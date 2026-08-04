@@ -1,0 +1,54 @@
+[project]
+name = "matchpoint-api"
+version = "0.1.0"
+description = "MatchPoint API"
+requires-python = ">=3.12"
+dependencies = [
+    # standard-no-fastapi-cloud-cli is the standard extra minus fastapi-cloud-cli
+    # (and its sentry-sdk dependency), which we have no use for — we deploy to our
+    # own VPS, not FastAPI Cloud.
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.115",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12",
+    "pytest>=8.3",
+    "pyright>=1.1.390",
+    # starlette.testclient prefers httpx2 and warns when falling back to httpx.
+    "httpx2>=2.9",
+]
+
+[tool.uv]
+# Floor is the lowest uv we have actually verified against this project. uv.lock is
+# at revision 3, which older uv versions cannot read; this turns that into a clear
+# error instead of a confusing parse failure.
+required-version = ">=0.11"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/matchpoint_api"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, isort, pyupgrade, flake8-bugbear, flake8-simplify
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
