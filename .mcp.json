@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "shadcn": {
+      "command": "pnpm",
+      "args": ["--filter", "@matchpoint/web", "exec", "shadcn", "mcp"]
+    }
+  }
+}
