@@ -1,136 +1,176 @@
-# matchpoint
+# MatchPoint
+
+MatchPoint is a tennis statistics tracking app that lets coaches capture live match data and turn it
+into player performance analytics.
+
+## Stack
+
+| Area               | Choice                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| Web app            | React 19 · Vite 8 · TypeScript 5.9 · Tailwind CSS 4 · shadcn/ui (Base UI) · Zustand 5 |
+| API                | FastAPI 0.141 · Pydantic 2 · Python 3.12                                              |
+| Database           | PostgreSQL 18 (Docker Compose for local dev) · SQLAlchemy 2 (sync) · Alembic          |
+| Web tests          | Vitest 4 · Testing Library 16                                                         |
+| API tests          | pytest 9                                                                              |
+| Lint / format      | ESLint 10 + Prettier 3 (web, repo root) · Ruff 0.16 (API)                             |
+| Type checking      | `tsc` (web) · Pyright (API)                                                           |
+| Package management | pnpm 11.18 workspace (web) · uv (API)                                                 |
+| CI                 | GitLab CI (`.gitlab-ci.yml`)                                                          |
+
+UI components are generated with the shadcn CLI rather than hand-built — see
+[`.claude/rules/web-components.md`](.claude/rules/web-components.md) for the instructions.
 
 ## Getting started
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+These instructions target Ubuntu/Debian Linux and macOS.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy?
-[Use the template at the bottom](#editing-this-readme)!
+### Prerequisites
 
-## Add your files
+| Tool   | Version    | Notes                                                                                                  |
+| ------ | ---------- | ------------------------------------------------------------------------------------------------------ |
+| Node   | ≥ 22.13    | Required by pnpm 11. `.nvmrc` pins the major; CI uses 22 LTS.                                          |
+| pnpm   | 11.18.0    | Pinned by `packageManager`; install via corepack, not `npm install -g`.                                |
+| Python | 3.12       | Pinned in `apps/api/.python-version`.                                                                  |
+| uv     | ≥ 0.11     | Enforced by `required-version` in `apps/api/pyproject.toml`. Manages the Python venv and dependencies. |
+| Docker | any recent | Runs PostgreSQL locally via `docker-compose.yml`. Docker Compose v2 (`docker compose`) is required.    |
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or
-      [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file)
-      files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository)
-      or push an existing Git repository with the following command:
+```sh
+# nvm — see https://github.com/nvm-sh/nvm for the latest install script
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
+
+# Node + pnpm — `nvm use` reads .nvmrc
+nvm install && nvm use
+corepack enable && corepack prepare pnpm@11.18.0 --activate
+
+# uv — see https://docs.astral.sh/uv/ for other platforms
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+If you don't already have Docker:
+
+- **Ubuntu/Debian, including WSL2**: install
+  [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) directly, or install
+  [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/) and
+  enable WSL2 integration for your distro under Settings → Resources → WSL Integration.
+- **macOS**: install
+  [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
+
+Either way, `docker compose version` should report Compose v2 once done.
+
+### Install
+
+```sh
+git clone git@gitlab.cs.uct.ac.za:tldr/matchpoint.git
+cd matchpoint
+
+pnpm install                          # web app + root tooling, from the repo root
+cd apps/api && uv sync --group dev    # API, from apps/api
+```
+
+PostgreSQL runs via Docker Compose rather than a native install:
+
+```sh
+docker compose up -d                             # starts Postgres, from the repo root
+cd apps/api && uv run alembic upgrade head        # applies migrations
+```
+
+The default `MATCHPOINT_DATABASE_URL` already matches the Compose credentials, so no `.env` file is
+required for local dev — copy `apps/api/.env.example` to `apps/api/.env` only to override it.
+
+`apps/api` is a uv project, deliberately **not** a pnpm workspace member — never run `pnpm install`
+inside it.
+
+pnpm 11 enforces a `minimumReleaseAge` supply-chain policy: packages published within the last day
+are rejected. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` after you add a
+dependency, the fix is normally to wait rather than to relax the policy.
+
+### Run
+
+```sh
+docker compose up -d                            # Postgres, from the repo root (if not already running)
+pnpm dev                                        # web app  → http://localhost:5173
+cd apps/api && uv run fastapi dev src/matchpoint_api/main.py   # API → http://localhost:8000
+```
+
+Check the API is up with `curl http://localhost:8000/health`; interactive docs are at
+`http://localhost:8000/docs`.
+
+Alternatively, `scripts/dev.sh` validates prerequisite versions and runs all three steps above in
+one go.
+
+### Check your work
+
+Two scripts, run from anywhere in the repo:
+
+- `scripts/format.sh` — formats web + API code in place. **Required before every commit.**
+- `scripts/check.sh` — runs the full suite (web: format check, lint, typecheck, test; API: ruff
+  format check, ruff check, pyright, pytest). **Optional but recommended before pushing** — not
+  required, since CI runs the identical checks on every push/MR anyway, but running it locally first
+  catches failures earlier. Like CI, it only ever reports — it never rewrites your files, so run
+  `format.sh` to fix what it flags.
+
+Each script is a thin wrapper around plain package-manager commands, useful if you want to run a
+single step (e.g. just `pnpm run lint`) instead of the whole suite:
+
+```sh
+# From the repo root
+pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test
+
+# From apps/api
+uv run ruff format . && uv run ruff check . && uv run pyright && uv run pytest
+```
+
+CI runs the same checks in verify mode rather than write mode — `pnpm run format:check` and
+`uv run ruff format --check .` — so it fails the pipeline instead of reformatting. Formatting
+locally first is what keeps it green.
+
+## Repository structure
+
+This is the target layout — some of these directories are planned and do not exist yet; create them
+as the work that needs them lands.
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.cs.uct.ac.za/tldr/matchpoint.git
-git branch -M main
-git push -uf origin main
+apps/
+  web/                      # React Single Page Application (Vite)
+    public/
+    e2e/                    # end-to-end testing
+    index.html              # Vite entry point
+    components.json         # shadcn CLI config (style, aliases, base colour)
+    src/
+      routes/
+      features/             # feature slices (e.g. matches, players)
+        capture/            # network-free zone (enforced by ESLint)
+        players/
+      components/
+        ui/                 # shadcn components
+        layout/
+      lib/                  # shared helpers
+  api/                      # FastAPI service (uv project)
+    migrations/
+    src/matchpoint_api/     # app factory, config
+      models/
+      schemas/
+      routers/
+    tests/
+packages/                   # shared libraries
+  api-client/               # generated, not hand-edited
+infra/                      # deployment config for matchpoint-prod
+scripts/                    # check.sh, format.sh
+.claude/
+  rules/                    # path-scoped conventions for Claude Code
+  skills/                   # vendored skills; skills-lock.json records their upstream source
+docs/                       # finished, production-ready documentation only
+  scratch/                  # gitignored — in-progress/planning notes, not tracked
+deliverables/               # graded course submissions (e.g. assignment write-ups), not docs/ or app code
 ```
 
-## Integrate with your tools
+The web app is sliced by **feature**, not by file type, so architectural rules can be scoped to a
+directory.
 
-- [ ] [Set up project integrations](https://gitlab.cs.uct.ac.za/tldr/matchpoint/-/settings/integrations)
-
-## Collaborate with your team
-
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
-
-## Test and Deploy
-
-Use the built-in continuous integration in GitLab.
-
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
-
----
-
-# Editing this README
-
-When you're ready to make this README your own, just edit this file and use the handy template below
-(or feel free to structure it however you want - this is just a starting point!). Thanks to
-[makeareadme.com](https://www.makeareadme.com/) for this template.
-
-## Suggestions for a good README
-
-Every project is different, so consider which of these sections apply to yours. The sections used in
-the template are suggestions for most open source projects. Also keep in mind that while a README
-can be too long and detailed, too long is better than too short. If you think your README is too
-long, consider utilizing another form of documentation rather than cutting out information.
-
-## Name
-
-Choose a self-explaining name for your project.
-
-## Description
-
-Let people know what your project can do specifically. Provide context and add a link to any
-reference visitors might be unfamiliar with. A list of Features or a Background subsection can also
-be added here. If there are alternatives to your project, this is a good place to list
-differentiating factors.
-
-## Badges
-
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests
-are passing for the project. You can use Shields to add some to your README. Many services also have
-instructions for adding a badge.
-
-## Visuals
-
-Depending on what you are making, it can be a good idea to include screenshots or even a video
-(you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out
-Asciinema for a more sophisticated method.
-
-## Installation
-
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn,
-NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a
-novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people
-to using your project as quickly as possible. If it only runs in a specific context like a
-particular programming language version or operating system or has dependencies that have to be
-installed manually, also add a Requirements subsection.
-
-## Usage
-
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the
-smallest example of usage that you can demonstrate, while providing links to more sophisticated
-examples if they are too long to reasonably include in the README.
-
-## Support
-
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat
-room, an email address, etc.
-
-## Roadmap
-
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+`docs/` holds only final, professional documentation — the kind you'd be comfortable handing to a
+new team member or an external reader. Drafts and in-progress notes belong in `docs/scratch/`
+(gitignored, so it's never committed).
 
 ## Contributing
 
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how
-to get started. Perhaps there is a script that they should run or some environment variables that
-they need to set. Make these steps explicit. These instructions could also be useful to your future
-self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code
-quality and reduce the likelihood that the changes inadvertently break something. Having
-instructions for running tests is especially helpful if it requires external setup, such as starting
-a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-
-Show your appreciation to those who have contributed to the project.
-
-## License
-
-For open source projects, say how it is licensed.
-
-## Project status
-
-If you have run out of energy or time for your project, put a note at the top of the README saying
-that development has slowed down or stopped completely. Someone may choose to fork your project or
-volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also
-make an explicit request for maintainers.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and workflow conventions.

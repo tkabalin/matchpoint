@@ -31,12 +31,18 @@ one-line summary.
 
 ## Code style
 
-Python (`apps/api/`) uses [Ruff](https://docs.astral.sh/ruff/) for both linting and formatting; the
-web app and root-level Markdown/YAML/JSON use [Prettier](https://prettier.io/) for formatting and
-[ESLint](https://eslint.org/) for correctness. Shared editor settings live in `.editorconfig`.
+Python (`apps/api/`) uses [Ruff](https://docs.astral.sh/ruff/) for both linting and formatting, and
+[Pyright](https://microsoft.github.io/pyright/) for type checking; the web app and
+Markdown/YAML/JSON use [Prettier](https://prettier.io/) for formatting,
+[ESLint](https://eslint.org/) for correctness, and `tsc` (`pnpm run typecheck`) for type checking.
+Shared editor settings live in `.editorconfig`.
 
 CI runs the non-mutating variants (`ruff format --check`, `pnpm run format:check`), so a formatting
 slip fails the pipeline rather than being quietly corrected.
+
+`scripts/format.sh` runs both formatters and is required before every commit; `scripts/check.sh`
+runs the full format-check/lint/typecheck/test suite — the same non-mutating variants CI uses — and
+is optional but recommended before pushing.
 
 On an in-progress branch, prefer fixing a bug by amending the commit that introduced it
 (`git commit --amend` / interactive rebase), then force-pushing if it's already on remote — this
