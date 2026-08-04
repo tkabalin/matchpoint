@@ -1,0 +1,26 @@
+# Python is handled by ruff, not prettier
+apps/api/
+
+# Dependencies and lockfiles
+node_modules/
+pnpm-lock.yaml
+.venv/
+
+# Build output
+dist/
+dist-ssr/
+build/
+dev-dist/
+
+# Generated
+routeTree.gen.ts
+packages/api-client/
+
+# Vendored Claude Code skills — kept byte-identical to upstream, so reformatting
+# would make them diff against their source for no benefit
+.claude/skills/
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/

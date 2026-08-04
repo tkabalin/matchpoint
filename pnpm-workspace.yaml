@@ -1,0 +1,16 @@
+packages:
+  # apps/api is a uv (Python) project and is deliberately NOT a pnpm workspace member.
+  - apps/web
+  - packages/*
+
+# Single source of truth for versions needed by more than one workspace package.
+# typescript is required at the root (typescript-eslint peer-depends on it, and
+# `eslint .` runs from here) and in apps/web (`tsc --noEmit`).
+#
+# Two separate reasons this is not on the latest release (7.x):
+#   - typescript-eslint peers on `>=4.8.4 <6.1.0`, which rules out 7.x outright.
+#   - 6.0.x is inside that range, so it is available — we are simply staying on
+#     5.9 for now. Bumping to 6.x is a deliberate call, not a blocked one.
+# Re-check the peer range before raising this past 6.0.
+catalog:
+  typescript: ^5.9.3
