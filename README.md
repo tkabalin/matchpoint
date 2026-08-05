@@ -38,6 +38,9 @@ These instructions target Ubuntu/Debian Linux and macOS.
 # nvm — see https://github.com/nvm-sh/nvm for the latest install script
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
 
+# nvm only wires itself into your shell profile — load it into this shell too, or open a new terminal
+\. "$HOME/.nvm/nvm.sh"
+
 # Node + pnpm — `nvm use` reads .nvmrc
 nvm install && nvm use
 corepack enable && corepack prepare pnpm@11.18.0 --activate
@@ -155,7 +158,7 @@ apps/
 packages/                   # shared libraries
   api-client/               # generated, not hand-edited
 infra/                      # deployment config for matchpoint-prod
-scripts/                    # check.sh, format.sh
+scripts/                    # dev setup/check/format helpers
 .claude/
   rules/                    # path-scoped conventions for Claude Code
   skills/                   # vendored skills; skills-lock.json records their upstream source
