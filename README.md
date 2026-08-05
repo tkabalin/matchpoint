@@ -53,8 +53,9 @@ If you don't already have Docker:
 
 - **Ubuntu/Debian, including WSL2**: install
   [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) directly, or install
-  [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/) and
-  enable WSL2 integration for your distro under Settings → Resources → WSL Integration.
+  [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). With
+  Docker Desktop you must then turn on WSL integration for the specific distro you develop in
+  (Settings → Resources → WSL Integration → toggle your distro on, then Apply & Restart).
 - **macOS**: install
   [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
 
@@ -70,10 +71,12 @@ pnpm install                          # web app + root tooling, from the repo ro
 cd apps/api && uv sync --group dev    # API, from apps/api
 ```
 
-PostgreSQL runs via Docker Compose rather than a native install:
+PostgreSQL runs via Docker Compose rather than a native install. The previous step leaves you in
+`apps/api`, so `cd` back to the repo root first — `docker compose` reads `docker-compose.yml` from
+there:
 
 ```sh
-docker compose up -d                             # starts Postgres, from the repo root
+docker compose up -d --wait                       # starts Postgres, from the repo root
 cd apps/api && uv run alembic upgrade head        # applies migrations
 ```
 
