@@ -1,0 +1,4 @@
+# MatchPoint is a private coaching tool and is not meant to be indexed.
+# Mirrors the `noindex, nofollow` robots meta tag in index.html.
+User-agent: *
+Disallow: /
