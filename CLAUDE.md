@@ -35,8 +35,8 @@
 
 ## Tech Stack
 
-- See the Stack table in @README.md for the current tech stack. Each time a new item is added to the
-  stack, it should be documented here.
+- See @docs/tech-stack.md for the current tech stack. Each time a new item is added to the stack, it
+  should be documented there.
 - `pnpm-lock.yaml` and `apps/api/uv.lock` remain the authority for exact dependency versions.
 
 ## Assignment Brief

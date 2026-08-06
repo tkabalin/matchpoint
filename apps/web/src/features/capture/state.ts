@@ -1,5 +1,3 @@
-import { create } from "zustand";
-
 /**
  * In-match capture state.
  *
@@ -7,10 +5,3 @@ import { create } from "zustand";
  * zone: the capture path must never await I/O. ESLint enforces that at the root
  * config; see the `features/capture` block in `eslint.config.mjs`.
  */
-interface CaptureState {
-  pointsRecorded: number;
-}
-
-export const useCaptureStore = create<CaptureState>(() => ({
-  pointsRecorded: 0,
-}));

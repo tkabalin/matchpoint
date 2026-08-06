@@ -5,17 +5,14 @@ into player performance analytics.
 
 ## Stack
 
-| Area               | Choice                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| Web app            | React 19 · Vite 8 · TypeScript 5.9 · Tailwind CSS 4 · shadcn/ui (Base UI) · Zustand 5 |
-| API                | FastAPI 0.141 · Pydantic 2 · Python 3.12                                              |
-| Database           | PostgreSQL 18 (Docker Compose for local dev) · SQLAlchemy 2 (sync) · Alembic          |
-| Web tests          | Vitest 4 · Testing Library 16                                                         |
-| API tests          | pytest 9 · pytest-cov / coverage.py                                                   |
-| Lint / format      | ESLint 10 + Prettier 3 (web, repo root) · Ruff 0.16 (API)                             |
-| Type checking      | `tsc` (web) · Pyright (API)                                                           |
-| Package management | pnpm 11.18 workspace (web) · uv (API)                                                 |
-| CI                 | GitLab CI (`.gitlab-ci.yml`)                                                          |
+| Layer    | Key technologies                                 |
+| -------- | ------------------------------------------------ |
+| Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui |
+| Backend  | FastAPI · SQLAlchemy · Alembic · Python          |
+| Infra    | PostgreSQL · Docker Compose · GitLab CI          |
+
+See [docs/tech-stack.md](docs/tech-stack.md) for the full breakdown with versions, tooling, and test
+frameworks.
 
 UI components are generated with the shadcn CLI rather than hand-built — see
 [`.claude/rules/web-components.md`](.claude/rules/web-components.md) for the instructions.
