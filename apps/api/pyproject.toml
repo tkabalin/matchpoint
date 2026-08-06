@@ -21,6 +21,7 @@ dev = [
     "pyright>=1.1.390",
     # starlette.testclient prefers httpx2 and warns when falling back to httpx.
     "httpx2>=2.9",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.uv]
@@ -46,6 +47,12 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src/matchpoint_api"]
+
+[tool.coverage.report]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
 
 [tool.pyright]
 include = ["src", "tests"]

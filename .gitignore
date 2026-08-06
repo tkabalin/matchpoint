@@ -40,6 +40,7 @@ __pycache__/
 # -----------------------------------------------------------------------------
 coverage/
 .coverage
+htmlcov/
 
 # -----------------------------------------------------------------------------
 # Claude Code personal/local settings, not meant to be shared with the team
