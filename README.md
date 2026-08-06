@@ -11,7 +11,7 @@ into player performance analytics.
 | API                | FastAPI 0.141 · Pydantic 2 · Python 3.12                                              |
 | Database           | PostgreSQL 18 (Docker Compose for local dev) · SQLAlchemy 2 (sync) · Alembic          |
 | Web tests          | Vitest 4 · Testing Library 16                                                         |
-| API tests          | pytest 9 · pytest-cov / coverage.py                                                  |
+| API tests          | pytest 9 · pytest-cov / coverage.py                                                   |
 | Lint / format      | ESLint 10 + Prettier 3 (web, repo root) · Ruff 0.16 (API)                             |
 | Type checking      | `tsc` (web) · Pyright (API)                                                           |
 | Package management | pnpm 11.18 workspace (web) · uv (API)                                                 |
@@ -130,8 +130,8 @@ CI runs the same checks in verify mode rather than write mode — `pnpm run form
 `uv run ruff format --check .` — so it fails the pipeline instead of reformatting. Formatting
 locally first is what keeps it green.
 
-For a coverage report on the API, run `uv run pytest --cov` from `apps/api` — coverage is opt-in,
-so it's not part of `scripts/check.sh` or plain `pytest` runs.
+For a coverage report on the API, run `uv run pytest --cov` from `apps/api` — coverage is opt-in, so
+it's not part of `scripts/check.sh` or plain `uv run pytest` runs.
 
 ## Repository structure
 

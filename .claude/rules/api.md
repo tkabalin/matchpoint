@@ -22,9 +22,9 @@ paths:
 
 ## Query Safety
 
-- Every database query must be parameterised — never build a query by interpolating untrusted
-  input into it. This is the difference between letting a user filter data and letting them run
-  arbitrary SQL against our database.
+- Every database query must be parameterised — never build a query by interpolating untrusted input
+  into it. This is the difference between letting a user filter data and letting them run arbitrary
+  SQL against our database.
 
 ## Toolchain
 
