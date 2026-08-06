@@ -19,6 +19,12 @@ paths:
   `features/players`, it belongs in `src/components/` or `src/lib/` — and only once there are two
   real call sites (see Code Style in `CLAUDE.md`).
 
+## HTML Injection
+
+- Avoid `dangerouslySetInnerHTML` on data that isn't fully trusted (coach notes, player names, any
+  other user-entered or stored text). React escapes text content by default — rendering it as plain
+  text instead of markup is what prevents HTML/script injection from that data.
+
 ## Imports & Naming
 
 - Use the `@/` alias (set in both `tsconfig.json` and `vite.config.ts`) for anything outside the

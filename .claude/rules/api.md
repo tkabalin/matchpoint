@@ -20,6 +20,12 @@ paths:
   latency under concurrency. Get the keyword right up front.
 - All schema changes go through Alembic, from the first table onward. No hand-edited databases.
 
+## Query Safety
+
+- Every database query must be parameterised — never build a query by interpolating untrusted
+  input into it. This is the difference between letting a user filter data and letting them run
+  arbitrary SQL against our database.
+
 ## Toolchain
 
 - `apps/api` is a uv project and deliberately **not** a pnpm workspace member. Never run
