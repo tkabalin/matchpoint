@@ -1,0 +1,12 @@
+# Build context for apps/web/Dockerfile (the API builds from apps/api with its
+# own .dockerignore). Everything the web build doesn't need stays out of the
+# context so builds are fast and cache-stable.
+.git/
+**/node_modules/
+**/dist/
+**/dev-dist/
+**/coverage/
+apps/api/
+deliverables/
+docs/
+infra/cloudflare/

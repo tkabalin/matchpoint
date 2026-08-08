@@ -1,0 +1,24 @@
+# Baked into the web image (apps/web/Dockerfile). TLS terminates here with a
+# Cloudflare Origin Certificate (Cloudflare SSL mode: Full (strict)) — no ACME,
+# nothing to renew, nothing for the proxy to break. The cert pair is mounted
+# from the host at deploy time, never baked into the image.
+matchpoint.thomaskabalin.com {
+	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
+
+	# /api/* matches nothing for a bare /api, which would otherwise fall through
+	# to the SPA and answer an API call with index.html and a 200.
+	redir /api /api/ permanent
+
+	# handle_path strips the /api prefix, so the API keeps clean route paths;
+	# uvicorn runs with --root-path /api to compensate (see apps/api/Dockerfile).
+	handle_path /api/* {
+		reverse_proxy api:8000
+	}
+
+	# SPA fallback: without try_files, refreshing any client-side route 404s.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
