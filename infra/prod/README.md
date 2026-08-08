@@ -18,7 +18,8 @@ Done by hand as the `thomas` admin user; CI never performs these steps.
    installing `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`.
 1. Create a `deploy` user in the `docker` group (no sudo): `sudo useradd -m -G docker deploy`
 2. Install this directory's files:
-   - `compose.yml` and `deploy.sh` (executable) into `/opt/matchpoint/`, owned by `deploy`.
+   - `compose.yml`, `deploy.sh`, and `backup.sh` (both scripts executable) into `/opt/matchpoint/`,
+     owned by `deploy`.
    - A Cloudflare **Origin Certificate** pair (Cloudflare dashboard → SSL/TLS → Origin Server) as
      `/opt/matchpoint/certs/origin.pem` and `origin.key`, owned by `root:root` with the key at mode
      `600`, and the Cloudflare SSL mode set to **Full (strict)**. The web container drops
@@ -61,3 +62,14 @@ refuses the deploy rather than failing halfway through it.
 
 If `compose.yml`, `deploy.sh`, or the certs change, they must be re-installed on the VPS by hand —
 the restricted SSH key deliberately cannot copy files.
+
+## Database backups
+
+`backup.sh` writes a nightly gzipped `pg_dump` to `/opt/matchpoint/backups/` — outside the Docker
+volume — keeping the newest 14. VPS snapshots cover catastrophic loss; the logical dump is what
+restores data after a bad migration. Install it in the `deploy` user's crontab, timed so the 02:00
+VPS snapshot captures the fresh dump:
+
+```
+30 1 * * * /opt/matchpoint/backup.sh
+```
