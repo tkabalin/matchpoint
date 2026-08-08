@@ -116,11 +116,12 @@ and LLM-friendly.
 
 ## Infrastructure
 
-| Category         | Choice         |
-| ---------------- | -------------- |
-| Database         | PostgreSQL 18  |
-| Local DB hosting | Docker Compose |
-| CI               | GitLab CI      |
+| Category           | Choice                            |
+| ------------------ | --------------------------------- |
+| Database           | PostgreSQL 18                     |
+| Containers         | Docker Compose (local dev + prod) |
+| Web server / proxy | Caddy 2                           |
+| CI/CD              | GitLab CI                         |
 
 ### Rationale
 
@@ -131,9 +132,18 @@ application. MySQL was the other mainstream option; PostgreSQL was chosen over i
 team experience. All schema lives in Alembic migrations from day one, keeping switching costs low
 regardless.
 
-**Docker Compose for local dev.** Gives dev/prod parity with minimal overhead. The same Compose file
-describes the production deployment on the VPS.
+**Docker Compose for local dev and prod.** Gives dev/prod parity with minimal overhead. Local dev
+runs just Postgres (root `docker-compose.yml`); production runs the full stack on the VPS from
+`infra/prod/compose.yml`.
+
+**Caddy.** Serves the built SPA and reverse-proxies `/api/*` to the API from a single origin, which
+removes CORS from the picture entirely. TLS is a two-line config using a Cloudflare Origin
+Certificate — no ACME to break behind the Cloudflare proxy. Alternative considered: nginx (more
+config boilerplate for the same outcome, and manual cert wiring either way).
 
 **GitLab CI.** Dictated by the university's GitLab instance (`gitlab.cs.uct.ac.za`) being the
 required code host for submission. The CI runner is self-hosted on an off-campus server since the
-university instance does not provide shared runners.
+university instance does not provide shared runners. The same pipeline handles CD: images are built
+on the runner, uploaded as tarballs to the project's package registry (the container registry port
+is firewalled to campus-internal traffic, so off-campus machines cannot push or pull images), and
+deployed to the VPS over SSH (see `infra/prod/README.md`).
