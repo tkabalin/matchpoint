@@ -1,0 +1,77 @@
+# CI/CD Pipeline
+
+How a commit gets from a branch to production: what CI checks, what a merge to `main` triggers, and
+the guardrails around deployment. The pipeline is defined in `.gitlab-ci.yml`; the deployment files
+it drives live in `infra/prod/` (see the README there for VPS provisioning). Server and network
+decisions are in [infrastructure.md](infrastructure.md).
+
+## CI — every branch and merge request
+
+| Stage | What runs                                                                  |
+| ----- | -------------------------------------------------------------------------- |
+| lint  | Ruff check + format check (API) · Prettier check + ESLint (web, repo-wide) |
+| test  | Pyright + pytest (API) · tsc + Vitest (web)                                |
+
+These are the same non-mutating checks as `scripts/check.sh`, so a green local check predicts a
+green pipeline. Everything runs on the self-hosted ThinkTank runner.
+
+- **Two independent job families** (uv/Python and pnpm/Node) with caches keyed on their lockfiles,
+  and `rules:changes` filters so a change to one side doesn't burn runner time on the other. Because
+  Prettier formats Markdown repo-wide, docs-only changes still run the web lint job.
+- **Test reports surface in the MR**: both suites emit JUnit XML, so a failing test appears in the
+  merge-request widget rather than buried in job logs. Coverage output feeds the project badge.
+- **Image builds are exercised on merge requests**: a change to anything an image is built from —
+  app source, dependencies, lockfiles, the Dockerfiles themselves — builds both images without
+  pushing them, so a broken build fails on the merge request rather than on `main`.
+- **Superseded work is cancelled**: pipelines are `interruptible`, so pushing again auto-cancels the
+  outdated run, and duplicate branch/MR pipelines are suppressed.
+
+## CD — merges to `main`
+
+A green `main` pipeline continues into two more stages:
+
+1. **Build** — both images are built on the runner against the host Docker daemon (so the layer
+   cache persists between runs), tagged with the commit short SHA, and uploaded as `docker save`
+   tarballs to the project's generic package registry using the pipeline-scoped job token — no
+   stored registry secret. The GitLab container registry isn't used: its port is firewalled to
+   campus-internal traffic, so an off-campus runner or VPS can't reach it, while the package
+   registry rides the normal HTTPS port. CI prunes the package registry to the newest 10 image
+   packages.
+2. **Deploy** — the pipeline SSHes to the VPS and hands over the SHA tag. The key it holds is bound
+   to a forced command, so it can run `/opt/matchpoint/deploy.sh` and nothing else; the script
+   downloads and `docker load`s the tarball for that SHA (using a read-only deploy token, skipping
+   the download if the tag is already loaded locally), runs Alembic migrations as a one-shot (a
+   failure aborts the deploy and leaves the previous containers running), brings the stack up, and
+   records the tag only once that has all worked. Slack is notified of the outcome via an incoming
+   webhook, as it is for a `main` pipeline that fails before reaching the deploy at all.
+
+**Deploys are automatic** on every green `main` pipeline — merging is releasing, which fits the
+rapid usability-testing loop with the client. The guardrails: deployment records to the GitLab
+`production` environment (deploy history and one-click redeploys, restricted to Maintainers), a
+`resource_group` serialises concurrent deploys and runs them oldest-first so the newest SHA lands
+last, and the deploy job is never auto-cancelled.
+
+**Rollback is a redeploy of an older SHA** — image tags are immutable per commit, so rolling back
+means re-running an older pipeline's deploy job (or `ssh deploy@<vps> <older-sha>`), not rebuilding.
+Reach is bounded by the package registry's 10-package retention, plus the handful of recent image
+tags `deploy.sh` keeps loaded on the VPS. Rolling back past a migration needs the schema downgraded
+from the newer image first; `deploy.sh` detects that case and refuses rather than failing halfway.
+
+## Production stack
+
+`infra/prod/compose.yml` runs three containers on the VPS:
+
+| Container | Role                                                                              |
+| --------- | --------------------------------------------------------------------------------- |
+| web       | Caddy: terminates TLS (Cloudflare origin cert), serves the built SPA, proxies API |
+| api       | FastAPI under uvicorn                                                             |
+| postgres  | PostgreSQL, nightly logical backups on top of VPS snapshots                       |
+
+**One origin for SPA and API.** Caddy serves the app shell and reverse-proxies `/api/*` to the API
+container, so there is no CORS configuration anywhere — removing a whole category of
+works-locally-breaks-on-prod bugs. The `/api` prefix is stripped at the proxy and restored via
+uvicorn's `--root-path`, keeping API route paths clean.
+
+**Build once, in CI.** Images are built in a consistent environment and the VPS only ever pulls and
+runs them — the production box never builds, and a half-finished deploy can't leave it in a broken
+state.
