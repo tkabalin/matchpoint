@@ -3,6 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
+import matchpoint_api.models  # noqa: F401  # register all models on Base.metadata
 from matchpoint_api.config import settings
 from matchpoint_api.db import Base
 
