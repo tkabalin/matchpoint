@@ -1,0 +1,111 @@
+stages:
+  - lint
+  - test
+
+# Run on merge requests and on the default branch, but avoid duplicate pipelines
+# for branches that already have an open merge request.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+# --- Shared job setup -------------------------------------------------------
+# apps/api is a uv (Python) project; apps/web is a pnpm workspace member. The two
+# toolchains never touch each other, hence two independent job families.
+
+.api-base:
+  # The 0.11 minor pin matches pyproject's uv required-version; the unversioned
+  # *-bookworm-slim tags are frozen at uv 0.9, which can't read this lockfile.
+  image: ghcr.io/astral-sh/uv:0.11-python3.12-trixie-slim
+  variables:
+    # Absolute, because before_script cds into apps/api while cache:paths are
+    # resolved from the repo root — a relative path caches a directory that the
+    # jobs never write to.
+    UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
+  cache:
+    key:
+      files:
+        - apps/api/uv.lock
+    paths:
+      - .uv-cache
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq libatomic1 > /dev/null
+    - cd apps/api
+    - uv sync --locked --group dev
+  # Root config files affect both families and so appear in both filters.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - apps/api/**/*
+        - .gitlab-ci.yml
+
+.web-base:
+  image: node:22-slim
+  cache:
+    key:
+      files:
+        - pnpm-lock.yaml
+    paths:
+      - .pnpm-store
+  before_script:
+    - corepack enable
+    # Moves the store inside the project so cache:paths above can archive it.
+    - pnpm config set store-dir .pnpm-store
+    - pnpm install --frozen-lockfile
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Prettier and ESLint run repo-wide from the root, so this list has to name
+    # every file Prettier formats, not just web source — Markdown, YAML and JSON
+    # anywhere in the repo included. A violation that skips web-lint merges
+    # unchecked and then fails the next pipeline that does run one.
+    - changes:
+        - apps/web/**/*
+        - packages/**/*
+        - docs/**/*
+        - infra/**/*
+        - "**/*.md"
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.base.json
+        - skills-lock.json
+        - eslint.config.mjs
+        - .prettierrc.json
+        - .prettierignore
+        - .editorconfig
+        - .mcp.json
+        - docker-compose.yml
+        - .gitlab-ci.yml
+
+# --- Jobs -------------------------------------------------------------------
+
+python-lint:
+  extends: .api-base
+  stage: lint
+  script:
+    - uv run ruff check .
+    - uv run ruff format --check .
+
+web-lint:
+  extends: .web-base
+  stage: lint
+  script:
+    - pnpm run format:check
+    - pnpm run lint
+
+api-test:
+  extends: .api-base
+  stage: test
+  script:
+    - uv run pyright
+    - uv run pytest
+
+web-test:
+  extends: .web-base
+  stage: test
+  script:
+    - pnpm run typecheck
+    - pnpm run test
