@@ -1,0 +1,74 @@
+# Production stack for matchpoint-prod. Lives at /opt/matchpoint/compose.yml on
+# the VPS (installed by hand — see README.md); CI never edits it there, it only
+# triggers deploy.sh over restricted SSH.
+#
+# Interpolated from /opt/matchpoint/.env:
+#   IMAGE_TAG         — written by deploy.sh (commit short SHA)
+#   POSTGRES_PASSWORD — set once at provisioning time
+#
+# The matchpoint/* images are never pulled: deploy.sh docker-loads them from
+# tarballs in the GitLab package registry (the container registry port is
+# firewalled off-campus), so the local names here match the tags CI bakes in.
+#
+# Memory limits keep any one service from consuming the whole (modest) VPS
+# under load; Postgres gets the largest share.
+services:
+  # Caddy runs as root because it binds :80/:443, and dropping the uid would not
+  # protect the one secret here — it has to read the origin key whatever it runs
+  # as. Stripping every capability but the port bind removes what
+  # root-in-container is worth escalating to, without the port/ownership
+  # coupling a non-root image would add.
+  web:
+    image: matchpoint/web:${IMAGE_TAG:?}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./certs:/etc/caddy/certs:ro
+      - caddy-data:/data
+    depends_on:
+      - api
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 256m
+
+  api:
+    image: matchpoint/api:${IMAGE_TAG:?}
+    restart: unless-stopped
+    environment:
+      MATCHPOINT_DATABASE_URL: postgresql+psycopg://matchpoint:${POSTGRES_PASSWORD:?}@postgres:5432/matchpoint
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 512m
+
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: matchpoint
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: matchpoint
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U matchpoint"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    security_opt:
+      - "no-new-privileges:true"
+    mem_limit: 768m
+    shm_size: 128mb
+
+volumes:
+  postgres-data:
+  caddy-data:
