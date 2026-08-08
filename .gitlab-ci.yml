@@ -1,6 +1,8 @@
 stages:
   - lint
   - test
+  - build
+  - deploy
 
 # Let GitLab's "auto-cancel redundant pipelines" kill superseded runs when new
 # commits land on the same ref.
@@ -130,3 +132,146 @@ web-test:
     when: always
     reports:
       junit: apps/web/junit.xml
+
+# --- Build & deploy ----------------------------------------------------------
+# Image builds talk to the ThinkTank host's Docker daemon through the socket
+# the runner mounts into job containers, so the layer cache persists between
+# runs. Shipping and deploying are default-branch only; each image is uploaded
+# as a docker-save tarball to the generic package registry (package "images",
+# version = commit short SHA) — the container registry port (5050) is
+# firewalled to campus-internal traffic, while the package registry rides the
+# reachable HTTPS port. The tarball is written to disk before the upload so
+# curl sends a Content-Length instead of a chunked body, and `docker save` and
+# `gzip` are separate steps rather than a pipeline: the job runs under sh with
+# no pipefail, so piping would report gzip's status and upload a truncated
+# tarball with the job green.
+
+.image-base:
+  stage: build
+  image: docker:29-cli
+  variables:
+    PUSH_IMAGE: "true"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    # Off the default branch, build without pushing whenever an image input
+    # changes, so a broken build fails on the merge request instead of first
+    # being noticed as a main pipeline that leaves main undeployable. The whole
+    # of each app is an input, not just its Dockerfile: a bad import, a new
+    # dependency, or a lockfile bump breaks the build with the Dockerfile
+    # untouched. The web image builds from the repo root, so the workspace
+    # manifests count too.
+    - changes:
+        - apps/api/**/*
+        - apps/web/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - .dockerignore
+      variables:
+        PUSH_IMAGE: "false"
+
+build-api-image:
+  extends: .image-base
+  script:
+    - docker build -t "matchpoint/api:$CI_COMMIT_SHORT_SHA" apps/api
+    # CI_JOB_TOKEN is scoped to this pipeline run; no stored secret involved.
+    - >-
+      if [ "$PUSH_IMAGE" = "true" ]; then apk add --no-cache curl && docker save -o api.tar
+      "matchpoint/api:$CI_COMMIT_SHORT_SHA" && gzip api.tar && curl --fail-with-body -sS -H
+      "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file api.tar.gz
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/images/$CI_COMMIT_SHORT_SHA/api.tar.gz";
+      fi
+
+build-web-image:
+  extends: .image-base
+  script:
+    - docker build -f apps/web/Dockerfile -t "matchpoint/web:$CI_COMMIT_SHORT_SHA" .
+    - >-
+      if [ "$PUSH_IMAGE" = "true" ]; then apk add --no-cache curl && docker save -o web.tar
+      "matchpoint/web:$CI_COMMIT_SHORT_SHA" && gzip web.tar && curl --fail-with-body -sS -H
+      "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file web.tar.gz
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/images/$CI_COMMIT_SHORT_SHA/web.tar.gz";
+      fi
+
+deploy:
+  stage: deploy
+  image: alpine:3.22
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  # Never auto-cancel a deploy mid-flight, and never run two concurrently.
+  interruptible: false
+  resource_group: production
+  environment:
+    name: production
+    url: https://matchpoint.thomaskabalin.com
+  before_script:
+    - apk add --no-cache openssh-client
+  script:
+    - chmod 600 "$SSH_PRIVATE_KEY"
+    # The key is bound to a forced command on the VPS (infra/prod/deploy.sh),
+    # so the "command" sent here is just the image tag to deploy. SSH goes to
+    # the IP because the domain resolves to Cloudflare, not the origin.
+    - ssh -i "$SSH_PRIVATE_KEY" -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" deploy@REDACTED
+      "$CI_COMMIT_SHORT_SHA"
+
+# Slack messages via an incoming-webhook URL in the (protected, masked)
+# SLACK_WEBHOOK_URL variable; both jobs drop out of the pipeline entirely while
+# that variable is unset or blank — a blank one would fail curl and redden an
+# otherwise green pipeline.
+
+.notify-base:
+  stage: .post
+  image: curlimages/curl:8.18.0
+
+notify-deploy-success:
+  extends: .notify-base
+  needs: [deploy]
+  rules:
+    - if: $SLACK_WEBHOOK_URL == null || $SLACK_WEBHOOK_URL == ""
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - >
+      curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "{\"text\": \"✅ Deployed
+      $CI_COMMIT_SHORT_SHA to https://matchpoint.thomaskabalin.com — $CI_PIPELINE_URL\"}"
+      "$SLACK_WEBHOOK_URL"
+
+# Deliberately no `needs`: a main pipeline that fails in lint, test or build
+# never reaches the deploy job, and needing it would skip this job in exactly
+# the cases worth announcing — a broken main.
+notify-pipeline-failure:
+  extends: .notify-base
+  rules:
+    - if: $SLACK_WEBHOOK_URL == null || $SLACK_WEBHOOK_URL == ""
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_failure
+  script:
+    - >
+      curl -fsS --max-time 10 -H 'Content-Type: application/json' --data "{\"text\": \"❌ main
+      pipeline for $CI_COMMIT_SHORT_SHA failed — $CI_PIPELINE_URL\"}" "$SLACK_WEBHOOK_URL"
+
+# The generic package registry has no equivalent of the container registry's
+# cleanup policy, so prune it from the pipeline: keep the newest 10 image
+# packages (the rollback window) and delete the rest. Scoped by package_name as
+# well as type, so an unrelated generic package can't eat into that window.
+# allow_failure because a failed prune must not mark a successful deploy
+# pipeline red.
+cleanup-packages:
+  stage: .post
+  image: alpine:3.22
+  needs: [deploy]
+  allow_failure: true
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    # If the instance refuses JOB-TOKEN for the packages API, swap both headers
+    # for "PRIVATE-TOKEN: $PACKAGES_CLEANUP_TOKEN" backed by a project access
+    # token (api scope, Maintainer) in a protected CI/CD variable.
+    - >-
+      curl --fail-with-body -sS -H "JOB-TOKEN: $CI_JOB_TOKEN"
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages?package_type=generic&package_name=images&order_by=created_at&sort=desc&per_page=100"
+      | jq -r '.[10:] | .[].id' | while read -r id; do curl --fail-with-body -sS -X DELETE -H
+      "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/$id"; done
