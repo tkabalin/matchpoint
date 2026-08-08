@@ -36,11 +36,12 @@ __pycache__/
 .pytest_cache/
 
 # -----------------------------------------------------------------------------
-# Test coverage (Vitest, pytest)
+# Test reports and coverage (Vitest, pytest)
 # -----------------------------------------------------------------------------
 coverage/
 .coverage
 htmlcov/
+junit.xml
 
 # -----------------------------------------------------------------------------
 # Claude Code personal/local settings, not meant to be shared with the team

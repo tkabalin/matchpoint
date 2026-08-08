@@ -2,6 +2,11 @@ stages:
   - lint
   - test
 
+# Let GitLab's "auto-cancel redundant pipelines" kill superseded runs when new
+# commits land on the same ref.
+default:
+  interruptible: true
+
 # Run on merge requests and on the default branch, but avoid duplicate pipelines
 # for branches that already have an open merge request.
 workflow:
@@ -101,11 +106,27 @@ api-test:
   stage: test
   script:
     - uv run pyright
-    - uv run pytest
+    - uv run pytest --cov --junitxml=junit.xml
+  # Matches the TOTAL line of pytest-cov's terminal report.
+  coverage: '/TOTAL.*? (\d+(?:\.\d+)?)%/'
+  artifacts:
+    when: always
+    reports:
+      junit: apps/api/junit.xml
 
 web-test:
   extends: .web-base
   stage: test
   script:
     - pnpm run typecheck
-    - pnpm run test
+    # Called via --filter rather than the root `test` script because the extra
+    # `--recursive` layer swallows the reporter flags.
+    - pnpm --filter @matchpoint/web run test --reporter=default --reporter=junit
+      --outputFile=junit.xml --coverage
+  # Matches the Statements line of the "Coverage summary" block, which the
+  # text-summary reporter emits (enabled in apps/web/vite.config.ts).
+  coverage: '/Statements\s*:\s*([\d.]+)%/'
+  artifacts:
+    when: always
+    reports:
+      junit: apps/web/junit.xml

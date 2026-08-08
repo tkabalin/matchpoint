@@ -16,5 +16,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    coverage: {
+      // text-summary prints the one totals block CI's coverage regex reads; the
+      // default text reporter only emits a per-file table.
+      reporter: ["text", "text-summary", "html"],
+    },
   },
 });
