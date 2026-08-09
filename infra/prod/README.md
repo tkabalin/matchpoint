@@ -73,3 +73,40 @@ VPS snapshot captures the fresh dump:
 ```
 30 1 * * * /opt/matchpoint/backup.sh
 ```
+
+## Operating the box by hand
+
+Everything below runs **as `deploy`, from the compose project directory** — `deploy` is the account
+in the `docker` group, and every `docker compose` call needs `.env` (mode `600`, owned by `deploy`)
+for `IMAGE_TAG` and `POSTGRES_PASSWORD`:
+
+```
+sudo -iu deploy
+cd /opt/matchpoint
+```
+
+| Task                         | Command                                                      |
+| ---------------------------- | ------------------------------------------------------------ |
+| Which tag is deployed        | `grep IMAGE_TAG .env`                                        |
+| Deploy or roll back to a tag | `SSH_ORIGINAL_COMMAND=<short-sha> ./deploy.sh`               |
+| Tags still loaded locally    | `docker images 'matchpoint/*'`                               |
+| Container status             | `docker compose ps`                                          |
+| Follow a service's logs      | `docker compose logs -f --tail=100 api`                      |
+| Restart one service          | `docker compose restart api`                                 |
+| Database shell               | `docker compose exec postgres psql -U matchpoint matchpoint` |
+| Schema revision the DB is at | `docker compose run --rm api alembic current`                |
+| Back up now, off the cron    | `./backup.sh`                                                |
+
+`deploy.sh` takes its tag from `SSH_ORIGINAL_COMMAND` because CI arrives through a forced command,
+so setting that variable by hand is the same entry point the pipeline uses — migration guard,
+tarball download and `.env` bookkeeping included.
+
+Restoring a dump **replaces the current database**. The dumps are plain `pg_dump` output with no
+drop statements, so the schema goes first or the restore collides with the tables already there:
+
+```
+docker compose exec -T postgres psql -U matchpoint matchpoint \
+  -c 'drop schema public cascade; create schema public;'
+gunzip -c backups/matchpoint-<date>.sql.gz |
+  docker compose exec -T postgres psql -U matchpoint matchpoint
+```
