@@ -25,6 +25,12 @@ paths:
   other user-entered or stored text). React escapes text content by default — rendering it as plain
   text instead of markup is what prevents HTML/script injection from that data.
 
+## Tests
+
+- New behaviour ships with tests. Unit/integration tests are co-located `*.test.ts(x)` files run by
+  Vitest; browser e2e lives in `e2e/` on Playwright. Conventions: `.claude/rules/web-tests.md`;
+  framework: `docs/testing.md`.
+
 ## Imports & Naming
 
 - Use the `@/` alias (set in both `tsconfig.json` and `vite.config.ts`) for anything outside the

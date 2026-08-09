@@ -26,6 +26,12 @@ paths:
   into it. This is the difference between letting a user filter data and letting them run arbitrary
   SQL against our database.
 
+## Tests
+
+- New behaviour ships with tests. pytest, in `tests/`; route tests go through the `client` /
+  `db_session` fixtures against real Postgres. Conventions: `.claude/rules/api-tests.md`; framework:
+  `docs/testing.md`.
+
 ## Toolchain
 
 - `apps/api` is a uv project and deliberately **not** a pnpm workspace member. Never run
