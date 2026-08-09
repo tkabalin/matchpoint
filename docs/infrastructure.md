@@ -50,7 +50,8 @@ root, in order to:
 - Password authentication disabled
 - Unattended security upgrades enabled
 - Fail2ban monitoring SSH
-- UFW firewall, allowing SSH, HTTP, and HTTPS only
+- UFW firewall: SSH open to any source; HTTP/HTTPS restricted to Cloudflare's published IP ranges
+  only, not open to the internet
 - 2GB swap configured
 
 ### Terminal access
@@ -79,3 +80,9 @@ services. Running the runner there rather than on the VPS is on the basis that:
   directly, which is a genuine risk for cheap South African VPS IP ranges.
 - **Basic DDoS absorption**: provided free and automatically, with no additional configuration
   required.
+
+Origin IP hiding only holds if the origin actually refuses direct connections — otherwise anyone who
+finds the real IP (DNS history, a scan of the hosting provider's ranges, a misconfigured record)
+connects straight to the VPS and skips Cloudflare's protections entirely. UFW closes that gap:
+inbound 80/443 is allowed only from Cloudflare's published IP ranges
+(`https://www.cloudflare.com/ips-v4` and `/ips-v6`), not `Anywhere`, for both IPv4 and IPv6.
