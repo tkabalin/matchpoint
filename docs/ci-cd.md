@@ -10,7 +10,7 @@ decisions are in [infrastructure.md](infrastructure.md).
 | Stage | What runs                                                                  |
 | ----- | -------------------------------------------------------------------------- |
 | lint  | Ruff check + format check (API) · Prettier check + ESLint (web, repo-wide) |
-| test  | Pyright + pytest (API) · tsc + Vitest (web)                                |
+| test  | Pyright + pytest (API) · tsc + Vitest + Playwright (web)                   |
 
 These are the same non-mutating checks as `scripts/check.sh`, so a green local check predicts a
 green pipeline. Everything runs on the self-hosted ThinkTank runner.
@@ -18,8 +18,12 @@ green pipeline. Everything runs on the self-hosted ThinkTank runner.
 - **Two independent job families** (uv/Python and pnpm/Node) with caches keyed on their lockfiles,
   and `rules:changes` filters so a change to one side doesn't burn runner time on the other. Because
   Prettier formats Markdown repo-wide, docs-only changes still run the web lint job.
-- **Test reports surface in the MR**: both suites emit JUnit XML, so a failing test appears in the
-  merge-request widget rather than buried in job logs. Coverage output feeds the project badge.
+- **Test reports surface in the MR**: every suite emits JUnit XML, so a failing test appears in the
+  merge-request widget rather than buried in job logs. Coverage output feeds the project badge, and
+  a failed e2e run attaches its Playwright HTML report — traces included — as an artifact.
+- **E2E runs on its own job**, on the Playwright image rather than the plain Node one, since it
+  needs browsers. It is not part of `scripts/check.sh`: e2e is slow enough that it stays a CI and
+  on-demand step rather than something every local commit waits on.
 - **Image builds are exercised on merge requests**: a change to anything an image is built from —
   app source, dependencies, lockfiles, the Dockerfiles themselves — builds both images without
   pushing them, so a broken build fails on the merge request rather than on `main`.

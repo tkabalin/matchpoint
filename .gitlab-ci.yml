@@ -133,6 +133,26 @@ web-test:
     reports:
       junit: apps/web/junit.xml
 
+web-e2e:
+  extends: .web-base
+  stage: test
+  # The image tag must track @playwright/test in pnpm-lock.yaml. It ships the
+  # browser builds that release expects, which is what the suite runs against:
+  # pnpm doesn't execute the playwright postinstall that would otherwise
+  # download them, so a mismatched tag fails looking for a browser revision the
+  # image doesn't carry.
+  image: mcr.microsoft.com/playwright:v1.62.1-noble
+  script:
+    - pnpm --filter @matchpoint/web run test:e2e
+  artifacts:
+    when: always
+    # The HTML report is the point of a failed e2e run — it carries the traces
+    # retries record, which the JUnit summary alone can't show.
+    paths:
+      - apps/web/playwright-report/
+    reports:
+      junit: apps/web/junit-e2e.xml
+
 # --- Build & deploy ----------------------------------------------------------
 # Image builds talk to the ThinkTank host's Docker daemon through the socket
 # the runner mounts into job containers, so the layer cache persists between

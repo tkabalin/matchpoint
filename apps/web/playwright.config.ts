@@ -5,6 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // open: "never" so a local failure doesn't try to launch a browser from the
+  // terminal; junit feeds the CI merge-request widget.
+  reporter: [["list"], ["html", { open: "never" }], ["junit", { outputFile: "junit-e2e.xml" }]],
   webServer: {
     command: "pnpm run dev",
     url: "http://localhost:5173",
