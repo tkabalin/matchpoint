@@ -41,13 +41,19 @@ everything below:
 
 ### Layered instruction files
 
-Instructions are split across three tiers by scope and audience:
+Instructions are split across four tiers by scope and audience:
 
 | Layer                                                     | Scope                               | Committed       | Holds                                                                                                                        |
 | --------------------------------------------------------- | ----------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `CLAUDE.md`                                               | Whole repo, always loaded           | Yes             | Project-wide only: pnpm-not-npm, git workflow, the formatting gate, code-style thresholds, repo layout, stack, and the brief |
 | `.claude/rules/*.md`                                      | Path-scoped via `paths` frontmatter | Yes             | Area-specific invariants, loaded only when matching paths are touched                                                        |
+| `.claude/skills/*/SKILL.md`                               | Task-scoped, loaded on demand       | Yes             | The ordered procedure a whole task follows, matched from its description rather than from a path                             |
 | `.claude/rules/*.local.md`, `.claude/settings.local.json` | Personal                            | No (gitignored) | Individual preferences and habits                                                                                            |
+
+Rules and skills divide on invariants versus procedure. A rule states what must always hold in an
+area and is loaded whenever that area is touched; a skill walks the steps a particular job takes and
+is loaded only when that job comes up. A skill that restates its area's rules pays for them twice
+and leaves two copies to drift, so it cites them instead.
 
 `CLAUDE.md` opens with a rule governing its own growth: only add something there if it is genuinely
 meant for the whole team, and put area-specific conventions in `.claude/rules/` instead. The
@@ -122,10 +128,11 @@ stays personal via `enabledMcpjsonServers` in the gitignored `.claude/settings.l
 restraint is the point: MCP servers cost context on every request, so only one is configured, and
 only because component generation genuinely needs registry lookup.
 
-**`.claude/skills/`** vendors the upstream shadcn skill rather than fetching it at runtime, so
-behaviour is reproducible and any change to it shows up in a diff. `skills-lock.json` records the
-upstream source (`shadcn/ui`, `skills/shadcn/SKILL.md`) and a content hash, so the vendored copy can
-be traced back and re-verified against upstream.
+**`.claude/skills/`** holds both vendored and first-party skills. Vendored ones are committed rather
+than fetched at runtime, so behaviour is reproducible and any change shows up in a diff;
+`skills-lock.json` records each one's upstream source and a content hash, so the copy can be traced
+back and re-verified. A skill written here has no upstream and so no lock entry — it is ours to edit
+and, unlike the vendored copies, is formatted with the rest of the repo.
 
 The division of labour between the two is spelled out in `web-components.md`: the skill carries the
 composition, styling, and forms conventions, while the MCP server only provides registry

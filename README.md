@@ -165,7 +165,7 @@ infra/                      # deployment config for matchpoint-prod
 scripts/                    # dev setup/check/format helpers
 .claude/
   rules/                    # path-scoped conventions for Claude Code
-  skills/                   # vendored skills; skills-lock.json records their upstream source
+  skills/                   # task procedures for Claude Code; skills-lock.json pins the vendored ones
 docs/                       # finished, production-ready documentation only
   scratch/                  # gitignored — in-progress/planning notes, not tracked
 deliverables/               # graded course submissions (e.g. assignment write-ups), not docs/ or app code

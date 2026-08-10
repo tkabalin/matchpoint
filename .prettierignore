@@ -17,8 +17,9 @@ routeTree.gen.ts
 packages/api-client/
 
 # Vendored Claude Code skills — kept byte-identical to upstream, so reformatting
-# would make them diff against their source for no benefit
-.claude/skills/
+# would make them diff against their source for no benefit. Skills written here are
+# ours to format, so the ignore names the vendored one rather than the whole folder.
+.claude/skills/shadcn/
 
 # Test artifacts
 coverage/
