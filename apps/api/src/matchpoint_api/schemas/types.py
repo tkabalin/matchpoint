@@ -3,10 +3,11 @@ from typing import Annotated
 from pydantic import StringConstraints
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-"""A required free-text field, bounded to match the String(100) columns on the models.
+"""A free-text field, bounded to match the String(100) columns on the models.
 
 Stripped before the length check, so whitespace-only input is rejected rather than
-stored as a name that renders blank everywhere.
+stored as a name that renders blank everywhere. Optional fields pair it with `| None`,
+which leaves the bounds applying only to a value that is actually present.
 """
 
 LongText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
