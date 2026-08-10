@@ -6,9 +6,11 @@ import sqlalchemy
 def str_enum(enum_cls: type[enum.StrEnum], name: str) -> sqlalchemy.Enum:
     """VARCHAR + CHECK column type for a StrEnum — the project convention for enums.
 
-    Native Postgres enums cannot be altered inside a transactional migration, so
-    enums are stored as plain strings constrained by a CHECK, keyed on the enum's
-    values rather than its member names.
+    Postgres offers no way to remove a value from a native enum, so adding one
+    could never be rolled back and any migration touching an enum would ship a
+    downgrade that cannot do what it claims. A CHECK constraint is editable in
+    both directions, so enums are stored as plain strings constrained by one,
+    keyed on the enum's values rather than its member names.
     """
     return sqlalchemy.Enum(
         enum_cls,
