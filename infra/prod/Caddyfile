@@ -5,6 +5,12 @@
 matchpoint.thomaskabalin.com {
 	tls /etc/caddy/certs/origin.pem /etc/caddy/certs/origin.key
 
+	# Caddy logs errors but not requests unless asked, which leaves no record
+	# that a request ever arrived — the timeline an outage is reconstructed from.
+	# Output defaults to stderr, so Docker captures it and compose's log limits
+	# bound it. Client IPs are Cloudflare's edge, not visitors': no trusted_proxies.
+	log
+
 	# /api/* matches nothing for a bare /api, which would otherwise fall through
 	# to the SPA and answer an API call with index.html and a 200.
 	redir /api /api/ permanent
