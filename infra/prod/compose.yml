@@ -12,6 +12,16 @@
 #
 # Memory limits keep any one service from consuming the whole (modest) VPS
 # under load; Postgres gets the largest share.
+# Docker's json-file driver is unbounded by default, so one chatty or
+# crash-looping service can fill the disk — and Caddy logs every request. Docker
+# fixes a container's logging at creation, so this only takes effect once
+# containers are recreated, not on a restart.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # Caddy runs as root because it binds :80/:443, and dropping the uid would not
   # protect the one secret here — it has to read the origin key whatever it runs
@@ -21,6 +31,7 @@ services:
   web:
     image: matchpoint/web:${IMAGE_TAG:?}
     restart: unless-stopped
+    logging: *logging
     ports:
       - "80:80"
       - "443:443"
@@ -40,6 +51,7 @@ services:
   api:
     image: matchpoint/api:${IMAGE_TAG:?}
     restart: unless-stopped
+    logging: *logging
     environment:
       MATCHPOINT_DATABASE_URL: postgresql+psycopg://matchpoint:${POSTGRES_PASSWORD:?}@postgres:5432/matchpoint
     depends_on:
@@ -52,6 +64,7 @@ services:
   postgres:
     image: postgres:18
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_USER: matchpoint
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
