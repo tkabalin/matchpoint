@@ -109,6 +109,15 @@ def test_create_player_accepts_date_of_birth_of_today(client: TestClient) -> Non
     assert response.json()["date_of_birth"] == today.isoformat()
 
 
+def test_create_player_accepts_an_explicit_null_date_of_birth(client: TestClient) -> None:
+    """Not the same path as omitting the field: an explicit null is handed to the
+    validator, where an absent field skips it entirely."""
+    response = client.post("/players", json=_payload(date_of_birth=None))
+
+    assert response.status_code == 201
+    assert response.json()["date_of_birth"] is None
+
+
 def test_create_player_rejects_missing_first_name(client: TestClient) -> None:
     response = client.post("/players", json={"last_name": "Williams"})
 
@@ -139,10 +148,26 @@ def test_create_player_rejects_overlong_name(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_create_player_accepts_name_at_the_length_limit(client: TestClient) -> None:
+    """Pairs with the test above so the boundary is pinned from both sides — an
+    off-by-one in ShortText would otherwise pass."""
+    response = client.post("/players", json=_payload(first_name="x" * 100))
+
+    assert response.status_code == 201
+
+
 def test_create_player_rejects_overlong_notes(client: TestClient) -> None:
     response = client.post("/players", json=_payload(notes="x" * (NOTES_LIMIT + 1)))
 
     assert response.status_code == 422
+
+
+def test_create_player_accepts_notes_at_the_length_limit(client: TestClient) -> None:
+    """LongText's bound is the schema's alone — the column is unbounded Text — so
+    only this pins that the limit reaches the route at all."""
+    response = client.post("/players", json=_payload(notes="x" * NOTES_LIMIT))
+
+    assert response.status_code == 201
 
 
 def test_create_player_rejects_whitespace_only_name(client: TestClient) -> None:
@@ -230,7 +255,22 @@ def test_get_player_still_returns_an_archived_player(
     assert response.json()["archived_at"] is not None
 
 
+def test_list_players_with_none_stored_is_an_empty_list(client: TestClient) -> None:
+    response = client.get("/players")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
 def test_get_player_unknown_id_is_404(client: TestClient) -> None:
     response = client.get(f"/players/{uuid.uuid4()}")
 
     assert response.status_code == 404
+
+
+def test_get_player_malformed_id_is_422(client: TestClient) -> None:
+    """A non-UUID path segment fails path validation rather than reaching the
+    handler, so it is a 422 and not the 404 an unknown id gets."""
+    response = client.get("/players/not-a-uuid")
+
+    assert response.status_code == 422
