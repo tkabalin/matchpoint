@@ -19,22 +19,60 @@ checked twice.
 Apart from e2e, these are the same non-mutating checks as `scripts/check.sh`, so a green local check
 predicts a green pipeline. Everything runs on the self-hosted ThinkTank runner.
 
-**Which of them run depends on what changed.** On `main` all of them do, always. Elsewhere each
-family runs only when its own inputs are touched, so a change to one toolchain doesn't burn runner
-time on the other:
+**The jobs run as a graph, not in lockstep.** Each declares what it actually depends on, so the two
+toolchains progress as independent chains and nothing waits on a stage boundary it has no dependency
+on:
+
+```
+python-lint ─┐
+             ├─▶ build-api-image ─┐
+api-test ────┘                    │
+                                  ├─▶ deploy
+web-lint ────┐                    │
+web-test ────┼─▶ build-web-image ─┘
+web-e2e ─────┘
+```
+
+Every job in the left-hand column is ready the moment the pipeline starts. How many actually run at
+that point is up to the runner, which has a fixed number of job slots — when there are more ready
+jobs than slots, one waits for the first of the others to finish, so the graph describes the ceiling
+on parallelism rather than a guarantee (see [infrastructure.md](infrastructure.md)).
+
+Lint gates the image builds rather than the test jobs, which is the one non-obvious edge here: a job
+in a graph runs as soon as its _own_ dependencies are met, regardless of what else has failed, so
+lint has to sit somewhere upstream of the builds or a failing formatter would sail through to a
+deploy. Putting it there is close to free, since lint runs alongside the tests and the builds wait
+for those anyway; gating the test jobs on it instead would park repo-wide Prettier in front of the
+browser suite, which is the most expensive thing in the pipeline.
+
+The `stages:` list in `.gitlab-ci.yml` still exists, but with the graph in place it orders the
+pipeline view rather than acting as a barrier.
+
+**Which of them run depends on what changed.** On `main` all of them do, always. Elsewhere each job
+runs only when its own inputs are touched, so a change to one toolchain doesn't burn runner time on
+the other:
 
 - **API jobs** — anything under `apps/api/`.
-- **Web jobs** — anything Prettier or ESLint reads, which is much more than web source: shared
-  packages, docs, Markdown anywhere in the repo, root manifests and tool configs. A docs-only change
-  therefore still runs web lint. That breadth is deliberate: a formatting violation that slipped
-  through would fail the next pipeline that did run one, far from the change that caused it.
+- **Web lint** — anything Prettier or ESLint reads, which is much more than web source: shared
+  packages, docs, Markdown anywhere in the repo, root manifests and tool configs. That breadth is
+  deliberate: a formatting violation that slipped through would fail the next pipeline that did run
+  one, far from the change that caused it.
+- **Web typecheck, unit tests and e2e** — web app code and the manifests that describe it, and
+  nothing else. A docs-only change therefore runs web lint but not the browser suite, which is the
+  most expensive thing in the pipeline and cannot tell a prose edit anything.
 - **Both** — a change to the pipeline definition itself.
 
 Also on every pipeline:
 
 - **Image builds are exercised on merge requests**: a change to anything an image is built from —
-  app source, dependencies, lockfiles, the Dockerfiles themselves — builds both images without
-  uploading them, so a broken build fails on the merge request rather than on `main`.
+  app source, dependencies, lockfiles, the Dockerfiles themselves — builds that image without
+  uploading it, so a broken build fails on the merge request rather than on `main`. The two images
+  have separate input lists, so an API change doesn't rebuild the web image.
+- **Dependency caches are keyed on lockfile content**: the pnpm store, uv's cache and the Node
+  toolchain pyright downloads for itself all persist between pipelines, and each is re-uploaded only
+  by the job that owns it. Every other job restores it read-only rather than re-archiving an
+  identical copy. The runner holds a separate copy of each cache per job slot rather than one shared
+  copy, so slots warm up independently and a job can miss a cache that another slot already has.
 - **Test reports surface in the MR**: every suite emits JUnit XML, so a failing test appears in the
   merge-request widget rather than buried in job logs. Coverage output feeds the project badge, and
   a failed e2e run attaches its Playwright HTML report — traces included — as an artifact.

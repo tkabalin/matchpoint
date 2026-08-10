@@ -71,6 +71,16 @@ services. Running the runner there rather than on the VPS is on the basis that:
 - Keeping it off the VPS preserves the production server's limited resources for actually serving
   MatchPoint
 
+It uses the **Docker executor**: every job runs in its own container, and the host's Docker socket
+is mounted in so image builds go to the host daemon and reuse its layer cache between pipelines.
+
+**How many jobs run at once is a runner-side setting**, configured on ThinkTank and not in this
+repository. It is the ceiling on pipeline parallelism regardless of what the pipeline definition
+allows — a job graph with no barriers in it still runs single-file if the runner will only take one
+job at a time, and this is the first thing to check when pipeline wall-clock doesn't match the
+graph. The value is sized against ThinkTank's core count and the other services competing for them,
+so it is recorded with the runner's own documentation rather than duplicated here.
+
 ## DNS & CDN
 
 **Cloudflare** handles DNS, chosen for:
