@@ -51,9 +51,16 @@ e2e runs on **Playwright**. The runners are kept apart by location and naming: V
 
 ## Backend (`apps/api`)
 
-All tests run on **pytest** and live in `apps/api/tests/`, outside the package (the Python idiom for
-a `src/` layout). Files are named `test_<module>.py` after the module or router under test; as the
-suite grows, subfolders mirror the source tree (`tests/routers/`, `tests/models/`).
+All tests run on **pytest** and live in `apps/api/tests/`, outside the application package (the
+Python idiom for a `src/` layout). Files are named `test_<module>.py` after the module under test,
+in subfolders mirroring the source tree (`tests/models/`, `tests/routers/`, `tests/schemas/`) from
+the first test rather than once the suite feels large. Tests for top-level modules stay at the root
+of `tests/`.
+
+Each test folder is a package. Mirroring reproduces the source tree's module names, so one model
+tested at two layers yields two files sharing a basename — which pytest's default import mode
+refuses to collect unless the folders are packages. It also makes shared helpers importable as
+`tests.factories`.
 
 - **Unit tests** import the function and call it — no fixtures.
 - **Integration tests** use two fixtures from `tests/conftest.py`:

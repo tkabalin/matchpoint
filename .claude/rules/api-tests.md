@@ -7,7 +7,11 @@ paths:
 
 - Tests live in `tests/`, named `test_<module>.py` after the module or router under test; subfolders
   always mirror `src/matchpoint_api/` — e.g. a test for `src/matchpoint_api/routers/matches.py` goes
-  in `tests/routers/test_matches.py`, from the first test, not once the suite feels big.
+  in `tests/routers/test_matches.py`, from the first test, not once the suite feels big. Tests for
+  top-level modules (`main.py`) stay at the root of `tests/`.
+- Every test folder is a package, `tests/` included — keep the `__init__.py` files. Mirroring gives
+  two layers' tests for one model the same basename, which pytest's default import mode refuses to
+  collect unless the folders are packages.
 - Unit tests for pure logic take no fixtures. Anything exercising a route goes through the `client`
   fixture from `conftest.py`.
 - Default to an integration test unless the code under test is pure logic with no I/O — see
