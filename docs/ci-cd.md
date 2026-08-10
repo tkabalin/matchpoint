@@ -64,8 +64,10 @@ A green `main` pipeline continues into two more stages:
 
 **Deploys are automatic** on every green `main` pipeline — merging is releasing, which fits the
 rapid usability-testing loop with the client. The guardrails: deployment records to the GitLab
-`production` environment (deploy history and one-click redeploys, restricted to Maintainers), a
-`resource_group` so two deploys never run concurrently, and the deploy job is never auto-cancelled.
+`production` environment (deploy history and one-click redeploys, with deploy access matching who
+may merge to `main` — the merge is the release decision, so gating deploy more tightly than merge
+only produces failed jobs), a `resource_group` so two deploys never run concurrently, and the deploy
+job is never auto-cancelled.
 
 **Rollback is a redeploy of an older SHA** — image tags are immutable per commit, so rolling back
 means re-running an older pipeline's deploy job (or `ssh deploy@<vps> <older-sha>`), not rebuilding.

@@ -4,10 +4,12 @@ The stack runs on the `matchpoint-prod` VPS as three containers (Caddy serving t
 proxying `/api/*`, the FastAPI service, Postgres), defined by `compose.yml`. CI builds images on the
 ThinkTank runner, uploads them as docker-save tarballs to the GitLab **generic package registry**
 (package `images`, version = commit short SHA), then triggers `deploy.sh` on the VPS over SSH, which
-downloads and `docker load`s the tarballs for that SHA. The GitLab **container registry** is not
-used: its port (5050) is firewalled to campus-internal traffic, while the package registry rides the
-normal HTTPS port, which both the runner and the VPS can reach. The SSH key CI holds is locked to
-that one script via a forced command, so it cannot open a shell.
+downloads and `docker load`s the tarballs for that SHA. Only the two application images arrive this
+way — the Postgres image is pulled from Docker Hub, so the box needs to reach it whenever that pin
+names a tag not already in its local image store. The GitLab **container registry** is not used: its
+port (5050) is firewalled to campus-internal traffic, while the package registry rides the normal
+HTTPS port, which both the runner and the VPS can reach. The SSH key CI holds is locked to that one
+script via a forced command, so it cannot open a shell.
 
 ## One-time VPS provisioning
 
@@ -64,6 +66,23 @@ refuses the deploy rather than failing halfway through it.
 
 If `compose.yml`, `deploy.sh`, or the certs change, they must be re-installed on the VPS by hand —
 the restricted SSH key deliberately cannot copy files.
+
+### Checking the web layer
+
+`docker compose ps` only shows that the containers are up; these three cover what it cannot see —
+TLS termination, the `/api/*` proxy, and Caddy's SPA fallback — and are worth running after any
+change to the Caddyfile or the compose port mappings:
+
+```
+curl -sSI https://matchpoint.thomaskabalin.com/               # 200 over TLS
+curl -sS  https://matchpoint.thomaskabalin.com/api/health     # JSON from the API, not HTML
+curl -sSI https://matchpoint.thomaskabalin.com/any/unknown/path
+```
+
+The last one must answer `200` with `content-type: text/html` — Caddy serving the app shell for a
+path that exists only as a client-side route. A `404` there means refreshing the page on any real
+route inside the app is broken. On the middle one, HTML rather than JSON means the SPA is swallowing
+API paths instead of them reaching the API.
 
 ## Database backups
 
