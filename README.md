@@ -110,10 +110,11 @@ Two scripts, run from anywhere in the repo:
   format check, ruff check, pyright, pytest). **Optional but recommended before pushing** — not
   required, since CI runs the identical checks on every push/MR anyway, but running it locally first
   catches failures earlier. Like CI, it only ever reports — it never rewrites your files, so run
-  `format.sh` to fix what it flags.
+  `format.sh` to fix what it flags. The checks run concurrently, and every one runs to completion,
+  so a single run reports all the failures rather than stopping at the first.
 
-Each script is a thin wrapper around plain package-manager commands, useful if you want to run a
-single step (e.g. just `pnpm run lint`) instead of the whole suite:
+Underneath, both scripts run plain package-manager commands, so you can run a single step yourself
+(e.g. just `pnpm run lint`) instead of the whole suite:
 
 ```sh
 # From the repo root
