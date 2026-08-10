@@ -34,6 +34,10 @@ __pycache__/
 .venv/
 .ruff_cache/
 .pytest_cache/
+# CI redirects these into the project so they can be cached between jobs; they
+# don't appear locally, where both tools use the usual per-user cache dirs.
+.uv-cache/
+.pyright-node/
 
 # -----------------------------------------------------------------------------
 # Test reports and coverage (Vitest, pytest)

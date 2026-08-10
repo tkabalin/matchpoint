@@ -39,7 +39,6 @@ workflow:
     paths:
       - .uv-cache
   before_script:
-    - apt-get update -qq && apt-get install -y -qq libatomic1 > /dev/null
     - cd apps/api
     - uv sync --locked --group dev
   # Root config files affect both families and so appear in both filters.
@@ -48,6 +47,22 @@ workflow:
     - changes:
         - apps/api/**/*
         - .gitlab-ci.yml
+
+# Narrower than .web-base's filter on purpose. That list is sized for repo-wide
+# Prettier/ESLint, which has to see a Markdown edit anywhere in the repo; these
+# rules are for the jobs that only compile and run web app code, and nothing
+# left out of them can change web runtime behaviour. web-lint still runs on the
+# broad list, so repo-wide formatting stays enforced.
+.web-app-rules: &web-app-rules
+  - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  - changes:
+      - apps/web/**/*
+      - packages/**/*
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - tsconfig.base.json
+      - .gitlab-ci.yml
 
 .web-base:
   image: node:22-slim
@@ -88,10 +103,26 @@ workflow:
         - .gitlab-ci.yml
 
 # --- Jobs -------------------------------------------------------------------
+# `needs:` makes this a DAG rather than a stage ladder, so the two families run
+# as independent chains and every lint and test job starts at once. The `stages:`
+# list above is then ordering documentation that keeps the pipeline graph
+# readable, not a barrier.
+#
+# Note where the lint jobs sit: nothing depends on them until the image builds.
+# A job with `needs:` runs as soon as its own needs are satisfied, regardless of
+# what else in the pipeline failed, so hanging lint off the builds rather than
+# off the test jobs is what keeps a failing lint from reaching deploy — while
+# still letting the slow e2e job start immediately instead of queueing behind
+# repo-wide Prettier.
+#
+# The build jobs' `needs:` use the `optional: true` long form because `rules:`
+# lets jobs drop out independently, and a hard `needs:` on a job that was never
+# created is a pipeline-config error rather than a skip.
 
 python-lint:
   extends: .api-base
   stage: lint
+  needs: []
   script:
     - uv run ruff check .
     - uv run ruff format --check .
@@ -99,6 +130,7 @@ python-lint:
 web-lint:
   extends: .web-base
   stage: lint
+  needs: []
   script:
     - pnpm run format:check
     - pnpm run lint
@@ -106,7 +138,33 @@ web-lint:
 api-test:
   extends: .api-base
   stage: test
+  needs: []
+  variables:
+    # Absolute for the same reason as UV_CACHE_DIR. pyright on PyPI is a shim
+    # that downloads a Node build and npm-installs the real pyright into this
+    # directory on first run, so caching it is worth more than caching uv's.
+    PYRIGHT_PYTHON_ENV_DIR: $CI_PROJECT_DIR/.pyright-node
+  # Spelled out rather than inherited: cache: is a list, so extends replaces it
+  # wholesale. The uv entry is pull-only — python-lint already pushes it under
+  # the same key — while the pyright env is only ever produced here. Keying it on
+  # uv.lock invalidates it whenever the pyright pin moves.
+  cache:
+    - key:
+        files:
+          - apps/api/uv.lock
+      paths:
+        - .uv-cache
+      policy: pull
+    - key:
+        prefix: pyright-node
+        files:
+          - apps/api/uv.lock
+      paths:
+        - .pyright-node
   script:
+    # The Node build pyright fetches links against libatomic; ruff is a static
+    # binary and doesn't, so this stays out of .api-base and off python-lint.
+    - apt-get update -qq && apt-get install -y -qq libatomic1 > /dev/null
     - uv run pyright
     - uv run pytest --cov --junitxml=junit.xml
   # Matches the TOTAL line of pytest-cov's terminal report.
@@ -119,6 +177,13 @@ api-test:
 web-test:
   extends: .web-base
   stage: test
+  needs: []
+  rules: *web-app-rules
+  # Pull-only: web-lint pushes this cache under the same lockfile-derived key,
+  # so re-archiving the store here would upload nothing new. cache: is a map, so
+  # extends merges this in on top of .web-base's key and paths.
+  cache:
+    policy: pull
   script:
     - pnpm run typecheck
     # Called via --filter rather than the root `test` script because the extra
@@ -136,6 +201,12 @@ web-test:
 web-e2e:
   extends: .web-base
   stage: test
+  # needs: [] deliberately — this is the longest job in the pipeline, so it
+  # starts at t=0 rather than waiting for a lint stage it has no dependency on.
+  needs: []
+  rules: *web-app-rules
+  cache:
+    policy: pull
   # The image tag must track @playwright/test in pnpm-lock.yaml. It ships the
   # browser builds that release expects, which is what the suite runs against:
   # pnpm doesn't execute the playwright postinstall that would otherwise
@@ -171,27 +242,33 @@ web-e2e:
   image: docker:29-cli
   variables:
     PUSH_IMAGE: "true"
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    # Off the default branch, build without pushing whenever an image input
-    # changes, so a broken build fails on the merge request instead of first
-    # being noticed as a main pipeline that leaves main undeployable. The whole
-    # of each app is an input, not just its Dockerfile: a bad import, a new
-    # dependency, or a lockfile bump breaks the build with the Dockerfile
-    # untouched. The web image builds from the repo root, so the workspace
-    # manifests count too.
-    - changes:
-        - apps/api/**/*
-        - apps/web/**/*
-        - package.json
-        - pnpm-lock.yaml
-        - pnpm-workspace.yaml
-        - .dockerignore
-      variables:
-        PUSH_IMAGE: "false"
+
+# Each build job spells out its own rules rather than sharing one on .image-base:
+# the changes: list is per-image, so an apps/api commit doesn't rebuild the web
+# image, and rules: is a list, which extends replaces rather than merges.
+#
+# Off the default branch, each builds without pushing whenever its own inputs
+# change, so a broken build fails on the merge request instead of first being
+# noticed as a main pipeline that leaves main undeployable. The whole of each app
+# is an input, not just its Dockerfile: a bad import, a new dependency, or a
+# lockfile bump breaks the build with the Dockerfile untouched.
 
 build-api-image:
   extends: .image-base
+  needs:
+    - job: python-lint
+      optional: true
+    - job: api-test
+      optional: true
+  # No root .dockerignore here: the build context is apps/api, so Docker reads
+  # apps/api/.dockerignore, which apps/api/**/* already covers.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - apps/api/**/*
+        - .gitlab-ci.yml
+      variables:
+        PUSH_IMAGE: "false"
   script:
     - docker build -t "matchpoint/api:$CI_COMMIT_SHORT_SHA" apps/api
     # CI_JOB_TOKEN is scoped to this pipeline run; no stored secret involved.
@@ -204,6 +281,28 @@ build-api-image:
 
 build-web-image:
   extends: .image-base
+  needs:
+    - job: web-lint
+      optional: true
+    - job: web-test
+      optional: true
+    - job: web-e2e
+      optional: true
+  # This image builds from the repo root, so the workspace manifests and the root
+  # .dockerignore are inputs too.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - apps/web/**/*
+        - packages/**/*
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.base.json
+        - .dockerignore
+        - .gitlab-ci.yml
+      variables:
+        PUSH_IMAGE: "false"
   script:
     - docker build -f apps/web/Dockerfile -t "matchpoint/web:$CI_COMMIT_SHORT_SHA" .
     - >-
@@ -216,6 +315,10 @@ build-web-image:
 deploy:
   stage: deploy
   image: alpine:3.22
+  # Not optional, unlike the needs above: this job is default-branch-only, where
+  # both builds always run, so a soft edge could only ever let a deploy fire for
+  # a SHA whose tarball was never uploaded. Fail the pipeline instead.
+  needs: [build-api-image, build-web-image]
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   # Never auto-cancel a deploy mid-flight, and never run two concurrently.
