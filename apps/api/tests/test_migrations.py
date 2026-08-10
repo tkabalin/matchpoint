@@ -15,12 +15,19 @@ from pathlib import Path
 
 import pytest
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import Engine, create_engine, inspect, make_url, text
 
+import matchpoint_api.models  # noqa: F401  # register all models on Base.metadata
 from matchpoint_api.config import settings
+from matchpoint_api.db import Base
 
 ROUND_TRIP_DATABASE = "matchpoint_migration_round_trip"
+# Every table the migrations are expected to build. `alembic_version` is deliberately
+# absent: Alembic creates it outside the revisions and leaves it behind at base.
+MIGRATED_TABLES = frozenset({"players", "matches"})
 
 
 def _table_names(url: str) -> set[str]:
@@ -62,12 +69,29 @@ def test_migrations_upgrade_downgrade_and_upgrade_again(round_trip_url: str) -> 
     settings.database_url = round_trip_url
     try:
         command.upgrade(config, "head")
-        assert "players" in _table_names(round_trip_url)
+        assert _table_names(round_trip_url).issuperset(MIGRATED_TABLES)
 
         command.downgrade(config, "base")
-        assert "players" not in _table_names(round_trip_url)
+        assert _table_names(round_trip_url).isdisjoint(MIGRATED_TABLES)
 
         command.upgrade(config, "head")
-        assert "players" in _table_names(round_trip_url)
+        assert _table_names(round_trip_url).issuperset(MIGRATED_TABLES)
     finally:
         settings.database_url = original_url
+
+
+def test_the_schema_at_head_matches_the_models(_test_engine: Engine) -> None:
+    """Alembic's own autogenerate comparison, asserted rather than printed.
+
+    A column added to a model without a revision to go with it is otherwise invisible:
+    the ORM writes through `Base.metadata`, so every test keeps passing until a
+    deployment runs against the migrated schema and the column isn't there.
+
+    Reads the shared `matchpoint_test` database, which conftest has already migrated
+    to head, so this costs a reflection and nothing else.
+    """
+    with _test_engine.connect() as connection:
+        context = MigrationContext.configure(connection, opts={"compare_type": True})
+        differences = compare_metadata(context, Base.metadata)
+
+    assert differences == [], "models and migrations disagree — autogenerate a revision"
