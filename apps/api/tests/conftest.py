@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from matchpoint_api.main import create_app
 
 TEST_DATABASE = "matchpoint_test"
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+ALLOW_NONLOCAL_ENV = "MATCHPOINT_TEST_ALLOW_NONLOCAL_DB"
 
 
 @pytest.fixture(scope="session")
@@ -23,10 +25,16 @@ def _test_engine() -> Iterator[Engine]:
     # This fixture drops a database, so refuse any server that isn't local: a
     # MATCHPOINT_DATABASE_URL pointed at a deployed Postgres would otherwise run
     # DDL on it the moment someone types `pytest`.
-    if dev_url.host not in LOCAL_HOSTS:
+    #
+    # CI is the one legitimate exception — a service container is reachable only at
+    # its network alias, never at localhost — and it has to opt in explicitly rather
+    # than be recognised by hostname: the alias there is `postgres`, which is also
+    # the host the deployed API talks to (infra/prod/compose.yml).
+    if dev_url.host not in LOCAL_HOSTS and os.getenv(ALLOW_NONLOCAL_ENV) != "1":
         raise RuntimeError(
             f"Refusing to recreate {TEST_DATABASE} on non-local host {dev_url.host!r}. "
-            "Point MATCHPOINT_DATABASE_URL at the local Compose Postgres to run the tests."
+            "Point MATCHPOINT_DATABASE_URL at the local Compose Postgres to run the tests, "
+            f"or set {ALLOW_NONLOCAL_ENV}=1 if the target is genuinely disposable."
         )
     admin_engine = create_engine(dev_url.set(database="postgres"), isolation_level="AUTOCOMMIT")
     try:

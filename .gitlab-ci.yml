@@ -139,11 +139,27 @@ api-test:
   extends: .api-base
   stage: test
   needs: []
+  # Integration tests run against real Postgres, matching the local `docker compose
+  # up -d` setup. Tag pinned to the same major as docker-compose.yml and prod.
+  # No `alias:` — GitLab derives the `postgres` hostname from the image name, and
+  # setting it explicitly collides with that default rather than reinforcing it.
+  services:
+    - postgres:18
   variables:
     # Absolute for the same reason as UV_CACHE_DIR. pyright on PyPI is a shim
     # that downloads a Node build and npm-installs the real pyright into this
     # directory on first run, so caching it is worth more than caching uv's.
     PYRIGHT_PYTHON_ENV_DIR: $CI_PROJECT_DIR/.pyright-node
+    # Job variables reach the service container too, which is how these three
+    # configure the server the tests then connect to.
+    POSTGRES_USER: matchpoint
+    POSTGRES_PASSWORD: matchpoint
+    POSTGRES_DB: matchpoint
+    # The service is only reachable at its alias, so conftest's local-host guard
+    # has to be waived explicitly — see tests/conftest.py. Only the database name
+    # differs from what the tests use: conftest swaps in matchpoint_test itself.
+    MATCHPOINT_DATABASE_URL: postgresql+psycopg://matchpoint:matchpoint@postgres:5432/matchpoint
+    MATCHPOINT_TEST_ALLOW_NONLOCAL_DB: "1"
   # Spelled out rather than inherited: cache: is a list, so extends replaces it
   # wholesale. The uv entry is pull-only — python-lint already pushes it under
   # the same key — while the pyright env is only ever produced here. Keying it on
