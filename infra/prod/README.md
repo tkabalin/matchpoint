@@ -19,7 +19,9 @@ Done by hand as the `thomas` admin user; CI never performs these steps.
 1. Create a `deploy` user in the `docker` group (no sudo): `sudo useradd -m -G docker deploy`
 2. Install this directory's files:
    - `compose.yml`, `deploy.sh`, and `backup.sh` (both scripts executable) into `/opt/matchpoint/`,
-     owned by `deploy`.
+     with the directory itself and everything in it owned by `deploy`. `deploy.sh` records the
+     deployed tag by writing a temp file alongside `.env` and renaming it, so a directory it can
+     only read is not enough.
    - A Cloudflare **Origin Certificate** pair (Cloudflare dashboard → SSL/TLS → Origin Server) as
      `/opt/matchpoint/certs/origin.pem` and `origin.key`, owned by `root:root` with the key at mode
      `600`, and the Cloudflare SSL mode set to **Full (strict)**. The web container drops

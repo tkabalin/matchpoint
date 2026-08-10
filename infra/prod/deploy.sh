@@ -18,6 +18,16 @@ fi
 # running. It is rewritten at the end, once all of this has worked.
 export IMAGE_TAG="$tag"
 
+# Recording the tag at the end replaces .env, which means creating a temp file in
+# this directory — so it needs write permission on the directory, not just on
+# .env. Check that before anything is deployed: discovering it afterwards leaves
+# the containers rolled but .env without an IMAGE_TAG, and every later bare
+# `docker compose` here then dies on ${IMAGE_TAG:?}.
+if [[ ! -w . ]]; then
+  echo "/opt/matchpoint is not writable by $(id -un), so the deployed tag could not be recorded" >&2
+  exit 1
+fi
+
 # Images arrive as docker-save tarballs from the GitLab generic package
 # registry (the container registry port is firewalled off-campus). The
 # read-only deploy token lives in .env next to POSTGRES_PASSWORD; read just
