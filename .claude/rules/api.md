@@ -26,6 +26,20 @@ paths:
   into it. This is the difference between letting a user filter data and letting them run arbitrary
   SQL against our database.
 
+## Error Responses
+
+- **Never raise a 422 by hand.** FastAPI auto-declares every route's 422 as `HTTPValidationError`,
+  whose `detail` is a list of errors, and the generated TypeScript client unpacks it as one — so an
+  `HTTPException(422, detail="...")` returns a shape the client cannot read. Pick a status FastAPI
+  does not auto-declare; 404 is the project's choice for a body field referencing a row that doesn't
+  exist.
+
+## Column Defaults
+
+- Timestamp columns default to `clock_timestamp()`, not `now()`. In Postgres `now()` is the
+  _transaction_ timestamp, so every row written in one transaction shares a value — silently voiding
+  any ordering that uses the column as a tiebreaker.
+
 ## Tests
 
 - New behaviour ships with tests. pytest, in `tests/`; route tests go through the `client` /
