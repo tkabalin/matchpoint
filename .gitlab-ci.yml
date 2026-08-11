@@ -258,6 +258,17 @@ web-e2e:
   image: docker:29-cli
   variables:
     PUSH_IMAGE: "true"
+  # The daemon is shared with every other pipeline, and each build leaves an
+  # immutable per-commit tag on it, so `docker image prune` frees nothing —
+  # nothing is ever dangling — and the tags accumulate until the disk fills.
+  # Bound the list explicitly, the way infra/prod/deploy.sh bounds it on the VPS,
+  # keeping the newest few so the layer cache the next build reuses survives.
+  # In after_script so that a failed build tidies up too, and so that a prune
+  # which fails cannot redden an otherwise green job.
+  after_script:
+    - >-
+      docker images "matchpoint/$IMAGE_NAME" --format '{{.Tag}}' | tail -n +6 | while read -r old;
+      do docker rmi "matchpoint/$IMAGE_NAME:$old" || true; done
 
 # Each build job spells out its own rules rather than sharing one on .image-base:
 # the changes: list is per-image, so an apps/api commit doesn't rebuild the web
@@ -271,6 +282,8 @@ web-e2e:
 
 build-api-image:
   extends: .image-base
+  variables:
+    IMAGE_NAME: api
   needs:
     - job: python-lint
       optional: true
@@ -297,6 +310,8 @@ build-api-image:
 
 build-web-image:
   extends: .image-base
+  variables:
+    IMAGE_NAME: web
   needs:
     - job: web-lint
       optional: true
