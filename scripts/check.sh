@@ -21,6 +21,25 @@ set -uo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# pytest builds its test database on the Compose Postgres (apps/api/tests/conftest.py), so a
+# stopped container fails every database-backed test on the same connection error — dozens of
+# identical tracebacks for a one-command fix. Check it up front and say what to run instead.
+# This is the one prerequisite worth failing fast on: unlike a lint or type error, no amount of
+# reading the output tells you the database is simply not there.
+if ! docker info > /dev/null 2>&1; then
+  printf 'The API tests need the Compose Postgres, but Docker is not running.\n' >&2
+  printf 'Start Docker, then: docker compose up -d\n' >&2
+  exit 1
+fi
+# pg_isready covers both states the tests care about — container stopped, and container up but
+# not yet accepting connections, which is the window right after `up -d`.
+if ! (cd "$repo_root" && docker compose exec -T postgres pg_isready -U matchpoint -q) \
+  > /dev/null 2>&1; then
+  printf 'The API tests need the Compose Postgres, which is not accepting connections.\n' >&2
+  printf 'Start it with: docker compose up -d\n' >&2
+  exit 1
+fi
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
