@@ -49,6 +49,14 @@ junit.xml
 junit-e2e.xml
 
 # -----------------------------------------------------------------------------
+# Container image tarballs
+# -----------------------------------------------------------------------------
+# CI `docker save`s each image to the repo root before uploading it. Anchored,
+# because only the copies at the root are build output.
+/*.tar
+/*.tar.gz
+
+# -----------------------------------------------------------------------------
 # Claude Code personal/local settings, not meant to be shared with the team
 # -----------------------------------------------------------------------------
 .claude/settings.local.json

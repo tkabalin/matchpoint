@@ -10,3 +10,7 @@ apps/api/
 deliverables/
 docs/
 infra/cloudflare/
+# CI `docker save`s the built images to the repo root, so a leftover tarball sits
+# next to the files this context does need.
+*.tar
+*.tar.gz
