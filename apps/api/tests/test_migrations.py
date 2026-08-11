@@ -27,7 +27,7 @@ from matchpoint_api.db import Base
 ROUND_TRIP_DATABASE = "matchpoint_migration_round_trip"
 # Every table the migrations are expected to build. `alembic_version` is deliberately
 # absent: Alembic creates it outside the revisions and leaves it behind at base.
-MIGRATED_TABLES = frozenset({"players", "matches"})
+MIGRATED_TABLES = frozenset({"coaches", "players", "matches"})
 
 
 def _table_names(url: str) -> set[str]:

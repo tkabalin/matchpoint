@@ -1,11 +1,12 @@
 import uuid
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import func, inspect, select, text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api.models import DominantHand, Gender, Player
+from tests.factories import make_coach
 
 NAME_FIELDS = ["first_name", "last_name"]
 
@@ -116,8 +117,8 @@ def _insert_raw_player(session: Session, **columns: object) -> None:
     """
     session.execute(
         text(
-            "INSERT INTO players (id, first_name, last_name, dominant_hand, gender) "
-            "VALUES (:id, :first_name, :last_name, :dominant_hand, :gender)"
+            "INSERT INTO players (id, first_name, last_name, dominant_hand, gender, coach_id) "
+            "VALUES (:id, :first_name, :last_name, :dominant_hand, :gender, :coach_id)"
         ),
         {
             "id": uuid.uuid4(),
@@ -125,6 +126,7 @@ def _insert_raw_player(session: Session, **columns: object) -> None:
             "last_name": "Nadal",
             "dominant_hand": None,
             "gender": None,
+            "coach_id": None,
             **columns,
         },
     )
@@ -160,3 +162,32 @@ def test_database_rejects_a_name_over_the_column_width(db_session: Session, fiel
     would first surface as a 500 in production."""
     with pytest.raises(DataError):
         _insert_raw_player(db_session, **{field: "x" * 101})
+
+
+def test_database_rejects_an_unknown_coach_id(db_session: Session) -> None:
+    """coach_id is nullable but not unconstrained: an id that matches no coach is a
+    player nobody owns, which is what the null it could have been already means."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_player(db_session, coach_id=uuid.uuid4())
+
+
+def test_database_refuses_to_delete_a_coach_who_still_has_players(db_session: Session) -> None:
+    """The foreign key declares no ondelete on purpose. Deleting the coach is refused
+    rather than cascading into their roster and the match history hanging off it."""
+    coach = make_coach(db_session)
+    _insert_raw_player(db_session, coach_id=coach.id)
+
+    with pytest.raises(IntegrityError):
+        db_session.execute(text("DELETE FROM coaches WHERE id = :id"), {"id": coach.id})
+
+
+def test_coach_id_is_indexed(db_session: Session) -> None:
+    """Postgres does not index a foreign key automatically, and one coach's roster is
+    the query every list of players becomes — a missing index would show up as nothing
+    but a slow page."""
+    indexed_columns = {
+        tuple(index["column_names"])
+        for index in inspect(db_session.connection()).get_indexes("players")
+    }
+
+    assert ("coach_id",) in indexed_columns

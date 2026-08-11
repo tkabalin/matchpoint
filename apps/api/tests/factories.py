@@ -4,12 +4,30 @@ Rows are flush()ed, not committed, so they stay inside the test's rolled-back
 transaction like everything else done through db_session.
 """
 
+import uuid
 from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match, Player
+from matchpoint_api.models import Coach, Match, Player
+
+
+def make_coach(session: Session, **overrides: Any) -> Coach:
+    # The email is unique per call rather than a fixed address: the column carries a
+    # UNIQUE constraint, so a shared default would make the second coach in any one
+    # test fail on it. The hash is obvious nonsense — nothing verifies passwords yet.
+    coach = Coach(
+        **{
+            "email": f"coach-{uuid.uuid4()}@example.com",
+            "display_name": "Test Coach",
+            "password_hash": "not-a-real-hash",
+        }
+        | overrides
+    )
+    session.add(coach)
+    session.flush()
+    return coach
 
 
 def make_player(session: Session, **overrides: Any) -> Player:
