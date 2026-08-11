@@ -101,7 +101,10 @@ A green `main` pipeline continues into two more stages:
    campus-internal traffic, so an off-campus runner or VPS can't reach it, while the package
    registry rides the normal HTTPS port. That choice comes with the retention problem the container
    registry would have solved: the generic registry has no cleanup policy of its own, so the
-   pipeline prunes it to the newest 10 image packages itself.
+   pipeline prunes it to the newest 10 image packages itself. The runner host's own tags need the
+   same treatment for the same reason a rolled VPS does — an immutable per-commit tag is never
+   dangling, so nothing reclaims it — and each build bounds its image to the newest few tags, which
+   is all the layer cache needs.
 2. **Deploy** — the pipeline SSHes to the VPS and hands over the SHA tag. The key it holds is bound
    to a forced command, so it can run `/opt/matchpoint/deploy.sh` and nothing else; the script
    downloads and `docker load`s the tarball for that SHA (using a read-only deploy token, skipping
