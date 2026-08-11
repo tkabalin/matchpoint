@@ -5,20 +5,22 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+// The generated client calls /api/* on its own origin, which is how production serves
+// it (Caddy strips the prefix and proxies to the API). This makes that true in dev too,
+// so no environment ever needs a different base URL — and same-origin means no CORS
+// anywhere. Shared by `server` and `preview`: preview serves the production build
+// locally, and without the proxy every request from it 404s against the static server.
+const apiProxy = {
+  "/api": {
+    target: "http://localhost:8000",
+    rewrite: (path: string) => path.replace(/^\/api/, ""),
+  },
+};
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: {
-    // The generated client calls /api/* on its own origin, which is how production
-    // serves it (Caddy strips the prefix and proxies to the API). This makes that
-    // true in dev too, so no environment ever needs a different base URL — and
-    // same-origin means no CORS anywhere.
-    proxy: {
-      "/api": {
-        target: "http://localhost:8000",
-        rewrite: (path) => path.replace(/^\/api/, ""),
-      },
-    },
-  },
+  server: { proxy: apiProxy },
+  preview: { proxy: apiProxy },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
