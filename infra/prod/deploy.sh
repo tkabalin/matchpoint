@@ -32,7 +32,10 @@ fi
 # registry (the container registry port is firewalled off-campus). The
 # read-only deploy token lives in .env next to POSTGRES_PASSWORD; read just
 # that line rather than sourcing the whole file.
-deploy_token=$(grep '^DEPLOY_TOKEN=' .env | cut -d= -f2-)
+# `|| true` because grep exits non-zero when the line (or the file) is missing,
+# which under pipefail would abort the script here — leaving the check below,
+# and the only message that explains what to fix, unreachable.
+deploy_token=$(grep '^DEPLOY_TOKEN=' .env | cut -d= -f2- || true)
 if [[ -z "$deploy_token" ]]; then
   echo "DEPLOY_TOKEN missing from .env" >&2
   exit 1
