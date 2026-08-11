@@ -15,9 +15,13 @@ class Coach(Base):
 
     No `archived_at`, unlike Player, because there is no deletion path to offer an
     alternative to: no route deletes a coach, and the foreign key from players refuses a
-    hard delete while any of theirs remain. Archiving is what a table offers *instead* of
-    deletion, so it belongs with deactivating an account — which also has to stop a
-    deactivated coach from signing in, and so is the auth work's to design.
+    hard delete while any of theirs remain. Archiving is what a table offers *instead*
+    of deletion, so here it would mean deactivating the account. The login work (#24)
+    weighed adding it and declined: nothing can set it — there is no admin surface and
+    no self-service closure — so the column would be written by nobody and the sign-in
+    check reading it would guard a state no code can produce. When a deactivation path
+    arrives, it brings three things as one piece of work: this column, the login check
+    that refuses the deactivated, and the revocation of their live coach_sessions rows.
     """
 
     __tablename__ = "coaches"

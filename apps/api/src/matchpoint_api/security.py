@@ -15,11 +15,12 @@ hashing was never available here, so bounding it to two at a time gives up no th
 the box could have delivered, and buys back the budget to keep RFC 9106's 64 MiB instead
 of trading memory away for iterations.
 
-Changing these parameters later reaches rows already stored only via
-`check_needs_rehash()` on a successful login, which is the one moment the plaintext and a
-database session are both in hand. Nothing in this module does database work.
+Changing these parameters later reaches rows already stored only via `needs_rehash()`
+on a successful login, which is the one moment the plaintext and a database session are
+both in hand. Nothing in this module does database work.
 """
 
+import secrets
 import threading
 import unicodedata
 
@@ -37,6 +38,15 @@ _hasher = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=1)
 # have spent waiting for the core anyway; capping the arrival rate is rate limiting's job,
 # not this module's.
 _slots = threading.Semaphore(2)
+
+# What login verifies against when the submitted email has no account. Without it, an
+# unknown address would answer before Argon2 has run and a known one after — a timing
+# oracle for which emails hold accounts, which is sign-up's 409 leak again but without
+# the "they could have guessed anyway" defence. Hashed at import (one hash at process
+# start) rather than committed as a literal, so its parameters can never drift from
+# _hasher's — equal cost is the whole point. The input is random and thrown away: no
+# submitted password should ever verify True against this.
+DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(32))
 
 
 def _normalise(password: str) -> str:
@@ -75,3 +85,14 @@ def verify_password(password: str, password_hash: str) -> bool:
             return _hasher.verify(password_hash, _normalise(password))
         except VerifyMismatchError:
             return False
+
+
+def needs_rehash(password_hash: str) -> bool:
+    """True when a stored hash was made with parameters other than the current ones.
+
+    How a parameter change above reaches rows already stored: a successful login is
+    the one moment the plaintext and a database session are both in hand, so the login
+    route asks this and re-hashes when the answer is yes. No semaphore — this reads
+    the parameters recorded in the hash string, it does not compute anything.
+    """
+    return _hasher.check_needs_rehash(password_hash)

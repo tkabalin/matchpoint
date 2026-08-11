@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # reported by /health. The default is what anything not deployed reports:
     # nothing outside production has a commit to name.
     commit: str = "dev"
+    # The session cookie's Secure flag. True everywhere deployed — the site is only
+    # served over HTTPS — and in tests, whose client claims an https base URL. Local
+    # dev over plain http://localhost still works in Chrome and Firefox, which treat
+    # localhost as trustworthy; Safari does not, and needs
+    # MATCHPOINT_SESSION_COOKIE_SECURE=false in apps/api/.env.
+    session_cookie_secure: bool = True
 
 
 settings = Settings()

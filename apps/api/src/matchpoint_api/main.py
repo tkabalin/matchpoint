@@ -6,7 +6,7 @@ from fastapi.routing import APIRoute
 from matchpoint_api import __version__
 from matchpoint_api.config import settings
 from matchpoint_api.errors import validation_error_response
-from matchpoint_api.routers import coaches, matches, players
+from matchpoint_api.routers import auth, coaches, matches, players
 
 
 def operation_id(route: APIRoute) -> str:
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         return validation_error_response(exc)
 
+    app.include_router(auth.router)
     app.include_router(coaches.router)
     app.include_router(players.router)
     app.include_router(matches.router)
