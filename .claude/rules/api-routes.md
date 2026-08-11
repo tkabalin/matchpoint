@@ -30,6 +30,28 @@ paths:
   the project's choice, and a status FastAPI does not auto-declare. Checking it beats leaving it to
   the foreign key, which surfaces as a 500 from an `IntegrityError`.
 
+## A Conflict on a Unique Column Is a Caught 409
+
+- A value colliding with a `UNIQUE` constraint is a **409**, raised from a caught `IntegrityError`
+  rather than a pre-check. This is the one place a pre-check is not enough: two requests can both
+  pass it and one still raises, so the catch is needed anyway and the query only adds a round-trip.
+  A foreign key has no such race, which is why the 404 above is pre-checked instead.
+- `rollback()` first, then narrow on `isinstance(exc.orig, UniqueViolation)` and re-raise anything
+  else. Reporting an unrelated integrity failure as a conflict points whoever hit it at the wrong
+  cause.
+
+## A Declared Response Declares a Model
+
+- `responses={409: {"description": "..."}}` reaches the spec as a status with no schema, and the
+  generated client types that as `unknown`. It unions a route's error responses into one type, so
+  the `unknown` swallows the union whole and takes the auto-declared 422 with it — leaving the
+  caller unable to read `detail` off either. Pass the model as well:
+  `{"model": ErrorDetail, "description": ...}`, using `schemas/errors.py`.
+- So a status is declared with a model or not declared at all. Declaring one exists to let the
+  client branch on it, which is exactly what the missing model takes away.
+- Nothing catches this: the spec test only checks that the committed `openapi.json` matches the
+  routes, and it does — `unknown` is what the routes asked for.
+
 ## Validation JSON Schema Cannot Express Needs a Twin
 
 - Rules like the date-of-birth and played-on bounds exist only in Python, so the OpenAPI spec cannot

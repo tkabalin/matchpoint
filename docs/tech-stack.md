@@ -80,17 +80,18 @@ path.
 
 ## Backend
 
-| Category        | Choice                     |
-| --------------- | -------------------------- |
-| Language        | Python 3.12                |
-| API framework   | FastAPI 0.141 + Pydantic 2 |
-| ORM             | SQLAlchemy 2 (sync)        |
-| Migrations      | Alembic                    |
-| Package manager | uv                         |
-| Lint / format   | Ruff 0.16                  |
-| Type checking   | Pyright                    |
-| Auth            | _TBD_                      |
-| Tests           | pytest 9                   |
+| Category         | Choice                     |
+| ---------------- | -------------------------- |
+| Language         | Python 3.12                |
+| API framework    | FastAPI 0.141 + Pydantic 2 |
+| ORM              | SQLAlchemy 2 (sync)        |
+| Migrations       | Alembic                    |
+| Package manager  | uv                         |
+| Lint / format    | Ruff 0.16                  |
+| Type checking    | Pyright                    |
+| Password hashing | Argon2id (argon2-cffi 25)  |
+| Sessions         | _TBD_                      |
+| Tests            | pytest 9                   |
 
 ### Rationale
 
@@ -113,6 +114,20 @@ analytics queries would outgrow its sweet spot).
 **uv + Ruff + Pyright.** The modern Python toolchain: uv for package/project management, Ruff for
 lint and format (replaces multiple tools), Pyright for type checking. All are fast, well-maintained,
 and LLM-friendly.
+
+**Argon2id via argon2-cffi.** OWASP's first choice for storing new passwords, and argon2-cffi is the
+reference binding rather than a wrapper over one. Its parameters are set explicitly for the hardware
+in `docs/infrastructure.md` rather than taken as shipped, because the defaults assume a machine we
+do not have: Argon2's memory cost is allocated per concurrent hash and routes that touch the
+database run on a thread pool, so the per-hash figure multiplies, and a single core cannot use more
+than one of Argon2's parallel lanes. Bounding how many hashes run at once is what keeps the
+recommended memory cost affordable inside the api container's memory limit, and the arithmetic is
+recorded in `security.py` so that whoever changes that limit knows which figures to redo.
+Alternatives considered: `pwdlib[argon2]` (what FastAPI's docs now use, but a wrapper whose value is
+migrating between algorithms we have no plan to migrate between, and pre-1.0 -- the same objection
+this doc makes to SQLModel); `bcrypt` (silently truncates at 72 bytes, and no memory-hardness);
+stdlib `hashlib.scrypt` (zero dependencies, at the cost of hand-writing salt generation, encoding
+and constant-time comparison); `passlib` (unmaintained since 2020).
 
 ## Infrastructure
 

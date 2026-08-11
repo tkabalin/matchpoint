@@ -18,7 +18,7 @@ erDiagram
         uuid id PK
         varchar(254) email UK "the sign-in identity, stored lowercased"
         varchar(100) display_name "full name, or whatever they go by"
-        text password_hash
+        text password_hash "argon2id hash"
         timestamptz created_at
         timestamptz updated_at
     }
