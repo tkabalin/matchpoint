@@ -125,8 +125,9 @@ def test_the_orm_lowercases_an_email_on_the_way_in(db_session: Session) -> None:
 
 
 def test_database_rejects_an_email_over_the_column_width(db_session: Session) -> None:
-    """254 characters is the longest address SMTP will carry, and the bound a sign-up
-    schema has to be written against."""
+    """254 characters is the longest address SMTP will carry, and the bound CoachCreate's
+    EMAIL_MAX_LENGTH is written against. Pinned separately from the schema's figure on
+    purpose: if the two ever diverge, an address the schema accepts becomes a 500."""
     local_part = "x" * (EMAIL_LIMIT + 1 - len("@example.com"))
 
     with pytest.raises(DataError):
@@ -134,8 +135,8 @@ def test_database_rejects_an_email_over_the_column_width(db_session: Session) ->
 
 
 def test_database_rejects_a_display_name_over_the_column_width(db_session: Session) -> None:
-    """String(100), matching the name columns on Player — so ShortText is the annotation
-    the sign-up schema wants, and a column narrowed later would break that pairing."""
+    """String(100), matching the name columns on Player — which is why CoachCreate's
+    display_name is ShortText, and why narrowing this column would break that pairing."""
     with pytest.raises(DataError):
         _insert_raw_coach(db_session, display_name="x" * (DISPLAY_NAME_LIMIT + 1))
 
