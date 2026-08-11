@@ -19,7 +19,11 @@ UI components are generated with the shadcn CLI rather than hand-built — see
 
 ## Getting started
 
-These instructions target Ubuntu/Debian Linux and macOS.
+These instructions target Ubuntu/Debian Linux, including WSL2, and nothing else. macOS is not
+supported: the scripts under `scripts/` use bash associative arrays and GNU `date`, neither of which
+a BSD userland provides. On Windows, work inside your WSL2 distro and run every command below from
+its bash shell — not from PowerShell or cmd, which cannot run the scripts at all and whose Node and
+pnpm binaries do not understand WSL paths.
 
 ### Prerequisites
 
@@ -42,19 +46,15 @@ curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
 nvm install && nvm use
 corepack enable && corepack prepare pnpm@11.18.0 --activate
 
-# uv — see https://docs.astral.sh/uv/ for other platforms
+# uv — see https://docs.astral.sh/uv/ for other install methods
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-If you don't already have Docker:
-
-- **Ubuntu/Debian, including WSL2**: install
-  [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) directly, or install
-  [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/). With
-  Docker Desktop you must then turn on WSL integration for the specific distro you develop in
-  (Settings → Resources → WSL Integration → toggle your distro on, then Apply & Restart).
-- **macOS**: install
-  [Docker Desktop for Mac](https://docs.docker.com/desktop/setup/install/mac-install/).
+If you don't already have Docker, install
+[Docker Engine](https://docs.docker.com/engine/install/ubuntu/) directly. On WSL2 you can instead
+install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+and turn on WSL integration for the specific distro you develop in (Settings → Resources → WSL
+Integration → toggle your distro on, then Apply & Restart).
 
 Either way, `docker compose version` should report Compose v2 once done.
 
