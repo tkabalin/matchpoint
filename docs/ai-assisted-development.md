@@ -71,6 +71,8 @@ Each committed rule declares a `paths` glob in its frontmatter:
 | Rule                | Paths                              | Protects                                                                                             |
 | ------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `api.md`            | `apps/api/**`                      | Sync SQLAlchemy, `def` (not `async def`) database routes, Alembic from the first table, uv-not-pnpm  |
+| `api-models.md`     | Model modules                      | Archiving over deletion, client-assignable UUID ids, enums as VARCHAR + CHECK, the timestamp pair    |
+| `api-routes.md`     | Routers and schemas                | `XCreate` as the client-settable columns, archived rows leaving the list, letting Pydantic raise 422 |
 | `api-migrations.md` | `apps/api/migrations/**`           | Alembic's `generic` template plus the two local `env.py` edits; no `sqlalchemy.url` in `alembic.ini` |
 | `api-tests.md`      | `apps/api/tests/**`                | A test tree mirroring the source; real Postgres over SQLite or a mocked session; savepoint rollback  |
 | `api-spec.md`       | Routers, schemas, app factory      | Regenerating the spec and TypeScript client in the same commit as the change that moved them         |

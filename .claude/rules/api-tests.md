@@ -27,5 +27,12 @@ paths:
   visible to requests in the same test.
 - Tests must not depend on execution order or leak state. If a test only passes after another has
   run, it is broken.
+- Build rows with the factories in `tests/factories.py` rather than constructing models inline, and
+  add one there for each new model. They `flush()` rather than `commit()`, which is what keeps a
+  fixture row inside the transaction the test rolls back.
+- `conftest.py` drops and recreates `matchpoint_test`, so it refuses any non-local database host.
+  Don't loosen that guard to make a run work — point `MATCHPOINT_DATABASE_URL` at the local Compose
+  Postgres instead. The opt-out env var exists for CI, where the service container is only reachable
+  at an alias.
 
 See `docs/testing.md` for the unit/integration/e2e split and framework rationale.
