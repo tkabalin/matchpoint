@@ -345,6 +345,10 @@ export type CreateCoachErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many sign-up attempts
+     */
+    429: ErrorDetail;
 };
 
 export type CreateCoachError = CreateCoachErrors[keyof CreateCoachErrors];

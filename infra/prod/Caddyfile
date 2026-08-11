@@ -9,6 +9,14 @@ matchpoint.thomaskabalin.com {
 	# that a request ever arrived — the timeline an outage is reconstructed from.
 	# Output defaults to stderr, so Docker captures it and compose's log limits
 	# bound it. Client IPs are Cloudflare's edge, not visitors': no trusted_proxies.
+	#
+	# Adding trusted_proxies to fix that is not a change to this file alone. Caddy
+	# keeps a client's own X-Forwarded-For once the peer sending it is trusted, and
+	# the api runs with --forwarded-allow-ips '*' (apps/api/Dockerfile), which takes
+	# the leftmost entry of the chain — safe only while Caddy guarantees the chain is
+	# the one address it saw. Trust Cloudflare here and the address the api keys its
+	# sign-up rate limit on becomes whatever the visitor sent, i.e. a fresh bucket
+	# per request. Change the two together, or not at all.
 	log
 
 	# /api/* matches nothing for a bare /api, which would otherwise fall through

@@ -30,4 +30,21 @@ EXPOSE 8000
 # --root-path because Caddy strips the /api prefix before proxying
 # (handle_path in infra/prod/Caddyfile); this keeps the OpenAPI docs and
 # generated URLs correct behind the proxy.
-CMD ["uvicorn", "matchpoint_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--root-path", "/api"]
+#
+# --forwarded-allow-ips so request.client is the address Caddy saw rather than
+# Caddy's container IP — the sign-up rate limit keys on it. Trusting the header
+# from any peer ('*') is safe here because this port is never published: the
+# only peer is Caddy, and Caddy replaces X-Forwarded-For from clients it does
+# not trust (it trusts none — no trusted_proxies in infra/prod/Caddyfile), so
+# the value is always the one address that reached Caddy, never a client-forged
+# chain. That address is a Cloudflare edge, not the visitor: coarser, which the
+# rate limit's shared tier compensates for (see rate_limit.py).
+#
+# The safety is Caddy's, not uvicorn's: '*' makes uvicorn read the leftmost
+# entry of the chain — the client-supplied end — and that is the right address
+# only because the chain is one entry long. Adding trusted_proxies to the
+# Caddyfile preserves a visitor's own X-Forwarded-For and hands the rate limit
+# an attacker-chosen key, so that change belongs with a real CIDR here (the api
+# container's Docker network) in place of '*'. Noted in the Caddyfile too, next
+# to the log directive that invites the change.
+CMD ["uvicorn", "matchpoint_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--root-path", "/api", "--forwarded-allow-ips", "*"]

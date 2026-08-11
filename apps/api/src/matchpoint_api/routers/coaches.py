@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach
+from matchpoint_api.rate_limit import RateLimiter, take_all
 from matchpoint_api.schemas.coach import CoachCreate, CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import hash_password
@@ -15,6 +16,36 @@ from matchpoint_api.security import hash_password
 router = APIRouter(prefix="/coaches", tags=["coaches"])
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+def limit_sign_up_rate(request: Request) -> None:
+    """Refuse sign-ups beyond a bounded arrival rate, before anything is spent on one.
+
+    Listed in the decorator's `dependencies`, which run ahead of the handler's own — so a
+    refused request costs no body validation, no database session, and above all no Argon2
+    hash. Every arrival that parses counts, not just the valid ones: a body the schema
+    rejects still spent a worker thread getting rejected. A body that is not JSON at all is
+    not counted, since FastAPI parses before it solves any dependency and answers that with
+    its own 422 — cheaper than the ones that are counted, and no Argon2 either way.
+
+    Two tiers, counted together by `take_all` so that a refusal by either spends a token
+    in neither. The per-address bucket is fairness over time rather than in the instant:
+    its burst matches the shared one, so a group behind a single NAT is bounded by the
+    tier sized for the hardware instead of a tighter one, but its refill is a third as
+    fast, so a flooding address is the first of the two to run dry and cannot hold sign-up
+    for longer than one shared burst. The shared bucket is the actual bound: behind
+    Cloudflare the client address is an edge address, of which an attacker can occupy many,
+    so only a key nobody escapes bounds what reaches Argon2. A flood therefore throttles
+    sign-up itself — the tradeoff over the alternative, which was every route in the app
+    stalling behind sign-up's parked threads.
+
+    The buckets live on app state (sized where they are built, in `create_app`) rather
+    than at module level, so every `create_app()` — each test's app included — counts
+    from zero.
+    """
+    per_ip: RateLimiter = request.app.state.sign_up_per_ip_limit
+    total: RateLimiter = request.app.state.sign_up_total_limit
+    take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
 
 
 # Deliberately open: anyone can create an account. Right for usability testing with the
@@ -28,7 +59,11 @@ DbSession = Annotated[Session, Depends(get_db)]
     "",
     status_code=201,
     response_model=CoachRead,
-    responses={409: {"model": ErrorDetail, "description": "Email already registered"}},
+    dependencies=[Depends(limit_sign_up_rate)],
+    responses={
+        409: {"model": ErrorDetail, "description": "Email already registered"},
+        429: {"model": ErrorDetail, "description": "Too many sign-up attempts"},
+    },
 )
 def create_coach(data: CoachCreate, db: DbSession) -> Coach:
     # Fields named rather than the Model(**data.model_dump()) splat the other create

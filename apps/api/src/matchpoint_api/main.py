@@ -7,6 +7,7 @@ from matchpoint_api import __version__
 from matchpoint_api.auth import SessionRenewalMiddleware
 from matchpoint_api.config import settings
 from matchpoint_api.errors import validation_error_response
+from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers import auth, coaches, matches, players
 
 
@@ -42,6 +43,18 @@ def create_app() -> FastAPI:
     # cookie must reach the browser whichever response the request ends in, and a route
     # that raises never returns the object one could be written to.
     app.add_middleware(SessionRenewalMiddleware)
+
+    # Sign-up's arrival-rate bound — enforced by routers/coaches.py::limit_sign_up_rate,
+    # which says why there are two tiers and why they live on app state. Sized for the
+    # hardware `security.py` documents: a full shared burst is ten hashes, under a second
+    # of queue on two slots, so the threadpool never parks; sustained it is thirty hashes
+    # a minute, a few percent of one slot. The per-address burst matches the shared one so
+    # that a clubhouse of coaches signing up together behind one NAT is bounded by the
+    # shared tier — the tier sized for the hardware — rather than refused sooner by a
+    # tighter per-address one. Per-address fairness is then the sustained rate: a third of
+    # the shared one, so a single address cannot hold sign-up for longer than its burst.
+    app.state.sign_up_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.sign_up_total_limit = RateLimiter(per_minute=30, burst=10)
 
     app.include_router(auth.router)
     app.include_router(coaches.router)
