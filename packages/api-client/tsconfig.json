@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // The generated fetch client is browser code: it iterates URLSearchParams, which
+    // needs DOM.Iterable on top of DOM.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": ["src", "openapi-ts.config.ts"]
+}

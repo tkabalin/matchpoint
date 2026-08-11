@@ -14,7 +14,8 @@ dev-dist/
 
 # Generated
 routeTree.gen.ts
-packages/api-client/
+# Only the generated tree — the package's own config files are ours to format.
+packages/api-client/src/
 
 # Vendored Claude Code skills — kept byte-identical to upstream, so reformatting
 # would make them diff against their source for no benefit. Skills written here are
