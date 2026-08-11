@@ -18,9 +18,17 @@ const player = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-/** Stubs the transport rather than the generated client: the client is what's under test. */
-function stubFetch(response: Response) {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response));
+/** Stubs the transport rather than the generated client: the client is what's under test.
+ *
+ * Takes a factory, not a Response: a body can be read only once, so a single instance
+ * handed to every call would resolve a second request in the same test — a refetch, or
+ * a retry — with an unusable body rather than the fixture set up here.
+ */
+function stubFetch(response: () => Response) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(response())),
+  );
 }
 
 function renderPlayerList() {
@@ -38,7 +46,7 @@ afterEach(() => {
 });
 
 test("renders the players the API returns", async () => {
-  stubFetch(Response.json([player]));
+  stubFetch(() => Response.json([player]));
 
   renderPlayerList();
 
@@ -46,7 +54,7 @@ test("renders the players the API returns", async () => {
 });
 
 test("requests the roster from the API's own origin", async () => {
-  stubFetch(Response.json([]));
+  stubFetch(() => Response.json([]));
 
   renderPlayerList();
 
@@ -56,7 +64,7 @@ test("requests the roster from the API's own origin", async () => {
 });
 
 test("reports a failed load instead of rendering an empty roster", async () => {
-  stubFetch(new Response("nope", { status: 500 }));
+  stubFetch(() => new Response("nope", { status: 500 }));
 
   renderPlayerList();
 
