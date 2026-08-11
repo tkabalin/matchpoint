@@ -12,6 +12,7 @@ requests; in an editor that doesn't, paste the block into an online Mermaid view
 ```mermaid
 erDiagram
     coaches |o--o{ players : owns
+    coaches ||--o{ coach_sessions : "signs in as"
     players ||--o{ matches : plays
 
     coaches {
@@ -19,6 +20,15 @@ erDiagram
         varchar(254) email UK "the sign-in identity, stored lowercased"
         varchar(100) display_name "full name, or whatever they go by"
         text password_hash "argon2id hash"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    coach_sessions {
+        uuid id PK
+        uuid coach_id FK "the signed-in coach"
+        varchar(64) token_hash UK "sha-256 of the cookie token, never the token"
+        timestamptz expires_at "when an abandoned login dies"
         timestamptz created_at
         timestamptz updated_at
     }
