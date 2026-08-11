@@ -21,7 +21,7 @@ response with no error. Work the steps in order.
 | 3   | `src/matchpoint_api/schemas/<model>.py`             | field is server-owned (ids, stamps)  |
 | 4   | `src/matchpoint_api/routers/<models>.py`            | router splats and never names fields |
 | 5   | `tests/models/`, `tests/schemas/`, `tests/routers/` | never                                |
-| 6   | Generated TypeScript client                         | no client generated yet              |
+| 6   | `scripts/gen-api-client.sh` — spec + TS client      | never                                |
 
 ## 1. Decide before typing
 
@@ -189,8 +189,15 @@ reached a model without a revision to match. Coverage is informational here (the
 threshold), so a new branch needs a test because review expects one, not because a gate will stop
 you.
 
-If a generated TypeScript client is present, regenerate it — a changed response model is a client
-contract change.
+Then regenerate the spec and the TypeScript client the web app compiles against, and commit both
+with the change:
+
+```
+scripts/gen-api-client.sh
+```
+
+`test_the_committed_spec_matches_the_routes` catches a forgotten spec dump. Nothing catches a
+forgotten client regeneration, so run the script rather than the dump alone.
 
 ## Checklist
 
@@ -206,3 +213,4 @@ contract change.
 - [ ] Schema test: both sides of every boundary
 - [ ] Router test: round-trips through POST and back out of GET
 - [ ] `uv run pytest` green
+- [ ] `scripts/gen-api-client.sh` run; regenerated spec and client committed with the change

@@ -101,6 +101,21 @@ Check the API is up with `curl http://localhost:8000/health`; interactive docs a
 Alternatively, `scripts/dev.sh` validates prerequisite versions and runs all three steps above in
 one go.
 
+### The typed API client
+
+The web app calls the API through `packages/api-client`, generated from the API's own OpenAPI spec —
+so a route's request and response types are the ones the frontend compiles against, and a mismatch
+is a type error rather than a runtime surprise.
+
+Both the spec (`apps/api/openapi.json`) and the generated client are committed. After changing
+anything a route exposes, regenerate them and commit the result alongside the change:
+
+```sh
+scripts/gen-api-client.sh
+```
+
+A stale spec fails `uv run pytest` in `apps/api`, so it cannot go unnoticed for long.
+
 ### Check your work
 
 Two scripts, run from anywhere in the repo:
