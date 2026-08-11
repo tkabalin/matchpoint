@@ -1,0 +1,22 @@
+<!--
+  Tab-sized variant of the mark in ../icon.svg, served as-is rather than generated from it:
+  at a 16px tab the full mark's service lines land under half a pixel and smear into the
+  court. This drops them, keeps the outline and net, and thickens both to survive the
+  rasteriser. Same geometry and palette otherwise — edit alongside ../icon.svg.
+
+  crispEdges for the same reason as ../icon.svg, and it matters more here: a 1.06px outline at
+  16px is otherwise blended away to grey. The browser picks the size, so this was checked from
+  16 to 128 — solid and symmetric at each. Not on the tile, or the rx corner staircases.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">MatchPoint</title>
+  <desc id="desc">A tennis court viewed from above, in two greens with off-white lines.</desc>
+
+  <rect width="512" height="512" rx="110" fill="#0E3B2C"/>
+  <rect x="150" y="54" width="212" height="404" fill="#1E6B4A" shape-rendering="crispEdges"/>
+
+  <g fill="none" stroke="#F4F1E8" stroke-linecap="square" shape-rendering="crispEdges">
+    <rect x="150" y="54" width="212" height="404" stroke-width="34"/>
+    <path d="M110 256H402" stroke-width="46"/>
+  </g>
+</svg>

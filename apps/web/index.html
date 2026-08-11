@@ -17,6 +17,17 @@
          scrollbars; theme-color matches --background in src/app.css. -->
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#ffffff" />
+
+    <!-- A tab-sized simplification of the mark, not the icon.svg the PNGs come from —
+         the full one's service lines smear together at 16px. SVG so it stays sharp at
+         whatever size the browser asks for, and small enough to be worth fetching on
+         every first visit. -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+
+    <!-- iOS ignores the manifest's icons when installing to the home screen and reads
+         this instead, so it has to be linked by hand. The manifest itself is injected
+         by vite-plugin-pwa at build time. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>

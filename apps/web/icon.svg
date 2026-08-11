@@ -1,0 +1,32 @@
+<!--
+  MatchPoint's mark: original artwork, no third-party licence attached. Single source for the
+  rasters in public/, which are not regenerated automatically — after editing, re-run
+  `pnpm --filter @matchpoint/web gen-icons` (that script explains how it renders them).
+
+  crispEdges on the court: this geometry is integer-aligned at 512 and nowhere else — the
+  18-unit rail is 6.75px at 192 — so without it every box gets a pale blended outline, and at
+  180 the two service lines come out different weights. Not on the tile: crispEdges would
+  staircase the rx corner.
+
+  The maskable variant insets the mark on an opaque tile because Android masks icons and only
+  the central ~80% survives; apple-touch-icon sits on the same green because iOS composites
+  home screen icons over white.
+
+  public/favicon.svg is a separate hand-simplified variant, NOT generated from this file —
+  these stroke weights turn to mush at a 16px tab. Edit both together.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">MatchPoint</title>
+  <desc id="desc">A tennis court viewed from above, in two greens with off-white lines.</desc>
+
+  <rect width="512" height="512" rx="110" fill="#0E3B2C"/>
+  <rect x="154" y="58" width="204" height="396" fill="#1E6B4A" shape-rendering="crispEdges"/>
+
+  <g fill="none" stroke="#F4F1E8" stroke-linecap="square" shape-rendering="crispEdges">
+    <rect x="154" y="58" width="204" height="396" stroke-width="18"/>
+    <path d="M154 157H358" stroke-width="13"/>
+    <path d="M154 355H358" stroke-width="13"/>
+    <path d="M256 157V355" stroke-width="11"/>
+    <path d="M124 256H388" stroke-width="27"/>
+  </g>
+</svg>
