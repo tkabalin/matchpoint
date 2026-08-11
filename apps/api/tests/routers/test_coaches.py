@@ -1,8 +1,9 @@
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from psycopg.errors import CheckViolation
 from sqlalchemy import func, select
@@ -201,6 +202,63 @@ def test_a_rejected_sign_up_does_not_echo_the_password(client: TestClient) -> No
     assert "hunter2" not in on_the_password.text
     assert on_the_email.status_code == 422
     assert "a-good-password" not in on_the_email.text
+
+
+def test_sign_up_arrivals_beyond_the_burst_are_refused(client: TestClient) -> None:
+    """The bound #26 exists for, pinned at the per-address burst create_app sizes (10).
+
+    The filler bodies are invalid on purpose, and the refusal arriving as a 429 rather
+    than their 422 is half the point: the limit counts arrivals before validation ever
+    runs, so a refused request spends no parsing, no session, and no Argon2 hash. The
+    body is asserted exactly because the route declares the 429 as ErrorDetail and the
+    generated client is typed from that declaration.
+    """
+    for _ in range(10):
+        assert client.post("/coaches", json={}).status_code == 422
+
+    response = client.post("/coaches", json={})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert int(response.headers["Retry-After"]) >= 1
+
+
+def test_sign_up_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
+    """The shared tier is the actual arrival bound: behind Cloudflare the per-address key
+    is an edge address an attacker can occupy many of, so a spread-out flood must still
+    hit a ceiling. Two addresses drain the shared burst create_app sizes (10) without
+    exhausting their own buckets; a third is refused on its very first request."""
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = TestClient(client.app, client=(address, 50000))
+        for _ in range(5):
+            assert from_address.post("/coaches", json={}).status_code == 422
+
+    latecomer = TestClient(client.app, client=("203.0.113.3", 50000))
+
+    assert latecomer.post("/coaches", json={}).status_code == 429
+
+
+def test_a_sign_up_refused_by_the_shared_tier_spends_no_per_address_token(
+    client: TestClient,
+) -> None:
+    """A coach arriving mid-flood is refused by a tier they are not part of, so their own
+    bucket must be untouched: otherwise, obeying the Retry-After they were handed would
+    spend it a request at a time and leave them locked out after the flood had passed. The
+    per-address dict is asserted directly because "spent nothing" is a claim about state
+    the response cannot show — an untouched bucket is one that was never even created."""
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = TestClient(client.app, client=(address, 50000))
+        for _ in range(5):
+            from_address.post("/coaches", json={})
+
+    mid_flood = TestClient(client.app, client=("203.0.113.9", 50000))
+    for _ in range(3):
+        assert mid_flood.post("/coaches", json={}).status_code == 429
+
+    # cast because TestClient types the app it was handed as a bare ASGI callable.
+    per_ip = cast(FastAPI, client.app).state.sign_up_per_ip_limit
+
+    assert "203.0.113.9" not in per_ip._buckets
 
 
 def test_me_returns_the_signed_in_coach_and_nobody_else(
