@@ -11,13 +11,20 @@ decisions are in [infrastructure.md](infrastructure.md).
 request gets one too — but once an MR exists, only the MR pipeline runs, so the same commit is never
 checked twice.
 
-| Stage | API (uv / Python)             | Web (pnpm / Node)                               |
-| ----- | ----------------------------- | ----------------------------------------------- |
-| lint  | Ruff check, Ruff format check | Prettier check, ESLint — both repo-wide         |
-| test  | Pyright, pytest               | tsc, Vitest; Playwright e2e in a job of its own |
+| Stage | API (uv / Python)                        | Web (pnpm / Node)                               |
+| ----- | ---------------------------------------- | ----------------------------------------------- |
+| lint  | Ruff check, Ruff format check            | Prettier check, ESLint — both repo-wide         |
+| test  | Pyright, pytest against Postgres service | tsc, Vitest; Playwright e2e in a job of its own |
 
 Apart from e2e, these are the same non-mutating checks as `scripts/check.sh`, so a green local check
 predicts a green pipeline. Everything runs on the self-hosted ThinkTank runner.
+
+**The API tests need a database, and CI supplies one.** They run against real Postgres, never SQLite
+or a mock (see [testing.md](testing.md) for why) — locally the Compose instance, in CI a service
+container pinned to the same major version as `docker-compose.yml` and production. The test fixtures
+refuse to recreate their scratch database on a non-local host, and a service container is one; since
+its alias is the same `postgres` hostname production uses, no hostname check could tell the two
+apart, so the job opts out explicitly with `MATCHPOINT_TEST_ALLOW_NONLOCAL_DB`.
 
 **The jobs run as a graph, not in lockstep.** Each declares what it actually depends on, so the two
 toolchains progress as independent chains and nothing waits on a stage boundary it has no dependency
@@ -33,17 +40,21 @@ web-test ────┼─▶ build-web-image ─┘
 web-e2e ─────┘
 ```
 
-Every job in the left-hand column is ready the moment the pipeline starts. How many actually run at
-that point is up to the runner, which has a fixed number of job slots — when there are more ready
-jobs than slots, one waits for the first of the others to finish, so the graph describes the ceiling
-on parallelism rather than a guarantee (see [infrastructure.md](infrastructure.md)).
+Every job in the left-hand column is ready the moment the pipeline starts, so the graph is a ceiling
+on parallelism rather than a guarantee: the runner's job-slot count decides how many actually run at
+once (see [infrastructure.md](infrastructure.md)).
 
 Lint gates the image builds rather than the test jobs, which is the one non-obvious edge here: a job
-in a graph runs as soon as its _own_ dependencies are met, regardless of what else has failed, so
-lint has to sit somewhere upstream of the builds or a failing formatter would sail through to a
-deploy. Putting it there is close to free, since lint runs alongside the tests and the builds wait
-for those anyway; gating the test jobs on it instead would park repo-wide Prettier in front of the
-browser suite, which is the most expensive thing in the pipeline.
+in a graph runs as soon as its _own_ dependencies are met regardless of what else failed, so lint
+has to sit upstream of the builds or a failing formatter sails through to a deploy. It costs nothing
+there, since the builds wait on the tests anyway — whereas gating the tests on it would park
+repo-wide Prettier in front of the browser suite.
+
+**The build jobs' upstream edges are soft, the deploy job's are not.** Jobs drop out of a pipeline
+independently, and an edge pointing at a job that was never created is a config error rather than a
+skip — hence optional dependencies on the builds. Deploy's are hard on purpose: it only runs on
+`main`, where both builds always run, so a soft edge could only ever let a deploy fire for a commit
+whose images were never uploaded.
 
 The `stages:` list in `.gitlab-ci.yml` still exists, but with the graph in place it orders the
 pipeline view rather than acting as a barrier.
@@ -64,23 +75,20 @@ the other:
 
 Also on every pipeline:
 
-- **Image builds are exercised on merge requests**: a change to anything an image is built from —
-  app source, dependencies, lockfiles, the Dockerfiles themselves — builds that image without
-  uploading it, so a broken build fails on the merge request rather than on `main`. The two images
-  have separate input lists, so an API change doesn't rebuild the web image.
-- **Dependency caches are keyed on lockfile content**: the pnpm store, uv's cache and the Node
-  toolchain pyright downloads for itself all persist between pipelines, and each is re-uploaded only
-  by the job that owns it. Every other job restores it read-only rather than re-archiving an
-  identical copy. The runner holds a separate copy of each cache per job slot rather than one shared
-  copy, so slots warm up independently and a job can miss a cache that another slot already has.
-- **Test reports surface in the MR**: every suite emits JUnit XML, so a failing test appears in the
-  merge-request widget rather than buried in job logs. Coverage output feeds the project badge, and
-  a failed e2e run attaches its Playwright HTML report — traces included — as an artifact.
-- **E2E runs on its own job**, on the Playwright image rather than the plain Node one, since it
-  needs browsers. It is not part of `scripts/check.sh`: e2e is slow enough that it stays a CI and
-  on-demand step rather than something every local commit waits on.
-- **Superseded work is cancelled**: pipelines are `interruptible`, so pushing again auto-cancels the
-  outdated run, and duplicate branch/MR pipelines are suppressed.
+- **Image builds are exercised on merge requests**: any change an image is built from — app source,
+  dependencies, lockfiles, Dockerfiles — rebuilds that image without uploading it, so a broken build
+  fails on the MR rather than on `main`. The two builds have separate input lists.
+- **Dependency caches** — the pnpm store, uv's cache, pyright's Node download — **are keyed on
+  lockfile content**, and each is pushed only by the job that owns it; the rest restore it
+  read-only. The runner holds a copy per job slot, so a job can miss a cache another slot already
+  has.
+- **Test reports surface in the MR**: every suite emits JUnit XML, so failures appear in the
+  merge-request widget rather than job logs. Coverage feeds the project badge, and a failed e2e run
+  attaches its Playwright HTML report, traces included.
+- **E2E runs on the Playwright image**, since it needs browsers, and stays out of `scripts/check.sh`
+  so local commits don't wait on it.
+- **Superseded work is cancelled**: pipelines are `interruptible`, and duplicate branch/MR pipelines
+  are suppressed.
 
 ## CD — merges to `main`
 
@@ -91,8 +99,9 @@ A green `main` pipeline continues into two more stages:
    tarballs to the project's generic package registry using the pipeline-scoped job token — no
    stored registry secret. The GitLab container registry isn't used: its port is firewalled to
    campus-internal traffic, so an off-campus runner or VPS can't reach it, while the package
-   registry rides the normal HTTPS port. CI prunes the package registry to the newest 10 image
-   packages.
+   registry rides the normal HTTPS port. That choice comes with the retention problem the container
+   registry would have solved: the generic registry has no cleanup policy of its own, so the
+   pipeline prunes it to the newest 10 image packages itself.
 2. **Deploy** — the pipeline SSHes to the VPS and hands over the SHA tag. The key it holds is bound
    to a forced command, so it can run `/opt/matchpoint/deploy.sh` and nothing else; the script
    downloads and `docker load`s the tarball for that SHA (using a read-only deploy token, skipping
@@ -101,17 +110,17 @@ A green `main` pipeline continues into two more stages:
    records the tag only once that has all worked.
 
 **Deploys are automatic** on every green `main` pipeline — merging is releasing, which fits the
-rapid usability-testing loop with the client. The guardrails: deployment records to the GitLab
-`production` environment (deploy history and one-click redeploys, with deploy access matching who
-may merge to `main` — the merge is the release decision, so gating deploy more tightly than merge
-only produces failed jobs), a `resource_group` so two deploys never run concurrently, and the deploy
-job is never auto-cancelled.
+rapid usability-testing loop with the client. Guardrails: deploys record to the GitLab `production`
+environment for history and one-click redeploys, with deploy access matching merge access (the merge
+is the release decision, so gating deploy more tightly only produces failed jobs); a
+`resource_group` keeps two deploys from overlapping; and the deploy job is never auto-cancelled.
 
 **Rollback is a redeploy of an older SHA** — image tags are immutable per commit, so rolling back
 means re-running an older pipeline's deploy job (or `ssh deploy@<vps> <older-sha>`), not rebuilding.
-Reach is bounded by the package registry's 10-package retention, plus the handful of recent image
-tags `deploy.sh` keeps loaded on the VPS. Rolling back past a migration needs the schema downgraded
-from the newer image first; `deploy.sh` detects that case and refuses rather than failing halfway.
+Reach is bounded by the package registry's 10-package retention; the newest 5 tags per image roll
+back without a download at all, since `deploy.sh` keeps that many loaded on the VPS. Rolling back
+past a migration needs the schema downgraded from the newer image first; `deploy.sh` detects that
+case and refuses rather than failing halfway.
 
 ### Slack alerts
 
@@ -122,15 +131,12 @@ Two messages, both `main`-only, sent to an incoming webhook:
 | ✅ Deployed `<sha>` | the deploy job finishes cleanly — quotes the SHA and the site URL |
 | ❌ Pipeline failed  | any job in a `main` pipeline fails, at any stage                  |
 
-The failure alert deliberately doesn't wait on the deploy job: a `main` pipeline that breaks in
-lint, test or build never reaches deployment, and that is exactly when a broken `main` is worth
-announcing.
-
-Nothing is sent for merge-request or branch pipelines, and there is no "deploy started" message —
-the signal is the outcome, not the attempt. A failed registry prune is also silent, since it is
-allowed to fail without reddening an otherwise successful deploy. Both jobs are conditional on a
-`SLACK_WEBHOOK_URL` variable: while it is unset or blank they drop out of the pipeline entirely,
-rather than failing it.
+The failure alert deliberately doesn't depend on the deploy job: a pipeline that breaks in lint,
+test or build never reaches deployment, which is exactly when a broken `main` is worth announcing.
+There is no "deploy started" message and nothing at all for branch or MR pipelines — the signal is
+the outcome, not the attempt; a failed registry prune is silent too, since it must not redden a
+successful deploy. Both jobs drop out of the pipeline entirely while `SLACK_WEBHOOK_URL` is unset or
+blank, rather than failing it.
 
 ## Production stack
 
@@ -149,4 +155,5 @@ uvicorn's `--root-path`, keeping API route paths clean.
 
 **Build once, in CI.** Images are built in a consistent environment and the VPS only ever loads and
 runs them — the production box never builds, and a half-finished deploy can't leave it in a broken
-state.
+state. Only the two application images arrive as tarballs; Postgres is pulled from Docker Hub, so
+the box needs Hub reachable whenever that pin names a tag it hasn't already loaded.
