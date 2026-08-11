@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@tanstack/react-query':
+      specifier: ^5.101.4
+      version: 5.101.4
     typescript:
       specifier: ^5.9.3
       version: 5.9.3
@@ -51,7 +54,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/api-client
       '@tanstack/react-query':
-        specifier: ^5.101.4
+        specifier: 'catalog:'
         version: 5.101.4(react@19.2.8)
       class-variance-authority:
         specifier: ^0.7.1
@@ -133,7 +136,7 @@ importers:
         specifier: ^0.99.0
         version: 0.99.0(magicast@0.5.4)(typescript@5.9.3)
       '@tanstack/react-query':
-        specifier: ^5.101.4
+        specifier: 'catalog:'
         version: 5.101.4(react@19.2.8)
       typescript:
         specifier: 'catalog:'
