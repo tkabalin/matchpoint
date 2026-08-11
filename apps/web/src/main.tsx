@@ -1,8 +1,9 @@
+import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "@/app";
 import "@/app.css";
+import { routeTree } from "@/routeTree.gen";
 
 // react-grab lets coding agents select page context to work from. Dev-only — the
 // `import.meta.env.DEV` guard means Vite tree-shakes this out of production builds.
@@ -12,11 +13,19 @@ if (import.meta.env.DEV) {
   });
 }
 
+const router = createRouter({ routeTree });
+
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
+
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Root element #root not found");
 
 createRoot(rootElement).render(
   <StrictMode>
-    <App />
+    <RouterProvider router={router} />
   </StrictMode>,
 );

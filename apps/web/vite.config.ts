@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { fileURLToPath } from "node:url";
 
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -18,7 +19,13 @@ const apiProxy = {
 };
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  // tanstackRouter must run before react() — it generates routeTree.gen.ts from
+  // src/routes/ that react()'s Babel transform then compiles.
+  plugins: [
+    tanstackRouter({ target: "react", autoCodeSplitting: true, quoteStyle: "double" }),
+    react(),
+    tailwindcss(),
+  ],
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   resolve: {
