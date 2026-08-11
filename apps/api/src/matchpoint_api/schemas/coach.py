@@ -45,8 +45,9 @@ class CoachCreate(BaseModel):
     # SecretStr keeps the password out of reprs, tracebacks and any structured log of the
     # model, and unlike the date-of-birth bounds its own bounds do reach the OpenAPI spec
     # (format: password, writeOnly, minLength, maxLength) — so the sign-up form enforces
-    # them without a hand-written twin. What it does not do is keep the password out of a
-    # 422 body: FastAPI echoes the submitted value back in detail[].input regardless.
+    # them without a hand-written twin. What it cannot do is keep the password out of a
+    # 422 body, since FastAPI echoes the submitted value back in detail[].input and
+    # SecretStr never sees that error — so `errors.py` redacts it there instead.
     #
     # Not stripped, unlike ShortText above: a space is a legitimate password character, so
     # stripping would silently alter the credential a coach chose.

@@ -1,8 +1,11 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from matchpoint_api import __version__
 from matchpoint_api.config import settings
+from matchpoint_api.errors import validation_error_response
 from matchpoint_api.routers import coaches, matches, players
 
 
@@ -25,6 +28,15 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         generate_unique_id_function=operation_id,
     )
+
+    # Replaces FastAPI's own 422 handler for every route at once, which is the point: a
+    # secret must not depend on the route that received it remembering to redact.
+    @app.exception_handler(RequestValidationError)
+    async def redact_validation_errors(
+        _request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return validation_error_response(exc)
+
     app.include_router(coaches.router)
     app.include_router(players.router)
     app.include_router(matches.router)
