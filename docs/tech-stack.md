@@ -80,18 +80,18 @@ path.
 
 ## Backend
 
-| Category         | Choice                     |
-| ---------------- | -------------------------- |
-| Language         | Python 3.12                |
-| API framework    | FastAPI 0.141 + Pydantic 2 |
-| ORM              | SQLAlchemy 2 (sync)        |
-| Migrations       | Alembic                    |
-| Package manager  | uv                         |
-| Lint / format    | Ruff 0.16                  |
-| Type checking    | Pyright                    |
-| Password hashing | Argon2id (argon2-cffi 25)  |
-| Sessions         | _TBD_                      |
-| Tests            | pytest 9                   |
+| Category         | Choice                         |
+| ---------------- | ------------------------------ |
+| Language         | Python 3.12                    |
+| API framework    | FastAPI 0.141 + Pydantic 2     |
+| ORM              | SQLAlchemy 2 (sync)            |
+| Migrations       | Alembic                        |
+| Package manager  | uv                             |
+| Lint / format    | Ruff 0.16                      |
+| Type checking    | Pyright                        |
+| Password hashing | Argon2id (argon2-cffi 25)      |
+| Sessions         | Opaque tokens, HttpOnly cookie |
+| Tests            | pytest 9                       |
 
 ### Rationale
 
@@ -128,6 +128,19 @@ migrating between algorithms we have no plan to migrate between, and pre-1.0 -- 
 this doc makes to SQLModel); `bcrypt` (silently truncates at 72 bytes, and no memory-hardness);
 stdlib `hashlib.scrypt` (zero dependencies, at the cost of hand-writing salt generation, encoding
 and constant-time comparison); `passlib` (unmaintained since 2020).
+
+**Opaque session tokens over JWTs.** A login mints a random 256-bit token, stores its SHA-256 in a
+`coach_sessions` row and sets the token in an HttpOnly, SameSite=Lax cookie, `__Host-` prefixed so
+that no sibling name under the apex we deploy under can shadow it; deleting the row is a complete
+revocation. The offline-first requirement is what decides this: capture must survive a whole match
+with no connection, so the credential has to be long-lived — it is renewed on use from the halfway
+mark of its life, so only abandoned logins expire — and a long-lived credential is only defensible
+when the server can end it early. HttpOnly keeps the token where XSS cannot reach, and Caddy serves
+the SPA and the API from one origin, so no CORS or cross-site cookie design arises. The cost is a
+table and one indexed lookup per authenticated request. Alternatives considered: JWT bearer tokens
+(FastAPI's documented path and stateless, but revocation then needs a denylist — the sessions table
+wearing another name — and the SPA would have to hold the token somewhere JavaScript can read, which
+is exactly where XSS shops).
 
 ## Infrastructure
 
