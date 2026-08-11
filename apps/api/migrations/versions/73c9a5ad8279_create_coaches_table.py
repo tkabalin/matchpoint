@@ -41,6 +41,10 @@ def upgrade() -> None:
         # Postgres implements this with an index, which is the one a login lookup uses,
         # so email carries no index of its own.
         sa.UniqueConstraint("email"),
+        # The UNIQUE constraint above compares case-sensitively, so it is this one that
+        # stops Mike@ and mike@ from becoming two accounts. Addresses are stored
+        # lowercased; the model normalises writes that go through the ORM.
+        sa.CheckConstraint("email = lower(email)", name="coach_email_lowercase"),
     )
     # The constraint and index that the players revision deferred to this one. Named
     # rather than left to Postgres so the downgrade below has something to drop — and

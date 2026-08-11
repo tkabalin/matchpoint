@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import CheckConstraint, DateTime, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from matchpoint_api.db import Base
 
@@ -21,6 +21,15 @@ class Coach(Base):
     """
 
     __tablename__ = "coaches"
+    __table_args__ = (
+        # Addresses are stored lowercased, and the database is what holds the line: a
+        # UNIQUE constraint compares case-sensitively, so without this Mike@ and mike@
+        # are two accounts, each owning a separate roster, and a login looking up the
+        # address as typed misses whichever row it was not stored as. `validates` below
+        # normalises every write through the ORM, and this refuses anything that did
+        # not come through it.
+        CheckConstraint("email = lower(email)", name="coach_email_lowercase"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # The sign-in identity, so unique. No separate index=True: Postgres implements a
@@ -46,3 +55,15 @@ class Coach(Base):
         server_default=func.clock_timestamp(),
         onupdate=func.clock_timestamp(),
     )
+
+    @validates("email")
+    def _normalise_email(self, _key: str, email: str) -> str:
+        """Lowercase on the way in, so a coach signing in as MIKE@ finds their account.
+
+        Here rather than in a schema because it is the column's invariant, not one
+        endpoint's: sign-up, an admin fixture and a future import all write this row,
+        and only one of them would go through a request body. Case is all that is
+        normalised — surrounding whitespace and the address's validity are the sign-up
+        schema's to reject, where the coach can be told about it.
+        """
+        return email.lower()

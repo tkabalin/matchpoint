@@ -106,6 +106,24 @@ def test_database_rejects_a_duplicate_email(db_session: Session) -> None:
         _insert_raw_coach(db_session)
 
 
+def test_database_rejects_an_email_that_is_not_lowercased(db_session: Session) -> None:
+    """The UNIQUE constraint compares case-sensitively, so the CHECK is what keeps
+    Mike@ and mike@ from being two accounts with two separate rosters."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_coach(db_session, email="Mike@example.com")
+
+
+def test_the_orm_lowercases_an_email_on_the_way_in(db_session: Session) -> None:
+    """So an address typed with capitals is stored, and later found, as one address —
+    rather than tripping the CHECK above at whatever endpoint happened to write it."""
+    coach = make_coach(db_session, email="Mike@Example.COM")
+    db_session.commit()
+
+    saved = db_session.get(Coach, coach.id)
+    assert saved is not None
+    assert saved.email == "mike@example.com"
+
+
 def test_database_rejects_an_email_over_the_column_width(db_session: Session) -> None:
     """254 characters is the longest address SMTP will carry, and the bound a sign-up
     schema has to be written against."""
