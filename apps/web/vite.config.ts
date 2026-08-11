@@ -7,6 +7,18 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    // The generated client calls /api/* on its own origin, which is how production
+    // serves it (Caddy strips the prefix and proxies to the API). This makes that
+    // true in dev too, so no environment ever needs a different base URL — and
+    // same-origin means no CORS anywhere.
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        rewrite: (path) => path.replace(/^\/api/, ""),
+      },
+    },
+  },
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
