@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, String, Text, func
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from matchpoint_api.db import Base
@@ -42,10 +42,12 @@ class Player(Base):
     # Text rather than String(n): coach notes are prose, and the length bound belongs
     # on the schema, where it reaches the OpenAPI spec and so the client form.
     notes: Mapped[str | None] = mapped_column(Text)
-    # The owning coach. Deliberately not a ForeignKey yet — the coaches table does not
-    # exist; the constraint and its index are added by the migration that creates it.
-    # (Postgres does not index a foreign key automatically, so the two belong together.)
-    coach_id: Mapped[uuid.UUID | None]
+    # The owning coach. Still nullable: nothing sets it until sign-in exists, so every
+    # player created today has no owner to record. No ondelete, so Postgres refuses to
+    # delete a coach who still has players rather than taking their match history along.
+    # Indexed because Postgres does not index a foreign key automatically, and the
+    # roster query this becomes — one coach's players — filters on it.
+    coach_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("coaches.id"), index=True)
     # Soft deletion: a player who has matches recorded against them cannot be deleted
     # outright without taking the match history along, so archiving is the only safe
     # way to clear someone off an active roster.

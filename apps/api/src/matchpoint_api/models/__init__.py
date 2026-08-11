@@ -1,4 +1,5 @@
+from matchpoint_api.models.coach import Coach
 from matchpoint_api.models.match import Match, SetsFormat, Surface
 from matchpoint_api.models.player import DominantHand, Gender, Player
 
-__all__ = ["DominantHand", "Gender", "Match", "Player", "SetsFormat", "Surface"]
+__all__ = ["Coach", "DominantHand", "Gender", "Match", "Player", "SetsFormat", "Surface"]
