@@ -196,8 +196,9 @@ with the change:
 scripts/gen-api-client.sh
 ```
 
-`test_the_committed_spec_matches_the_routes` catches a forgotten spec dump. Nothing catches a
-forgotten client regeneration, so run the script rather than the dump alone.
+`test_the_committed_spec_matches_the_routes` catches a forgotten spec dump, and the `web-api-client`
+CI job catches a client left behind by a regenerated spec — both after the push, so run the script
+rather than the dump alone.
 
 ## Checklist
 

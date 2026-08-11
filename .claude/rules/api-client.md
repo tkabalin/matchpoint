@@ -9,9 +9,9 @@ paths:
   `apps/api/openapi.json`, and `@hey-api/openapi-ts` turns that file into the typed client and
   TanStack Query options in this package.
 - Never hand-edit anything under `src/`, and never patch a type to make a call site compile — the
-  next regeneration silently discards it. The API suite fails on a stale `openapi.json`, but nothing
-  yet checks that `src/` matches the spec, so an unregenerated client passes the pipeline. Treat a
-  hand-edit here as a bug regardless.
+  next regeneration silently discards it. Both halves are caught in CI — the API suite fails on a
+  stale `openapi.json`, the `web-api-client` job fails on a `src/` the spec has outgrown — but a
+  hand-edit is a bug regardless of what the pipeline says about it.
 - If the client is wrong, the **API** is wrong. Fix the FastAPI route's response model, Pydantic
   schema, or status codes, then regenerate with `scripts/gen-api-client.sh`.
 - If the generator's output itself needs to change (naming, plugins, formatting), change the
