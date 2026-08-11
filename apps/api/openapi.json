@@ -1,6 +1,42 @@
 {
   "components": {
     "schemas": {
+      "CoachRead": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "display_name",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CoachRead",
+        "type": "object"
+      },
       "DominantHand": {
         "enum": [
           "right",
@@ -425,6 +461,49 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/coaches/{coach_id}": {
+      "get": {
+        "operationId": "get_coach",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "coach_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Coach Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoachRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Coach",
+        "tags": [
+          "coaches"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health",

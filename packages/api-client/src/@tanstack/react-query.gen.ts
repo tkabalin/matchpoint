@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createMatch, createPlayer, getMatch, getPlayer, health, listMatches, listPlayers, type Options } from '../sdk.gen';
-import type { CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse } from '../types.gen';
+import { createMatch, createPlayer, getCoach, getMatch, getPlayer, health, listMatches, listPlayers, type Options } from '../sdk.gen';
+import type { CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCoachData, GetCoachError, GetCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -38,6 +38,24 @@ const createQueryKey = <TOptions extends Options>(id: string, options?: TOptions
     }
     return [params];
 };
+
+export const getCoachQueryKey = (options: Options<GetCoachData>) => createQueryKey('getCoach', options);
+
+/**
+ * Get Coach
+ */
+export const getCoachOptions = (options: Options<GetCoachData>) => queryOptions<GetCoachResponse, GetCoachError, GetCoachResponse, ReturnType<typeof getCoachQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getCoach({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getCoachQueryKey(options)
+});
 
 export const healthQueryKey = (options?: Options<HealthData>) => createQueryKey('health', options);
 

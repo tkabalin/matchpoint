@@ -5,6 +5,32 @@ export type ClientOptions = {
 };
 
 /**
+ * CoachRead
+ */
+export type CoachRead = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
  * DominantHand
  */
 export type DominantHand = 'right' | 'left';
@@ -191,6 +217,36 @@ export type ValidationError = {
      */
     type: string;
 };
+
+export type GetCoachData = {
+    body?: never;
+    path: {
+        /**
+         * Coach Id
+         */
+        coach_id: string;
+    };
+    query?: never;
+    url: '/coaches/{coach_id}';
+};
+
+export type GetCoachErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetCoachError = GetCoachErrors[keyof GetCoachErrors];
+
+export type GetCoachResponses = {
+    /**
+     * Successful Response
+     */
+    200: CoachRead;
+};
+
+export type GetCoachResponse = GetCoachResponses[keyof GetCoachResponses];
 
 export type HealthData = {
     body?: never;
