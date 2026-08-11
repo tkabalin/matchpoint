@@ -16,12 +16,14 @@ def _player_count(session: Session) -> int:
 
 
 def test_player_round_trips(db_session: Session) -> None:
+    coach = make_coach(db_session)
     player = Player(
         first_name="Serena",
         last_name="Williams",
         dominant_hand=DominantHand.RIGHT,
         gender=Gender.FEMALE,
         notes="Second serve sits up under pressure.",
+        coach_id=coach.id,
     )
     db_session.add(player)
     db_session.commit()
@@ -33,6 +35,7 @@ def test_player_round_trips(db_session: Session) -> None:
     assert saved.dominant_hand is DominantHand.RIGHT
     assert saved.gender is Gender.FEMALE
     assert saved.notes == "Second serve sits up under pressure."
+    assert saved.coach_id == coach.id
     assert isinstance(saved.id, uuid.UUID)
     assert saved.created_at is not None
     assert saved.updated_at is not None
@@ -42,25 +45,27 @@ def test_player_round_trips(db_session: Session) -> None:
 # leaked state; together they prove per-test isolation regardless of execution order.
 def test_committed_rows_do_not_leak_between_tests_a(db_session: Session) -> None:
     assert _player_count(db_session) == 0
-    db_session.add(Player(first_name="Iga", last_name="Swiatek"))
+    db_session.add(
+        Player(first_name="Iga", last_name="Swiatek", coach_id=make_coach(db_session).id)
+    )
     db_session.commit()
     assert _player_count(db_session) == 1
 
 
 def test_committed_rows_do_not_leak_between_tests_b(db_session: Session) -> None:
     assert _player_count(db_session) == 0
-    db_session.add(Player(first_name="Carlos", last_name="Alcaraz"))
+    db_session.add(
+        Player(first_name="Carlos", last_name="Alcaraz", coach_id=make_coach(db_session).id)
+    )
     db_session.commit()
     assert _player_count(db_session) == 1
 
 
-def test_only_the_name_parts_are_required(db_session: Session) -> None:
-    """Profile setup has to be fast, so every column past the name is nullable.
-
-    That includes coach_id and archived_at, which no endpoint writes yet: were either
-    NOT NULL, this insert would be the thing that failed rather than the first request.
-    """
-    player = Player(first_name="Iga", last_name="Swiatek")
+def test_only_the_name_parts_and_the_owner_are_required(db_session: Session) -> None:
+    """Profile setup has to be fast, so every column a coach could type is nullable
+    past the two name parts. coach_id is required too, but costs nothing at the
+    keyboard — the route fills it from the session, never from the form."""
+    player = Player(first_name="Iga", last_name="Swiatek", coach_id=make_coach(db_session).id)
     db_session.add(player)
     db_session.commit()
 
@@ -68,7 +73,6 @@ def test_only_the_name_parts_are_required(db_session: Session) -> None:
     assert player.dominant_hand is None
     assert player.gender is None
     assert player.notes is None
-    assert player.coach_id is None
     assert player.archived_at is None
 
 
@@ -79,11 +83,12 @@ def test_created_at_differs_between_rows_in_one_transaction(db_session: Session)
     transaction, so under now() — the transaction timestamp — the two rows would
     claim the same creation time.
     """
-    first = Player(first_name="Iga", last_name="Swiatek")
+    coach = make_coach(db_session)
+    first = Player(first_name="Iga", last_name="Swiatek", coach_id=coach.id)
     db_session.add(first)
     db_session.commit()
 
-    second = Player(first_name="Carlos", last_name="Alcaraz")
+    second = Player(first_name="Carlos", last_name="Alcaraz", coach_id=coach.id)
     db_session.add(second)
     db_session.commit()
 
@@ -91,7 +96,7 @@ def test_created_at_differs_between_rows_in_one_transaction(db_session: Session)
 
 
 def test_updated_at_advances_when_a_row_changes(db_session: Session) -> None:
-    player = Player(first_name="Serena", last_name="Williams")
+    player = Player(first_name="Serena", last_name="Williams", coach_id=make_coach(db_session).id)
     db_session.add(player)
     db_session.commit()
     first_written = player.updated_at
@@ -113,22 +118,24 @@ def _insert_raw_player(session: Session, **columns: object) -> None:
 
     The constraints below are the database's job precisely because a sync payload can
     reach the table without either of those layers having vetted it. Unnamed columns
-    are written as NULL.
+    are written as NULL — except coach_id, which defaults to a real coach because the
+    column is NOT NULL and most of these tests are about the other constraints.
     """
+    values: dict[str, object] = {
+        "id": uuid.uuid4(),
+        "first_name": "Rafa",
+        "last_name": "Nadal",
+        "dominant_hand": None,
+        "gender": None,
+    }
+    if "coach_id" not in columns:
+        values["coach_id"] = make_coach(session).id
     session.execute(
         text(
             "INSERT INTO players (id, first_name, last_name, dominant_hand, gender, coach_id) "
             "VALUES (:id, :first_name, :last_name, :dominant_hand, :gender, :coach_id)"
         ),
-        {
-            "id": uuid.uuid4(),
-            "first_name": "Rafa",
-            "last_name": "Nadal",
-            "dominant_hand": None,
-            "gender": None,
-            "coach_id": None,
-            **columns,
-        },
+        values | columns,
     )
 
 
@@ -164,9 +171,16 @@ def test_database_rejects_a_name_over_the_column_width(db_session: Session, fiel
         _insert_raw_player(db_session, **{field: "x" * 101})
 
 
+def test_database_requires_an_owner(db_session: Session) -> None:
+    """coach_id went NOT NULL with the scoping work: a player nobody owns is a row no
+    roster can ever show again, so the database refuses to hold one."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_player(db_session, coach_id=None)
+
+
 def test_database_rejects_an_unknown_coach_id(db_session: Session) -> None:
-    """coach_id is nullable but not unconstrained: an id that matches no coach is a
-    player nobody owns, which is what the null it could have been already means."""
+    """The foreign key's half of ownership: an id that matches no coach row is
+    refused outright rather than stored as a dangling reference."""
     with pytest.raises(IntegrityError):
         _insert_raw_player(db_session, coach_id=uuid.uuid4())
 

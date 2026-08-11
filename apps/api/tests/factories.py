@@ -1,9 +1,10 @@
 """Plain-function factories for building model rows in tests.
 
 Rows are flush()ed, not committed, so they stay inside the test's rolled-back
-transaction like everything else done through db_session. `verify_email` is the
-exception, and says at its own commit why: it stands in for a request that
-committed, so a route that rolls back must still find the row afterwards.
+transaction like everything else done through db_session. `sign_in` and
+`verify_email` are the exceptions, and each says at its own commit why: they stand
+in for a request that committed, so a route that rolls back must still find the
+row afterwards.
 """
 
 import hashlib
@@ -14,7 +15,12 @@ from typing import Any
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import VERIFICATION_COOKIE, hash_token, new_session_token
+from matchpoint_api.auth import (
+    SESSION_COOKIE,
+    VERIFICATION_COOKIE,
+    hash_token,
+    new_session_token,
+)
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, Match, Player
 
 
@@ -58,6 +64,24 @@ def make_coach_session(session: Session, **overrides: Any) -> CoachSession:
     session.add(coach_session)
     session.flush()
     return coach_session
+
+
+def sign_in(
+    client: TestClient, db_session: Session, coach: Coach, **session_overrides: Any
+) -> CoachSession:
+    """Give the client a live session for `coach`, arranged rather than logged in.
+
+    Bypassing POST /auth/login is deliberate twice over: the tests using this are not
+    about the login route — and the factory coach's fake hash costs nothing where a
+    real login pays a full Argon2 verification per test.
+    """
+    token = new_session_token()
+    session_row = make_coach_session(
+        db_session, coach_id=coach.id, token_hash=hash_token(token), **session_overrides
+    )
+    db_session.commit()
+    client.cookies.set(SESSION_COOKIE, token)
+    return session_row
 
 
 def make_email_verification(session: Session, **overrides: Any) -> EmailVerification:
@@ -106,6 +130,8 @@ def verify_email(
 
 
 def make_player(session: Session, **overrides: Any) -> Player:
+    if "coach_id" not in overrides:
+        overrides["coach_id"] = make_coach(session).id
     player = Player(**{"first_name": "Test", "last_name": "Player"} | overrides)
     session.add(player)
     session.flush()

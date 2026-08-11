@@ -82,6 +82,34 @@ def test_migrations_upgrade_downgrade_and_upgrade_again(round_trip_url: str) -> 
         settings.database_url = original_url
 
 
+def test_requiring_a_player_owner_refuses_orphans_rather_than_deleting_them(
+    round_trip_url: str,
+) -> None:
+    """`alembic upgrade head` runs unattended on deploy, so a player with no coach has
+    to stop the upgrade rather than be cleared out of its way along with its matches."""
+    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    original_url = settings.database_url
+    settings.database_url = round_trip_url
+    engine = create_engine(round_trip_url)
+    try:
+        # The revision before af8b6534855d — the last point at which coach_id is still
+        # nullable, and so the only place an orphan can be arranged.
+        command.upgrade(config, "29e32ffe5d88")
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "INSERT INTO players (id, first_name, last_name) "
+                    "VALUES (gen_random_uuid(), 'Orphan', 'Player')"
+                )
+            )
+
+        with pytest.raises(RuntimeError, match="1 player"):
+            command.upgrade(config, "head")
+    finally:
+        engine.dispose()
+        settings.database_url = original_url
+
+
 def test_the_schema_at_head_matches_the_models(_test_engine: Engine) -> None:
     """Alembic's own autogenerate comparison, asserted rather than printed.
 

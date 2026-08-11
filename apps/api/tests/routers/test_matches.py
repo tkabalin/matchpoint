@@ -1,16 +1,31 @@
 import uuid
 from datetime import date, timedelta
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match
-from tests.factories import make_match, make_player
+from matchpoint_api.models import Coach, Match
+from tests.factories import make_coach, make_match, make_player, sign_in
 
 
-def test_create_match_persists_and_returns_row(client: TestClient, db_session: Session) -> None:
-    player = make_player(db_session)
+@pytest.fixture
+def coach(client: TestClient, db_session: Session) -> Coach:
+    """The coach the client is signed in as.
+
+    Every match route requires a session, so even the pure-validation tests take this
+    fixture — without it the dependency's 401 would answer before the 422 they are
+    about."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    return coach
+
+
+def test_create_match_persists_and_returns_row(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches",
@@ -39,9 +54,9 @@ def test_create_match_persists_and_returns_row(client: TestClient, db_session: S
 
 
 def test_create_match_with_only_the_required_fields(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches", json={"player_id": str(player.id), "played_on": "2026-08-01"}
@@ -55,6 +70,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["sets_format"] is None
 
 
+@pytest.mark.usefixtures("coach")
 def test_create_match_rejects_unknown_player(client: TestClient, db_session: Session) -> None:
     """404 rather than 422: FastAPI declares that status as HTTPValidationError, whose
     detail is a list, and the generated TypeScript client unpacks it as one."""
@@ -67,12 +83,32 @@ def test_create_match_rejects_unknown_player(client: TestClient, db_session: Ses
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
 
 
+def test_create_match_against_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The write across the boundary: without an owner check a coach could attach a
+    match to someone else's player. The same 404 an unknown id gets, and not a 403 —
+    a 403 would confirm the player exists."""
+    other_player = make_player(db_session)
+    db_session.commit()
+
+    response = client.post(
+        "/matches",
+        json={"player_id": str(other_player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+@pytest.mark.usefixtures("coach")
 def test_create_match_rejects_missing_player_id(client: TestClient) -> None:
     response = client.post("/matches", json={"played_on": "2026-08-01"})
 
     assert response.status_code == 422
 
 
+@pytest.mark.usefixtures("coach")
 def test_create_match_rejects_a_malformed_player_id(client: TestClient) -> None:
     """Fails body validation before the handler's existence check, so it is a 422 and
     not the 404 an unknown but well-formed id gets."""
@@ -81,8 +117,10 @@ def test_create_match_rejects_a_malformed_player_id(client: TestClient) -> None:
     assert response.status_code == 422
 
 
-def test_create_match_rejects_missing_played_on(client: TestClient, db_session: Session) -> None:
-    player = make_player(db_session)
+def test_create_match_rejects_missing_played_on(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post("/matches", json={"player_id": str(player.id)})
 
@@ -90,9 +128,9 @@ def test_create_match_rejects_missing_played_on(client: TestClient, db_session: 
 
 
 def test_create_match_rejects_a_malformed_played_on(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches", json={"player_id": str(player.id), "played_on": "01-08-2026"}
@@ -101,25 +139,35 @@ def test_create_match_rejects_a_malformed_played_on(
     assert response.status_code == 422
 
 
-def test_create_match_rejects_a_future_played_on(client: TestClient, db_session: Session) -> None:
+def test_create_match_rejects_a_future_played_on(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
     tomorrow = date.today() + timedelta(days=1)
 
     response = client.post(
         "/matches",
-        json={"player_id": str(make_player(db_session).id), "played_on": tomorrow.isoformat()},
+        json={
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
+            "played_on": tomorrow.isoformat(),
+        },
     )
 
     assert response.status_code == 422
 
 
-def test_create_match_accepts_a_played_on_of_today(client: TestClient, db_session: Session) -> None:
+def test_create_match_accepts_a_played_on_of_today(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
     """The common case, since capture starts courtside — so the future bound must not
     swallow it."""
     today = date.today()
 
     response = client.post(
         "/matches",
-        json={"player_id": str(make_player(db_session).id), "played_on": today.isoformat()},
+        json={
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
+            "played_on": today.isoformat(),
+        },
     )
 
     assert response.status_code == 201
@@ -127,18 +175,23 @@ def test_create_match_accepts_a_played_on_of_today(client: TestClient, db_sessio
 
 
 def test_create_match_rejects_an_implausibly_old_played_on(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     response = client.post(
         "/matches",
-        json={"player_id": str(make_player(db_session).id), "played_on": "1999-01-01"},
+        json={
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
+            "played_on": "1999-01-01",
+        },
     )
 
     assert response.status_code == 422
 
 
-def test_create_match_rejects_an_invalid_surface(client: TestClient, db_session: Session) -> None:
-    player = make_player(db_session)
+def test_create_match_rejects_an_invalid_surface(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches",
@@ -149,12 +202,12 @@ def test_create_match_rejects_an_invalid_surface(client: TestClient, db_session:
 
 
 def test_create_match_rejects_an_invalid_sets_format(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     response = client.post(
         "/matches",
         json={
-            "player_id": str(make_player(db_session).id),
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
             "played_on": "2026-08-01",
             "sets_format": "best_of_2",
         },
@@ -164,9 +217,9 @@ def test_create_match_rejects_an_invalid_sets_format(
 
 
 def test_create_match_rejects_a_whitespace_only_opponent_name(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches",
@@ -177,9 +230,9 @@ def test_create_match_rejects_a_whitespace_only_opponent_name(
 
 
 def test_create_match_rejects_an_overlong_opponent_name(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches",
@@ -190,11 +243,11 @@ def test_create_match_rejects_an_overlong_opponent_name(
 
 
 def test_create_match_accepts_free_text_at_the_length_limit(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     """Pairs with the test above so the boundary is pinned from both sides — an
     off-by-one in ShortText would otherwise pass."""
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
     at_limit = "x" * 100
 
     response = client.post(
@@ -213,9 +266,9 @@ def test_create_match_accepts_free_text_at_the_length_limit(
 
 
 def test_create_match_strips_surrounding_whitespace(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
         "/matches",
@@ -232,8 +285,8 @@ def test_create_match_strips_surrounding_whitespace(
     assert response.json()["event"] == "Roland-Garros"
 
 
-def test_list_matches_newest_first(client: TestClient, db_session: Session) -> None:
-    player = make_player(db_session)
+def test_list_matches_newest_first(client: TestClient, db_session: Session, coach: Coach) -> None:
+    player = make_player(db_session, coach_id=coach.id)
     older = make_match(db_session, player_id=player.id, played_on=date(2026, 7, 1))
     newer = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
     db_session.commit()
@@ -245,9 +298,9 @@ def test_list_matches_newest_first(client: TestClient, db_session: Session) -> N
 
 
 def test_list_matches_breaks_same_day_ties_by_creation_order(
-    client: TestClient, db_session: Session
+    client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(db_session)
+    player = make_player(db_session, coach_id=coach.id)
     first = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
     second = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
     db_session.commit()
@@ -258,11 +311,21 @@ def test_list_matches_breaks_same_day_ties_by_creation_order(
     assert [m["id"] for m in response.json()] == [str(second.id), str(first.id)]
 
 
-def test_list_matches_spans_every_player(client: TestClient, db_session: Session) -> None:
-    """Unfiltered unless asked: the player_id filter is opt-in, and a list that scoped
-    itself silently would look identical in every other test here."""
-    make_match(db_session, played_on=date(2026, 8, 1))
-    make_match(db_session, played_on=date(2026, 8, 2))
+def test_list_matches_spans_every_player_of_the_caller(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Unfiltered unless asked: the player_id filter is opt-in, so the list crosses
+    the caller's whole roster — that is the recent activity the dashboard opens on."""
+    make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        played_on=date(2026, 8, 1),
+    )
+    make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        played_on=date(2026, 8, 2),
+    )
     db_session.commit()
 
     response = client.get("/matches")
@@ -271,12 +334,34 @@ def test_list_matches_spans_every_player(client: TestClient, db_session: Session
     assert len(response.json()) == 2
 
 
-def test_list_matches_filtered_by_player(client: TestClient, db_session: Session) -> None:
-    """The other player's match is the newer one, so a filter that was ignored fails
-    this on order as well as on length."""
-    player = make_player(db_session)
+def test_list_matches_omits_another_coachs_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match reaches its owner only through its player, so the scope is a join —
+    and the other coach's match must be absent from the unfiltered list."""
+    mine = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    # No player_id, so the factory mints the other coach and their player itself.
+    make_match(db_session)
+    db_session.commit()
+
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    assert [m["id"] for m in response.json()] == [str(mine.id)]
+
+
+def test_list_matches_filtered_by_player(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The other match belongs to the caller too and is the newer one, so a filter
+    that was ignored fails this on order as well as on length."""
+    player = make_player(db_session, coach_id=coach.id)
     theirs = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
-    make_match(db_session, played_on=date(2026, 8, 2))
+    make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        played_on=date(2026, 8, 2),
+    )
     db_session.commit()
 
     response = client.get("/matches", params={"player_id": str(player.id)})
@@ -285,6 +370,7 @@ def test_list_matches_filtered_by_player(client: TestClient, db_session: Session
     assert [m["id"] for m in response.json()] == [str(theirs.id)]
 
 
+@pytest.mark.usefixtures("coach")
 def test_list_matches_filtered_by_an_unknown_player_is_empty(
     client: TestClient, db_session: Session
 ) -> None:
@@ -299,12 +385,31 @@ def test_list_matches_filtered_by_an_unknown_player_is_empty(
     assert response.json() == []
 
 
+@pytest.mark.usefixtures("coach")
+def test_list_matches_filtered_by_another_coachs_player_is_empty(
+    client: TestClient, db_session: Session
+) -> None:
+    """The player_id filter narrows the caller's scope, never widens it — and an
+    empty list rather than an error keeps the filter from confirming the player
+    exists, same as the by-id 404s."""
+    other_player = make_player(db_session)
+    make_match(db_session, player_id=other_player.id)
+    db_session.commit()
+
+    response = client.get("/matches", params={"player_id": str(other_player.id)})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+@pytest.mark.usefixtures("coach")
 def test_list_matches_rejects_a_malformed_player_id(client: TestClient) -> None:
     response = client.get("/matches", params={"player_id": "not-a-uuid"})
 
     assert response.status_code == 422
 
 
+@pytest.mark.usefixtures("coach")
 def test_list_matches_with_none_stored_is_an_empty_list(client: TestClient) -> None:
     response = client.get("/matches")
 
@@ -312,8 +417,12 @@ def test_list_matches_with_none_stored_is_an_empty_list(client: TestClient) -> N
     assert response.json() == []
 
 
-def test_get_match_returns_one(client: TestClient, db_session: Session) -> None:
-    match = make_match(db_session, opponent_name="Aryna")
+def test_get_match_returns_one(client: TestClient, db_session: Session, coach: Coach) -> None:
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+    )
     db_session.commit()
 
     response = client.get(f"/matches/{match.id}")
@@ -322,15 +431,47 @@ def test_get_match_returns_one(client: TestClient, db_session: Session) -> None:
     assert response.json()["opponent_name"] == "Aryna"
 
 
+def test_get_match_of_another_coach_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """404 and not 403, the recorded call: a 403 confirms the id exists, which hands
+    an enumerator exactly what unguessable UUIDs exist to withhold."""
+    other_match = make_match(db_session)
+    db_session.commit()
+
+    response = client.get(f"/matches/{other_match.id}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.usefixtures("coach")
 def test_get_match_unknown_id_is_404(client: TestClient) -> None:
     response = client.get(f"/matches/{uuid.uuid4()}")
 
     assert response.status_code == 404
 
 
+@pytest.mark.usefixtures("coach")
 def test_get_match_malformed_id_is_422(client: TestClient) -> None:
     """A non-UUID path segment fails path validation rather than reaching the
     handler, so it is a 422 and not the 404 an unknown id gets."""
     response = client.get("/matches/not-a-uuid")
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/matches"),
+        ("get", "/matches"),
+        ("get", f"/matches/{uuid.UUID(int=0)}"),
+    ],
+)
+def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
+    """No cookie, no history: every match route answers 401 before anything else —
+    including validation, which is why the POST can send an empty body."""
+    response = client.request(method, path, json={} if method == "post" else None)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}

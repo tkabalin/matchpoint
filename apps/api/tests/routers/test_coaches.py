@@ -23,29 +23,13 @@ from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.security import verify_password
-from tests.factories import make_coach, make_coach_session, verify_email
+from tests.factories import make_coach, make_coach_session, sign_in, verify_email
 
 SIGN_UP = {
     "email": "mike@example.com",
     "display_name": "Coach Mike",
     "password": "a-good-password",
 }
-
-
-def _sign_in(client: TestClient, db_session: Session, coach: Coach, **session_overrides: object):
-    """Give the client a live session for `coach`, arranged rather than logged in.
-
-    Bypassing POST /auth/login is deliberate twice over: these tests are about the
-    resolving dependency, not the login route — and the factory coach's fake hash
-    costs nothing where a real login pays a full Argon2 verification per test.
-    """
-    token = new_session_token()
-    session_row = make_coach_session(
-        db_session, coach_id=coach.id, token_hash=hash_token(token), **session_overrides
-    )
-    db_session.commit()
-    client.cookies.set(SESSION_COOKIE, token)
-    return session_row
 
 
 def test_signing_up_returns_the_new_coach(client: TestClient, db_session: Session) -> None:
@@ -399,7 +383,7 @@ def test_me_returns_the_signed_in_coach_and_nobody_else(
     must resolve to the one the session belongs to."""
     make_coach(db_session, email="other@example.com")
     coach = make_coach(db_session, email="mike@example.com", display_name="Coach Mike")
-    _sign_in(client, db_session, coach)
+    sign_in(client, db_session, coach)
 
     response = client.get("/coaches/me")
 
@@ -424,7 +408,7 @@ def test_me_with_a_token_no_login_minted_is_a_401(client: TestClient, db_session
     table. Same 401 as no cookie at all — the difference is server bookkeeping,
     not something to describe to whoever is probing."""
     coach = make_coach(db_session)
-    _sign_in(client, db_session, coach)
+    sign_in(client, db_session, coach)
     client.cookies.set(SESSION_COOKIE, new_session_token())
 
     assert client.get("/coaches/me").status_code == 401
@@ -436,7 +420,7 @@ def test_me_with_an_expired_session_is_a_401_and_discards_it(
     """Being presented is the one moment an expired row is in hand, so rejection is
     also when it is deleted; the rows never presented again are left to accumulate."""
     coach = make_coach(db_session)
-    _sign_in(client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    sign_in(client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(seconds=1))
 
     response = client.get("/coaches/me")
 
@@ -449,7 +433,7 @@ def test_me_renews_a_session_past_its_half_life(client: TestClient, db_session: 
     in the second half of a session's life pushes expiry a full lifetime out, so only
     an *abandoned* login can ever actually expire."""
     coach = make_coach(db_session)
-    session_row = _sign_in(
+    session_row = sign_in(
         client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=5)
     )
 
@@ -464,7 +448,7 @@ def test_a_renewed_session_re_sends_the_cookie(client: TestClient, db_session: S
     deadline — signing out the coach who used the app every single day, which is exactly
     the silent expiry courtside that the renewal exists to rule out."""
     coach = make_coach(db_session)
-    _sign_in(client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=5))
+    sign_in(client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=5))
     token = client.cookies[SESSION_COOKIE]
 
     header = client.get("/coaches/me").headers["set-cookie"]
@@ -515,7 +499,7 @@ def test_me_leaves_a_session_in_its_first_half_alone(
     """The other side of the halfway mark: renewing on every request would turn every
     read into a write, so a young session must come through untouched."""
     coach = make_coach(db_session)
-    session_row = _sign_in(client, db_session, coach)
+    session_row = sign_in(client, db_session, coach)
     expires_at = session_row.expires_at
 
     assert client.get("/coaches/me").status_code == 200
@@ -529,7 +513,7 @@ def test_me_never_returns_the_password_hash(client: TestClient, db_session: Sess
     leaves it out. Sign-up and login return a Coach row too, and are asserted on
     separately."""
     coach = make_coach(db_session, password_hash="not-a-real-hash")
-    _sign_in(client, db_session, coach)
+    sign_in(client, db_session, coach)
 
     response = client.get("/coaches/me")
 
