@@ -154,6 +154,24 @@ def test_signing_up_with_too_short_a_password_is_rejected(client: TestClient) ->
     assert response.json()["detail"][0]["loc"] == ["body", "password"]
 
 
+def test_a_rejected_sign_up_does_not_echo_the_password(client: TestClient) -> None:
+    """The handler in errors.py, seen through the route it exists for — the plaintext would
+    otherwise come back in detail[].input and land in devtools and any body-logging proxy.
+
+    Both shapes are checked, because they leak by different routes: an error on the
+    password reports the password as its input, while an error on another field reports the
+    whole submitted body, password and all. The second is the one a check on the field name
+    alone would miss.
+    """
+    on_the_password = client.post("/coaches", json=SIGN_UP | {"password": "hunter2"})
+    on_the_email = client.post("/coaches", json={k: v for k, v in SIGN_UP.items() if k != "email"})
+
+    assert on_the_password.status_code == 422
+    assert "hunter2" not in on_the_password.text
+    assert on_the_email.status_code == 422
+    assert "a-good-password" not in on_the_email.text
+
+
 def test_get_coach_returns_the_row(client: TestClient, db_session: Session) -> None:
     coach = make_coach(db_session, email="mike@example.com", display_name="Coach Mike")
     db_session.commit()
