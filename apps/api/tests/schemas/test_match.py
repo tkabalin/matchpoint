@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from matchpoint_api.models import MatchFormat, Surface
+from matchpoint_api.models import SetsFormat, Surface
 from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate
 
 PLAYER_ID = "3f8c1a2e-0b4d-4c7e-9a51-2d6f8b0e4c13"
@@ -33,7 +33,7 @@ def test_only_the_player_and_date_are_required() -> None:
     assert match.opponent_name is None
     assert match.surface is None
     assert match.event is None
-    assert match.format is None
+    assert match.sets_format is None
 
 
 # --- player_id --------------------------------------------------------------
@@ -100,7 +100,7 @@ def test_rejects_a_played_on_just_outside_the_age_limit() -> None:
         _match(played_on=just_outside)
 
 
-# --- surface and format -----------------------------------------------------
+# --- surface and sets_format -----------------------------------------------------
 
 
 def test_coerces_a_surface_string_to_the_enum() -> None:
@@ -112,13 +112,13 @@ def test_rejects_a_surface_outside_the_enum() -> None:
         _match(surface="sand")
 
 
-def test_coerces_a_format_string_to_the_enum() -> None:
-    assert _match(format="best_of_3").format is MatchFormat.BEST_OF_3
+def test_coerces_a_sets_format_string_to_the_enum() -> None:
+    assert _match(sets_format="best_of_3").sets_format is SetsFormat.BEST_OF_3
 
 
-def test_rejects_a_format_outside_the_enum() -> None:
+def test_rejects_a_sets_format_outside_the_enum() -> None:
     with pytest.raises(ValidationError):
-        _match(format="best_of_2")
+        _match(sets_format="best_of_2")
 
 
 # --- opponent_name and event (ShortText) ------------------------------------

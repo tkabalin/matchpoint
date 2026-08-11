@@ -20,7 +20,7 @@ def test_create_match_persists_and_returns_row(client: TestClient, db_session: S
             "played_on": "2026-08-01",
             "surface": "clay",
             "event": "Roland-Garros",
-            "format": "best_of_3",
+            "sets_format": "best_of_3",
         },
     )
 
@@ -31,7 +31,7 @@ def test_create_match_persists_and_returns_row(client: TestClient, db_session: S
     assert body["played_on"] == "2026-08-01"
     assert body["surface"] == "clay"
     assert body["event"] == "Roland-Garros"
-    assert body["format"] == "best_of_3"
+    assert body["sets_format"] == "best_of_3"
 
     saved = db_session.get(Match, uuid.UUID(body["id"]))
     assert saved is not None
@@ -52,7 +52,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["opponent_name"] is None
     assert body["surface"] is None
     assert body["event"] is None
-    assert body["format"] is None
+    assert body["sets_format"] is None
 
 
 def test_create_match_rejects_unknown_player(client: TestClient, db_session: Session) -> None:
@@ -148,13 +148,15 @@ def test_create_match_rejects_an_invalid_surface(client: TestClient, db_session:
     assert response.status_code == 422
 
 
-def test_create_match_rejects_an_invalid_format(client: TestClient, db_session: Session) -> None:
+def test_create_match_rejects_an_invalid_sets_format(
+    client: TestClient, db_session: Session
+) -> None:
     response = client.post(
         "/matches",
         json={
             "player_id": str(make_player(db_session).id),
             "played_on": "2026-08-01",
-            "format": "best_of_2",
+            "sets_format": "best_of_2",
         },
     )
 

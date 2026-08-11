@@ -32,7 +32,6 @@ export type MatchCreate = {
      * Event
      */
     event?: string | null;
-    format?: MatchFormat | null;
     /**
      * Opponent Name
      */
@@ -45,13 +44,9 @@ export type MatchCreate = {
      * Player Id
      */
     player_id: string;
+    sets_format?: SetsFormat | null;
     surface?: Surface | null;
 };
-
-/**
- * MatchFormat
- */
-export type MatchFormat = 'best_of_1' | 'best_of_3' | 'best_of_5';
 
 /**
  * MatchRead
@@ -65,7 +60,6 @@ export type MatchRead = {
      * Event
      */
     event: string | null;
-    format: MatchFormat | null;
     /**
      * Id
      */
@@ -82,6 +76,7 @@ export type MatchRead = {
      * Player Id
      */
     player_id: string;
+    sets_format: SetsFormat | null;
     surface: Surface | null;
     /**
      * Updated At
@@ -156,6 +151,13 @@ export type PlayerRead = {
      */
     updated_at: string;
 };
+
+/**
+ * SetsFormat
+ *
+ * How many sets the match is played over.
+ */
+export type SetsFormat = 'best_of_1' | 'best_of_3' | 'best_of_5';
 
 /**
  * Surface

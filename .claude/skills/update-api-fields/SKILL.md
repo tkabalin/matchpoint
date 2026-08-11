@@ -83,7 +83,7 @@ constraints by name only, never by condition, so editing an enum's members leave
 stale: add a member no longer than the current longest and autogenerate reports **no changes at
 all**; add a longer one and it emits a `modify_type` widening the VARCHAR, which looks like it
 handled the enum while the CHECK still rejects the new value at runtime. Hand-write it, naming the
-constraint after `str_enum`'s second argument (`match_format`, not `format`):
+constraint after `str_enum`'s second argument, which is not required to match the column name:
 
 ```python
 def upgrade() -> None:

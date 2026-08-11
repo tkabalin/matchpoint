@@ -6,7 +6,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match, MatchFormat, Player, Surface
+from matchpoint_api.models import Match, Player, SetsFormat, Surface
 from tests.factories import make_match, make_player
 
 
@@ -19,7 +19,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
         played_on=date(2026, 8, 1),
         surface=Surface.CLAY,
         event="Roland-Garros",
-        format=MatchFormat.BEST_OF_3,
+        sets_format=SetsFormat.BEST_OF_3,
     )
     db_session.commit()
 
@@ -30,7 +30,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
     assert saved.played_on == date(2026, 8, 1)
     assert saved.surface is Surface.CLAY
     assert saved.event == "Roland-Garros"
-    assert saved.format is MatchFormat.BEST_OF_3
+    assert saved.sets_format is SetsFormat.BEST_OF_3
     assert isinstance(saved.id, uuid.UUID)
     assert saved.created_at is not None
     assert saved.updated_at is not None
@@ -47,7 +47,7 @@ def test_only_the_player_and_date_are_required(db_session: Session) -> None:
     assert saved.opponent_name is None
     assert saved.surface is None
     assert saved.event is None
-    assert saved.format is None
+    assert saved.sets_format is None
 
 
 def test_match_requires_a_played_on_date(db_session: Session) -> None:
@@ -93,8 +93,9 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
     """
     session.execute(
         text(
-            "INSERT INTO matches (id, player_id, played_on, opponent_name, surface, format) "
-            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, :format)"
+            "INSERT INTO matches "
+            "(id, player_id, played_on, opponent_name, surface, sets_format) "
+            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, :sets_format)"
         ),
         {
             "id": uuid.uuid4(),
@@ -102,7 +103,7 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
             "played_on": date(2026, 8, 1),
             "opponent_name": None,
             "surface": None,
-            "format": None,
+            "sets_format": None,
             **columns,
         },
     )
@@ -116,11 +117,11 @@ def test_database_rejects_surface_outside_the_enum(db_session: Session) -> None:
         _insert_raw_match(db_session, surface="sand")
 
 
-def test_database_rejects_format_outside_the_enum(db_session: Session) -> None:
+def test_database_rejects_sets_format_outside_the_enum(db_session: Session) -> None:
     """A "best_of_2" is exactly the column's VARCHAR(9), so it reaches the CHECK —
     and it is the shape of mistake a hand-written sync payload would actually make."""
     with pytest.raises(IntegrityError):
-        _insert_raw_match(db_session, format="best_of_2")
+        _insert_raw_match(db_session, sets_format="best_of_2")
 
 
 def test_database_rejects_free_text_over_the_column_width(db_session: Session) -> None:

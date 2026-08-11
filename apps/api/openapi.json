@@ -46,16 +46,6 @@
             ],
             "title": "Event"
           },
-          "format": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MatchFormat"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "opponent_name": {
             "anyOf": [
               {
@@ -79,6 +69,16 @@
             "title": "Player Id",
             "type": "string"
           },
+          "sets_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetsFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "surface": {
             "anyOf": [
               {
@@ -97,15 +97,6 @@
         "title": "MatchCreate",
         "type": "object"
       },
-      "MatchFormat": {
-        "enum": [
-          "best_of_1",
-          "best_of_3",
-          "best_of_5"
-        ],
-        "title": "MatchFormat",
-        "type": "string"
-      },
       "MatchRead": {
         "properties": {
           "created_at": {
@@ -123,16 +114,6 @@
               }
             ],
             "title": "Event"
-          },
-          "format": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/MatchFormat"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "id": {
             "format": "uuid",
@@ -160,6 +141,16 @@
             "title": "Player Id",
             "type": "string"
           },
+          "sets_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetsFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "surface": {
             "anyOf": [
               {
@@ -183,7 +174,7 @@
           "played_on",
           "surface",
           "event",
-          "format",
+          "sets_format",
           "created_at",
           "updated_at"
         ],
@@ -365,6 +356,16 @@
         ],
         "title": "PlayerRead",
         "type": "object"
+      },
+      "SetsFormat": {
+        "description": "How many sets the match is played over.",
+        "enum": [
+          "best_of_1",
+          "best_of_3",
+          "best_of_5"
+        ],
+        "title": "SetsFormat",
+        "type": "string"
       },
       "Surface": {
         "enum": [

@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from matchpoint_api.models import MatchFormat, Surface
+from matchpoint_api.models import SetsFormat, Surface
 from matchpoint_api.schemas.types import ShortText
 
 # Room to back-fill a season or two of matches, while still bracketing a wrong
@@ -17,7 +17,7 @@ class MatchCreate(BaseModel):
     played_on: date
     surface: Surface | None = None
     event: ShortText | None = None
-    format: MatchFormat | None = None
+    sets_format: SetsFormat | None = None
 
     @field_validator("played_on")
     @classmethod
@@ -52,6 +52,6 @@ class MatchRead(BaseModel):
     played_on: date
     surface: Surface | None
     event: str | None
-    format: MatchFormat | None
+    sets_format: SetsFormat | None
     created_at: datetime
     updated_at: datetime

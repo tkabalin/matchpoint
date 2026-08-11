@@ -40,12 +40,12 @@ def upgrade() -> None:
         ),
         sa.Column("event", sa.String(length=100), nullable=True),
         sa.Column(
-            "format",
+            "sets_format",
             sa.Enum(
                 "best_of_1",
                 "best_of_3",
                 "best_of_5",
-                name="match_format",
+                name="sets_format",
                 native_enum=False,
                 create_constraint=True,
             ),

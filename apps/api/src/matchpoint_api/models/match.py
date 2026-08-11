@@ -16,7 +16,14 @@ class Surface(enum.StrEnum):
     CARPET = "carpet"
 
 
-class MatchFormat(enum.StrEnum):
+# Named for the one axis it models, not "format": real tennis also varies by game
+# scoring (ad vs no-ad), set length (first to 6 vs Fast4's 4) and tiebreak type
+# (7-point vs a 10-point match tiebreak). Those can arrive as their own fields if the
+# client asks for them, rather than multiplying combinations into this enum. Docstring
+# kept to one line because it ships to the generated TypeScript client.
+class SetsFormat(enum.StrEnum):
+    """How many sets the match is played over."""
+
     BEST_OF_1 = "best_of_1"
     BEST_OF_3 = "best_of_3"
     BEST_OF_5 = "best_of_5"
@@ -36,7 +43,7 @@ class Match(Base):
     played_on: Mapped[date]
     surface: Mapped[Surface | None] = mapped_column(str_enum(Surface, "surface"))
     event: Mapped[str | None] = mapped_column(String(100))
-    format: Mapped[MatchFormat | None] = mapped_column(str_enum(MatchFormat, "match_format"))
+    sets_format: Mapped[SetsFormat | None] = mapped_column(str_enum(SetsFormat, "sets_format"))
     # clock_timestamp(), not now(): now() is the transaction timestamp, so a batch of
     # matches synced in one transaction would all claim the same creation time and the
     # created_at tiebreaker in list_matches would order them arbitrarily.

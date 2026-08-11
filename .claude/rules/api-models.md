@@ -23,7 +23,8 @@ paths:
   native Postgres enum. Postgres cannot remove a value from a native enum, so adding one could never
   be rolled back and every enum migration would ship a downgrade that lies.
 - The constraint name is the second argument and is what a migration must name later, so it is worth
-  choosing deliberately (`match_format`, not `format`).
+  choosing deliberately: it has to read unambiguously in a revision that does not have the model in
+  front of it, and it is not required to match the column name.
 - A new enum must be re-exported from `models/__init__.py` and added to its `__all__`; the schemas
   import enums from the package, so it fails at import until then.
 
