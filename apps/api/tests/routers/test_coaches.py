@@ -1,6 +1,8 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from psycopg.errors import CheckViolation
 from sqlalchemy import func, select
@@ -8,15 +10,40 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
-from matchpoint_api.models import Coach
+from matchpoint_api.auth import (
+    SESSION_COOKIE,
+    SESSION_LIFETIME,
+    CurrentCoach,
+    hash_token,
+    new_session_token,
+)
+from matchpoint_api.db import get_db
+from matchpoint_api.main import create_app
+from matchpoint_api.models import Coach, CoachSession
 from matchpoint_api.security import verify_password
-from tests.factories import make_coach
+from tests.factories import make_coach, make_coach_session
 
 SIGN_UP = {
     "email": "mike@example.com",
     "display_name": "Coach Mike",
     "password": "a-good-password",
 }
+
+
+def _sign_in(client: TestClient, db_session: Session, coach: Coach, **session_overrides: object):
+    """Give the client a live session for `coach`, arranged rather than logged in.
+
+    Bypassing POST /auth/login is deliberate twice over: these tests are about the
+    resolving dependency, not the login route — and the factory coach's fake hash
+    costs nothing where a real login pays a full Argon2 verification per test.
+    """
+    token = new_session_token()
+    session_row = make_coach_session(
+        db_session, coach_id=coach.id, token_hash=hash_token(token), **session_overrides
+    )
+    db_session.commit()
+    client.cookies.set(SESSION_COOKIE, token)
+    return session_row
 
 
 def test_signing_up_returns_the_new_coach(client: TestClient) -> None:
@@ -75,13 +102,17 @@ def test_two_coaches_sharing_a_password_get_different_hashes(
 
 def test_a_mixed_case_email_is_stored_and_read_back_lowercased(client: TestClient) -> None:
     """EmailStr folds the domain, so the local part is the model's `validates` to do — and
-    this is the test that fails if that ever comes out. Read back through the other route
-    because a coach signing in as Mike@ has to find the row stored as mike@."""
+    this is the test that fails if that ever comes out. Read back through a real login and
+    /coaches/me, address typed with capitals both times, because that whole round trip is
+    what storing lowercase exists to keep working."""
     response = client.post("/coaches", json=SIGN_UP | {"email": "Mike@Example.com"})
 
     assert response.status_code == 201
     assert response.json()["email"] == "mike@example.com"
-    assert client.get(f"/coaches/{response.json()['id']}").json()["email"] == "mike@example.com"
+
+    login = {"email": "Mike@Example.com", "password": SIGN_UP["password"]}
+    assert client.post("/auth/login", json=login).status_code == 200
+    assert client.get("/coaches/me").json()["email"] == "mike@example.com"
 
 
 def test_signing_up_twice_with_one_email_is_a_conflict(
@@ -172,11 +203,16 @@ def test_a_rejected_sign_up_does_not_echo_the_password(client: TestClient) -> No
     assert "a-good-password" not in on_the_email.text
 
 
-def test_get_coach_returns_the_row(client: TestClient, db_session: Session) -> None:
+def test_me_returns_the_signed_in_coach_and_nobody_else(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cookie decides whose row comes back — with two coaches in the table, /me
+    must resolve to the one the session belongs to."""
+    make_coach(db_session, email="other@example.com")
     coach = make_coach(db_session, email="mike@example.com", display_name="Coach Mike")
-    db_session.commit()
+    _sign_in(client, db_session, coach)
 
-    response = client.get(f"/coaches/{coach.id}")
+    response = client.get("/coaches/me")
 
     assert response.status_code == 200
     body = response.json()
@@ -187,32 +223,130 @@ def test_get_coach_returns_the_row(client: TestClient, db_session: Session) -> N
     assert body["updated_at"] is not None
 
 
-def test_get_coach_never_returns_the_password_hash(client: TestClient, db_session: Session) -> None:
-    """Checked at the boundary that matters: response_model filters a response to
-    CoachRead's fields, so the hash is dropped here — but only for as long as CoachRead
-    leaves it out. Sign-up returns a Coach row too, and is asserted on separately."""
-    coach = make_coach(db_session, password_hash="not-a-real-hash")
+def test_me_without_a_cookie_is_a_401(client: TestClient) -> None:
+    response = client.get("/coaches/me")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_me_with_a_token_no_login_minted_is_a_401(client: TestClient, db_session: Session) -> None:
+    """A forged or revoked token: syntactically fine, hashing to nothing in the
+    table. Same 401 as no cookie at all — the difference is server bookkeeping,
+    not something to describe to whoever is probing."""
+    coach = make_coach(db_session)
+    _sign_in(client, db_session, coach)
+    client.cookies.set(SESSION_COOKIE, new_session_token())
+
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_me_with_an_expired_session_is_a_401_and_discards_it(
+    client: TestClient, db_session: Session
+) -> None:
+    """Being presented is the one moment an expired row is in hand, so rejection is
+    also when it is deleted; the rows never presented again are left to accumulate."""
+    coach = make_coach(db_session)
+    _sign_in(client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+
+    response = client.get("/coaches/me")
+
+    assert response.status_code == 401
+    assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 0
+
+
+def test_me_renews_a_session_past_its_half_life(client: TestClient, db_session: Session) -> None:
+    """Renewal on use is what makes the fixed lifetime safe courtside: any activity
+    in the second half of a session's life pushes expiry a full lifetime out, so only
+    an *abandoned* login can ever actually expire."""
+    coach = make_coach(db_session)
+    session_row = _sign_in(
+        client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=5)
+    )
+
+    assert client.get("/coaches/me").status_code == 200
+
+    assert session_row.expires_at > datetime.now(UTC) + SESSION_LIFETIME - timedelta(minutes=1)
+
+
+def test_a_renewed_session_re_sends_the_cookie(client: TestClient, db_session: Session) -> None:
+    """Renewing the row is only half of it: Max-Age is absolute from the moment the
+    cookie is sent, so a browser told nothing would drop its copy on the original
+    deadline — signing out the coach who used the app every single day, which is exactly
+    the silent expiry courtside that the renewal exists to rule out."""
+    coach = make_coach(db_session)
+    _sign_in(client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=5))
+    token = client.cookies[SESSION_COOKIE]
+
+    header = client.get("/coaches/me").headers["set-cookie"]
+
+    assert header.startswith(f"{SESSION_COOKIE}={token}")
+    assert f"max-age={int(SESSION_LIFETIME.total_seconds())}" in header.lower()
+
+
+def test_a_renewal_reaches_the_browser_even_on_an_error_response(db_session: Session) -> None:
+    """The renewal is a fact about the session, so it must not depend on how the request
+    went. An error answer is built by an exception handler, not by the route, so a cookie
+    written to the route's own response is dropped — leaving the row renewed and the
+    browser still counting down to the old deadline. Nothing renews it again until the
+    *new* halfway mark, so the coach is signed out mid-season having used the app daily.
+
+    Built on its own app because no route on this branch both authenticates and fails,
+    and the failing half is the whole point of the test.
+    """
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: db_session
+
+    @app.get("/boom")
+    def boom(_coach: CurrentCoach) -> None:
+        raise HTTPException(status_code=418, detail="Nothing to do with the session")
+
+    coach = make_coach(db_session)
+    token = new_session_token()
+    session_row = make_coach_session(
+        db_session,
+        coach_id=coach.id,
+        token_hash=hash_token(token),
+        expires_at=datetime.now(UTC) + timedelta(days=5),
+    )
     db_session.commit()
 
-    response = client.get(f"/coaches/{coach.id}")
+    with TestClient(app, base_url="https://testserver") as failing_client:
+        failing_client.cookies.set(SESSION_COOKIE, token)
+        response = failing_client.get("/boom")
+
+    assert response.status_code == 418
+    assert session_row.expires_at > datetime.now(UTC) + SESSION_LIFETIME - timedelta(minutes=1)
+    assert response.headers["set-cookie"].startswith(f"{SESSION_COOKIE}={token}")
+
+
+def test_me_leaves_a_session_in_its_first_half_alone(
+    client: TestClient, db_session: Session
+) -> None:
+    """The other side of the halfway mark: renewing on every request would turn every
+    read into a write, so a young session must come through untouched."""
+    coach = make_coach(db_session)
+    session_row = _sign_in(client, db_session, coach)
+    expires_at = session_row.expires_at
+
+    assert client.get("/coaches/me").status_code == 200
+
+    assert session_row.expires_at == expires_at
+
+
+def test_me_never_returns_the_password_hash(client: TestClient, db_session: Session) -> None:
+    """Checked at the boundary that matters: response_model filters a response to
+    CoachRead's fields, so the hash is dropped here — but only for as long as CoachRead
+    leaves it out. Sign-up and login return a Coach row too, and are asserted on
+    separately."""
+    coach = make_coach(db_session, password_hash="not-a-real-hash")
+    _sign_in(client, db_session, coach)
+
+    response = client.get("/coaches/me")
 
     assert response.status_code == 200
     assert "password_hash" not in response.json()
     assert "not-a-real-hash" not in response.text
-
-
-def test_get_coach_returns_404_for_an_unknown_id(client: TestClient) -> None:
-    response = client.get(f"/coaches/{uuid.uuid4()}")
-
-    assert response.status_code == 404
-
-
-def test_get_coach_returns_422_for_a_malformed_id(client: TestClient) -> None:
-    """The path parameter is a uuid.UUID, so FastAPI rejects a non-UUID before the
-    handler runs — nothing here reaches the database."""
-    response = client.get("/coaches/not-a-uuid")
-
-    assert response.status_code == 422
 
 
 def test_coaches_are_not_listable(client: TestClient) -> None:
