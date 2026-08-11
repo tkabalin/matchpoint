@@ -4,7 +4,7 @@ import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanst
 
 import { client } from '../client.gen';
 import { createCoach, createMatch, createPlayer, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, verifyOtp } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Login
@@ -218,7 +218,7 @@ export const listPlayersQueryKey = (options?: Options<ListPlayersData>) => creat
 /**
  * List Players
  */
-export const listPlayersOptions = (options?: Options<ListPlayersData>) => queryOptions<ListPlayersResponse, DefaultError, ListPlayersResponse, ReturnType<typeof listPlayersQueryKey>>({
+export const listPlayersOptions = (options?: Options<ListPlayersData>) => queryOptions<ListPlayersResponse, ListPlayersError, ListPlayersResponse, ReturnType<typeof listPlayersQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
         const { data } = await listPlayers({
             ...options,

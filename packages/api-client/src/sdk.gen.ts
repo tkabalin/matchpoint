@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
+import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -106,7 +106,7 @@ export const getMatch = <ThrowOnError extends boolean = false>(options: Options<
 /**
  * List Players
  */
-export const listPlayers = <ThrowOnError extends boolean = false>(options?: Options<ListPlayersData, ThrowOnError>): RequestResult<ListPlayersResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListPlayersResponses, unknown, ThrowOnError>({ url: '/players', ...options });
+export const listPlayers = <ThrowOnError extends boolean = false>(options?: Options<ListPlayersData, ThrowOnError>): RequestResult<ListPlayersResponses, ListPlayersErrors, ThrowOnError> => (options?.client ?? client).get<ListPlayersResponses, ListPlayersErrors, ThrowOnError>({ url: '/players', ...options });
 
 /**
  * Create Player

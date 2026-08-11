@@ -189,7 +189,7 @@ export type PlayerRead = {
     /**
      * Coach Id
      */
-    coach_id: string | null;
+    coach_id: string;
     /**
      * Created At
      */
@@ -529,6 +529,10 @@ export type ListMatchesData = {
 
 export type ListMatchesErrors = {
     /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -555,6 +559,10 @@ export type CreateMatchData = {
 };
 
 export type CreateMatchErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
     /**
      * Validation Error
      */
@@ -586,6 +594,10 @@ export type GetMatchData = {
 
 export type GetMatchErrors = {
     /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -609,6 +621,15 @@ export type ListPlayersData = {
     url: '/players';
 };
 
+export type ListPlayersErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+};
+
+export type ListPlayersError = ListPlayersErrors[keyof ListPlayersErrors];
+
 export type ListPlayersResponses = {
     /**
      * Response List Players
@@ -628,6 +649,10 @@ export type CreatePlayerData = {
 };
 
 export type CreatePlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
     /**
      * Validation Error
      */
@@ -658,6 +683,10 @@ export type GetPlayerData = {
 };
 
 export type GetPlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
     /**
      * Validation Error
      */

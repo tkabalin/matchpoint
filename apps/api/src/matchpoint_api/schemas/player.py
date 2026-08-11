@@ -61,7 +61,7 @@ class PlayerRead(BaseModel):
     notes: str | None
     # Readable but absent from PlayerCreate: ownership comes from the authenticated
     # coach, never from the request body, so there is nothing for a client to send.
-    coach_id: uuid.UUID | None
+    coach_id: uuid.UUID
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime

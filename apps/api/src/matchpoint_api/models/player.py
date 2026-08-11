@@ -42,12 +42,12 @@ class Player(Base):
     # Text rather than String(n): coach notes are prose, and the length bound belongs
     # on the schema, where it reaches the OpenAPI spec and so the client form.
     notes: Mapped[str | None] = mapped_column(Text)
-    # The owning coach. Still nullable: nothing sets it until sign-in exists, so every
-    # player created today has no owner to record. No ondelete, so Postgres refuses to
-    # delete a coach who still has players rather than taking their match history along.
-    # Indexed because Postgres does not index a foreign key automatically, and the
-    # roster query this becomes — one coach's players — filters on it.
-    coach_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("coaches.id"), index=True)
+    # The owning coach, set by the route from the session — never from the request
+    # body, which is why PlayerCreate does not carry it. No ondelete, so Postgres
+    # refuses to delete a coach who still has players rather than taking their match
+    # history along. Indexed because Postgres does not index a foreign key
+    # automatically, and the roster query — one coach's players — filters on it.
+    coach_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("coaches.id"), index=True)
     # Soft deletion: a player who has matches recorded against them cannot be deleted
     # outright without taking the match history along, so archiving is the only safe
     # way to clear someone off an active roster.

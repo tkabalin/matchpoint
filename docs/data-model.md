@@ -11,7 +11,7 @@ requests; in an editor that doesn't, paste the block into an online Mermaid view
 
 ```mermaid
 erDiagram
-    coaches |o--o{ players : owns
+    coaches ||--o{ players : owns
     coaches ||--o{ coach_sessions : "signs in as"
     players ||--o{ matches : plays
 
@@ -52,7 +52,7 @@ erDiagram
         varchar(5) dominant_hand "nullable: right, left"
         varchar(6) gender "nullable: male, female, other"
         text notes "nullable: coach notes"
-        uuid coach_id FK "nullable: the owning coach"
+        uuid coach_id FK "the owning coach"
         timestamptz archived_at "nullable: soft delete"
         timestamptz created_at
         timestamptz updated_at
