@@ -92,5 +92,8 @@ def client(request: pytest.FixtureRequest) -> Iterator[TestClient]:
     """
     app = create_app()
     app.dependency_overrides[get_db] = lambda: request.getfixturevalue("db_session")
-    with TestClient(app) as client:
+    # https rather than the default http, because production is: the session cookie is
+    # marked Secure, and the cookie jar refuses to send a Secure cookie back over plain
+    # http — every cookie-authenticated request would arrive silently signed out.
+    with TestClient(app, base_url="https://testserver") as client:
         yield client

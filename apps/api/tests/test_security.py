@@ -7,11 +7,12 @@ round-trip, so only a test naming the numbers catches it.
 """
 
 import pytest
+from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError
 from sqlalchemy import Text
 
 from matchpoint_api.models import Coach
-from matchpoint_api.security import hash_password, verify_password
+from matchpoint_api.security import DUMMY_HASH, hash_password, needs_rehash, verify_password
 
 PASSWORD = "correct horse battery"
 
@@ -80,6 +81,38 @@ def test_the_same_password_verifies_across_two_encodings_of_it() -> None:
 
     assert verify_password(decomposed, hash_password(composed)) is True
     assert verify_password(composed, hash_password(decomposed)) is True
+
+
+def test_the_dummy_hash_costs_what_a_real_one_costs() -> None:
+    """DUMMY_HASH exists so an unknown email burns the same Argon2 work as a wrong
+    password, and equal parameters are what make that time equal — verification cost
+    is set by the parameters recorded in the hash string, not by the verifier."""
+    assert DUMMY_HASH.startswith("$argon2id$")
+    assert EXPECTED_PARAMETERS in DUMMY_HASH
+
+
+def test_nothing_verifies_against_the_dummy_hash() -> None:
+    """Its input is random and discarded at import, so no submitted password may ever
+    come back True against it — login ignores the result, but only this keeps the
+    ignored result from mattering."""
+    assert verify_password(PASSWORD, DUMMY_HASH) is False
+    assert verify_password("", DUMMY_HASH) is False
+
+
+def test_a_current_hash_does_not_need_a_rehash() -> None:
+    """The quiet branch of every successful login: parameters unchanged, nothing to
+    do. If this fails, every login is re-hashing — twice the Argon2 work per sign-in
+    for nothing."""
+    assert needs_rehash(hash_password(PASSWORD)) is False
+
+
+def test_a_hash_with_stale_parameters_needs_a_rehash() -> None:
+    """How a future parameter change reaches stored rows: login asks, this answers.
+    The stale hash is built with deliberately cheap parameters — what matters is only
+    that they differ from security.py's."""
+    stale = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash(PASSWORD)
+
+    assert needs_rehash(stale) is True
 
 
 def test_verifying_against_a_stored_value_that_is_not_a_hash_raises() -> None:
