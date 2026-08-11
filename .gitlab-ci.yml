@@ -135,6 +135,40 @@ web-lint:
     - pnpm run format:check
     - pnpm run lint
 
+web-api-client:
+  extends: .web-base
+  stage: lint
+  needs: []
+  # apps/api's own suite fails on an openapi.json that no longer matches the
+  # routes; this is the other half — a spec that was regenerated without the
+  # client that is generated from it. Both are committed, and a client left
+  # behind compiles fine against its own stale types, so nothing else notices.
+  #
+  # Node-only, since the spec is a committed file: no uv, no Postgres, no server.
+  #
+  # The spec file, not apps/api/**: it is the generator's only input from the API
+  # side, so a route change that leaves openapi.json alone cannot change what this
+  # job produces — and that case is api-test's, which fails on a spec the routes
+  # have outgrown.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+        - apps/api/openapi.json
+        - packages/api-client/**/*
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - .gitlab-ci.yml
+  cache:
+    policy: pull
+  script:
+    # Copied outside the project so the generator can't see it. `diff -r` rather
+    # than `git diff --exit-code`: node:22-slim ships no git.
+    - cp -r packages/api-client/src /tmp/api-client-committed
+    - pnpm --filter @matchpoint/api-client run generate
+    - >-
+      diff -r /tmp/api-client-committed packages/api-client/src || { echo "The committed client is
+      not what the spec generates — run scripts/gen-api-client.sh and commit the result."; exit 1; }
+
 api-test:
   extends: .api-base
   stage: test
@@ -314,6 +348,8 @@ build-web-image:
     IMAGE_NAME: web
   needs:
     - job: web-lint
+      optional: true
+    - job: web-api-client
       optional: true
     - job: web-test
       optional: true
