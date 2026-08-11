@@ -73,6 +73,7 @@ Each committed rule declares a `paths` glob in its frontmatter:
 | `api.md`            | `apps/api/**`                      | Sync SQLAlchemy, `def` (not `async def`) database routes, Alembic from the first table, uv-not-pnpm  |
 | `api-migrations.md` | `apps/api/migrations/**`           | Alembic's `generic` template plus the two local `env.py` edits; no `sqlalchemy.url` in `alembic.ini` |
 | `api-tests.md`      | `apps/api/tests/**`                | A test tree mirroring the source; real Postgres over SQLite or a mocked session; savepoint rollback  |
+| `api-spec.md`       | Routers, schemas, app factory      | Regenerating the spec and TypeScript client in the same commit as the change that moved them         |
 | `api-client.md`     | `packages/api-client/**`           | Generated output, never hand-edited — fix the API, then regenerate                                   |
 | `web.md`            | `apps/web/**`                      | Tailwind v4 CSS-first via `@theme`, feature slices, the `@/` alias, kebab-case filenames             |
 | `web-capture.md`    | `apps/web/src/features/capture/**` | A network-free capture path; portrait _and_ landscape; touch-first affordances                       |

@@ -34,16 +34,6 @@ paths:
   does not auto-declare; 404 is the project's choice for a body field referencing a row that doesn't
   exist.
 
-## The Generated Client
-
-- A route's request and response models are a published contract: the web app compiles against
-  `packages/api-client`, generated from this app's OpenAPI spec. After changing anything a route
-  exposes — schema fields, status codes, query parameters, a handler's name — run
-  `scripts/gen-api-client.sh` and commit the regenerated spec and client with the change.
-- Handler function names become the client's function names (`create_player` → `createPlayer`), so
-  they have to stay unique across routers and read well as a call. `tests/test_openapi.py` fails on
-  both a stale spec and a name collision.
-
 ## Column Defaults
 
 - Timestamp columns default to `clock_timestamp()`, not `now()`. In Postgres `now()` is the
