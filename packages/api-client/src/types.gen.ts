@@ -5,6 +5,20 @@ export type ClientOptions = {
 };
 
 /**
+ * CoachCreate
+ */
+export type CoachCreate = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * CoachRead
  */
 export type CoachRead = {
@@ -34,6 +48,16 @@ export type CoachRead = {
  * DominantHand
  */
 export type DominantHand = 'right' | 'left';
+
+/**
+ * ErrorDetail
+ */
+export type ErrorDetail = {
+    /**
+     * Detail
+     */
+    detail: string;
+};
 
 /**
  * Gender
@@ -217,6 +241,53 @@ export type ValidationError = {
      */
     type: string;
 };
+
+/**
+ * CoachCreate
+ */
+export type CoachCreateWritable = {
+    /**
+     * Display Name
+     */
+    display_name: string;
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+export type CreateCoachData = {
+    body: CoachCreateWritable;
+    path?: never;
+    query?: never;
+    url: '/coaches';
+};
+
+export type CreateCoachErrors = {
+    /**
+     * Email already registered
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateCoachError = CreateCoachErrors[keyof CreateCoachErrors];
+
+export type CreateCoachResponses = {
+    /**
+     * Successful Response
+     */
+    201: CoachRead;
+};
+
+export type CreateCoachResponse = CreateCoachResponses[keyof CreateCoachResponses];
 
 export type GetCoachData = {
     body?: never;

@@ -34,8 +34,8 @@ class Coach(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # The sign-in identity, so unique. No separate index=True: Postgres implements a
     # UNIQUE constraint with an index, and that index is the one a login lookup wants.
-    # 254 is the longest address SMTP will carry (RFC 5321); the schema bound to pair
-    # with it belongs to the sign-up endpoint, which does not exist yet.
+    # 254 is the longest address SMTP will carry (RFC 5321), paired with CoachCreate's
+    # EMAIL_MAX_LENGTH so a too-long address is rejected as a 422 rather than a 500.
     email: Mapped[str] = mapped_column(String(254), unique=True)
     # What the coach is called in the app. Intended as a full name, but a nickname is a
     # valid answer, which is why it is one free-text field rather than the

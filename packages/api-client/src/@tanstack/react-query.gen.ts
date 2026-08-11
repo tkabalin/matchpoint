@@ -3,8 +3,25 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createMatch, createPlayer, getCoach, getMatch, getPlayer, health, listMatches, listPlayers, type Options } from '../sdk.gen';
-import type { CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCoachData, GetCoachError, GetCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse } from '../types.gen';
+import { createCoach, createMatch, createPlayer, getCoach, getMatch, getPlayer, health, listMatches, listPlayers, type Options } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCoachData, GetCoachError, GetCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse } from '../types.gen';
+
+/**
+ * Create Coach
+ */
+export const createCoachMutation = (options?: Partial<Options<CreateCoachData>>): UseMutationOptions<CreateCoachResponse, CreateCoachError, Options<CreateCoachData>> => {
+    const mutationOptions: UseMutationOptions<CreateCoachResponse, CreateCoachError, Options<CreateCoachData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await createCoach({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
