@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, getCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCoachData, GetCoachError, GetCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse } from '../types.gen';
+import { createCoach, createMatch, createPlayer, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse } from '../types.gen';
 
 /**
  * Login
@@ -90,14 +90,14 @@ const createQueryKey = <TOptions extends Options>(id: string, options?: TOptions
     return [params];
 };
 
-export const getCoachQueryKey = (options: Options<GetCoachData>) => createQueryKey('getCoach', options);
+export const getCurrentCoachQueryKey = (options?: Options<GetCurrentCoachData>) => createQueryKey('getCurrentCoach', options);
 
 /**
- * Get Coach
+ * Get Current Coach
  */
-export const getCoachOptions = (options: Options<GetCoachData>) => queryOptions<GetCoachResponse, GetCoachError, GetCoachResponse, ReturnType<typeof getCoachQueryKey>>({
+export const getCurrentCoachOptions = (options?: Options<GetCurrentCoachData>) => queryOptions<GetCurrentCoachResponse, GetCurrentCoachError, GetCurrentCoachResponse, ReturnType<typeof getCurrentCoachQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
-        const { data } = await getCoach({
+        const { data } = await getCurrentCoach({
             ...options,
             ...queryKey[0],
             signal,
@@ -105,7 +105,7 @@ export const getCoachOptions = (options: Options<GetCoachData>) => queryOptions<
         });
         return data;
     },
-    queryKey: getCoachQueryKey(options)
+    queryKey: getCurrentCoachQueryKey(options)
 });
 
 export const healthQueryKey = (options?: Options<HealthData>) => createQueryKey('health', options);

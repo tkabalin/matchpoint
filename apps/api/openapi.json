@@ -644,21 +644,9 @@
         ]
       }
     },
-    "/coaches/{coach_id}": {
+    "/coaches/me": {
       "get": {
-        "operationId": "get_coach",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "coach_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Coach Id",
-              "type": "string"
-            }
-          }
-        ],
+        "operationId": "get_current_coach",
         "responses": {
           "200": {
             "content": {
@@ -670,18 +658,18 @@
             },
             "description": "Successful Response"
           },
-          "422": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/ErrorDetail"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Not signed in"
           }
         },
-        "summary": "Get Coach",
+        "summary": "Get Current Coach",
         "tags": [
           "coaches"
         ]

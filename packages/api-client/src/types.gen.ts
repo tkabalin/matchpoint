@@ -358,35 +358,30 @@ export type CreateCoachResponses = {
 
 export type CreateCoachResponse = CreateCoachResponses[keyof CreateCoachResponses];
 
-export type GetCoachData = {
+export type GetCurrentCoachData = {
     body?: never;
-    path: {
-        /**
-         * Coach Id
-         */
-        coach_id: string;
-    };
+    path?: never;
     query?: never;
-    url: '/coaches/{coach_id}';
+    url: '/coaches/me';
 };
 
-export type GetCoachErrors = {
+export type GetCurrentCoachErrors = {
     /**
-     * Validation Error
+     * Not signed in
      */
-    422: HttpValidationError;
+    401: ErrorDetail;
 };
 
-export type GetCoachError = GetCoachErrors[keyof GetCoachErrors];
+export type GetCurrentCoachError = GetCurrentCoachErrors[keyof GetCurrentCoachErrors];
 
-export type GetCoachResponses = {
+export type GetCurrentCoachResponses = {
     /**
      * Successful Response
      */
     200: CoachRead;
 };
 
-export type GetCoachResponse = GetCoachResponses[keyof GetCoachResponses];
+export type GetCurrentCoachResponse = GetCurrentCoachResponses[keyof GetCurrentCoachResponses];
 
 export type HealthData = {
     body?: never;

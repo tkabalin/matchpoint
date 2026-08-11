@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, GetCoachData, GetCoachErrors, GetCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses } from './types.gen';
+import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -48,9 +48,9 @@ export const createCoach = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Get Coach
+ * Get Current Coach
  */
-export const getCoach = <ThrowOnError extends boolean = false>(options: Options<GetCoachData, ThrowOnError>): RequestResult<GetCoachResponses, GetCoachErrors, ThrowOnError> => (options.client ?? client).get<GetCoachResponses, GetCoachErrors, ThrowOnError>({ url: '/coaches/{coach_id}', ...options });
+export const getCurrentCoach = <ThrowOnError extends boolean = false>(options?: Options<GetCurrentCoachData, ThrowOnError>): RequestResult<GetCurrentCoachResponses, GetCurrentCoachErrors, ThrowOnError> => (options?.client ?? client).get<GetCurrentCoachResponses, GetCurrentCoachErrors, ThrowOnError>({ url: '/coaches/me', ...options });
 
 /**
  * Health

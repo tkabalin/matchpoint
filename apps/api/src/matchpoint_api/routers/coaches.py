@@ -1,4 +1,3 @@
-import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,6 +5,7 @@ from psycopg.errors import UniqueViolation
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach
 from matchpoint_api.schemas.coach import CoachCreate, CoachRead
@@ -59,14 +59,20 @@ def create_coach(data: CoachCreate, db: DbSession) -> Coach:
     return coach
 
 
-# Deliberately no list route to pair with the ones on players and matches: a coach roster
-# is a list of email addresses, and nothing authenticates a request yet. With a POST on
-# this path the absence now reads as a 405 rather than a 404 — the method is what is
-# missing, not the route. Fetching one by id needs the coach's own unguessable UUID, and
-# is what becomes GET /coaches/me once there is a caller to identify.
-@router.get("/{coach_id}", response_model=CoachRead)
-def get_coach(coach_id: uuid.UUID, db: DbSession) -> Coach:
-    coach = db.get(Coach, coach_id)
-    if coach is None:
-        raise HTTPException(status_code=404, detail="Coach not found")
+# Deliberately no list route to pair with the ones on players and matches: a coach
+# roster is a list of email addresses, and even a signed-in coach has no business with
+# the others'. With a POST on this path the absence reads as a 405 rather than a 404 —
+# the method is what is missing, not the route.
+#
+# This replaces the by-id route outright rather than joining it: fetching by id existed
+# because nothing could identify a caller, so the coach's own unguessable UUID stood in
+# as the credential. The session cookie is the credential now, and keeping the old
+# route would have kept its UUID-as-secret semantics alongside. The 401 is declared
+# with a model so the client can route it to a login screen, per ErrorDetail's note.
+@router.get(
+    "/me",
+    response_model=CoachRead,
+    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+)
+def get_current_coach(coach: CurrentCoach) -> Coach:
     return coach

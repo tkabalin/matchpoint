@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import SESSION_COOKIE, SESSION_LIFETIME, hash_token, new_session_token
+from matchpoint_api.auth import (
+    SESSION_COOKIE,
+    SESSION_LIFETIME,
+    hash_token,
+    new_session_token,
+    set_session_cookie,
+)
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, CoachSession
@@ -22,17 +28,6 @@ DbSession = Annotated[Session, Depends(get_db)]
 # it was is exactly what a response must not disclose (the timing defence below is the
 # other half of the same promise).
 INCORRECT_CREDENTIALS = "Incorrect email or password"
-
-
-def _set_session_cookie(response: Response, token: str) -> None:
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        max_age=int(SESSION_LIFETIME.total_seconds()),
-        httponly=True,
-        secure=settings.session_cookie_secure,
-        samesite="lax",
-    )
 
 
 # The 401 is declared because the login form has to branch on "wrong credentials",
@@ -80,7 +75,7 @@ def login(data: LoginRequest, db: DbSession, response: Response) -> Coach:
         )
     )
     db.commit()
-    _set_session_cookie(response, token)
+    set_session_cookie(response, token)
     return coach
 
 
