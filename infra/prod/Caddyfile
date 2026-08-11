@@ -24,6 +24,17 @@ matchpoint.thomaskabalin.com {
 	# SPA fallback: without try_files, refreshing any client-side route 404s.
 	handle {
 		root * /srv
+
+		# Vite fingerprints every filename it emits under /assets, so those URLs
+		# never change content and can be cached for good. Everything else is the
+		# app shell, which must be revalidated instead: a cached index.html keeps
+		# booting the previous deploy's asset hashes, which are gone. no-cache
+		# still allows a 304, so the cost is a conditional request, not a refetch.
+		@fingerprinted path /assets/*
+		header @fingerprinted Cache-Control "public, max-age=31536000, immutable"
+		@shell not path /assets/*
+		header @shell Cache-Control "no-cache"
+
 		try_files {path} /index.html
 		file_server
 	}
