@@ -33,7 +33,12 @@ async function renderSignIn() {
     path: "/home",
     component: () => <h1>Home</h1>,
   });
-  const routeTree = rootRoute.addChildren([indexRoute, homeRoute]);
+  const signUpRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/sign-up",
+    component: () => <h1>Sign Up</h1>,
+  });
+  const routeTree = rootRoute.addChildren([indexRoute, homeRoute, signUpRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -131,4 +136,13 @@ test("shows a generic error when the request fails outright", async () => {
   await fillAndSubmit(user);
 
   expect(await screen.findByRole("alert")).toBeInTheDocument();
+});
+
+test("links to the sign-up page", async () => {
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await user.click(screen.getByRole("link", { name: "sign up here" }));
+
+  expect(await screen.findByRole("heading", { name: "Sign Up" })).toBeInTheDocument();
 });

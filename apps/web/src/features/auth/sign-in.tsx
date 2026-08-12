@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -39,26 +39,31 @@ export function SignIn() {
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h1>Sign In</h1>
-      <label htmlFor="email">Email</label>
-      <input
-        id="email"
-        type="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-      />
-      <label htmlFor="password">Password</label>
-      <input
-        id="password"
-        type="password"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-      />
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={!canSubmit}>
-        Sign In
-      </button>
-    </form>
+    <div>
+      <form onSubmit={handleSubmit}>
+        <h1>Sign In</h1>
+        <label htmlFor="email">Email</label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        {error && <p role="alert">{error}</p>}
+        <button type="submit" disabled={!canSubmit}>
+          Sign In
+        </button>
+      </form>
+      <p>
+        If you don't have an account, <Link to="/sign-up">sign up here</Link>.
+      </p>
+    </div>
   );
 }
