@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as HomeRouteImport } from "./routes/home"
+import { Route as PlayersRouteImport } from "./routes/players"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 
 const IndexRoute = IndexRouteImport.update({
@@ -23,6 +24,11 @@ const HomeRoute = HomeRouteImport.update({
   path: "/home",
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayersRoute = PlayersRouteImport.update({
+  id: "/players",
+  path: "/players",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: "/sign-up",
   path: "/sign-up",
@@ -32,30 +38,34 @@ const SignUpRoute = SignUpRouteImport.update({
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/home": typeof HomeRoute
+  "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/home": typeof HomeRoute
+  "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/": typeof IndexRoute
   "/home": typeof HomeRoute
+  "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: "/" | "/home" | "/sign-up"
+  fullPaths: "/" | "/home" | "/players" | "/sign-up"
   fileRoutesByTo: FileRoutesByTo
-  to: "/" | "/home" | "/sign-up"
-  id: "__root__" | "/" | "/home" | "/sign-up"
+  to: "/" | "/home" | "/players" | "/sign-up"
+  id: "__root__" | "/" | "/home" | "/players" | "/sign-up"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HomeRoute: typeof HomeRoute
+  PlayersRoute: typeof PlayersRoute
   SignUpRoute: typeof SignUpRoute
 }
 
@@ -75,6 +85,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/players": {
+      id: "/players"
+      path: "/players"
+      fullPath: "/players"
+      preLoaderRoute: typeof PlayersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/sign-up": {
       id: "/sign-up"
       path: "/sign-up"
@@ -88,6 +105,7 @@ declare module "@tanstack/react-router" {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HomeRoute: HomeRoute,
+  PlayersRoute: PlayersRoute,
   SignUpRoute: SignUpRoute,
 }
 export const routeTree = rootRouteImport
