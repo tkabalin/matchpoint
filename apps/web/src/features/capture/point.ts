@@ -27,72 +27,66 @@
 export type ServeNumber = "first" | "second";
 export const SERVE_NUMBERS: readonly ServeNumber[] = ["first", "second"];
 
-export type PointOutcome = "ace" | "winner" | "unforced_error" | "forced_error" | "double_fault";
-export const POINT_OUTCOMES: readonly PointOutcome[] = [
-  "ace",
-  "winner",
-  "unforced_error",
-  "forced_error",
-  "double_fault",
-];
+// From the tracked player's perspective. Not who served — see `winner`/`server`.
+export type PointOutcome = "win" | "loss";
+export const POINT_OUTCOMES: readonly PointOutcome[] = ["win", "loss"];
 
-// TODO: revisit once the capture UI is built — keep this to whatever a coach can
-// tag in one tap, not a granular shot taxonomy.
-export type ShotType = "forehand" | "backhand" | "volley" | "overhead" | "drop_shot";
+export type ErrorType = "forced_error" | "unforced_error";
+export const ERROR_TYPES: readonly ErrorType[] = ["forced_error", "unforced_error"];
+
+// TODO: revisit once the capture UI is built — this list is provisional, to be
+// refined once we know what a coach can realistically tag in one tap.
+export type ShotType = "forehand" | "backhand" | "volley" | "slice" | "drop_shot" | "lob";
 export const SHOT_TYPES: readonly ShotType[] = [
   "forehand",
   "backhand",
   "volley",
-  "overhead",
+  "slice",
   "drop_shot",
+  "lob",
 ];
 
 function isShotType(value: unknown): value is ShotType {
   return SHOT_TYPES.includes(value as ShotType);
 }
 
-// --- Point ---------------------------------------------------------------------
+// TODO: "net" is the only reason tracked so far — others (long, wide, ...) will
+// likely follow. Nullable on ErrorDetail below since not every error has a reason
+// worth tagging yet.
+export type ErrorReason = "net";
+export const ERROR_REASONS: readonly ErrorReason[] = ["net"];
 
-// TODO: flesh out beyond the one example rule the brief called out
-// (DOUBLE_FAULT ⇒ no rally shots). Rough shape only.
-function assertOutcomeConsistent(fields: {
-  outcome: PointOutcome;
-  serveNumber: ServeNumber;
-  winner: string;
-  server: string;
-  trackedPlayerShots: ShotType[];
-  opponentShots: ShotType[] | null;
-}): void {
-  if (fields.outcome === "ace" || fields.outcome === "double_fault") {
-    if (fields.trackedPlayerShots.length > 0) {
-      throw new Error(`${fields.outcome} cannot have tracked-player rally shots`);
-    }
-    if ((fields.opponentShots?.length ?? 0) > 0) {
-      throw new Error(`${fields.outcome} cannot have opponent rally shots`);
-    }
-  }
+// The shot that set up the error, whether the error was forced or unforced, and —
+// optionally — why it went wrong (e.g. into the net). The ShotType always belongs to
+// whoever did *not* error — the last shot the other side hit before it. On `winBy`
+// that's the tracked player's own last shot, the one the opponent erred trying to
+// handle; on `lossBy` it's the opponent's last shot, the one the tracked player
+// erred trying to handle. Null on both when the point ended on a clean winner
+// instead of an error (see `isAce` below for the other way a point can end with
+// neither populated).
+export type ErrorDetail = readonly [ErrorType, ShotType, ErrorReason | null];
 
-  // A double fault is by definition the server's own error on the second serve.
-  if (fields.outcome === "double_fault") {
-    if (fields.serveNumber !== "second") {
-      throw new Error("double_fault must be on the second serve");
-    }
-    if (fields.winner === fields.server) {
-      throw new Error("the server cannot win their own double fault");
-    }
-  }
-
-  if (fields.outcome === "ace" && fields.winner !== fields.server) {
-    throw new Error("the server wins an ace");
-  }
+function isErrorDetail(value: unknown): value is ErrorDetail {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    ERROR_TYPES.includes(value[0] as ErrorType) &&
+    isShotType(value[1]) &&
+    (value[2] === null || ERROR_REASONS.includes(value[2] as ErrorReason))
+  );
 }
+
+// --- Point ---------------------------------------------------------------------
 
 /**
  * Live scoring Point.
  *
- * Construct via `Point.create()` (validates) or `Point.fromJSON()` (rehydrate from
- * the outbox); never `new Point(...)` directly, so a Point in memory is always
- * known-valid. `toJSON()` is what actually gets written to Dexie.
+ * Construct via `Point.create()` (validates structurally) or `Point.fromJSON()`
+ * (rehydrate from the outbox); never `new Point(...)` directly. Cross-field tennis
+ * rules aren't re-checked here — every Point, including one shared in from another
+ * coach, was already built through that coach's own capture UI, which is the one
+ * place responsible for only ever producing consistent combinations. `toJSON()` is
+ * what actually gets written to Dexie.
  *
  * `gameId` references the parent Game by id only, the same way the backend
  * references `player_id` rather than embedding a row: Game doesn't exist as a class
@@ -114,6 +108,8 @@ export class Point {
   readonly trackedPlayerShots: ShotType[];
   // null = opponent's shots not recorded yet; [] = recorded, and there were none.
   readonly opponentShots: ShotType[] | null;
+  readonly winBy: ErrorDetail | null;
+  readonly lossBy: ErrorDetail | null;
 
   private constructor(fields: {
     id: string;
@@ -126,6 +122,8 @@ export class Point {
     server: string;
     trackedPlayerShots: ShotType[];
     opponentShots: ShotType[] | null;
+    winBy: ErrorDetail | null;
+    lossBy: ErrorDetail | null;
   }) {
     this.id = fields.id;
     this.gameId = fields.gameId;
@@ -137,6 +135,8 @@ export class Point {
     this.server = fields.server;
     this.trackedPlayerShots = fields.trackedPlayerShots;
     this.opponentShots = fields.opponentShots;
+    this.winBy = fields.winBy;
+    this.lossBy = fields.lossBy;
   }
 
   // TODO: this is a rough first pass at structural checks — revisit field-by-field
@@ -188,7 +188,14 @@ export class Point {
       opponentShots = data.opponentShots;
     }
 
-    const fields = {
+    if (data.winBy !== null && !isErrorDetail(data.winBy)) {
+      throw new Error("winBy must be an [ErrorType, ShotType] tuple, or null");
+    }
+    if (data.lossBy !== null && !isErrorDetail(data.lossBy)) {
+      throw new Error("lossBy must be an [ErrorType, ShotType] tuple, or null");
+    }
+
+    return new Point({
       id: data.id,
       gameId: data.gameId,
       trackedPlayerId: data.trackedPlayerId,
@@ -199,9 +206,9 @@ export class Point {
       server: data.server as string,
       trackedPlayerShots,
       opponentShots,
-    };
-    assertOutcomeConsistent(fields);
-    return new Point(fields);
+      winBy: data.winBy as ErrorDetail | null,
+      lossBy: data.lossBy as ErrorDetail | null,
+    });
   }
 
   static fromJSON(json: unknown): Point {
@@ -220,11 +227,50 @@ export class Point {
       server: this.server,
       trackedPlayerShots: this.trackedPlayerShots,
       opponentShots: this.opponentShots,
+      winBy: this.winBy,
+      lossBy: this.lossBy,
     };
   }
 
   get opponentDataComplete(): boolean {
     return this.opponentShots !== null;
+  }
+
+  /**
+   * An ace isn't its own outcome anymore — it's the server also winning the point,
+   * with an untouched serve: no rally shots on either side and no error detail (an
+   * ace isn't an error). Works either way round — an ace for the tracked player or
+   * one served against them; `winner` tells you which. Only reliable once
+   * `opponentDataComplete`; until then, an unrecorded `opponentShots` is assumed
+   * empty, same as `rallyLength`.
+   */
+  get isAce(): boolean {
+    return (
+      this.winner === this.server &&
+      this.trackedPlayerShots.length === 0 &&
+      (this.opponentShots?.length ?? 0) === 0 &&
+      this.winBy === null &&
+      this.lossBy === null
+    );
+  }
+
+  /**
+   * A double fault isn't its own outcome either — it's the server instead *losing*
+   * their own service point, on the second serve, with no rally shots on either side
+   * (the serve itself was the fault, so nothing was ever returned) and no error
+   * detail (a double fault is a serve fault, not a groundstroke error — there's no
+   * ShotType for "serve"). Works either way round, same as `isAce`. Same
+   * `opponentDataComplete` caveat.
+   */
+  get isDoubleFault(): boolean {
+    return (
+      this.winner !== this.server &&
+      this.serveNumber === "second" &&
+      this.trackedPlayerShots.length === 0 &&
+      (this.opponentShots?.length ?? 0) === 0 &&
+      this.winBy === null &&
+      this.lossBy === null
+    );
   }
 
   /**
@@ -234,5 +280,44 @@ export class Point {
    */
   get rallyLength(): number {
     return this.trackedPlayerShots.length + (this.opponentShots?.length ?? 0);
+  }
+
+  /**
+   * The exact rally shot count, without needing `opponentShots` recorded at all.
+   * Rally shots strictly alternate starting with the returner, so `server` plus
+   * `trackedPlayerShots.length` fixes how many shots the opponent hit *up to the
+   * tracked player's last one* — the only remaining question is whether the rally
+   * ended right there or continued one more shot. `outcome` plus `winBy`/`lossBy`
+   * answers that: a clean win/loss (winBy/lossBy null) means the winner's own shot
+   * ended the rally; a win/loss by error means the loser's failed shot did — either
+   * way, that tells us exactly who hit last, so there's no ambiguity left.
+   */
+  get exactRallyLength(): number {
+    const trackedCount = this.trackedPlayerShots.length;
+    if (trackedCount === 0) return 0;
+
+    const trackedServed = this.server === this.trackedPlayerId;
+    const trackedHitLast = this.outcome === "win" ? this.winBy === null : this.lossBy !== null;
+
+    if (trackedServed) {
+      // Tracked player served, so alternation is opponent, tracked, opponent, ... —
+      // the tracked player's last shot lands at position 2 * trackedCount.
+      return trackedHitLast ? trackedCount * 2 : trackedCount * 2 + 1;
+    }
+    // Opponent served, so alternation is tracked, opponent, tracked, opponent, ... —
+    // the tracked player's last shot lands at position 2 * trackedCount - 1.
+    return trackedHitLast ? trackedCount * 2 - 1 : trackedCount * 2;
+  }
+
+  /**
+   * For when a coach can only estimate how long a rally ran (e.g. reconstructing
+   * from memory) rather than knowing it exactly. Takes the coach's best-guess
+   * range and returns its midpoint, rounded to the nearest whole shot.
+   */
+  approximateRallyLength(estimatedRange: { min: number; max: number }): number {
+    if (estimatedRange.min < 0 || estimatedRange.max < estimatedRange.min) {
+      throw new Error("invalid rally length range");
+    }
+    return Math.round((estimatedRange.min + estimatedRange.max) / 2);
   }
 }
