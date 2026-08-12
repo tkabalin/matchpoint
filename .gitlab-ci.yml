@@ -527,15 +527,22 @@ cleanup-packages:
   needs: [deploy]
   allow_failure: true
   rules:
+    - if: $PACKAGES_CLEANUP_TOKEN == null || $PACKAGES_CLEANUP_TOKEN == ""
+      when: never
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
     - apk add --no-cache curl jq
   script:
-    # If the instance refuses JOB-TOKEN for the packages API, swap both headers
-    # for "PRIVATE-TOKEN: $PACKAGES_CLEANUP_TOKEN" backed by a project access
-    # token (api scope, Maintainer) in a protected CI/CD variable.
+    # Deleting a package requires Maintainer and has no minimum-role setting to
+    # lower, while CI_JOB_TOKEN carries the permissions of whoever triggered the
+    # pipeline — so this prune only ran on a Maintainer's push and 403'd on a
+    # Developer's. PACKAGES_CLEANUP_TOKEN is a project access token (api scope,
+    # Maintainer) in a protected CI/CD variable, making it independent of who
+    # pushed. It expires, so the rule above skips the job rather than failing it
+    # once the variable is gone.
     - >-
-      curl --fail-with-body -sS -H "JOB-TOKEN: $CI_JOB_TOKEN"
+      curl --fail-with-body -sS -H "PRIVATE-TOKEN: $PACKAGES_CLEANUP_TOKEN"
       "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages?package_type=generic&package_name=images&order_by=created_at&sort=desc&per_page=100"
       | jq -r '.[10:] | .[].id' | while read -r id; do curl --fail-with-body -sS -X DELETE -H
-      "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/$id"; done
+      "PRIVATE-TOKEN: $PACKAGES_CLEANUP_TOKEN"
+      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/$id"; done
