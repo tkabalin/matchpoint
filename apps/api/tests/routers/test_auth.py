@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import SESSION_COOKIE, SESSION_LIFETIME, hash_token
+from matchpoint_api.auth import SESSION_COOKIE, SESSION_LIFETIME, hash_token, new_session_token
 from matchpoint_api.models import Coach, CoachSession
 from matchpoint_api.security import DUMMY_HASH, hash_password
 from tests.factories import make_coach, make_coach_session
@@ -228,6 +228,119 @@ def test_a_current_hash_is_left_alone_on_login(client: TestClient, db_session: S
     assert refreshed.password_hash == current_hash
 
 
+def _stub_out_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail every verification without running Argon2. These tests need volume, not real
+    hashing, and a failed verification is what the per-account tier counts — so stubbing
+    charges every bucket exactly as a wrong password would and keeps ~40 attempts cheap."""
+    monkeypatch.setattr("matchpoint_api.routers.auth.verify_password", lambda *_: False)
+
+
+def test_login_attempts_beyond_the_account_burst_are_refused(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-account bound #26 exists for, pinned at the burst create_app sizes (5).
+
+    No account is ever created: the bucket keys on the submitted address whether or not
+    a row lives there, so the 429 arrives all the same — and discloses nothing about
+    which addresses hold accounts. The body is asserted exactly because the route
+    declares the 429 as ErrorDetail and the generated client is typed from that.
+    """
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        assert client.post("/auth/login", json=LOGIN).status_code == 401
+
+    response = client.post("/auth/login", json=LOGIN)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    # The per-account tier's quote (30 s a token). It is the only tier with nothing
+    # left, the others being twenty deep — but even drained alongside them it is the
+    # one `take_all` would name, as the furthest of the three from a token.
+    assert int(response.headers["Retry-After"]) > 6
+
+
+def test_a_flooded_account_does_not_lock_out_the_rest(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The point of keying on the account: the bucket a flood aimed at mike@ drains is
+    mike@'s own, so every other coach still signs in — even one behind the very same
+    address. The flood's arrivals do count against the shared tiers, as any arrival
+    costing a verification must, but twenty deep those are nowhere near refusing."""
+    _stub_out_verification(monkeypatch)
+    for _ in range(8):
+        client.post("/auth/login", json=LOGIN)
+    assert client.post("/auth/login", json=LOGIN).status_code == 429
+
+    other_account = client.post("/auth/login", json=LOGIN | {"email": "other@example.com"})
+
+    assert other_account.status_code == 401
+
+
+def test_the_account_bucket_folds_case(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bucket key folds the whole address the way the row lookup does — otherwise
+    every casing of MIKE@ would mint a fresh bucket and the per-account bound would
+    be no bound at all."""
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        assert (
+            client.post("/auth/login", json=LOGIN | {"email": "MIKE@Example.COM"}).status_code
+            == 401
+        )
+
+    assert client.post("/auth/login", json=LOGIN).status_code == 429
+
+
+def test_cycling_accounts_does_not_escape_the_address_burst(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-account alone would hand an attacker five free tries per invented address;
+    the per-address and shared tiers are what bound the arrivals themselves, at the
+    burst create_app sizes for login (20)."""
+    _stub_out_verification(monkeypatch)
+    for n in range(20):
+        attempt = client.post("/auth/login", json=LOGIN | {"email": f"coach{n}@example.com"})
+        assert attempt.status_code == 401
+
+    twenty_first = client.post("/auth/login", json=LOGIN | {"email": "coach20@example.com"})
+
+    assert twenty_first.status_code == 429
+
+
+def test_login_has_a_total_bound_no_address_escapes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign-up's shared-tier reasoning holds here too: behind Cloudflare the per-address
+    key is an edge address an attacker can occupy many of, so a spread-out guessing run
+    must still hit a ceiling. Every attempt names a different account, so only the
+    shared bucket can be what refuses the latecomer."""
+    _stub_out_verification(monkeypatch)
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = TestClient(client.app, client=(address, 50000))
+        for n in range(10):
+            body = LOGIN | {"email": f"coach-{address}-{n}@example.com"}
+            assert from_address.post("/auth/login", json=body).status_code == 401
+
+    latecomer = TestClient(client.app, client=("203.0.113.3", 50000))
+
+    assert (
+        latecomer.post("/auth/login", json=LOGIN | {"email": "late@example.com"}).status_code == 429
+    )
+
+
+def test_a_body_the_schema_rejects_is_still_counted(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign-up's counting, not an inverse of it: the arrival tiers run in the decorator's
+    dependencies, ahead of validation, so a body the schema rejects is metered for the
+    worker thread it spent getting rejected. The valid body at the end is what shows the
+    tokens really went — it is refused without its password ever being read."""
+    _stub_out_verification(monkeypatch)
+    for _ in range(20):
+        assert client.post("/auth/login", json={}).status_code == 422
+
+    assert client.post("/auth/login", json=LOGIN).status_code == 429
+
+
 def test_logging_out_revokes_the_session_and_clears_the_cookie(
     client: TestClient, db_session: Session
 ) -> None:
@@ -263,6 +376,26 @@ def test_logging_out_signed_out_is_still_a_204(client: TestClient) -> None:
     """Idempotent on purpose: 'signed out' is a state, and a retry or double-click
     reaching it twice is a success, not an error."""
     assert client.post("/auth/logout").status_code == 204
+
+
+def test_logging_out_with_a_forged_cookie_revokes_nothing(
+    client: TestClient, db_session: Session
+) -> None:
+    """The no-cookie case above shares the early return; a cookie that hashes to no row
+    walks the delete instead, so it is the one that must be seen to delete *nothing* —
+    a forged token reaching someone else's session row would be revocation as a service.
+    The 204 and the cleared cookie are the same statelessness the other logouts promise."""
+    _sign_up(client)
+    client.post("/auth/login", json=LOGIN)
+    client.cookies.set(SESSION_COOKIE, new_session_token())
+
+    response = client.post("/auth/logout")
+
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 1
+    # The header rather than the client's jar: a hand-set cookie has a different jar
+    # identity than the server's, so the jar keeps it even as a browser would not.
+    assert "max-age=0" in response.headers["set-cookie"].lower()
 
 
 def test_a_rejected_login_does_not_echo_the_password(client: TestClient) -> None:
