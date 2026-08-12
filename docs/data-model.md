@@ -33,6 +33,17 @@ erDiagram
         timestamptz updated_at
     }
 
+    email_verifications {
+        uuid id PK
+        varchar(254) email UK "the address proving itself, stored lowercased"
+        varchar(64) otp_hash "nullable: sha-256 of the emailed code"
+        varchar(64) token_hash UK "nullable: sha-256 of the verification cookie token"
+        int attempts "wrong guesses against the current code"
+        timestamptz expires_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     players {
         uuid id PK
         varchar(100) first_name
@@ -62,6 +73,11 @@ erDiagram
 
 A match carries metadata only. Point-level data — serves, rally outcomes, rally length — is captured
 against a match rather than stored on it, and is modelled separately.
+
+`email_verifications` stands alone by design: it holds addresses proving themselves at sign-up,
+before any coach row exists to reference. A row is either an unanswered code or a proven
+verification — `otp_hash` and `token_hash` are exactly-one-of, held by a named CHECK constraint —
+and one row per address means a re-requested code replaces the old one rather than accumulating.
 
 ## Conventions
 
