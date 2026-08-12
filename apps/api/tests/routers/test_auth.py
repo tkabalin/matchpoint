@@ -1,15 +1,29 @@
+import logging
+import re
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
 from argon2 import PasswordHasher
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import SESSION_COOKIE, SESSION_LIFETIME, hash_token, new_session_token
-from matchpoint_api.models import Coach, CoachSession
+from matchpoint_api.auth import (
+    OTP_ATTEMPT_LIMIT,
+    OTP_LIFETIME,
+    SESSION_COOKIE,
+    SESSION_LIFETIME,
+    VERIFICATION_COOKIE,
+    VERIFICATION_LIFETIME,
+    hash_otp,
+    hash_token,
+    new_session_token,
+)
+from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.security import DUMMY_HASH, hash_password
-from tests.factories import make_coach, make_coach_session
+from tests.factories import make_coach, make_coach_session, make_email_verification
 
 SIGN_UP = {
     "email": "mike@example.com",
@@ -453,3 +467,397 @@ def test_a_rejected_login_does_not_echo_the_password(client: TestClient) -> None
 
     assert response.status_code == 422
     assert "hunter2" not in response.text
+
+
+# --- Sign-up email verification: /auth/request-otp and /auth/verify-otp ---
+
+PENDING_EMAIL = "new@example.com"
+
+
+class RecordingEmailSender:
+    """Swapped in over the app's sender: the same seam the routes use, but the test
+    can read what was handed to it — and nothing can reach the wire either way."""
+
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, str, str]] = []
+
+    def send(self, *, to: str, subject: str, body: str) -> None:
+        self.sent.append((to, subject, body))
+
+
+def _record_email(client: TestClient) -> RecordingEmailSender:
+    recorder = RecordingEmailSender()
+    cast(FastAPI, client.app).state.email_sender = recorder
+    return recorder
+
+
+def _code_in(body: str) -> str:
+    match = re.search(r"\b\d{6}\b", body)
+    assert match, f"no six-digit code in {body!r}"
+    return match.group()
+
+
+def _request_otp(client: TestClient, email: str = PENDING_EMAIL) -> str:
+    """Run the request step and hand back the code that was 'emailed'."""
+    recorder = _record_email(client)
+    assert client.post("/auth/request-otp", json={"email": email}).status_code == 202
+    return _code_in(recorder.sent[-1][2])
+
+
+def _wrong_guess_for(code: str) -> str:
+    return "000000" if code != "000000" else "111111"
+
+
+def test_requesting_a_code_emails_it_to_the_address(client: TestClient) -> None:
+    recorder = _record_email(client)
+
+    response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
+
+    assert response.status_code == 202
+    [(to, subject, body)] = recorder.sent
+    assert to == PENDING_EMAIL
+    assert "code" in subject.lower()
+    assert _code_in(body)
+
+
+def test_the_code_is_stored_hashed_and_expiring(client: TestClient, db_session: Session) -> None:
+    """The row must let a submitted code be checked without letting a copy of the
+    table read codes back out — and it must die on its own, emailed or not."""
+    code = _request_otp(client)
+
+    row = db_session.scalars(select(EmailVerification)).one()
+    assert row.email == PENDING_EMAIL
+    assert row.otp_hash == hash_otp(code)
+    assert code not in hash_otp(code)
+    assert row.token_hash is None
+    assert row.attempts == 0
+    assert timedelta() < row.expires_at - datetime.now(UTC) <= OTP_LIFETIME
+
+
+def test_a_registered_address_is_refused_with_no_code(
+    client: TestClient, db_session: Session
+) -> None:
+    """The 409 the shipped sign-up form branches on. Nothing is stored and nothing is
+    sent: a registered address has no business receiving sign-up codes."""
+    _sign_up(client)
+    recorder = _record_email(client)
+
+    response = client.post("/auth/request-otp", json={"email": "mike@example.com"})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Email already registered"}
+    assert recorder.sent == []
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 0
+
+
+def test_a_mixed_case_address_meets_the_409(client: TestClient) -> None:
+    """Coach rows are stored lowercased, so only a folded lookup can find mike@ when
+    MIKE@ asks for a code — anything else would mail sign-up codes to taken addresses."""
+    _sign_up(client)
+
+    response = client.post("/auth/request-otp", json={"email": "MIKE@Example.COM"})
+
+    assert response.status_code == 409
+
+
+def test_the_stored_address_is_lowercased(client: TestClient, db_session: Session) -> None:
+    """The row's email is what the verification cookie will later be matched against
+    (#44), and coaches.email is lowercased — so this column must fold the same way."""
+    recorder = _record_email(client)
+
+    client.post("/auth/request-otp", json={"email": "New@Example.COM"})
+
+    row = db_session.scalars(select(EmailVerification)).one()
+    assert row.email == PENDING_EMAIL
+    assert recorder.sent[-1][0] == PENDING_EMAIL
+
+
+def test_requesting_again_replaces_the_code(client: TestClient, db_session: Session) -> None:
+    """One live code per address, always: a resend must replace the old code rather
+    than mint a second concurrently-valid one, or every resend would widen the
+    guessing surface and leave 'which code works?' ambiguous."""
+    first = _request_otp(client)
+    second = _request_otp(client)
+
+    row = db_session.scalars(select(EmailVerification)).one()
+    assert row.otp_hash == hash_otp(second)
+
+    stale = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": first})
+    assert stale.status_code == 400
+    fresh = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": second})
+    assert fresh.status_code == 200
+
+
+def test_requesting_a_code_undoes_a_finished_verification(
+    client: TestClient, db_session: Session
+) -> None:
+    """Asking for a code resets the address to unproven, even one that already answered:
+    the row goes back to the code stage and the cookie it issued stops matching. The
+    alternative — refusing the request — would strand a coach who lost the cookie."""
+    code = _request_otp(client)
+    answered = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+    assert answered.status_code == 200
+
+    _request_otp(client)
+
+    row = db_session.scalars(select(EmailVerification)).one()
+    assert row.otp_hash is not None
+    # Nothing left for the issued cookie to match, which is the cost being accepted.
+    assert row.token_hash is None
+
+
+def test_requesting_sweeps_expired_rows_and_leaves_live_ones(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cleanup this table gets instead of a cron job: expired rows die on the next
+    request, whoever's they were — bounding the table to addresses seen within an
+    expiry window. Live rows are someone's pending sign-up and must survive."""
+    expired = make_email_verification(
+        db_session,
+        email="abandoned@example.com",
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    live = make_email_verification(db_session, email="pending@example.com")
+    db_session.commit()
+
+    _request_otp(client)
+
+    assert db_session.get(EmailVerification, expired.id) is None
+    assert db_session.get(EmailVerification, live.id) is not None
+
+
+def test_a_fourth_code_for_one_address_is_refused(client: TestClient) -> None:
+    """The per-email tier, and it is security rather than politeness: five attempts
+    per code bounds nothing if codes can be minted without bound. The quoted wait is
+    the per-email tier's own (a token every five minutes), and the refused request
+    sends no email."""
+    recorder = _record_email(client)
+    for _ in range(3):
+        assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 202
+
+    response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert int(response.headers["Retry-After"]) > 60
+    assert len(recorder.sent) == 3
+
+
+def test_the_code_budget_folds_case(client: TestClient) -> None:
+    _record_email(client)
+    for email in ("new@example.com", "NEW@example.com", "New@Example.COM"):
+        assert client.post("/auth/request-otp", json={"email": email}).status_code == 202
+
+    assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 429
+
+
+def test_cycling_addresses_meets_the_address_burst(client: TestClient) -> None:
+    """Per-email alone would hand out three free sends per invented address; the
+    per-address and shared tiers bound the arrivals themselves, at sign-up's sizes."""
+    _record_email(client)
+    for n in range(10):
+        response = client.post("/auth/request-otp", json={"email": f"new{n}@example.com"})
+        assert response.status_code == 202
+
+    assert client.post("/auth/request-otp", json={"email": "new10@example.com"}).status_code == 429
+
+
+def test_request_otp_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
+    """Behind Cloudflare the per-address key is an edge address an attacker can occupy
+    many of; only the shared bucket bounds what gets mailed in total — and what a young
+    sending domain's reputation is exposed to."""
+    _record_email(client)
+    from_elsewhere = TestClient(client.app, client=("203.0.113.1", 50000))
+    for n in range(10):
+        body = {"email": f"new-{n}@example.com"}
+        assert from_elsewhere.post("/auth/request-otp", json=body).status_code == 202
+
+    latecomer = TestClient(client.app, client=("203.0.113.2", 50000))
+
+    response = latecomer.post("/auth/request-otp", json={"email": "late@example.com"})
+    assert response.status_code == 429
+
+
+def test_answering_the_code_sets_the_verification_cookie(client: TestClient) -> None:
+    """The cookie is the endpoint's product: proof this browser answered a code sent
+    to that address, for the sign-up call to demand (#44)."""
+    code = _request_otp(client)
+
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+
+    assert response.status_code == 200
+    assert client.cookies.get(VERIFICATION_COOKIE)
+
+
+def test_the_verification_cookie_is_locked_down(client: TestClient) -> None:
+    """test_the_cookie_is_locked_down's reasoning, for the second cookie: the flags
+    are the design, the `__Host-` prefix is what they earn, and the name must never
+    collide with the session's — this cookie proves a lesser fact."""
+    code = _request_otp(client)
+
+    header = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code}).headers[
+        "set-cookie"
+    ]
+
+    assert VERIFICATION_COOKIE == "__Host-matchpoint_email_verification"
+    assert VERIFICATION_COOKIE != SESSION_COOKIE
+    assert header.startswith(f"{VERIFICATION_COOKIE}=")
+    assert "httponly" in header.lower()
+    assert "secure" in header.lower()
+    assert "path=/" in header.lower()
+    assert "domain=" not in header.lower()
+    assert "samesite=lax" in header.lower()
+    assert f"max-age={int(VERIFICATION_LIFETIME.total_seconds())}" in header.lower()
+
+
+def test_answering_the_code_retires_it_for_the_token(
+    client: TestClient, db_session: Session
+) -> None:
+    """The row's one transition, in one UPDATE: the code dies the instant it works,
+    the stored value is the token's hash and never the token, and the deadline is
+    rewritten to the verification's own — not extended for free."""
+    code = _request_otp(client)
+
+    client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+
+    row = db_session.scalars(select(EmailVerification)).one()
+    token = client.cookies[VERIFICATION_COOKIE]
+    assert row.otp_hash is None
+    assert row.token_hash == hash_token(token)
+    assert token not in hash_token(token)
+    assert row.attempts == 0
+    assert timedelta() < row.expires_at - datetime.now(UTC) <= VERIFICATION_LIFETIME
+
+
+def test_a_wrong_code_is_refused_and_charged(client: TestClient, db_session: Session) -> None:
+    code = _request_otp(client)
+
+    response = client.post(
+        "/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": _wrong_guess_for(code)}
+    )
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Incorrect or expired code"}
+    assert "set-cookie" not in response.headers
+    # The charge outlives the refusal — committed, not rolled back with the 400.
+    row = db_session.scalars(select(EmailVerification)).one()
+    assert row.attempts == 1
+
+
+def test_an_unknown_address_answers_exactly_like_a_wrong_code(client: TestClient) -> None:
+    """One 400 for every failure: wrong, expired, exhausted and never-asked are one
+    fact to the caller, and distinguishing them would tell a prober which addresses
+    are mid-sign-up."""
+    code = _request_otp(client)
+
+    unknown = client.post("/auth/verify-otp", json={"email": "ghost@example.com", "otp": code})
+    wrong = client.post(
+        "/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": _wrong_guess_for(code)}
+    )
+
+    assert unknown.status_code == wrong.status_code == 400
+    assert unknown.json() == wrong.json()
+
+
+def test_an_expired_code_is_refused(client: TestClient, db_session: Session) -> None:
+    make_email_verification(
+        db_session,
+        email=PENDING_EMAIL,
+        otp_hash=hash_otp("123456"),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    db_session.commit()
+
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": "123456"})
+
+    assert response.status_code == 400
+    assert "set-cookie" not in response.headers
+
+
+def test_an_answered_code_cannot_be_answered_again(client: TestClient) -> None:
+    """Single-use: once traded for the cookie, the code is gone — a replay of a
+    leaked, already-used code must win nothing."""
+    code = _request_otp(client)
+    answered = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+    assert answered.status_code == 200
+
+    replay = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+
+    assert replay.status_code == 400
+
+
+def test_verification_folds_the_address_case(client: TestClient) -> None:
+    code = _request_otp(client)
+
+    response = client.post("/auth/verify-otp", json={"email": "NEW@Example.COM", "otp": code})
+
+    assert response.status_code == 200
+
+
+def test_the_attempt_budget_kills_the_code(client: TestClient, db_session: Session) -> None:
+    """The actual bound on guessing (the digest is not one — auth.py's hash_otp):
+    five wrong answers and the row dies, so even the right code wins nothing after.
+    Counted in the database, where a deploy cannot refill it."""
+    code = _request_otp(client)
+    for _ in range(OTP_ATTEMPT_LIMIT):
+        wrong = client.post(
+            "/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": _wrong_guess_for(code)}
+        )
+        assert wrong.status_code == 400
+
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 0
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+    assert response.status_code == 400
+
+
+def test_a_guess_short_of_the_budget_does_not_cost_the_code(client: TestClient) -> None:
+    """The budget is five, not fewer: a coach who fat-fingers the code four times is
+    exactly who the cap must not lock out."""
+    code = _request_otp(client)
+    wrong = _wrong_guess_for(code)
+    for _ in range(OTP_ATTEMPT_LIMIT - 1):
+        client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": wrong})
+
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+
+    assert response.status_code == 200
+
+
+def test_guess_arrivals_beyond_the_address_burst_are_refused(client: TestClient) -> None:
+    """The second layer behind the attempt budget: arrivals themselves stay bounded,
+    as every unauthenticated endpoint's are. Guesses at addresses holding no row cost
+    the attacker arrivals all the same."""
+    for n in range(10):
+        response = client.post(
+            "/auth/verify-otp", json={"email": f"ghost{n}@example.com", "otp": "123456"}
+        )
+        assert response.status_code == 400
+
+    refused = client.post("/auth/verify-otp", json={"email": "ghost@example.com", "otp": "123456"})
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_a_rejected_verification_does_not_echo_the_code(client: TestClient) -> None:
+    """The 422 redaction, for the second secret the schemas carry: a code of the
+    wrong length must not come back in detail[].input."""
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": "1234567"})
+
+    assert response.status_code == 422
+    assert "1234567" not in response.text
+
+
+def test_the_flow_runs_on_the_default_logging_sender(
+    client: TestClient, caplog: pytest.LogCaptureFixture
+) -> None:
+    """No recorder: this is create_app's own wiring, end to end. The logging sender is
+    the seam's default, so the code lands in the log — which in local dev is exactly
+    where you go to read it — and the flow it 'sent' completes against the real row."""
+    with caplog.at_level(logging.INFO, logger="matchpoint_api.mail"):
+        assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 202
+    code = _code_in(caplog.text)
+
+    response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+
+    assert response.status_code == 200

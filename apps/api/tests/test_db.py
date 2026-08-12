@@ -5,7 +5,7 @@ generator the running app actually depends on is exercised nowhere else — and 
 half that matters is the half after the yield, where the session is released.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from matchpoint_api.db import get_db
 
@@ -25,3 +25,25 @@ def test_get_db_yields_a_usable_session_and_releases_it() -> None:
     # it the connection would never go back to the pool.
     assert next(sessions, None) is None
     assert not session.in_transaction()
+
+
+def test_the_engine_runs_at_the_isolation_the_otp_attempt_cap_assumes() -> None:
+    """`verify_otp` bounds guessing at OTP_ATTEMPT_LIMIT only because a losing concurrent
+    UPDATE blocks on the winner's row lock and then re-evaluates its own WHERE against the
+    committed new version — READ COMMITTED behaviour, relied on there but requested
+    nowhere. Under REPEATABLE READ that loser is a serialization failure, so the guess
+    owed the same 400 as every other failure answers 500 instead, and which one it was is
+    exactly the fact that 400 exists to withhold.
+
+    Read from inside the transaction rather than off SQLAlchemy's execution options,
+    because both ways of losing the assumption land here: an `isolation_level` passed to
+    `create_engine`, and a server-side `default_transaction_isolation` that moved. Safe on
+    the module's own engine for the reason above — no schema, and nothing written.
+    """
+    sessions = get_db()
+    session = next(sessions)
+
+    isolation = session.scalar(select(func.current_setting("transaction_isolation")))
+
+    assert isolation == "read committed"
+    assert next(sessions, None) is None
