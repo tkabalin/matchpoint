@@ -53,11 +53,16 @@ export default defineConfig({
       // CI as the headline figure. Naming the source tree makes untested files
       // count against the number.
       include: ["src/**/*.{ts,tsx}"],
-      // Bootstrap with no logic of its own, test infrastructure, and vendored
-      // shadcn components: none of these are code we wrote or would write tests
-      // for, so counting them would only depress the figure with work nobody
-      // intends to do.
-      exclude: ["src/main.tsx", "src/test-setup.ts", "src/components/ui/**"],
+      // Bootstrap with no logic of its own, test infrastructure, the router
+      // plugin's generated route tree, and vendored shadcn components: none of
+      // these are code we wrote or would write tests for, so counting them would
+      // only depress the figure with work nobody intends to do.
+      exclude: [
+        "src/main.tsx",
+        "src/test-setup.ts",
+        "src/routeTree.gen.ts",
+        "src/components/ui/**",
+      ],
     },
   },
 });
