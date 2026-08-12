@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { SignIn } from "@/features/auth/sign-in";
+
 export const Route = createFileRoute("/")({
-  component: () => <h1>Sign In (placeholder)</h1>,
+  component: SignIn,
 });
