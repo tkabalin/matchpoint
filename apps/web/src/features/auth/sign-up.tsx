@@ -1,16 +1,20 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-type Step = "email" | "otp";
+type Step = "email" | "otp" | "password";
 
 export function SignUp() {
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const canSubmitEmail = email !== "";
   const canSubmitOtp = otp !== "";
+  const passwordsMismatch = confirmPassword !== "" && password !== confirmPassword;
+  const canSubmitPassword = password !== "" && password === confirmPassword;
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,8 +45,41 @@ export function SignUp() {
 
   function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Verifying the code is separate, later work (#45) — this step only
-    // captures it locally for now, it doesn't call the server yet.
+    // Verifying the code against the server is separate, later work (#45) —
+    // for now, entering a code just advances to the password step locally.
+    setStep("password");
+  }
+
+  function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    // Creating the account is separate, later work (#37) — this step only
+    // captures the password locally for now, it doesn't call the server yet.
+  }
+
+  if (step === "password") {
+    return (
+      <form onSubmit={handlePasswordSubmit}>
+        <h1>Sign Up</h1>
+        <label htmlFor="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        <label htmlFor="confirm-password">Confirm password</label>
+        <input
+          id="confirm-password"
+          type="password"
+          value={confirmPassword}
+          onChange={(event) => setConfirmPassword(event.target.value)}
+        />
+        {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
+        <button type="submit" disabled={!canSubmitPassword}>
+          Sign Up
+        </button>
+      </form>
+    );
   }
 
   if (step === "otp") {

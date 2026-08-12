@@ -130,3 +130,45 @@ test("blocks the OTP submit until a code is entered", async () => {
   await user.type(screen.getByLabelText("Code"), "123456");
   expect(submit).toBeEnabled();
 });
+
+async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
+  await goToOtpStep(user);
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.click(screen.getByRole("button", { name: "Verify" }));
+  await screen.findByLabelText("Password");
+}
+
+test("renders the password and confirm fields once the password step is reached", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
+test("blocks submit while the passwords differ, with a visible error", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  const submit = screen.getByRole("button", { name: "Sign Up" });
+  expect(submit).toBeDisabled();
+
+  await user.type(screen.getByLabelText("Password"), "hunter2");
+  expect(submit).toBeDisabled();
+
+  await user.type(screen.getByLabelText("Confirm password"), "hunter3");
+  expect(submit).toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
+});
+
+test("allows submit once the passwords match", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  await user.type(screen.getByLabelText("Password"), "hunter2");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2");
+
+  expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
