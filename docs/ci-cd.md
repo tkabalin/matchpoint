@@ -34,7 +34,7 @@ on:
 python-lint ─┐
              ├─▶ build-api-image ─┐
 api-test ────┘                    │
-                                  ├─▶ deploy
+                                  ├─▶ deploy ─▶ smoke
 web-lint ────┐                    │
 web-test ────┼─▶ build-web-image ─┘
 web-e2e ─────┘
@@ -92,7 +92,7 @@ Also on every pipeline:
 
 ## CD — merges to `main`
 
-A green `main` pipeline continues into two more stages:
+A green `main` pipeline continues into three more stages:
 
 1. **Build** — both images are built on the runner against the host Docker daemon (so the layer
    cache persists between runs), tagged with the commit short SHA, and uploaded as `docker save`
@@ -111,6 +111,16 @@ A green `main` pipeline continues into two more stages:
    the download if the tag is already loaded locally), runs Alembic migrations as a one-shot (a
    failure aborts the deploy and leaves the previous containers running), brings the stack up, and
    records the tag only once that has all worked.
+3. **Verify** — the pipeline then asks production the way a browser would, over the public name and
+   through Cloudflare: `/api/health` until it names the commit just deployed, then the app shell.
+   `deploy.sh` returns when compose has _started_ the containers, which is a weaker claim than the
+   site working, so the check polls rather than asking once. Nothing is rolled back on a failure —
+   the pipeline goes red and the alert fires, and what to do about it is a person's call.
+
+The API reports its build because the deployed image tag is passed to it as an environment variable,
+which makes "did this deploy take effect" answerable from outside — a container that started while
+Caddy still fronts the previous tag cannot pass. Publishing that tag is deliberate: it identifies a
+build without describing one, since the repository it indexes is private.
 
 **Deploys are automatic** on every green `main` pipeline — merging is releasing, which fits the
 rapid usability-testing loop with the client. Guardrails: deploys record to the GitLab `production`
@@ -123,17 +133,19 @@ means re-running an older pipeline's deploy job (or `ssh deploy@<vps> <older-sha
 Reach is bounded by the package registry's 10-package retention; the newest 5 tags per image roll
 back without a download at all, since `deploy.sh` keeps that many loaded on the VPS. Rolling back
 past a migration needs the schema downgraded from the newer image first; `deploy.sh` detects that
-case and refuses rather than failing halfway.
+case and refuses rather than failing halfway. Retrying a job re-runs that job alone, so a rollback
+by that route is neither smoke-checked nor announced in Slack — the deploy job's own output is the
+only record.
 
 ### Slack alerts
 
 Two messages, both `main`-only, sent to an incoming webhook. Both carry the linked commit SHA and
 title, whoever started the pipeline, and a colour bar for the outcome:
 
-| Alert              | Sent when                                        |
-| ------------------ | ------------------------------------------------ |
-| ✅ Deployed        | the deploy job finishes cleanly — links the site |
-| ❌ Pipeline failed | any job in a `main` pipeline fails, at any stage |
+| Alert              | Sent when                                            |
+| ------------------ | ---------------------------------------------------- |
+| ✅ Deployed        | production answers as the new build — links the site |
+| ❌ Pipeline failed | any job in a `main` pipeline fails, at any stage     |
 
 The commit's author is named as well, but only when that is someone other than whoever started the
 pipeline — on a merge the two differ, and the person who started it is the one around to act.

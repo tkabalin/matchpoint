@@ -3,6 +3,7 @@ stages:
   - test
   - build
   - deploy
+  - verify
 
 # Let GitLab's "auto-cancel redundant pipelines" kill superseded runs when new
 # commits land on the same ref.
@@ -404,6 +405,45 @@ deploy:
     - ssh -i "$SSH_PRIVATE_KEY" -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" deploy@REDACTED
       "$CI_COMMIT_SHORT_SHA"
 
+# What "deployed" is allowed to mean. deploy.sh returns once compose has started
+# the containers, which is a weaker claim than the site working: a crash-looping
+# api, a web container still serving the previous tag, or a database that never
+# came back all clear that bar. So ask production the way a browser would — the
+# public name, through Cloudflare — and let the success alert wait on the answer.
+smoke:
+  stage: verify
+  image: alpine:3.22
+  needs: [deploy]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  # The deploy it judges has already happened, so cancelling this would leave a
+  # live deploy unverified and unannounced. As uninterruptible as deploy itself.
+  interruptible: false
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - |
+      site="https://matchpoint.thomaskabalin.com"
+      # Poll rather than ask once: compose returns before uvicorn is listening,
+      # so a single request races the container it is meant to be checking. The
+      # cache-buster is a query param because Cloudflare ignores a client's
+      # Cache-Control header, and a cached /health would answer for the old build.
+      deadline=$(($(date +%s) + 60))
+      while :; do
+        commit=$(curl -fsS --max-time 5 "$site/api/health?pipeline=$CI_PIPELINE_ID" | jq -r '.commit // empty' || true)
+        if [ "$commit" = "$CI_COMMIT_SHORT_SHA" ]; then break; fi
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+          echo "expected /health to report $CI_COMMIT_SHORT_SHA, got '${commit:-nothing}'" >&2
+          echo "an older tag means the deploy did not roll; \"dev\" means the VPS's" >&2
+          echo "compose.yml predates MATCHPOINT_COMMIT; nothing means it never answered" >&2
+          exit 1
+        fi
+        sleep 3
+      done
+      # Caddy serves the SPA from the web container, built from the same
+      # IMAGE_TAG the API just confirmed, so a 200 is all this has left to add.
+      curl -fsS -o /dev/null "$site/"
+
 # Slack messages via an incoming-webhook URL in the (protected, masked)
 # SLACK_WEBHOOK_URL variable; both jobs drop out of the pipeline entirely while
 # that variable is unset or blank — a blank one would fail curl and redden an
@@ -444,7 +484,10 @@ deploy:
 
 notify-deploy-success:
   extends: .notify-base
-  needs: [deploy]
+  # smoke, not deploy: the ✅ claims production is serving this build, so it has
+  # to wait on the job that establishes that. A smoke failure leaves this job
+  # skipped and notify-pipeline-failure to do the talking.
+  needs: [smoke]
   rules:
     - if: $SLACK_WEBHOOK_URL == null || $SLACK_WEBHOOK_URL == ""
       when: never
