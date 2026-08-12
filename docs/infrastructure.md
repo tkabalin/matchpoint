@@ -96,3 +96,21 @@ finds the real IP (DNS history, a scan of the hosting provider's ranges, a misco
 connects straight to the VPS and skips Cloudflare's protections entirely. UFW closes that gap:
 inbound 80/443 is allowed only from Cloudflare's published IP ranges
 (`https://www.cloudflare.com/ips-v4` and `/ips-v6`), not `Anywhere`, for both IPv4 and IPv6.
+
+## Uptime monitoring
+
+**Better Stack** checks `https://matchpoint.thomaskabalin.com/api/health` every 3 minutes (its
+free-tier floor) and posts to the team Slack channel via Better Stack's Slack integration on both
+failure and recovery. Locations are left at the default: at least four, with an incident raised only
+once the check fails from three of them, so one prober's view of reachability can't declare an
+outage. This complements the pipeline's post-deploy smoke check, which only proves production worked
+at the moment of deploying.
+
+**It matches the response body, not the status code** — the check passes only if the response
+contains `"status":"ok"`. Caddy answers any unmatched path with the SPA shell, so a routing mistake
+can serve `index.html` and a `200` to an API URL; requiring the payload means nothing but the API
+container answering will pass.
+
+Checks must target the public hostname, not the origin IP: UFW allows 80/443 only from Cloudflare's
+ranges. So this watches the whole public path, Cloudflare included, and can't on its own tell a
+proxy problem from an origin one.
