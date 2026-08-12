@@ -88,6 +88,7 @@ path.
 | Type checking    | Pyright                        |
 | Password hashing | Argon2id (argon2-cffi 25)      |
 | Sessions         | Opaque tokens, HttpOnly cookie |
+| Rate limiting    | In-process token bucket        |
 | Tests            | pytest 9                       |
 
 ### Rationale
@@ -138,6 +139,24 @@ table and one indexed lookup per authenticated request. Alternatives considered:
 (FastAPI's documented path and stateless, but revocation then needs a denylist — the sessions table
 wearing another name — and the SPA would have to hold the token somewhere JavaScript can read, which
 is exactly where XSS shops).
+
+**Hand-rolled in-process rate limiting.** A token bucket per key (`rate_limit.py`) bounds the
+arrival rate on endpoints that spend real work on unauthenticated requests — sign-up's Argon2
+hashing and login's password verification. It lives in the app rather than the proxy because the
+limit must key on things only the app sees — an unbounded login is an online password-guessing
+oracle per account, so its tightest tier is a budget of wrong guesses keyed on the submitted email,
+charged only once a verification has failed so that the bound cannot be turned into a lockout on the
+account it protects — and because a 429 declared in the OpenAPI spec is a response the generated
+client can type and the test suite can exercise. The counters are process memory: there is a single
+api container, so no second process needs to see them, and a deploy resetting them is harmless.
+Behind Cloudflare the client address the app sees is an edge address, so per-address limiting is
+fairness rather than a hard bound; a shared bucket per endpoint provides the bound itself.
+Alternatives considered: slowapi (pre-1.0 — the same objection this doc makes to SQLModel — for what
+is a few dozen lines of stdlib); Redis or Postgres counters (a new stateful service, or a write on
+the hot path of exactly the flood being shed, to solve a multi-process problem we do not have);
+Caddy's rate_limit module (not in the stock Caddy build, and a proxy cannot key on accounts);
+Cloudflare rate-limiting rules (remain available upstream if flood pressure ever outgrows the app,
+but the same blindness to accounts, and invisible to tests).
 
 ## Infrastructure
 
