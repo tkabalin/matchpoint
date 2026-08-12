@@ -2,20 +2,25 @@
  * Live scoring domain model — Point.
  *
  * Point sits at the bottom of Point → Game → Set → Match. Only the tracked player's
- * shots are captured live; the opponent's shots are optional and may be filled in
- * later from video review, so `opponentShots` must distinguish "not recorded yet"
- * from "recorded, and there were none" (e.g. an ace).
+ * shots are captured live; the opponent's shots are optional and may only ever
+ * arrive later — e.g. if the opponent's own coach also tracks them and shares that
+ * match — so `opponentShots` must distinguish "not recorded yet" from "recorded, and
+ * there were none" (e.g. an ace).
  *
- * Singles only, for now: `PointParticipant` is a two-way discriminant rather than a
- * player id, because a `Match` only has one `Player` row (`player_id` on the backend)
- * — the opponent is free text (`opponent_name`), with no stable id to reference. See
- * `apps/api/src/matchpoint_api/models/match.py`.
+ * Singles only, for now. `trackedPlayerId` and `opponentId` are set once at Match
+ * level and passed down through Set/Game to every Point, so `winner`/`server` can be
+ * plain id references instead of a role discriminant. `trackedPlayerId` always comes
+ * from a real `Player` row; `opponentId` does too when the opponent is identifiable,
+ * but the backend's `Match.opponent_name` is often free text with no `Player` behind
+ * it (see `apps/api/src/matchpoint_api/models/match.py`) — when that's the case,
+ * Match assigns a default per-match id standing in for "the opponent", so every
+ * Point still gets two real ids to validate and compare `winner`/`server` against.
  */
 
 // --- Supporting enums -------------------------------------------------------
 //
 // Plain string-literal unions, each paired with a runtime array of its members —
-// the array is what a hand-rolled validator checks incoming data against, since
+// the array is what Point's validation checks incoming data against, since
 // TypeScript's own type-checking disappears at runtime (e.g. data read back out of
 // the Dexie outbox).
 
@@ -32,7 +37,7 @@ export const POINT_OUTCOMES: readonly PointOutcome[] = [
 ];
 
 // TODO: revisit once the capture UI is built — keep this to whatever a coach can
-// tag in one tap, not a full video-analysis shot taxonomy.
+// tag in one tap, not a granular shot taxonomy.
 export type ShotType = "forehand" | "backhand" | "volley" | "overhead" | "drop_shot";
 export const SHOT_TYPES: readonly ShotType[] = [
   "forehand",
@@ -42,168 +47,184 @@ export const SHOT_TYPES: readonly ShotType[] = [
   "drop_shot",
 ];
 
-// Which side of the point — server or winner — a given role belongs to. Not a
-// player id: see the module doc comment above.
-export type PointParticipant = "tracked_player" | "opponent";
-export const POINT_PARTICIPANTS: readonly PointParticipant[] = ["tracked_player", "opponent"];
-
-// --- Shot --------------------------------------------------------------------
-
-export interface Shot {
-  type: ShotType;
-}
-
-function isShot(value: unknown): value is Shot {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "type" in value &&
-    SHOT_TYPES.includes((value as { type: unknown }).type as ShotType)
-  );
+function isShotType(value: unknown): value is ShotType {
+  return SHOT_TYPES.includes(value as ShotType);
 }
 
 // --- Point ---------------------------------------------------------------------
 
-// The persisted/wire shape — what actually round-trips through the Dexie outbox.
-// `gameId` references the parent Game by id only, the same way the backend
-// references `player_id` rather than embedding a row: Game doesn't exist as a
-// class yet, and id references keep this serializable as a flat outbox record.
-export interface PointData {
-  id: string;
-  gameId: string;
-  serveNumber: ServeNumber;
-  outcome: PointOutcome;
-  winner: PointParticipant;
-  server: PointParticipant;
-  trackedPlayerShots: Shot[];
-  // null = opponent's shots not recorded yet; [] = recorded, and there were none.
-  opponentShots: Shot[] | null;
-}
-
-// TODO: this is a rough first pass at structural checks — revisit field-by-field
-// once the outbox/sync layer settles on how untrusted this input really is.
-function parsePointData(input: unknown): PointData {
-  if (typeof input !== "object" || input === null) {
-    throw new Error("point data must be an object");
-  }
-  const data = input as Record<string, unknown>;
-
-  if (typeof data.id !== "string" || data.id.length === 0) {
-    throw new Error("point id must be a non-empty string");
-  }
-  if (typeof data.gameId !== "string" || data.gameId.length === 0) {
-    throw new Error("point gameId must be a non-empty string");
-  }
-  if (!SERVE_NUMBERS.includes(data.serveNumber as ServeNumber)) {
-    throw new Error(`invalid serveNumber: ${String(data.serveNumber)}`);
-  }
-  if (!POINT_OUTCOMES.includes(data.outcome as PointOutcome)) {
-    throw new Error(`invalid outcome: ${String(data.outcome)}`);
-  }
-  if (!POINT_PARTICIPANTS.includes(data.winner as PointParticipant)) {
-    throw new Error(`invalid winner: ${String(data.winner)}`);
-  }
-  if (!POINT_PARTICIPANTS.includes(data.server as PointParticipant)) {
-    throw new Error(`invalid server: ${String(data.server)}`);
-  }
-  if (!Array.isArray(data.trackedPlayerShots) || !data.trackedPlayerShots.every(isShot)) {
-    throw new Error("trackedPlayerShots must be an array of shots");
-  }
-  if (
-    data.opponentShots !== null &&
-    (!Array.isArray(data.opponentShots) || !data.opponentShots.every(isShot))
-  ) {
-    throw new Error("opponentShots must be an array of shots, or null");
-  }
-
-  return data as unknown as PointData;
-}
-
 // TODO: flesh out beyond the one example rule the brief called out
 // (DOUBLE_FAULT ⇒ no rally shots). Rough shape only.
-function assertOutcomeConsistent(data: PointData): void {
-  if (data.outcome === "ace" || data.outcome === "double_fault") {
-    if (data.trackedPlayerShots.length > 0) {
-      throw new Error(`${data.outcome} cannot have tracked-player rally shots`);
+function assertOutcomeConsistent(fields: {
+  outcome: PointOutcome;
+  serveNumber: ServeNumber;
+  winner: string;
+  server: string;
+  trackedPlayerShots: ShotType[];
+  opponentShots: ShotType[] | null;
+}): void {
+  if (fields.outcome === "ace" || fields.outcome === "double_fault") {
+    if (fields.trackedPlayerShots.length > 0) {
+      throw new Error(`${fields.outcome} cannot have tracked-player rally shots`);
     }
-    if ((data.opponentShots?.length ?? 0) > 0) {
-      throw new Error(`${data.outcome} cannot have opponent rally shots`);
+    if ((fields.opponentShots?.length ?? 0) > 0) {
+      throw new Error(`${fields.outcome} cannot have opponent rally shots`);
     }
   }
 
   // A double fault is by definition the server's own error on the second serve.
-  if (data.outcome === "double_fault") {
-    if (data.serveNumber !== "second") {
+  if (fields.outcome === "double_fault") {
+    if (fields.serveNumber !== "second") {
       throw new Error("double_fault must be on the second serve");
     }
-    if (data.winner === data.server) {
+    if (fields.winner === fields.server) {
       throw new Error("the server cannot win their own double fault");
     }
   }
 
-  if (data.outcome === "ace" && data.winner !== data.server) {
+  if (fields.outcome === "ace" && fields.winner !== fields.server) {
     throw new Error("the server wins an ace");
   }
 }
 
 /**
- * Live scoring Point — an immutable wrapper around validated `PointData`.
+ * Live scoring Point.
  *
  * Construct via `Point.create()` (validates) or `Point.fromJSON()` (rehydrate from
  * the outbox); never `new Point(...)` directly, so a Point in memory is always
  * known-valid. `toJSON()` is what actually gets written to Dexie.
+ *
+ * `gameId` references the parent Game by id only, the same way the backend
+ * references `player_id` rather than embedding a row: Game doesn't exist as a class
+ * yet, and id references keep this serializable as a flat outbox record.
  */
 export class Point {
-  private constructor(private readonly data: PointData) {}
+  readonly id: string;
+  readonly gameId: string;
+  // Both set once at Match level and passed down unchanged through every Point in
+  // the match — see the module doc comment for why opponentId is always present
+  // even when the opponent isn't a real Player row.
+  readonly trackedPlayerId: string;
+  readonly opponentId: string;
+  readonly serveNumber: ServeNumber;
+  readonly outcome: PointOutcome;
+  // Must equal trackedPlayerId or opponentId — checked in Point.create.
+  readonly winner: string;
+  readonly server: string;
+  readonly trackedPlayerShots: ShotType[];
+  // null = opponent's shots not recorded yet; [] = recorded, and there were none.
+  readonly opponentShots: ShotType[] | null;
 
+  private constructor(fields: {
+    id: string;
+    gameId: string;
+    trackedPlayerId: string;
+    opponentId: string;
+    serveNumber: ServeNumber;
+    outcome: PointOutcome;
+    winner: string;
+    server: string;
+    trackedPlayerShots: ShotType[];
+    opponentShots: ShotType[] | null;
+  }) {
+    this.id = fields.id;
+    this.gameId = fields.gameId;
+    this.trackedPlayerId = fields.trackedPlayerId;
+    this.opponentId = fields.opponentId;
+    this.serveNumber = fields.serveNumber;
+    this.outcome = fields.outcome;
+    this.winner = fields.winner;
+    this.server = fields.server;
+    this.trackedPlayerShots = fields.trackedPlayerShots;
+    this.opponentShots = fields.opponentShots;
+  }
+
+  // TODO: this is a rough first pass at structural checks — revisit field-by-field
+  // once the outbox/sync layer settles on how untrusted this input really is.
   static create(input: unknown): Point {
-    const data = parsePointData(input);
-    assertOutcomeConsistent(data);
-    return new Point(data);
+    if (typeof input !== "object" || input === null) {
+      throw new Error("point data must be an object");
+    }
+    const data = input as Record<string, unknown>;
+
+    if (typeof data.id !== "string" || data.id.length === 0) {
+      throw new Error("point id must be a non-empty string");
+    }
+    if (typeof data.gameId !== "string" || data.gameId.length === 0) {
+      throw new Error("point gameId must be a non-empty string");
+    }
+    if (typeof data.trackedPlayerId !== "string" || data.trackedPlayerId.length === 0) {
+      throw new Error("trackedPlayerId must be a non-empty string");
+    }
+    if (typeof data.opponentId !== "string" || data.opponentId.length === 0) {
+      throw new Error("opponentId must be a non-empty string");
+    }
+    if (data.trackedPlayerId === data.opponentId) {
+      throw new Error("trackedPlayerId and opponentId must be different");
+    }
+    if (!SERVE_NUMBERS.includes(data.serveNumber as ServeNumber)) {
+      throw new Error(`invalid serveNumber: ${String(data.serveNumber)}`);
+    }
+    if (!POINT_OUTCOMES.includes(data.outcome as PointOutcome)) {
+      throw new Error(`invalid outcome: ${String(data.outcome)}`);
+    }
+    const participants = [data.trackedPlayerId, data.opponentId];
+    if (!participants.includes(data.winner as string)) {
+      throw new Error(`winner must be trackedPlayerId or opponentId, got: ${String(data.winner)}`);
+    }
+    if (!participants.includes(data.server as string)) {
+      throw new Error(`server must be trackedPlayerId or opponentId, got: ${String(data.server)}`);
+    }
+    if (!Array.isArray(data.trackedPlayerShots) || !data.trackedPlayerShots.every(isShotType)) {
+      throw new Error("trackedPlayerShots must be an array of shot types");
+    }
+    const trackedPlayerShots = data.trackedPlayerShots as ShotType[];
+
+    let opponentShots: ShotType[] | null = null;
+    if (data.opponentShots !== null) {
+      if (!Array.isArray(data.opponentShots) || !data.opponentShots.every(isShotType)) {
+        throw new Error("opponentShots must be an array of shot types, or null");
+      }
+      opponentShots = data.opponentShots;
+    }
+
+    const fields = {
+      id: data.id,
+      gameId: data.gameId,
+      trackedPlayerId: data.trackedPlayerId,
+      opponentId: data.opponentId,
+      serveNumber: data.serveNumber as ServeNumber,
+      outcome: data.outcome as PointOutcome,
+      winner: data.winner as string,
+      server: data.server as string,
+      trackedPlayerShots,
+      opponentShots,
+    };
+    assertOutcomeConsistent(fields);
+    return new Point(fields);
   }
 
   static fromJSON(json: unknown): Point {
     return Point.create(json);
   }
 
-  toJSON(): PointData {
-    return this.data;
-  }
-
-  get id(): string {
-    return this.data.id;
-  }
-
-  get gameId(): string {
-    return this.data.gameId;
-  }
-
-  get serveNumber(): ServeNumber {
-    return this.data.serveNumber;
-  }
-
-  get outcome(): PointOutcome {
-    return this.data.outcome;
-  }
-
-  get winner(): PointParticipant {
-    return this.data.winner;
-  }
-
-  get server(): PointParticipant {
-    return this.data.server;
-  }
-
-  get trackedPlayerShots(): readonly Shot[] {
-    return this.data.trackedPlayerShots;
-  }
-
-  get opponentShots(): readonly Shot[] | null {
-    return this.data.opponentShots;
+  toJSON() {
+    return {
+      id: this.id,
+      gameId: this.gameId,
+      trackedPlayerId: this.trackedPlayerId,
+      opponentId: this.opponentId,
+      serveNumber: this.serveNumber,
+      outcome: this.outcome,
+      winner: this.winner,
+      server: this.server,
+      trackedPlayerShots: this.trackedPlayerShots,
+      opponentShots: this.opponentShots,
+    };
   }
 
   get opponentDataComplete(): boolean {
-    return this.data.opponentShots !== null;
+    return this.opponentShots !== null;
   }
 
   /**
@@ -212,6 +233,6 @@ export class Point {
    * full rally.
    */
   get rallyLength(): number {
-    return this.data.trackedPlayerShots.length + (this.data.opponentShots?.length ?? 0);
+    return this.trackedPlayerShots.length + (this.opponentShots?.length ?? 0);
   }
 }
