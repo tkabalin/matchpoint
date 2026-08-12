@@ -127,19 +127,25 @@ case and refuses rather than failing halfway.
 
 ### Slack alerts
 
-Two messages, both `main`-only, sent to an incoming webhook:
+Two messages, both `main`-only, sent to an incoming webhook. Both carry the linked commit SHA and
+title, whoever started the pipeline, and a colour bar for the outcome:
 
-| Alert               | Sent when                                                         |
-| ------------------- | ----------------------------------------------------------------- |
-| ✅ Deployed `<sha>` | the deploy job finishes cleanly — quotes the SHA and the site URL |
-| ❌ Pipeline failed  | any job in a `main` pipeline fails, at any stage                  |
+| Alert              | Sent when                                        |
+| ------------------ | ------------------------------------------------ |
+| ✅ Deployed        | the deploy job finishes cleanly — links the site |
+| ❌ Pipeline failed | any job in a `main` pipeline fails, at any stage |
+
+The commit's author is named as well, but only when that is someone other than whoever started the
+pipeline — on a merge the two differ, and the person who started it is the one around to act.
 
 The failure alert deliberately doesn't depend on the deploy job: a pipeline that breaks in lint,
 test or build never reaches deployment, which is exactly when a broken `main` is worth announcing.
-There is no "deploy started" message and nothing at all for branch or MR pipelines — the signal is
-the outcome, not the attempt; a failed registry prune is silent too, since it must not redden a
-successful deploy. Both jobs drop out of the pipeline entirely while `SLACK_WEBHOOK_URL` is unset or
-blank, rather than failing it.
+It can't name the job that broke, though: no CI variable carries that, and the job token is refused
+on the API listing a pipeline's jobs, so naming it would mean minting and rotating a `read_api`
+token. There is no "deploy started" message and nothing at all for branch or MR pipelines — the
+signal is the outcome, not the attempt; a failed registry prune is silent too, since it must not
+redden a successful deploy. Both jobs drop out of the pipeline entirely while `SLACK_WEBHOOK_URL` is
+unset or blank, rather than failing it.
 
 ## Production stack
 
