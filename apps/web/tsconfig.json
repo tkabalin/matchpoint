@@ -3,6 +3,10 @@
   "compilerOptions": {
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
+    // vite.config.ts imports src/features/pwa/pwa-config.ts by full filename: Vite's native
+    // config loader, which becomes the default in a future major, warns on an extensionless
+    // one. Nothing is emitted from here, so allowing the extension costs nothing.
+    "allowImportingTsExtensions": true,
     "types": ["vite/client", "vite-plugin-pwa/client", "@testing-library/jest-dom"],
     "paths": {
       "@/*": ["./src/*"]
