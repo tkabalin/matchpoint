@@ -45,6 +45,34 @@ SESSION_COOKIE = (
 # only decides when an *abandoned* login dies.
 SESSION_LIFETIME = timedelta(days=30)
 
+# The email-verification cookie: same conditional prefix, same reasons, distinct name
+# — it proves a different, lesser fact ("this browser answered a code sent to that
+# address") and must never be mistakable for a login.
+VERIFICATION_COOKIE = (
+    "__Host-matchpoint_email_verification"
+    if settings.session_cookie_secure
+    else "matchpoint_email_verification"
+)
+
+# How long an emailed code is answerable, and then how long the answered proof holds.
+# Both short, and neither renews — unlike the session these are single-purpose
+# credentials, and sliding either on use would defeat the point of the deadline. The
+# proof gets a little longer than the code only because the sign-up form still has to
+# be filled in behind it.
+OTP_LIFETIME = timedelta(minutes=10)
+VERIFICATION_LIFETIME = timedelta(minutes=15)
+
+# Six digits, deliberately: numeric is what earns autocomplete="one-time-code"
+# autofill on iOS and Android, which serves the brief's low-friction sign-up
+# directly. What six digits cost in guessability is the attempt cap's job to hold
+# (hash_otp below), not a longer code's.
+OTP_LENGTH = 6
+
+# Five wrong guesses against a code, then its row dies. This budget — not the digest
+# (hash_otp says why) and not rate_limit.py, whose counters reset on deploy — is the
+# real bound on guessing a code, which is why it is counted in the row itself.
+OTP_ATTEMPT_LIMIT = 5
+
 
 def new_session_token() -> str:
     """A fresh session token from the CSPRNG: 256 bits, URL-safe text.
@@ -66,6 +94,31 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def new_otp() -> str:
+    """A fresh code from the CSPRNG: six digits, zero-padded so 000123 keeps all six.
+
+    randbelow rather than a digit-by-digit build: one draw over the whole keyspace,
+    uniform by construction.
+    """
+    return f"{secrets.randbelow(10**OTP_LENGTH):0{OTP_LENGTH}d}"
+
+
+def hash_otp(otp: str) -> str:
+    """The stored form of a code: the same SHA-256 as hash_token, minus its promise.
+
+    hash_token's rationale — a 256-bit token is unguessable, so a plain digest is
+    enough — does not transfer to a six-digit code: ~20 bits, swept in milliseconds
+    by anyone holding the column. Argon2 would not rescue it either; GPU lanes put
+    the whole keyspace at minutes against a credential that lives ten, and every run
+    would contend for security.py's two hashing slots, redoing main.py's burst
+    arithmetic across four endpoints for break-even. What actually bounds guessing
+    is the row's attempt cap and expiry (EmailVerification.attempts); this digest's
+    only job is keeping the plaintext out of a copy of the table, and the prize it
+    guards is registering an address the attacker does not own — small, and accepted.
+    """
+    return hash_token(otp)
+
+
 def set_session_cookie(response: Response, token: str) -> None:
     """Hand the token to the browser, with the flags the module docstring argues for.
 
@@ -77,6 +130,23 @@ def set_session_cookie(response: Response, token: str) -> None:
         SESSION_COOKIE,
         token,
         max_age=int(SESSION_LIFETIME.total_seconds()),
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+
+
+def set_verification_cookie(response: Response, token: str) -> None:
+    """Hand the verification token to the browser, flagged exactly as the session is.
+
+    Its own setter rather than a parameter on set_session_cookie: the two share flags
+    but not name or lifetime, and no renewal path ever re-sends this one — Max-Age
+    here is absolute and final.
+    """
+    response.set_cookie(
+        VERIFICATION_COOKIE,
+        token,
+        max_age=int(VERIFICATION_LIFETIME.total_seconds()),
         httponly=True,
         secure=settings.session_cookie_secure,
         samesite="lax",

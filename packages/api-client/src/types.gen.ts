@@ -145,6 +145,16 @@ export type MatchRead = {
 };
 
 /**
+ * OtpRequest
+ */
+export type OtpRequest = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * PlayerCreate
  */
 export type PlayerCreate = {
@@ -253,6 +263,16 @@ export type ValidationError = {
 };
 
 /**
+ * VerifyOtpRequest
+ */
+export type VerifyOtpRequest = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * CoachCreate
  */
 export type CoachCreateWritable = {
@@ -282,6 +302,20 @@ export type LoginRequestWritable = {
      * Password
      */
     password: string;
+};
+
+/**
+ * VerifyOtpRequest
+ */
+export type VerifyOtpRequestWritable = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * Otp
+     */
+    otp: string;
 };
 
 export type LoginData = {
@@ -332,6 +366,68 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type RequestOtpData = {
+    body: OtpRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/request-otp';
+};
+
+export type RequestOtpErrors = {
+    /**
+     * Email already registered
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many codes requested
+     */
+    429: ErrorDetail;
+};
+
+export type RequestOtpError = RequestOtpErrors[keyof RequestOtpErrors];
+
+export type RequestOtpResponses = {
+    /**
+     * Successful Response
+     */
+    202: unknown;
+};
+
+export type VerifyOtpData = {
+    body: VerifyOtpRequestWritable;
+    path?: never;
+    query?: never;
+    url: '/auth/verify-otp';
+};
+
+export type VerifyOtpErrors = {
+    /**
+     * Incorrect or expired code
+     */
+    400: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many attempts
+     */
+    429: ErrorDetail;
+};
+
+export type VerifyOtpError = VerifyOtpErrors[keyof VerifyOtpErrors];
+
+export type VerifyOtpResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type CreateCoachData = {
     body: CoachCreateWritable;

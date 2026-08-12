@@ -1,22 +1,31 @@
+import secrets
 from datetime import UTC, datetime
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import (
+    OTP_ATTEMPT_LIMIT,
+    OTP_LIFETIME,
     SESSION_COOKIE,
     SESSION_LIFETIME,
+    VERIFICATION_LIFETIME,
+    hash_otp,
     hash_token,
+    new_otp,
     new_session_token,
     set_session_cookie,
+    set_verification_cookie,
 )
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach, CoachSession
+from matchpoint_api.mail import EmailSender
+from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.rate_limit import RateLimiter, take_all
-from matchpoint_api.schemas.auth import LoginRequest
+from matchpoint_api.schemas.auth import LoginRequest, OtpRequest, VerifyOtpRequest
 from matchpoint_api.schemas.coach import CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import DUMMY_HASH, hash_password, needs_rehash, verify_password
@@ -148,3 +157,208 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
         secure=settings.session_cookie_secure,
         samesite="lax",
     )
+
+
+# Sign-up email verification (#43, #35): request-otp emails a code, verify-otp trades
+# it for the short-lived cookie that POST /coaches will demand (#44). The contract —
+# 202 on send, 409 on a registered address — is pinned by sign-up form code already
+# shipped on main, not open for design here.
+
+INCORRECT_CODE = "Incorrect or expired code"
+
+
+def _incorrect_code() -> HTTPException:
+    # One 400 for a wrong code, an expired one, a spent attempt budget and an address
+    # nobody asked a code for: to the caller they are one fact ("that code didn't
+    # work"), and distinguishing them would describe the server's bookkeeping to
+    # whoever is probing — including whether an address is mid-sign-up.
+    #
+    # The body says one thing; the work behind it does not. A matched row is charged an
+    # attempt and sometimes deleted, where an unknown address writes nothing, so the two
+    # remain separable by timing. Login closes its equivalent by burning a verification
+    # it does not need; there is no equivalent here, because the work to equalise would
+    # be a row written for every address anyone cares to probe.
+    return HTTPException(status_code=400, detail=INCORRECT_CODE)
+
+
+# The 409 is declared for the same reason sign-up's is: the form branches on it,
+# inline on the email field. The cost of telling an unauthenticated caller whether an
+# address holds an account is the tradeoff sign-up already made (#47 owns revisiting
+# it) — and once #44 lands this endpoint is where that question moves, since
+# /coaches' own 409 stops being reachable without a verification cookie.
+@router.post(
+    "/request-otp",
+    status_code=202,
+    responses={
+        409: {"model": ErrorDetail, "description": "Email already registered"},
+        429: {"model": ErrorDetail, "description": "Too many codes requested"},
+    },
+)
+def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
+    # lower() folds the whole address as login does: the verification row, the coach
+    # row and the per-email bucket must all agree on what MIKE@ names.
+    email = data.email.lower()
+    # At the top of the handler rather than in the decorator's dependencies, because
+    # the per-email key needs the parsed body — login's position, for login's reason.
+    # The cost bounded here is not sign-up's CPU but outbound email: provider quota,
+    # a young sending domain's reputation, and strangers' inboxes. The per-email tier
+    # is also load-bearing for guessing — five attempts per code means little if codes
+    # can be minted without bound — and it meters probes of registered addresses the
+    # same, so the 409 below cannot be farmed for enumeration at arrival rate.
+    per_email: RateLimiter = request.app.state.request_otp_per_email_limit
+    per_ip: RateLimiter = request.app.state.request_otp_per_ip_limit
+    total: RateLimiter = request.app.state.request_otp_total_limit
+    take_all(
+        (per_email, email),
+        (per_ip, request.client.host if request.client else ""),
+        (total, "total"),
+    )
+    now = datetime.now(UTC)
+    # The whole table's expired rows, not just this address's: the upsert below
+    # already bounds the table to addresses ever seen, and this sweep tightens that
+    # to addresses seen within an expiry window. Here rather than on a hot path —
+    # this endpoint is rate-limited and about to do a network send, so a bounded
+    # DELETE is noise, which is exactly the objection (#41) that ruled out sweeping
+    # expired sessions at login.
+    db.execute(delete(EmailVerification).where(EmailVerification.expires_at <= now))
+    # A pre-check SELECT, where sign-up catches IntegrityError — a deliberate
+    # departure from that rule, whose rationale is the unique-constraint race: two
+    # requests both passing a pre-check and one losing the INSERT. No such race exists
+    # here, because email_verifications accepts the row either way; someone
+    # registering between this check and their sign-up still meets /coaches' own 409.
+    # The timing gap between this branch and the 202's hash-upsert-send is a kept
+    # oracle: the 409 itself already answers the same question, openly.
+    if db.scalar(select(Coach.id).where(Coach.email == email)) is not None:
+        raise HTTPException(status_code=409, detail="Email already registered")
+    otp = new_otp()
+    fresh = {
+        "otp_hash": hash_otp(otp),
+        # Not only a fresh code for a row still at the code stage: an address that has
+        # already answered its code is put back to the code stage too, so the
+        # verification cookie it earned stops working. That is the rule this endpoint
+        # means — asking for a code resets the address to unproven — and it is the
+        # kinder of the two options, since refusing the request would strand a coach
+        # who genuinely lost the cookie behind an endpoint that cannot say why.
+        "token_hash": None,
+        "attempts": 0,
+        "expires_at": now + OTP_LIFETIME,
+    }
+    # An upsert rather than insert-or-update in Python: two concurrent requests for
+    # one address must both land on the single row, and the loser of the INSERT must
+    # overwrite rather than raise. Replacing the row is what makes a resend *replace*
+    # the old code — one live code per address, always. updated_at is set by hand
+    # because ON CONFLICT is an INSERT to SQLAlchemy, so the column's onupdate
+    # never fires for it.
+    db.execute(
+        insert(EmailVerification)
+        .values(email=email, **fresh)
+        .on_conflict_do_update(
+            index_elements=[EmailVerification.email],
+            set_={**fresh, "updated_at": func.clock_timestamp()},
+        )
+    )
+    db.commit()
+    # After the commit, so a code that failed to store is never mailed. The reverse
+    # failure — stored but the send blows up — answers 500, and the retry that
+    # follows replaces the row anyway.
+    sender: EmailSender = request.app.state.email_sender
+    sender.send(
+        to=email,
+        subject="Your MatchPoint sign-up code",
+        body=f"Your sign-up code is {otp}. "
+        f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes.",
+    )
+
+
+def limit_verify_otp_rate(request: Request) -> None:
+    """Bound guess arrivals — the second layer, not the bound itself.
+
+    What actually caps guessing a given code is its row's attempt budget, counted in
+    the database where a deploy cannot refill it. That budget is third-party drainable:
+    anyone who knows an address can spend its five guesses and then hold request-otp's
+    per-email bucket drained, denying sign-up — the same shape removed from login's
+    per-account tier, but unfixable here because a guess IS a failed verification.
+    These tiers just keep the arrivals themselves bounded, as every unauthenticated
+    endpoint's are. In the decorator's dependencies like sign-up's, since no tier here
+    needs the parsed body: a refused guess costs no validation and no session.
+    """
+    per_ip: RateLimiter = request.app.state.verify_otp_per_ip_limit
+    total: RateLimiter = request.app.state.verify_otp_total_limit
+    take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
+
+
+@router.post(
+    "/verify-otp",
+    dependencies=[Depends(limit_verify_otp_rate)],
+    responses={
+        400: {"model": ErrorDetail, "description": INCORRECT_CODE},
+        429: {"model": ErrorDetail, "description": "Too many attempts"},
+    },
+)
+def verify_otp(data: VerifyOtpRequest, db: DbSession, response: Response) -> None:
+    email = data.email.lower()
+    now = datetime.now(UTC)
+    # Find the row and charge the guess in one statement, before the code is compared.
+    # Reading first and charging after would bound the counter but not the guessing:
+    # every request that read the row before anyone's increment landed would still get
+    # its comparison, so the real cap would be however many guesses arrive together —
+    # the per-address burst — rather than OTP_ATTEMPT_LIMIT. Charging first also takes
+    # the row's lock for the rest of this transaction, which is what leaves the success
+    # path below a single winner.
+    #
+    # The two conditions beyond the address are 400s that used to be read off the
+    # loaded row: a row already traded for a token has no code left to answer, and an
+    # expired one is not answerable either. Matching nothing is how they arrive there
+    # now, and neither is charged an attempt it has no budget left to spend.
+    charged = db.execute(
+        update(EmailVerification)
+        .where(
+            EmailVerification.email == email,
+            EmailVerification.otp_hash.is_not(None),
+            EmailVerification.expires_at > now,
+        )
+        .values(attempts=EmailVerification.attempts + 1)
+        .returning(EmailVerification.id, EmailVerification.otp_hash, EmailVerification.attempts)
+    ).one_or_none()
+    # one_or_none rather than one: a concurrent guess that spent the last of the budget
+    # deletes the row, and this UPDATE then matches nothing. Raising there would answer
+    # a 500 where the caller is owed the same 400 as every other failure — and a 500
+    # arriving exactly when the budget ran out is itself the fact _incorrect_code
+    # exists to withhold.
+    if charged is None:
+        raise _incorrect_code()
+    # _tuple() rather than unpacking the Row itself: the underscore is SQLAlchemy's own
+    # naming (a column could be called `tuple`), and it is what keeps these three typed
+    # instead of Any, so the fallback below is a real narrowing and not decoration.
+    row_id, otp_hash, attempts = charged._tuple()
+    # compare_digest because unlike current_coach's lookup, which compares in a SQL
+    # WHERE, this row was found by email and the comparison happens in Python. The
+    # column is typed optional because it is nullable, but the WHERE above matched on
+    # it being present; "" stands for that impossible case and matches no digest.
+    if not secrets.compare_digest(otp_hash or "", hash_otp(data.otp.get_secret_value())):
+        if attempts >= OTP_ATTEMPT_LIMIT:
+            # The budget is spent, and the row dies with it: the address goes back
+            # to "no code outstanding", and a fresh request-otp (its own limiter
+            # permitting) is the only way forward.
+            db.execute(delete(EmailVerification).where(EmailVerification.id == row_id))
+        db.commit()
+        raise _incorrect_code()
+    token = new_session_token()
+    # One UPDATE, so the code dies the instant it works: no window where code and token
+    # are both answerable, held by the table's exactly-one-secret CHECK. A second
+    # request answering the same code blocked on the lock the charge took, and
+    # re-evaluates its own `otp_hash IS NOT NULL` against this row once we commit — so
+    # it matches nothing and is refused, rather than minting a second token and leaving
+    # whichever response the browser stored last holding a dead one.
+    db.execute(
+        update(EmailVerification)
+        .where(EmailVerification.id == row_id)
+        .values(
+            otp_hash=None,
+            token_hash=hash_token(token),
+            attempts=0,
+            expires_at=now + VERIFICATION_LIFETIME,
+        )
+    )
+    db.commit()
+    set_verification_cookie(response, token)

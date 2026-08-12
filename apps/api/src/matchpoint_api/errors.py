@@ -19,10 +19,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-# The field names whose submitted value must never be echoed. Login and password reset
-# will each add one, and `tests/test_errors.py` fails if a schema grows a `SecretStr`
-# field that is not named here — the failure mode is silent otherwise.
-SECRET_FIELDS = frozenset({"password"})
+# The field names whose submitted value must never be echoed. Password reset will add
+# one, and `tests/test_errors.py` fails if a schema grows a `SecretStr` field that is
+# not named here — the failure mode is silent otherwise.
+SECRET_FIELDS = frozenset({"password", "otp"})
 
 REDACTED = "[redacted]"
 

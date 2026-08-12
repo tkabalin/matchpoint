@@ -7,6 +7,7 @@ from matchpoint_api import __version__
 from matchpoint_api.auth import SessionRenewalMiddleware
 from matchpoint_api.config import settings
 from matchpoint_api.errors import validation_error_response
+from matchpoint_api.mail import create_email_sender
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers import auth, coaches, matches, players
 
@@ -81,6 +82,43 @@ def create_app() -> FastAPI:
     app.state.login_per_account_limit = RateLimiter(per_minute=2, burst=5)
     app.state.login_per_ip_limit = RateLimiter(per_minute=10, burst=20)
     app.state.login_total_limit = RateLimiter(per_minute=120, burst=20)
+
+    # request-otp's bound — enforced at the top of its handler, which says why the
+    # per-email tier exists. The cost being priced is different in kind from the
+    # Argon2 arithmetic above: each 202 is an outbound email, so the tiers answer for
+    # provider quota, a young sending domain's reputation, and strangers' inboxes
+    # rather than for CPU. Per-email, three in the burst then one every five minutes,
+    # is sized for a person who mistyped or whose mail was slow — and it is also the
+    # guessing bound: with five attempts per code (auth.py's OTP_ATTEMPT_LIMIT), an
+    # address's keyspace erodes at fifteen guesses up front and about one a minute
+    # sustained, months of sustained work to cover half of it. The per-address and
+    # shared tiers reuse sign-up's sizes because they meter the same strangers on the
+    # same hardware; the shared bucket stays its own, as every route's does, so a
+    # flood of code requests cannot close sign-up or login.
+    #
+    # Counting arrivals is what login's per-account tier was rewritten to stop doing,
+    # and the objection carries here: anyone who knows an address can spend its burst
+    # and hold it drained for one request every five minutes, and whoever owns that
+    # address never receives a code. Login had somewhere to move the count to — a
+    # failed verification, which a legitimate sign-in never produces. This endpoint has
+    # nowhere: the request *is* the cost being priced, so there is no such thing as one
+    # that turns out to have been free. Kept knowingly, as the milder of the two: the
+    # alternative is an unmetered path to strangers' inboxes, and what is denied here
+    # is a sign-up, not an account already in use.
+    app.state.request_otp_per_email_limit = RateLimiter(per_minute=0.2, burst=3)
+    app.state.request_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.request_otp_total_limit = RateLimiter(per_minute=30, burst=10)
+
+    # verify-otp's bound — a second layer only, and sized like sign-up's for the same
+    # legitimate traffic, since the row's in-database attempt budget is what actually
+    # caps guessing a code (routers/auth.py::limit_verify_otp_rate).
+    app.state.verify_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.verify_otp_total_limit = RateLimiter(per_minute=30, burst=10)
+
+    # Outbound email, on app state for the buckets' reason — every create_app() gets
+    # a sender of its own, so no test can send real mail and any test can read what
+    # was sent by swapping in a recorder. Which sender is settings' call (mail.py).
+    app.state.email_sender = create_email_sender()
 
     app.include_router(auth.router)
     app.include_router(coaches.router)

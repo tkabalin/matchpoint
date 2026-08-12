@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse } from '../types.gen';
+import { createCoach, createMatch, createPlayer, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, verifyOtp } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Login
@@ -30,6 +30,40 @@ export const logoutMutation = (options?: Partial<Options<LogoutData>>): UseMutat
     const mutationOptions: UseMutationOptions<LogoutResponse, DefaultError, Options<LogoutData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await logout({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Request Otp
+ */
+export const requestOtpMutation = (options?: Partial<Options<RequestOtpData>>): UseMutationOptions<unknown, RequestOtpError, Options<RequestOtpData>> => {
+    const mutationOptions: UseMutationOptions<unknown, RequestOtpError, Options<RequestOtpData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await requestOtp({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Verify Otp
+ */
+export const verifyOtpMutation = (options?: Partial<Options<VerifyOtpData>>): UseMutationOptions<unknown, VerifyOtpError, Options<VerifyOtpData>> => {
+    const mutationOptions: UseMutationOptions<unknown, VerifyOtpError, Options<VerifyOtpData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await verifyOtp({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

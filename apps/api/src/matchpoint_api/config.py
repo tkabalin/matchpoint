@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -27,6 +28,10 @@ class Settings(BaseSettings):
     # localhost as trustworthy; Safari does not, and needs
     # MATCHPOINT_SESSION_COOKIE_SECURE=false in apps/api/.env.
     session_cookie_secure: bool = True
+    # Which outbound email sender create_app builds (mail.py). "logging" writes the
+    # message to the log — right for dev and tests, a lie anywhere deployed, and the
+    # only sender until a real provider lands (#48) and adds its name to the Literal.
+    email_sender: Literal["logging"] = "logging"
 
 
 settings = Settings()
