@@ -300,6 +300,10 @@ export type LoginErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many login attempts
+     */
+    429: ErrorDetail;
 };
 
 export type LoginError = LoginErrors[keyof LoginErrors];
