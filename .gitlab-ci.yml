@@ -287,6 +287,14 @@ web-e2e:
 # `gzip` are separate steps rather than a pipeline: the job runs under sh with
 # no pipefail, so piping would report gzip's status and upload a truncated
 # tarball with the job green.
+#
+# The two uploads go to one package version, differing only in filename, and the
+# registry find-or-creates that version per upload — so two builds finishing in
+# the same instant race to create it and the loser gets a 500. Hence the retry
+# around the upload: by the next attempt the version the other job created
+# exists. `retry:` on the job would re-run a four-minute build for a fault
+# entirely in its last step, and a package per image would move the download
+# path in infra/prod/deploy.sh, which lives on the VPS.
 
 .image-base:
   stage: build
@@ -338,10 +346,11 @@ build-api-image:
     # CI_JOB_TOKEN is scoped to this pipeline run; no stored secret involved.
     - >-
       if [ "$PUSH_IMAGE" = "true" ]; then apk add --no-cache curl && docker save -o api.tar
-      "matchpoint/api:$CI_COMMIT_SHORT_SHA" && gzip api.tar && curl --fail-with-body -sS -H
-      "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file api.tar.gz
+      "matchpoint/api:$CI_COMMIT_SHORT_SHA" && gzip api.tar && attempt=1 && until curl
+      --fail-with-body -sS -H "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file api.tar.gz
       "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/images/$CI_COMMIT_SHORT_SHA/api.tar.gz";
-      fi
+      do attempt=$((attempt + 1)); if [ "$attempt" -gt 3 ]; then exit 1; fi; echo "upload failed,
+      retrying (attempt $attempt of 3)" >&2; sleep 5; done; fi
 
 build-web-image:
   extends: .image-base
@@ -375,10 +384,11 @@ build-web-image:
     - docker build -f apps/web/Dockerfile -t "matchpoint/web:$CI_COMMIT_SHORT_SHA" .
     - >-
       if [ "$PUSH_IMAGE" = "true" ]; then apk add --no-cache curl && docker save -o web.tar
-      "matchpoint/web:$CI_COMMIT_SHORT_SHA" && gzip web.tar && curl --fail-with-body -sS -H
-      "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file web.tar.gz
+      "matchpoint/web:$CI_COMMIT_SHORT_SHA" && gzip web.tar && attempt=1 && until curl
+      --fail-with-body -sS -H "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file web.tar.gz
       "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/images/$CI_COMMIT_SHORT_SHA/web.tar.gz";
-      fi
+      do attempt=$((attempt + 1)); if [ "$attempt" -gt 3 ]; then exit 1; fi; echo "upload failed,
+      retrying (attempt $attempt of 3)" >&2; sleep 5; done; fi
 
 deploy:
   stage: deploy
