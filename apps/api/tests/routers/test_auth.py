@@ -341,6 +341,54 @@ def test_a_body_the_schema_rejects_is_still_counted(
     assert client.post("/auth/login", json=LOGIN).status_code == 429
 
 
+def test_an_arrival_beyond_the_address_burst_spends_no_verification(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The claim the arrival tiers exist for: once they refuse, an attempt costs no
+    Argon2 run. Only their placement in `dependencies` puts them ahead of the handler,
+    and no other test would notice them sliding into it — so the calls are counted, not
+    just the status. The per-account tier makes the opposite promise deliberately, and
+    pays a verification per refusal to keep it."""
+    calls: list[str] = []
+    monkeypatch.setattr(
+        "matchpoint_api.routers.auth.verify_password",
+        lambda password, password_hash: (calls.append(password), False)[1],
+    )
+    for n in range(20):
+        assert client.post("/auth/login", json=LOGIN | {"email": f"c{n}@x.com"}).status_code == 401
+
+    refused = client.post("/auth/login", json=LOGIN)
+
+    assert refused.status_code == 429
+    assert len(calls) == 20
+
+
+def test_a_correct_password_is_never_refused_by_the_account_tier(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What keeps a per-account bound from being an account-lockout lever. Only a failed
+    verification is charged, so a flood against a known address — and sign-up's 409 hands
+    those out — drains the bucket without ever standing between the coach and their own
+    account. Counting arrivals instead, one request every thirty seconds would have taken
+    each token as it refilled and kept them signed out for good.
+
+    The stub answers the real password and refuses the rest, so both branches of the
+    handler run for real; what it saves is thirty Argon2 runs, not the logic."""
+    _sign_up(client)
+    monkeypatch.setattr(
+        "matchpoint_api.routers.auth.verify_password",
+        lambda password, password_hash: password == LOGIN["password"],
+    )
+    for _ in range(5):
+        assert client.post("/auth/login", json=LOGIN | {"password": "wrong"}).status_code == 401
+    assert client.post("/auth/login", json=LOGIN | {"password": "wrong"}).status_code == 429
+
+    response = client.post("/auth/login", json=LOGIN)
+
+    assert response.status_code == 200
+    assert "set-cookie" in response.headers
+
+
 def test_logging_out_revokes_the_session_and_clears_the_cookie(
     client: TestClient, db_session: Session
 ) -> None:
