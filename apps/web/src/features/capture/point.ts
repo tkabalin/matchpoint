@@ -105,12 +105,17 @@ export class Point {
   // Must equal trackedPlayerId or opponentId — checked in Point.create.
   readonly winner: string;
   readonly server: string;
-  readonly trackedPlayerShots: ShotType[];
+  readonly trackedPlayerShots: readonly ShotType[];
   // null = opponent's shots not recorded yet; [] = recorded, and there were none.
-  readonly opponentShots: ShotType[] | null;
+  readonly opponentShots: readonly ShotType[] | null;
   readonly winBy: ErrorDetail | null;
   readonly lossBy: ErrorDetail | null;
 
+  // Takes already-validated, already-copied arrays — Point.create is the only
+  // caller, and it's the one responsible for defensively copying trackedPlayerShots/
+  // opponentShots so a Point can't be mutated later through a reference the caller
+  // kept. Without that, `readonly` here only stops reassignment, not `.push(...)`
+  // on the array itself.
   private constructor(fields: {
     id: string;
     gameId: string;
@@ -120,8 +125,8 @@ export class Point {
     outcome: PointOutcome;
     winner: string;
     server: string;
-    trackedPlayerShots: ShotType[];
-    opponentShots: ShotType[] | null;
+    trackedPlayerShots: readonly ShotType[];
+    opponentShots: readonly ShotType[] | null;
     winBy: ErrorDetail | null;
     lossBy: ErrorDetail | null;
   }) {
@@ -178,14 +183,16 @@ export class Point {
     if (!Array.isArray(data.trackedPlayerShots) || !data.trackedPlayerShots.every(isShotType)) {
       throw new Error("trackedPlayerShots must be an array of shot types");
     }
-    const trackedPlayerShots = data.trackedPlayerShots as ShotType[];
+    // Copied, not the caller's array: otherwise mutating it after Point.create()
+    // returns would silently mutate this "already-validated" Point too.
+    const trackedPlayerShots = [...(data.trackedPlayerShots as ShotType[])];
 
     let opponentShots: ShotType[] | null = null;
     if (data.opponentShots !== null) {
       if (!Array.isArray(data.opponentShots) || !data.opponentShots.every(isShotType)) {
         throw new Error("opponentShots must be an array of shot types, or null");
       }
-      opponentShots = data.opponentShots;
+      opponentShots = [...(data.opponentShots as ShotType[])];
     }
 
     if (data.winBy !== null && !isErrorDetail(data.winBy)) {
@@ -225,8 +232,10 @@ export class Point {
       outcome: this.outcome,
       winner: this.winner,
       server: this.server,
-      trackedPlayerShots: this.trackedPlayerShots,
-      opponentShots: this.opponentShots,
+      // Copied, not the live arrays: otherwise a caller mutating the returned
+      // snapshot (e.g. before writing it to Dexie) would mutate this Point too.
+      trackedPlayerShots: [...this.trackedPlayerShots],
+      opponentShots: this.opponentShots === null ? null : [...this.opponentShots],
       winBy: this.winBy,
       lossBy: this.lossBy,
     };
