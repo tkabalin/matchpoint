@@ -66,6 +66,24 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 require_min_version uv "$(uv --version | awk '{print $2}')" 0.11
 
+# Compose derives its project name from the directory it runs in, so from a linked worktree
+# every step below would address a project of this worktree's own rather than the one the
+# main checkout started. That does not announce itself: Docker drops the conflicting host
+# port binding instead of refusing it, so the duplicate Postgres comes up healthy with no
+# published port, `up --wait` succeeds, and whichever container does hold 5432 is the one
+# everything then talks to — the main checkout's if it is running, or this empty one if it is
+# not, which then gets migrated. Refuse instead, and name the checkout to run from. This
+# comes before the checks below because they describe how to fix up a working copy you should
+# not be running the stack from in the first place.
+git_dir="$(git -C "$repo_root" rev-parse --git-dir 2>/dev/null || true)"
+git_common_dir="$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null || true)"
+if [[ -n "$git_common_dir" && "$git_dir" != "$git_common_dir" ]]; then
+  die 'This is a git worktree, and Compose would start a second Postgres for it rather than' \
+    'use the one the main checkout runs — leaving which database the app talks to up to' \
+    'whichever container holds port 5432.' \
+    "Run the stack from the main checkout instead: $(dirname "$git_common_dir")"
+fi
+
 # `pnpm dev` ultimately execs apps/web's own vite binary, and without an install that
 # surfaces as "vite: not found" from a shell three processes down, naming neither this repo
 # nor the fix. Test for the binary rather than for node_modules/, so an interrupted install
@@ -126,16 +144,6 @@ cd "$repo_root"
 log="$work/compose.log"
 if ! docker compose up -d --wait 2>&1 | tee "$log"; then
   if grep -qEi 'address already in use|port is already allocated|failed to bind host port' "$log"; then
-    # Compose derives its project name from the directory it runs in, so from a linked
-    # worktree this just tried to start a *second* Postgres alongside the main checkout's.
-    # That is indistinguishable from a system Postgres owning the port, and has a completely
-    # different fix, so rule it out before blaming an install that may not exist.
-    if [[ "$(git -C "$repo_root" rev-parse --git-dir 2>/dev/null)" \
-      != "$(git -C "$repo_root" rev-parse --git-common-dir 2>/dev/null)" ]]; then
-      die 'Port 5432 is taken, and this is a git worktree: Compose used a project name of its' \
-        'own here and tried to start a second Postgres beside the main checkout'"'"'s.' \
-        'Use the Postgres already running from the main checkout rather than starting one here.'
-    fi
     die 'Port 5432 is already taken by another Postgres, so the Compose one cannot bind it.' \
       'Usually a system install: sudo systemctl stop postgresql' \
       'To see what owns it: sudo ss -ltnp "sport = :5432"'
