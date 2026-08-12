@@ -1,10 +1,13 @@
+import type { PlayerRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { PlayerList } from "./player-list";
 
-const player = {
+// Annotated rather than inferred so tsc holds the fixture to the generated contract:
+// an un-annotated literal happily describes a response the API cannot return.
+const player: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000001",
   first_name: "Amahle",
   last_name: "Nkosi",
@@ -12,7 +15,7 @@ const player = {
   dominant_hand: null,
   gender: null,
   notes: null,
-  coach_id: null,
+  coach_id: "3f1c2b4e-0000-4000-8000-0000000000c1",
   archived_at: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
