@@ -17,6 +17,10 @@ class Settings(BaseSettings):
 
     debug: bool = False
     database_url: str = "postgresql+psycopg://matchpoint:matchpoint@localhost:5432/matchpoint"
+    # The deployed image tag, set from IMAGE_TAG by infra/prod/compose.yml and
+    # reported by /health. The default is what anything not deployed reports:
+    # nothing outside production has a commit to name.
+    commit: str = "dev"
 
 
 settings = Settings()

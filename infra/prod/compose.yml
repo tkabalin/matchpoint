@@ -54,6 +54,10 @@ services:
     logging: *logging
     environment:
       MATCHPOINT_DATABASE_URL: postgresql+psycopg://matchpoint:${POSTGRES_PASSWORD:?}@postgres:5432/matchpoint
+      # Reported by /health, which is how the pipeline's smoke check tells a
+      # container that serves the tag just deployed from one still serving the
+      # last. Without this the API reports "dev" and that check can never pass.
+      MATCHPOINT_COMMIT: ${IMAGE_TAG:?}
     depends_on:
       postgres:
         condition: service_healthy

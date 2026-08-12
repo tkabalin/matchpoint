@@ -29,9 +29,15 @@ def create_app() -> FastAPI:
     app.include_router(players.router)
     app.include_router(matches.router)
 
+    # A comment rather than a docstring: this route is in the spec, and a docstring
+    # would put every word of it in the generated TypeScript client too.
+    #
+    # `commit` names the build answering, which is what lets CI tell a deploy that
+    # served from one that only started. It is read per request rather than closed
+    # over, so the value is the running container's, not the one imported at build.
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": __version__}
+        return {"status": "ok", "version": __version__, "commit": settings.commit}
 
     return app
 
