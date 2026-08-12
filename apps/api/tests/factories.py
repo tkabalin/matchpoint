@@ -11,7 +11,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, CoachSession, Match, Player
+from matchpoint_api.models import Coach, CoachSession, EmailVerification, Match, Player
 
 
 def make_coach(session: Session, **overrides: Any) -> Coach:
@@ -54,6 +54,25 @@ def make_coach_session(session: Session, **overrides: Any) -> CoachSession:
     session.add(coach_session)
     session.flush()
     return coach_session
+
+
+def make_email_verification(session: Session, **overrides: Any) -> EmailVerification:
+    # Unique email per call, as make_coach: the column carries a UNIQUE constraint.
+    # The default hash is a real SHA-256 for shape only — a test that wants a code a
+    # request can answer passes otp_hash=hash_otp(code) over a code it keeps. The
+    # expiry is far enough out that a row never dies mid-test; tests about expiry
+    # pass their own.
+    verification = EmailVerification(
+        **{
+            "email": f"pending-{uuid.uuid4()}@example.com",
+            "otp_hash": hashlib.sha256(uuid.uuid4().bytes).hexdigest(),
+            "expires_at": datetime.now(UTC) + timedelta(minutes=10),
+        }
+        | overrides
+    )
+    session.add(verification)
+    session.flush()
+    return verification
 
 
 def make_player(session: Session, **overrides: Any) -> Player:
