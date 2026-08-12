@@ -453,7 +453,7 @@ smoke:
   stage: .post
   image: alpine:3.22
   before_script:
-    - apk add --no-cache curl jq
+    - apk add --no-cache curl jq git
     # A commit title is arbitrary text, so neither layer of quoting can be done
     # by hand: jq builds the JSON, and this handles Slack's own markup, which
     # would otherwise swallow a title like "fix: strip <script> from notes".
@@ -468,16 +468,29 @@ smoke:
       [ "$author" = "$who" ] || who="$who (commit by $author)"
       summary="<$CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA|\`$CI_COMMIT_SHORT_SHA\`>"
       summary="$summary $(printf '%s' "$CI_COMMIT_TITLE" | slack_escape)"
-    # notify <colour> <headline> <context>. The attachment exists only for the
-    # colour bar down the side, which is what makes the two outcomes tellable
-    # apart at a glance; the blocks carry everything else.
+    # How much landed in one go: CI_COMMIT_BEFORE_SHA is the ref's previous tip,
+    # so a merge of five commits reads as five rather than as one. Silent at a
+    # single commit, and silent again when the shallow clone doesn't reach back
+    # far enough to answer — the count is a nicety, not worth a red pipeline.
+    - |
+      count=$(git rev-list --count "$CI_COMMIT_BEFORE_SHA..$CI_COMMIT_SHA" 2>/dev/null || true)
+      if [ -n "$count" ] && [ "$count" -gt 1 ]; then
+        summary="$summary · $count commits"
+      fi
+    # notify <colour> <headline> <context>. The headline sits outside the
+    # attachment, and repeats as the message's own `text`, because Slack builds
+    # the notification preview from those two and ignores attachment content.
+    # What's left inside buys the colour bar down the side, which is what makes
+    # the two outcomes tellable apart at a glance.
     - |
       notify() {
         jq -n --arg color "$1" --arg headline "$2" --arg summary "$summary" --arg context "$3" \
-          '{attachments: [{color: $color, blocks: [
-            {type: "section", text: {type: "mrkdwn", text: ($headline + "\n" + $summary)}},
-            {type: "context", elements: [{type: "mrkdwn", text: $context}]}
-          ]}]}' |
+          '{text: ($headline | gsub("\\*"; "")),
+            blocks: [{type: "section", text: {type: "mrkdwn", text: $headline}}],
+            attachments: [{color: $color, blocks: [
+              {type: "section", text: {type: "mrkdwn", text: $summary}},
+              {type: "context", elements: [{type: "mrkdwn", text: $context}]}
+            ]}]}' |
           curl -fsS --max-time 10 -H 'Content-Type: application/json' \
             --data @- "$SLACK_WEBHOOK_URL"
       }
@@ -494,9 +507,7 @@ notify-deploy-success:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   script:
     - >
-      notify "#2eb886" "*✅ Deployed to production*" "$who ·
-      <https://matchpoint.thomaskabalin.com|matchpoint.thomaskabalin.com> ·
-      <$CI_PIPELINE_URL|pipeline>"
+      notify "#2eb886" "*✅ Deployed to production*" "$who · <$CI_PIPELINE_URL|pipeline>"
 
 # Deliberately no `needs`: a main pipeline that fails in lint, test or build
 # never reaches the deploy job, and needing it would skip this job in exactly
