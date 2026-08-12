@@ -1,3 +1,11 @@
+import {
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -13,6 +21,32 @@ function stubFetch(response: () => Response) {
   );
 }
 
+/** Renders SignUp inside a real (in-memory) router rather than mocking useNavigate,
+ * so a successful sign-up is verified by what actually ends up on screen — same
+ * pattern as sign-in.test.tsx. Needed for every test now, not just the navigation
+ * ones: SignUp calls useNavigate() unconditionally, which throws without a router
+ * context regardless of whether a given test ever reaches the password step. */
+async function renderSignUp() {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const signUpRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/sign-up",
+    component: SignUp,
+  });
+  const signInRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    component: () => <h1>Sign In</h1>,
+  });
+  const routeTree = rootRoute.addChildren([signUpRoute, signInRoute]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ["/sign-up"] }),
+  });
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("heading", { name: "Sign Up" });
+}
+
 async function fillAndSubmitEmail(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
   await user.click(screen.getByRole("button", { name: "Continue" }));
@@ -22,15 +56,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the email field", () => {
-  render(<SignUp />);
+test("renders the email field", async () => {
+  await renderSignUp();
 
   expect(screen.getByLabelText("Email")).toBeInTheDocument();
 });
 
 test("updates the field as the user types", async () => {
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
 
@@ -39,7 +73,7 @@ test("updates the field as the user types", async () => {
 
 test("blocks submit until the email is filled", async () => {
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   const submit = screen.getByRole("button", { name: "Continue" });
   expect(submit).toBeDisabled();
@@ -51,7 +85,7 @@ test("blocks submit until the email is filled", async () => {
 test("sends the email to /api/auth/request-otp with cookies included", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   await fillAndSubmitEmail(user);
 
@@ -64,7 +98,7 @@ test("sends the email to /api/auth/request-otp with cookies included", async () 
 test("moves to the OTP step on a 202 response", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   await fillAndSubmitEmail(user);
 
@@ -78,7 +112,7 @@ test("shows an inline error and stays on the email step on a 409 response", asyn
     () => new Response(JSON.stringify({ detail: "Email already registered" }), { status: 409 }),
   );
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   await fillAndSubmitEmail(user);
 
@@ -89,7 +123,7 @@ test("shows an inline error and stays on the email step on a 409 response", asyn
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();
-  render(<SignUp />);
+  await renderSignUp();
 
   await fillAndSubmitEmail(user);
 
@@ -98,7 +132,7 @@ test("shows a generic error when the request fails outright", async () => {
 
 async function goToOtpStep(user: ReturnType<typeof userEvent.setup>) {
   stubFetch(() => new Response(null, { status: 202 }));
-  render(<SignUp />);
+  await renderSignUp();
   await fillAndSubmitEmail(user);
   await screen.findByLabelText("Code");
   vi.unstubAllGlobals();
@@ -171,4 +205,65 @@ test("allows submit once the passwords match", async () => {
 
   expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
+async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Password"), "hunter2");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2");
+  await user.click(screen.getByRole("button", { name: "Sign Up" }));
+}
+
+test("sends the email and password to POST /coaches with cookies included, no token field", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  stubFetch(() =>
+    Response.json({ id: "1", email: "coach@example.com", display_name: "" }, { status: 201 }),
+  );
+
+  await fillAndSubmitPassword(user);
+  await screen.findByRole("heading", { name: "Sign In" });
+
+  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(url).toBe("/api/coaches");
+  expect(init?.credentials).toBe("include");
+  expect(JSON.parse(String(init?.body))).toEqual({
+    email: "coach@example.com",
+    password: "hunter2",
+  });
+});
+
+test("navigates to / on a successful sign-up", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  stubFetch(() =>
+    Response.json({ id: "1", email: "coach@example.com", display_name: "" }, { status: 201 }),
+  );
+
+  await fillAndSubmitPassword(user);
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("shows the server's error and stays on the password step when verification is missing", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  stubFetch(
+    () => new Response(JSON.stringify({ detail: "Email verification required" }), { status: 400 }),
+  );
+
+  await fillAndSubmitPassword(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Email verification required");
+  expect(screen.getByLabelText("Password")).toBeInTheDocument();
+});
+
+test("shows a generic error when the complete-sign-up request fails outright", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+  await fillAndSubmitPassword(user);
+
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("Password")).toBeInTheDocument();
 });
