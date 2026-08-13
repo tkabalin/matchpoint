@@ -27,6 +27,18 @@
 - Don't abstract or extract shared code until there are at least two call sites needing it — either
   two real usages, or one usage plus a second that's definitely coming. A merely hypothetical future
   usage doesn't justify the abstraction.
+- Comment the **why**, not the what. This codebase deliberately keeps reasoning next to the code, so
+  don't strip comments out or leave a non-obvious decision bare.
+- Keep a comment block to about three lines, and to the length of the comments already in that file.
+  Past four, the reasoning has outgrown a comment. A docstring gets its summary line plus one short
+  paragraph.
+- When it has outgrown one, put it where it belongs (`docs/`, a `.claude/rules/` file, or the commit
+  message) and leave a one-clause pointer at the code.
+- Cut on sight: a sentence restating the one before it, a rejected alternative given more than a
+  clause, a caveat about something the code doesn't do.
+- In all prose we write, comments and docstrings and `docs/` and commit messages alike: never use
+  the phrase "load-bearing", and avoid em dashes where a comma, colon, or full stop does the same
+  job.
 
 ## Repository Layout
 
