@@ -143,8 +143,9 @@ redaction set.
 another coach returns 404. A 403 would confirm the row exists, which is the same enumeration concern
 as the authentication design above.
 
-**No coach list endpoint.** Only `GET /coaches/me` exists. A list route would be an open dump of
-every coach's email address. Pinned by a test asserting `GET /coaches` returns 404.
+**No coach list endpoint.** No route returns a coach other than the caller's own. A list route would
+be an open dump of every coach's email address. Pinned by a test asserting `GET /coaches`
+returns 404.
 
 ## Infrastructure
 
