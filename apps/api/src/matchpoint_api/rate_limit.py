@@ -63,6 +63,28 @@ class RateLimiter:
         """
         take_all((self, key))
 
+    def refund(self, key: str) -> None:
+        """Give `key` back the token it spent, for a request whose cost never landed.
+
+        For a tier that meters something a request can be admitted and still fail to do —
+        request-otp's send, whose cost is an email a provider failure means nobody
+        received. Keeping that charged turns a provider's bad minute into a lockout: the
+        502 tells the coach to try again, and the tier they have now paid three times for
+        nothing refuses the attempt for five minutes.
+
+        Only the tier whose cost went unspent is refunded. The tiers metering arrivals
+        stay charged — that work happened either way — and they are also what stops a
+        reliably refundable failure (an address the provider always refuses) from being
+        an unmetered path back into this endpoint.
+        """
+        now = time.monotonic()
+        with _lock:
+            # A key that is absent has a full bucket and so nothing owed back; putting
+            # one in would only hand `_prune` something to take straight out again.
+            if key not in self._buckets:
+                return
+            self._buckets[key] = (min(float(self._burst), self._tokens_at(key, now) + 1), now)
+
     def _tokens_at(self, key: str, now: float) -> float:
         """What `key` has to spend at `now` — refilled, but nothing taken off it yet.
 

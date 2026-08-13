@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,9 +30,15 @@ class Settings(BaseSettings):
     # MATCHPOINT_SESSION_COOKIE_SECURE=false in apps/api/.env.
     session_cookie_secure: bool = True
     # Which outbound email sender create_app builds (mail.py). "logging" writes the
-    # message to the log — right for dev and tests, a lie anywhere deployed, and the
-    # only sender until a real provider lands (#48) and adds its name to the Literal.
-    email_sender: Literal["logging"] = "logging"
+    # message to the log — right for dev and tests, a lie anywhere deployed; "resend"
+    # is the one that delivers, and is what infra/prod/compose.yml sets. The default
+    # stays the harmless one, so nothing sends real mail without being told to.
+    email_sender: Literal["logging", "resend"] = "logging"
+    # Required when email_sender is "resend", and unused otherwise — create_email_sender
+    # refuses the pairing rather than letting a blank key become a 502 per sign-up.
+    # SecretStr because a plain str reaches repr(), and this object is the kind of thing
+    # that gets logged or dumped into a traceback whole.
+    resend_api_key: SecretStr = SecretStr("")
 
 
 settings = Settings()

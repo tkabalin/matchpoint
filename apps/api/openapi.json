@@ -693,6 +693,16 @@
               }
             },
             "description": "Too many codes requested"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Couldn't send that code, please try again"
           }
         },
         "summary": "Request Otp",

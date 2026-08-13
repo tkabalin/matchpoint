@@ -13,6 +13,9 @@ dependencies = [
     "psycopg[binary]>=3.2",
     "alembic>=1.14",
     "argon2-cffi>=25.1.0",
+    # Already in the tree as a fastapi[standard] extra, declared here because mail.py
+    # imports it directly — a dependency we call is not one to inherit by accident.
+    "httpx>=0.28",
 ]
 
 [dependency-groups]

@@ -22,7 +22,7 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
-from matchpoint_api.mail import EmailSender
+from matchpoint_api.mail import EmailSender, EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.rate_limit import RateLimiter, take_all
 from matchpoint_api.schemas.auth import LoginRequest, OtpRequest, VerifyOtpRequest
@@ -166,6 +166,11 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
 
 INCORRECT_CODE = "Incorrect or expired code"
 
+# Distinct from every other failure this endpoint has, because it is the only one the
+# caller can do nothing about and should simply try again — the form says so rather than
+# leaving a coach waiting on the next screen for mail that was never accepted.
+SEND_FAILED = "Couldn't send that code, please try again"
+
 
 def _incorrect_code() -> HTTPException:
     # One 400 for a wrong code, an expired one, a spent attempt budget and an address
@@ -192,6 +197,7 @@ def _incorrect_code() -> HTTPException:
     responses={
         409: {"model": ErrorDetail, "description": "Email already registered"},
         429: {"model": ErrorDetail, "description": "Too many codes requested"},
+        502: {"model": ErrorDetail, "description": SEND_FAILED},
     },
 )
 def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
@@ -259,15 +265,34 @@ def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
     )
     db.commit()
     # After the commit, so a code that failed to store is never mailed. The reverse
-    # failure — stored but the send blows up — answers 500, and the retry that
+    # failure — stored but the send blows up — is the 502 below, and the retry that
     # follows replaces the row anyway.
+    #
+    # Inline, not a BackgroundTask. Deferring the send would put the 202 on the wire
+    # before the provider was called, which makes the 502 unreachable: the failure
+    # could only ever reach the log, leaving a coach parked on the code-entry screen
+    # waiting for mail that is never coming. That is the worse outcome, so the cost is
+    # accepted instead — provider latency sits in the request holding a threadpool
+    # thread, bounded by mail.py's RESEND_TIMEOUT and by the three tiers above.
     sender: EmailSender = request.app.state.email_sender
-    sender.send(
-        to=email,
-        subject="Your MatchPoint sign-up code",
-        body=f"Your sign-up code is {otp}. "
-        f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes.",
-    )
+    try:
+        sender.send(
+            to=email,
+            subject="Your MatchPoint sign-up code",
+            text=f"Your sign-up code is {otp}. "
+            f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes.",
+        )
+    except EmailSendError:
+        # What this discloses is whether the provider accepted a message, not whether an
+        # account exists. The row stays: it expires on its own, and a retry overwrites it.
+        #
+        # The per-email token goes back, because that tier meters mail to an inbox and
+        # this message never reached one — charged, three provider failures would spend
+        # the budget and refuse the retry this 502 asks for. Only that tier: the arrival
+        # tiers paid for work that did happen, and they keep the refund from being an
+        # unmetered way back in here.
+        per_email.refund(email)
+        raise HTTPException(status_code=502, detail=SEND_FAILED) from None
 
 
 def limit_verify_otp_rate(request: Request) -> None:

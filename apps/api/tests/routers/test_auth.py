@@ -481,8 +481,8 @@ class RecordingEmailSender:
     def __init__(self) -> None:
         self.sent: list[tuple[str, str, str]] = []
 
-    def send(self, *, to: str, subject: str, body: str) -> None:
-        self.sent.append((to, subject, body))
+    def send(self, *, to: str, subject: str, text: str) -> None:
+        self.sent.append((to, subject, text))
 
 
 def _record_email(client: TestClient) -> RecordingEmailSender:

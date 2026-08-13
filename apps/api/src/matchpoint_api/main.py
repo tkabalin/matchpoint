@@ -56,11 +56,9 @@ def create_app() -> FastAPI:
     app.state.login_per_ip_limit = RateLimiter(per_minute=10, burst=20)
     app.state.login_total_limit = RateLimiter(per_minute=120, burst=20)
 
-    # request-otp: the cost here is outbound email, not CPU. Per-email counts
-    # arrivals (unlike login's per-account), because there is no "free" request to
-    # move the count to — the send IS the cost. That means an attacker who knows an
-    # address can block its sign-up, kept as the milder alternative to an unmetered
-    # path to strangers' inboxes.
+    # request-otp: the cost is outbound email, not CPU. Per-email charges on arrival
+    # and refunds a failed send, so only mail that reached an inbox is paid for
+    # (routers/auth.py); the price is that knowing an address can block its sign-up.
     app.state.request_otp_per_email_limit = RateLimiter(per_minute=0.2, burst=3)
     app.state.request_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.request_otp_total_limit = RateLimiter(per_minute=30, burst=10)

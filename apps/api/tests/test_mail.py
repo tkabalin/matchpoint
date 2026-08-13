@@ -24,7 +24,7 @@ def test_the_logging_sender_writes_the_whole_message_to_the_log(
     """The body included, deliberately: in local dev the log is where you go to read
     the code the flow 'sent' you."""
     with caplog.at_level(logging.INFO, logger="matchpoint_api.mail"):
-        LoggingEmailSender().send(to="new@example.com", subject="Your code", body="123456")
+        LoggingEmailSender().send(to="new@example.com", subject="Your code", text="123456")
 
     assert "new@example.com" in caplog.text
     assert "Your code" in caplog.text

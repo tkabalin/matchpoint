@@ -387,6 +387,10 @@ export type RequestOtpErrors = {
      * Too many codes requested
      */
     429: ErrorDetail;
+    /**
+     * Couldn't send that code, please try again
+     */
+    502: ErrorDetail;
 };
 
 export type RequestOtpError = RequestOtpErrors[keyof RequestOtpErrors];
