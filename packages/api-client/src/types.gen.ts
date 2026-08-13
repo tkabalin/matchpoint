@@ -794,6 +794,40 @@ export type CreateMatchResponses = {
 
 export type CreateMatchResponse = CreateMatchResponses[keyof CreateMatchResponses];
 
+export type DeleteMatchData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}';
+};
+
+export type DeleteMatchErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteMatchError = DeleteMatchErrors[keyof DeleteMatchErrors];
+
+export type DeleteMatchResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteMatchResponse = DeleteMatchResponses[keyof DeleteMatchResponses];
+
 export type GetMatchData = {
     body?: never;
     path: {

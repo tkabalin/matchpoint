@@ -80,18 +80,25 @@ def list_matches(
     return list(db.scalars(statement))
 
 
-@router.get("/{match_id}", response_model=MatchRead)
-def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
-    # Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
-    # confirm the id exists, and ids must stay unenumerable across coaches.
+def match_for_coach(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Match:
+    """One coach's match by id, or a 404.
+
+    Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
+    confirm the id exists, and ids must stay unenumerable across coaches.
+    """
     match = db.scalar(
         select(Match)
         .join(Player, Match.player_id == Player.id)
-        .where(Match.id == match_id, Player.coach_id == coach.id)
+        .where(Match.id == match_id, Player.coach_id == coach_id)
     )
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
+
+
+@router.get("/{match_id}", response_model=MatchRead)
+def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
+    return match_for_coach(db, match_id, coach.id)
 
 
 @router.patch("/{match_id}", response_model=MatchRead)
@@ -113,3 +120,12 @@ def update_match(
         setattr(match, field, value)
     db.commit()
     return match
+
+
+@router.delete("/{match_id}", status_code=204)
+def delete_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
+    # Hard-deleted rather than archived like a player: a match entered by mistake has no
+    # history hanging off it. A table that comes to reference matches declares no
+    # ondelete, so Postgres refuses to delete a match with point data behind it.
+    db.delete(match_for_coach(db, match_id, coach.id))
+    db.commit()

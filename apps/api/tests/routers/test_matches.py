@@ -649,7 +649,7 @@ def test_update_match_rejects_a_future_played_on(
 def test_update_match_of_another_coach_is_404(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """404 and not 403, as on the fetch — and the row has to come through untouched."""
+    """404 and not 403, as on the fetch, and the row has to come through untouched."""
     other_match = make_match(db_session, opponent_name="Aryna")
     db_session.commit()
 
@@ -669,6 +669,57 @@ def test_update_match_unknown_id_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_delete_match_removes_it(client: TestClient, db_session: Session, coach: Coach) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}")
+
+    assert response.status_code == 204
+    assert client.get(f"/matches/{match.id}").status_code == 404
+    assert client.get("/matches").json() == []
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_delete_match_twice_is_404(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Not idempotent the way logout's 204 is: the second call asks to delete a match
+    that is not there, which is the unknown-id 404."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert client.delete(f"/matches/{match.id}").status_code == 404
+
+
+def test_delete_match_of_another_coach_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The 404 the get route gives, and the row outlives it: a delete answered across
+    the ownership boundary destroys someone else's history rather than just reading
+    it."""
+    other_match = make_match(db_session)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{other_match.id}")
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+
+
+@pytest.mark.usefixtures("coach")
+def test_delete_match_unknown_id_is_404(client: TestClient) -> None:
+    response = client.delete(f"/matches/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.usefixtures("coach")
+def test_delete_match_malformed_id_is_422(client: TestClient) -> None:
+    response = client.delete("/matches/not-a-uuid")
+
+    assert response.status_code == 422
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -676,6 +727,7 @@ def test_update_match_unknown_id_is_404(client: TestClient) -> None:
         ("get", "/matches"),
         ("get", f"/matches/{uuid.UUID(int=0)}"),
         ("patch", f"/matches/{uuid.UUID(int=0)}"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:

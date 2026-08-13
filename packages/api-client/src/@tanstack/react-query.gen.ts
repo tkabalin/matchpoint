@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { archivePlayer, createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
-import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { archivePlayer, createCoach, createMatch, createPlayer, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
+import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Forgot Password
@@ -260,6 +260,23 @@ export const createMatchMutation = (options?: Partial<Options<CreateMatchData>>)
     const mutationOptions: UseMutationOptions<CreateMatchResponse, CreateMatchError, Options<CreateMatchData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await createMatch({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Delete Match
+ */
+export const deleteMatchMutation = (options?: Partial<Options<DeleteMatchData>>): UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> => {
+    const mutationOptions: UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await deleteMatch({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

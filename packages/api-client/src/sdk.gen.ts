@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
+import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -145,6 +145,11 @@ export const createMatch = <ThrowOnError extends boolean = false>(options: Optio
         ...options.headers
     }
 });
+
+/**
+ * Delete Match
+ */
+export const deleteMatch = <ThrowOnError extends boolean = false>(options: Options<DeleteMatchData, ThrowOnError>): RequestResult<DeleteMatchResponses, DeleteMatchErrors, ThrowOnError> => (options.client ?? client).delete<DeleteMatchResponses, DeleteMatchErrors, ThrowOnError>({ url: '/matches/{match_id}', ...options });
 
 /**
  * Get Match
