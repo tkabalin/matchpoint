@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import StringConstraints
 
@@ -20,3 +20,9 @@ database; the exact figure is room for a page of notes, not a measured limit.
 Blank is rejected on the same reasoning as ShortText. Where the field is optional that
 means omitting it or sending null, never "".
 """
+
+
+# Default for XUpdate fields over non-nullable columns: the field becomes optional to
+# send while null stays rejected, since the annotation keeps its non-optional type.
+# Typed Any for pyright; never validated (defaults aren't) nor dumped (exclude_unset).
+UNSET: Any = None

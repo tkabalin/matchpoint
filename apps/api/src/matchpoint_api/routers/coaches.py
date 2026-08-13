@@ -11,7 +11,7 @@ from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, EmailVerification
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
-from matchpoint_api.schemas.coach import CoachCreate, CoachRead
+from matchpoint_api.schemas.coach import CoachCreate, CoachRead, CoachUpdate
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import hash_password
 
@@ -141,4 +141,21 @@ def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
     responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
 )
 def get_current_coach(coach: CurrentCoach) -> Coach:
+    return coach
+
+
+# The signed-in coach is the only coach this can address, so there is no id in the path
+# and no ownership check to get wrong.
+@router.patch(
+    "/me",
+    response_model=CoachRead,
+    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+)
+def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) -> Coach:
+    # exclude_unset is what makes the PATCH partial: an omitted field never reaches the
+    # dump, so it is never assigned. The loop is the shape every Update route shares,
+    # one field or many. updated_at moves on its own, from the column's onupdate.
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(coach, field, value)
+    db.commit()
     return coach

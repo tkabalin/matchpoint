@@ -1,10 +1,12 @@
 """Unit tests for the coach schemas — no fixtures, no database.
 
 CoachCreate is what a sign-up form is written against, so its bounds are pinned at the
-figures the schema itself names rather than restated here. CoachRead's rule is an
-omission — password_hash must not be reachable through the schema — which is exactly the
-kind of thing that survives a careless edit, because adding the field back looks like
-completing the model rather than undoing a decision.
+figures the schema itself names rather than restated here. CoachUpdate's rule is the
+sent/unsent distinction: an omitted field leaves the stored value alone, where an
+explicit null is refused. CoachRead's rule is an omission — password_hash must not be
+reachable through the schema — which is exactly the kind of thing that survives a
+careless edit, because adding the field back looks like completing the model rather
+than undoing a decision.
 """
 
 import uuid
@@ -20,6 +22,7 @@ from matchpoint_api.schemas.coach import (
     PASSWORD_MIN_LENGTH,
     CoachCreate,
     CoachRead,
+    CoachUpdate,
 )
 
 
@@ -119,6 +122,33 @@ def test_the_password_is_not_in_the_repr() -> None:
     """SecretStr's reason for being here. A plain str would put the password into any
     traceback or structured log that renders the model."""
     assert "a-good-password" not in repr(_sign_up())
+
+
+def test_an_update_omitting_the_display_name_dumps_nothing() -> None:
+    """The half of UNSET the route leans on: a field nobody sent has to stay out of
+    model_dump(exclude_unset=True), or a PATCH would write the default over a name it
+    was never asked to change."""
+    assert CoachUpdate.model_validate({}).model_dump(exclude_unset=True) == {}
+
+
+def test_an_update_carrying_the_display_name_dumps_it_stripped() -> None:
+    data = CoachUpdate.model_validate({"display_name": "  Coach Mike  "})
+
+    assert data.model_dump(exclude_unset=True) == {"display_name": "Coach Mike"}
+
+
+@pytest.mark.parametrize("display_name", ["", "   ", "x" * 101, None])
+def test_an_invalid_display_name_is_rejected_on_an_update(display_name: object) -> None:
+    """ShortText's bounds hold here exactly as on sign-up, null included: the field is
+    optional to send, never optional to hold a value."""
+    with pytest.raises(ValidationError):
+        CoachUpdate.model_validate({"display_name": display_name})
+
+
+def test_coach_update_carries_only_the_display_name() -> None:
+    """A field absent from the schema is unreachable through the route that takes it,
+    which is what keeps the sign-in email and the password out of a PATCH."""
+    assert set(CoachUpdate.model_fields) == {"display_name"}
 
 
 def test_coach_read_has_no_password_hash_field() -> None:

@@ -68,6 +68,18 @@
         "title": "CoachRead",
         "type": "object"
       },
+      "CoachUpdate": {
+        "properties": {
+          "display_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name",
+            "type": "string"
+          }
+        },
+        "title": "CoachUpdate",
+        "type": "object"
+      },
       "DominantHand": {
         "enum": [
           "right",
@@ -1021,6 +1033,55 @@
           }
         },
         "summary": "Get Current Coach",
+        "tags": [
+          "coaches"
+        ]
+      },
+      "patch": {
+        "operationId": "update_current_coach",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoachUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoachRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Current Coach",
         "tags": [
           "coaches"
         ]

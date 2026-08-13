@@ -45,6 +45,16 @@ export type CoachRead = {
 };
 
 /**
+ * CoachUpdate
+ */
+export type CoachUpdate = {
+    /**
+     * Display Name
+     */
+    display_name?: string;
+};
+
+/**
  * DominantHand
  */
 export type DominantHand = 'right' | 'left';
@@ -596,6 +606,35 @@ export type GetCurrentCoachResponses = {
 };
 
 export type GetCurrentCoachResponse = GetCurrentCoachResponses[keyof GetCurrentCoachResponses];
+
+export type UpdateCurrentCoachData = {
+    body: CoachUpdate;
+    path?: never;
+    query?: never;
+    url: '/coaches/me';
+};
+
+export type UpdateCurrentCoachErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateCurrentCoachError = UpdateCurrentCoachErrors[keyof UpdateCurrentCoachErrors];
+
+export type UpdateCurrentCoachResponses = {
+    /**
+     * Successful Response
+     */
+    200: CoachRead;
+};
+
+export type UpdateCurrentCoachResponse = UpdateCurrentCoachResponses[keyof UpdateCurrentCoachResponses];
 
 export type HealthData = {
     body?: never;

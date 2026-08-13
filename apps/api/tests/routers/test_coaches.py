@@ -563,6 +563,108 @@ def test_me_never_returns_the_password_hash(client: TestClient, db_session: Sess
     assert "not-a-real-hash" not in response.text
 
 
+def test_updating_the_display_name_stores_the_new_one(
+    client: TestClient, db_session: Session
+) -> None:
+    """What #60 exists for: a name typed once at sign-up was permanent. Read back with
+    a query rather than off the instance the route mutated, since the claim is that the
+    commit reached the row. updated_at is asserted because nothing sets it by hand."""
+    coach = make_coach(db_session, display_name="Coch Mike")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={"display_name": "Coach Mike"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["display_name"] == "Coach Mike"
+    assert datetime.fromisoformat(body["updated_at"]) > datetime.fromisoformat(body["created_at"])
+    stored = db_session.scalar(select(Coach.display_name).where(Coach.id == coach.id))
+    assert stored == "Coach Mike"
+
+
+def test_an_update_sending_no_fields_changes_nothing(
+    client: TestClient, db_session: Session
+) -> None:
+    """An absent field means leave it alone, so a body carrying none of them is a 200
+    that writes nothing, which is the semantics UNSET buys, seen from the wire."""
+    coach = make_coach(db_session, display_name="Coach Mike")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={})
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Coach Mike"
+    stored = db_session.scalar(select(Coach.display_name).where(Coach.id == coach.id))
+    assert stored == "Coach Mike"
+
+
+def test_updating_the_display_name_to_null_is_rejected(
+    client: TestClient, db_session: Session
+) -> None:
+    """The other half of UNSET: omitting the field is a no-op, but asking to clear it is
+    a 422, because the column is NOT NULL and has no blank name to hold."""
+    coach = make_coach(db_session, display_name="Coach Mike")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={"display_name": None})
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "display_name"]
+
+
+@pytest.mark.parametrize("display_name", ["   ", "x" * 101])
+def test_updating_to_a_display_name_outside_the_bounds_is_rejected(
+    client: TestClient, db_session: Session, display_name: str
+) -> None:
+    """ShortText's bounds, pinned as wired into this route; the exhaustive cases live in
+    tests/schemas/test_coach.py. A rejected update leaves the stored name alone."""
+    coach = make_coach(db_session, display_name="Coach Mike")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={"display_name": display_name})
+
+    assert response.status_code == 422
+    stored = db_session.scalar(select(Coach.display_name).where(Coach.id == coach.id))
+    assert stored == "Coach Mike"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("email", "attacker@example.com"),
+        ("password", "a-new-password"),
+        ("password_hash", "not-a-hash-either"),
+    ],
+)
+def test_an_update_cannot_touch_a_field_the_schema_leaves_out(
+    client: TestClient, db_session: Session, field: str, value: str
+) -> None:
+    """CoachUpdate carries display_name alone, so the sign-in identity and the credential
+    are out of reach here. Pydantic ignores an unknown key rather than refusing it, which
+    is accepted, so this is the test that pins the ignoring in both directions: the update
+    still succeeds, and the extra key changed nothing."""
+    coach = make_coach(db_session, email="mike@example.com", password_hash="not-a-real-hash")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={"display_name": "Coach Mike", field: value})
+
+    assert response.status_code == 200
+    assert response.json()["email"] == "mike@example.com"
+    stored = db_session.execute(
+        select(Coach.email, Coach.password_hash).where(Coach.id == coach.id)
+    ).one()
+    assert stored == ("mike@example.com", "not-a-real-hash")
+
+
+def test_updating_without_a_cookie_is_a_401(client: TestClient) -> None:
+    """The route declares the 401 as ErrorDetail, as GET /me does, and the generated
+    client is typed from that declaration."""
+    response = client.patch("/coaches/me", json={"display_name": "Coach Mike"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
 def test_coaches_are_not_listable(client: TestClient) -> None:
     """No list route on purpose: it would be an unauthenticated dump of every coach's
     email address. Pinned so that adding one is a deliberate act, taken together with
