@@ -32,6 +32,10 @@ paths:
 
 - List endpoints exclude archived rows. Fetch-by-id does not — a stored link or a match referencing
   an archived player must still resolve, rather than breaking once someone is off the roster.
+- A list may take an explicit `include_archived` flag, defaulting to false, for a screen that offers
+  restore: with exclusion the only behaviour, an archived row is reachable only by remembered id.
+  The flag widens which of the caller's rows come back, never whose, and the default stays
+  exclusion.
 
 ## Let Pydantic Raise the 422
 
