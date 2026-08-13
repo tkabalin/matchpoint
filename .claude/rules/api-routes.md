@@ -14,6 +14,20 @@ paths:
 - `Read` schemas set `model_config = ConfigDict(from_attributes=True)` and routes return the ORM
   object; `response_model` does the serialisation.
 
+## `XUpdate` Is Every Mutable Column, All Optional
+
+- An `Update` schema carries the client-settable columns that may change after creation, every field
+  optional. The route applies `data.model_dump(exclude_unset=True)`, so an absent field is left
+  alone, which keeps "not sent" distinct from "set to null".
+- Fields over non-nullable columns keep their non-optional type and default to `UNSET`
+  (`schemas/types.py`), so sending null is a 422 from pydantic; nullable columns declare `| None`,
+  where null clears the value.
+- The splat-safety argument for `XCreate` carries over: a server-owned or immutable column absent
+  from the schema cannot be reached through it. Immutability is the schema omitting the field, and
+  `Match.player_id` is the standing example: a match reaches its owner through its player, so a
+  writable one would let a match walk across the ownership boundary, for a correction that
+  delete-and-recreate serves better.
+
 ## Archived Rows Leave the List, Not the Lookup
 
 - List endpoints exclude archived rows. Fetch-by-id does not — a stored link or a match referencing
@@ -25,7 +39,9 @@ paths:
   whose `detail` is a list of errors, and the generated TypeScript client unpacks it as one — so an
   `HTTPException(422, detail="...")` returns a shape the client cannot read.
 - Validation that belongs to the shape of the data goes in a `field_validator` raising `ValueError`;
-  FastAPI turns that into a correctly-shaped 422 on its own.
+  FastAPI turns that into a correctly-shaped 422 on its own. A rule a `Create` and an `Update` share
+  goes in an `Annotated` alias with an `AfterValidator` instead (`PlayedOn`, `DateOfBirth`), so the
+  bound cannot drift between the two schemas.
 - For a body field referencing a row that doesn't exist, check it in the route and raise **404** —
   the project's choice, and a status FastAPI does not auto-declare. Checking it beats leaving it to
   the foreign key, which surfaces as a 500 from an `IntegrityError`.
