@@ -113,50 +113,36 @@ analytics queries would outgrow its sweet spot).
 lint and format (replaces multiple tools), Pyright for type checking. All are fast, well-maintained,
 and LLM-friendly.
 
-**Argon2id via argon2-cffi.** OWASP's first choice for storing new passwords, and argon2-cffi is the
-reference binding rather than a wrapper over one. Its parameters are set explicitly for the hardware
-in `docs/infrastructure.md` rather than taken as shipped, because the defaults assume a machine we
-do not have: Argon2's memory cost is allocated per concurrent hash and routes that touch the
-database run on a thread pool, so the per-hash figure multiplies, and a single core cannot use more
-than one of Argon2's parallel lanes. Bounding how many hashes run at once is what keeps the
-recommended memory cost affordable inside the api container's memory limit, and the arithmetic is
-recorded in `security.py` so that whoever changes that limit knows which figures to redo.
-Alternatives considered: `pwdlib[argon2]` (what FastAPI's docs now use, but a wrapper whose value is
-migrating between algorithms we have no plan to migrate between, and pre-1.0 -- the same objection
-this doc makes to SQLModel); `bcrypt` (silently truncates at 72 bytes, and no memory-hardness);
-stdlib `hashlib.scrypt` (zero dependencies, at the cost of hand-writing salt generation, encoding
-and constant-time comparison); `passlib` (unmaintained since 2020).
+**Argon2id via argon2-cffi.** OWASP's first choice for new password storage; argon2-cffi is the
+reference binding, not a wrapper. Parameters are set explicitly for the hardware in
+`docs/infrastructure.md` rather than taken as shipped: Argon2's memory cost is allocated per
+concurrent hash, and the api container's memory limit bounds how many can run at once. The
+arithmetic is recorded in `security.py` so that whoever changes that limit knows which figures to
+redo. Alternatives considered: `pwdlib[argon2]` (a wrapper whose value is algorithm migration we
+don't plan, and pre-1.0); `bcrypt` (silently truncates at 72 bytes, no memory-hardness);
+`hashlib.scrypt` (zero deps, but hand-rolled salt/encoding/comparison); `passlib` (unmaintained
+since 2020).
 
 **Opaque session tokens over JWTs.** A login mints a random 256-bit token, stores its SHA-256 in a
-`coach_sessions` row and sets the token in an HttpOnly, SameSite=Lax cookie, `__Host-` prefixed so
-that no sibling name under the apex we deploy under can shadow it; deleting the row is a complete
-revocation. The offline-first requirement is what decides this: capture must survive a whole match
-with no connection, so the credential has to be long-lived — it is renewed on use from the halfway
-mark of its life, so only abandoned logins expire — and a long-lived credential is only defensible
-when the server can end it early. HttpOnly keeps the token where XSS cannot reach, and Caddy serves
-the SPA and the API from one origin, so no CORS or cross-site cookie design arises. The cost is a
-table and one indexed lookup per authenticated request. Alternatives considered: JWT bearer tokens
-(FastAPI's documented path and stateless, but revocation then needs a denylist — the sessions table
-wearing another name — and the SPA would have to hold the token somewhere JavaScript can read, which
-is exactly where XSS shops).
+`coach_sessions` row, and sets the token in an HttpOnly, SameSite=Lax, `__Host-`-prefixed cookie;
+deleting the row is complete revocation. The offline-first requirement decides this: the credential
+must be long-lived (renewed on use from its half-life, so only abandoned logins expire), and a
+long-lived credential is only defensible when the server can end it early. Caddy serves the SPA and
+API from one origin, so no CORS or cross-site cookie design arises. Alternatives considered: JWT
+bearer tokens (stateless, but revocation needs a denylist — the sessions table wearing another name
+— and the SPA must hold the token where JavaScript, and therefore XSS, can read it).
 
-**Hand-rolled in-process rate limiting.** A token bucket per key (`rate_limit.py`) bounds the
-arrival rate on endpoints that spend real work on unauthenticated requests — sign-up's Argon2
-hashing and login's password verification. It lives in the app rather than the proxy because the
-limit must key on things only the app sees — an unbounded login is an online password-guessing
-oracle per account, so its tightest tier is a budget of wrong guesses keyed on the submitted email,
-charged only once a verification has failed so that the bound cannot be turned into a lockout on the
-account it protects — and because a 429 declared in the OpenAPI spec is a response the generated
-client can type and the test suite can exercise. The counters are process memory: there is a single
-api container, so no second process needs to see them, and a deploy resetting them is harmless.
-Behind Cloudflare the client address the app sees is an edge address, so per-address limiting is
-fairness rather than a hard bound; a shared bucket per endpoint provides the bound itself.
-Alternatives considered: slowapi (pre-1.0 — the same objection this doc makes to SQLModel — for what
-is a few dozen lines of stdlib); Redis or Postgres counters (a new stateful service, or a write on
-the hot path of exactly the flood being shed, to solve a multi-process problem we do not have);
-Caddy's rate_limit module (not in the stock Caddy build, and a proxy cannot key on accounts);
-Cloudflare rate-limiting rules (remain available upstream if flood pressure ever outgrows the app,
-but the same blindness to accounts, and invisible to tests).
+**Hand-rolled in-process rate limiting.** Token buckets per key (`rate_limit.py`) bound the arrival
+rate on sign-up and login — endpoints that spend real work on unauthenticated input. The limit lives
+in the app because it must key on things only the app sees: the tightest tier is a wrong-guess
+budget keyed on the submitted email, charged only after a failed verification so the bound can't
+become a lockout. A 429 declared in the OpenAPI spec is a response the generated client can type and
+the test suite can exercise. Counters are process memory (single container, deploy-reset is
+harmless). Behind Cloudflare, per-address limiting is fairness; a shared per-endpoint bucket
+provides the hard bound. Alternatives considered: slowapi (pre-1.0, for a few dozen lines of
+stdlib); Redis/Postgres counters (a stateful service to solve a multi-process problem we don't
+have); Caddy's rate_limit module (not in stock Caddy, proxy can't key on accounts); Cloudflare
+rate-limiting rules (can't key on accounts either, invisible to tests).
 
 ## Infrastructure
 
