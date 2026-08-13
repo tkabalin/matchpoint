@@ -558,6 +558,31 @@ export type ResetPasswordResponses = {
 
 export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
 
+export type RevokeOtherSessionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/sessions';
+};
+
+export type RevokeOtherSessionsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+};
+
+export type RevokeOtherSessionsError = RevokeOtherSessionsErrors[keyof RevokeOtherSessionsErrors];
+
+export type RevokeOtherSessionsResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type RevokeOtherSessionsResponse = RevokeOtherSessionsResponses[keyof RevokeOtherSessionsResponses];
+
 export type VerifyOtpData = {
     body: VerifyOtpRequestWritable;
     path?: never;

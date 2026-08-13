@@ -997,6 +997,31 @@
         ]
       }
     },
+    "/auth/sessions": {
+      "delete": {
+        "description": "Sign out every other client holding a session for this coach.\n\nThe calling device stays signed in, on a session issued here rather than the one it\narrived with. A coach revoking after a borrowed laptop or a lost phone does so from\nthe device in their hand, and dropping that one mid-action would be the wrong\nsurprise.",
+        "operationId": "revoke_other_sessions",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          }
+        },
+        "summary": "Revoke Other Sessions",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/auth/verify-otp": {
       "post": {
         "operationId": "verify_otp",

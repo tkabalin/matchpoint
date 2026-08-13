@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
+import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -70,6 +70,18 @@ export const resetPassword = <ThrowOnError extends boolean = false>(options: Opt
         ...options.headers
     }
 });
+
+/**
+ * Revoke Other Sessions
+ *
+ * Sign out every other client holding a session for this coach.
+ *
+ * The calling device stays signed in, on a session issued here rather than the one it
+ * arrived with. A coach revoking after a borrowed laptop or a lost phone does so from
+ * the device in their hand, and dropping that one mid-action would be the wrong
+ * surprise.
+ */
+export const revokeOtherSessions = <ThrowOnError extends boolean = false>(options?: Options<RevokeOtherSessionsData, ThrowOnError>): RequestResult<RevokeOtherSessionsResponses, RevokeOtherSessionsErrors, ThrowOnError> => (options?.client ?? client).delete<RevokeOtherSessionsResponses, RevokeOtherSessionsErrors, ThrowOnError>({ url: '/auth/sessions', ...options });
 
 /**
  * Verify Otp

@@ -510,6 +510,102 @@ def test_a_rejected_login_does_not_echo_the_password(client: TestClient) -> None
     assert "hunter2" not in response.text
 
 
+# --- Revoking other sessions: DELETE /auth/sessions ---
+
+
+def _revoke(client: TestClient) -> httpx2.Response:
+    """Revoke, leaving the token the route issued as the client's only session cookie.
+
+    The jar would otherwise hold two of that name, sign_in's hand-set one and the one the
+    route sends, which differ by domain and so make a read of either ambiguous.
+    """
+    response = client.delete("/auth/sessions")
+    if SESSION_COOKIE in response.cookies:
+        client.cookies.clear()
+        client.cookies.set(SESSION_COOKIE, response.cookies[SESSION_COOKIE])
+    return response
+
+
+def test_revoking_ends_the_coach_s_other_sessions(client: TestClient, db_session: Session) -> None:
+    """The borrowed-laptop case: every other login the coach holds stops working, and
+    the device asking stays signed in. Another coach's sessions are not this coach's to
+    touch."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    other_device_token = client.cookies[SESSION_COOKIE]
+    client.cookies.clear()
+    sign_in(client, db_session, coach)
+    bystander = make_coach_session(db_session)
+    db_session.commit()
+
+    response = _revoke(client)
+
+    assert response.status_code == 204
+    assert client.get("/coaches/me").status_code == 200
+    remaining = db_session.scalars(select(CoachSession)).all()
+    assert {row.token_hash for row in remaining} == {
+        hash_token(client.cookies[SESSION_COOKIE]),
+        bystander.token_hash,
+    }
+    client.cookies.set(SESSION_COOKIE, other_device_token)
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_the_token_the_revocation_was_made_with_stops_working(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the presented session is not spared: a thief holding a copy of this cookie
+    authenticates against the same row, so it is the coach's own device only by
+    assumption. The caller is handed a token no such copy matches."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    presented = client.cookies[SESSION_COOKIE]
+
+    assert _revoke(client).status_code == 204
+
+    assert client.cookies[SESSION_COOKIE] != presented
+    client.cookies.set(SESSION_COOKIE, presented)
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_a_revocation_from_a_session_due_for_renewal_hands_back_the_new_token(
+    client: TestClient, db_session: Session
+) -> None:
+    """The issued token and current_coach's renewal are sent through one channel, so a
+    session close enough to expiry to be renewed must not leave the browser holding the
+    renewed old cookie instead of this one."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach, expires_at=datetime.now(UTC) + timedelta(days=1))
+    presented = client.cookies[SESSION_COOKIE]
+
+    assert _revoke(client).status_code == 204
+
+    assert client.cookies[SESSION_COOKIE] != presented
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_revoking_with_nothing_else_to_end_is_still_a_204(
+    client: TestClient, db_session: Session
+) -> None:
+    """A coach signed in on one device only is already in the state asked for, so the
+    request succeeds and leaves them signed in on that device."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+
+    response = _revoke(client)
+
+    assert response.status_code == 204
+    remaining = db_session.scalars(select(CoachSession)).one()
+    assert remaining.coach_id == coach.id
+    assert remaining.token_hash == hash_token(client.cookies[SESSION_COOKIE])
+
+
+def test_revoking_needs_a_session_of_its_own(client: TestClient) -> None:
+    """There is no way to revoke sessions without holding one: the presented cookie is
+    the authorisation, and the session issued in its place goes to whoever sent it."""
+    assert client.delete("/auth/sessions").status_code == 401
+
+
 # --- Sign-up email verification: /auth/request-otp and /auth/verify-otp ---
 
 PENDING_EMAIL = "new@example.com"

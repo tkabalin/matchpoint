@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Forgot Password
@@ -81,6 +81,30 @@ export const resetPasswordMutation = (options?: Partial<Options<ResetPasswordDat
     const mutationOptions: UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await resetPassword({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Revoke Other Sessions
+ *
+ * Sign out every other client holding a session for this coach.
+ *
+ * The calling device stays signed in, on a session issued here rather than the one it
+ * arrived with. A coach revoking after a borrowed laptop or a lost phone does so from
+ * the device in their hand, and dropping that one mid-action would be the wrong
+ * surprise.
+ */
+export const revokeOtherSessionsMutation = (options?: Partial<Options<RevokeOtherSessionsData>>): UseMutationOptions<RevokeOtherSessionsResponse, RevokeOtherSessionsError, Options<RevokeOtherSessionsData>> => {
+    const mutationOptions: UseMutationOptions<RevokeOtherSessionsResponse, RevokeOtherSessionsError, Options<RevokeOtherSessionsData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await revokeOtherSessions({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

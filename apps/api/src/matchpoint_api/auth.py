@@ -17,6 +17,7 @@ from a single origin, so SameSite=Lax costs nothing and no cross-origin cookie d
 
 import hashlib
 import secrets
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
@@ -179,6 +180,19 @@ class SessionRenewalMiddleware(BaseHTTPMiddleware):
         if token is not None:
             set_session_cookie(response, token)
         return response
+
+
+def revoke_sessions(db: Session, coach_id: uuid.UUID) -> None:
+    """Delete every session this coach holds.
+
+    All of them, never all-but-the-caller's: a stolen cookie is a copy of the token it
+    was taken from, so a spared row is the coach's device only by assumption. A caller
+    that must stay signed in issues itself a fresh session instead.
+
+    No commit: a revocation rides with whatever prompted it (a new password hash, a
+    consumed reset row), and those have to land together or not at all.
+    """
+    db.execute(delete(CoachSession).where(CoachSession.coach_id == coach_id))
 
 
 def _unauthenticated() -> HTTPException:

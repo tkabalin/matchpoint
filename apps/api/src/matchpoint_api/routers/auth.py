@@ -13,10 +13,12 @@ from matchpoint_api.auth import (
     SESSION_COOKIE,
     SESSION_LIFETIME,
     VERIFICATION_LIFETIME,
+    CurrentCoach,
     hash_otp,
     hash_token,
     new_otp,
     new_session_token,
+    revoke_sessions,
     set_session_cookie,
     set_verification_cookie,
 )
@@ -163,6 +165,43 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
         secure=settings.session_cookie_secure,
         samesite="lax",
     )
+
+
+# 204 whether or not this coach had other sessions, for logout's reason: the request
+# asks for a state, and a coach signed in nowhere else is already in it. The 401 is
+# declared per-route, with a model for ErrorDetail's reason.
+@router.delete(
+    "/sessions",
+    status_code=204,
+    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+)
+def revoke_other_sessions(coach: CurrentCoach, request: Request, db: DbSession) -> None:
+    """Sign out every other client holding a session for this coach.
+
+    The calling device stays signed in, on a session issued here rather than the one it
+    arrived with. A coach revoking after a borrowed laptop or a lost phone does so from
+    the device in their hand, and dropping that one mid-action would be the wrong
+    surprise.
+    """
+    # The presented session goes with the rest, rather than being spared by its hash: a
+    # thief holding a copy of this cookie authenticates against that same row, and it is
+    # exactly their access this route exists to end.
+    revoke_sessions(db, coach.id)
+    # So the device that asked keeps working, holding a token no copy of the old one
+    # matches.
+    token = new_session_token()
+    db.add(
+        CoachSession(
+            coach_id=coach.id,
+            token_hash=hash_token(token),
+            expires_at=datetime.now(UTC) + SESSION_LIFETIME,
+        )
+    )
+    db.commit()
+    # Sent by the renewal middleware, for the reason its docstring gives. Writing where
+    # current_coach's renewal writes is what keeps the two from both setting the cookie:
+    # this runs after that dependency, so the token the browser is handed is this one.
+    request.state.renewed_session_token = token
 
 
 # Sign-up email verification (#43, #35): request-otp emails a code, verify-otp trades
@@ -548,5 +587,5 @@ def reset_password(data: ResetPasswordRequest, db: DbSession) -> None:
     # Every live session dies with the old password. The point of a reset is that
     # someone else may hold the old credential — and if they are signed in with it,
     # a reset that left those sessions standing would change nothing.
-    db.execute(delete(CoachSession).where(CoachSession.coach_id == coach.id))
+    revoke_sessions(db, coach.id)
     db.commit()
