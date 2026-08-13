@@ -290,6 +290,26 @@ def test_login_attempts_beyond_the_account_burst_are_refused(
     assert int(response.headers["Retry-After"]) > 6
 
 
+def test_the_login_429_answers_a_known_and_an_unknown_address_alike(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The limit's half of the enumeration promise (docs/security.md): the account
+    bucket is keyed and charged the same whether or not a row lives at the address,
+    so the refusal — status, body and quoted wait — cannot say which drained it."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    _stub_out_verification(monkeypatch)
+    for email in (SIGN_UP["email"], "ghost@example.com"):
+        for _ in range(5):
+            assert client.post("/auth/login", json=LOGIN | {"email": email}).status_code == 401
+
+    known = client.post("/auth/login", json=LOGIN)
+    unknown = client.post("/auth/login", json=LOGIN | {"email": "ghost@example.com"})
+
+    assert known.status_code == unknown.status_code == 429
+    assert known.json() == unknown.json()
+    assert abs(int(known.headers["Retry-After"]) - int(unknown.headers["Retry-After"])) <= 1
+
+
 def test_a_flooded_account_does_not_lock_out_the_rest(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -710,6 +730,27 @@ def test_a_fourth_code_for_one_address_is_refused(client: TestClient) -> None:
     assert len(recorder.sent) == 3
 
 
+def test_a_registered_address_meets_the_same_429_as_a_fresh_one(
+    client: TestClient, db_session: Session
+) -> None:
+    """The per-email charge lands before the 409 check, so three open answers cost
+    what three codes cost and the fourth refusal is one refusal — status, body and
+    quoted wait. Charged after, the 409 would never meet the per-email tier at all."""
+    _sign_up(client, db_session)
+    _record_email(client)
+    for _ in range(3):
+        taken = client.post("/auth/request-otp", json={"email": SIGN_UP["email"]})
+        assert taken.status_code == 409
+        assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 202
+
+    registered = client.post("/auth/request-otp", json={"email": SIGN_UP["email"]})
+    fresh = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
+
+    assert registered.status_code == fresh.status_code == 429
+    assert registered.json() == fresh.json()
+    assert abs(int(registered.headers["Retry-After"]) - int(fresh.headers["Retry-After"])) <= 1
+
+
 def test_the_code_budget_folds_case(client: TestClient) -> None:
     _record_email(client)
     for email in ("new@example.com", "NEW@example.com", "New@Example.COM"):
@@ -1066,6 +1107,28 @@ def test_a_fourth_code_for_one_account_is_refused(client: TestClient, db_session
     assert response.json() == {"detail": "Too many requests"}
     assert int(response.headers["Retry-After"]) > 60
     assert len(recorder.sent) == 3
+
+
+def test_the_forgot_password_429_answers_a_known_and_an_unknown_address_alike(
+    client: TestClient, db_session: Session
+) -> None:
+    """A uniform 202 would mean little if the meter behind it discriminated: both
+    addresses spend the same per-email budget, so the refusal is as uninformative as
+    the answer it guards."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    _record_email(client)
+    for _ in range(3):
+        body = {"email": SIGN_UP["email"]}
+        assert client.post("/auth/forgot-password", json=body).status_code == 202
+        ghost = client.post("/auth/forgot-password", json={"email": "ghost@example.com"})
+        assert ghost.status_code == 202
+
+    known = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+    unknown = client.post("/auth/forgot-password", json={"email": "ghost@example.com"})
+
+    assert known.status_code == unknown.status_code == 429
+    assert known.json() == unknown.json()
+    assert abs(int(known.headers["Retry-After"]) - int(unknown.headers["Retry-After"])) <= 1
 
 
 def test_forgot_password_cycling_addresses_meets_the_address_burst(client: TestClient) -> None:
