@@ -58,6 +58,13 @@ services:
       # container that serves the tag just deployed from one still serving the
       # last. Without this the API reports "dev" and that check can never pass.
       MATCHPOINT_COMMIT: ${IMAGE_TAG:?}
+      # The API's default sender writes the message to the log, which deployed
+      # is a sign-up flow that looks alive and verifies nobody — so production
+      # names the real one explicitly. :? refuses to start on an unset or empty
+      # key, which is the right failure: an API up but unable to mail cannot
+      # create an account at all.
+      MATCHPOINT_EMAIL_SENDER: resend
+      MATCHPOINT_RESEND_API_KEY: ${RESEND_API_KEY:?}
     depends_on:
       postgres:
         condition: service_healthy
