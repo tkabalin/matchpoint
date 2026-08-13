@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { archivePlayer, createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
+import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Forgot Password
@@ -365,6 +365,40 @@ export const updatePlayerMutation = (options?: Partial<Options<UpdatePlayerData>
     const mutationOptions: UseMutationOptions<UpdatePlayerResponse, UpdatePlayerError, Options<UpdatePlayerData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await updatePlayer({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Archive Player
+ */
+export const archivePlayerMutation = (options?: Partial<Options<ArchivePlayerData>>): UseMutationOptions<ArchivePlayerResponse, ArchivePlayerError, Options<ArchivePlayerData>> => {
+    const mutationOptions: UseMutationOptions<ArchivePlayerResponse, ArchivePlayerError, Options<ArchivePlayerData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await archivePlayer({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Restore Player
+ */
+export const restorePlayerMutation = (options?: Partial<Options<RestorePlayerData>>): UseMutationOptions<RestorePlayerResponse, RestorePlayerError, Options<RestorePlayerData>> => {
+    const mutationOptions: UseMutationOptions<RestorePlayerResponse, RestorePlayerError, Options<RestorePlayerData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await restorePlayer({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

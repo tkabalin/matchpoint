@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Player
+from matchpoint_api.models import Coach, Player
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import PlayerCreate, PlayerRead, PlayerUpdate
 
@@ -24,6 +25,16 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+def owned_player(player_id: uuid.UUID, db: Session, coach: Coach) -> Player:
+    """The coach's player, or the 404 that keeps ids unenumerable across coaches."""
+    player = db.get(Player, player_id)
+    # Another coach's player gets the 404 an unknown id gets, not a 403: a 403 would
+    # confirm the id exists.
+    if player is None or player.coach_id != coach.id:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return player
+
+
 @router.post("", status_code=201, response_model=PlayerRead)
 def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Player:
     # PlayerCreate carries exactly the client-settable columns, which is what makes
@@ -36,25 +47,45 @@ def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Pla
 
 
 @router.get("", response_model=list[PlayerRead])
-def list_players(db: DbSession, coach: CurrentCoach) -> list[Player]:
+def list_players(
+    db: DbSession, coach: CurrentCoach, include_archived: bool = False
+) -> list[Player]:
     # Archived players are hidden from the roster but still readable by id, so a
-    # stored link or a match that references one does not break.
-    return list(
-        db.scalars(
-            select(Player)
-            .where(Player.coach_id == coach.id, Player.archived_at.is_(None))
-            .order_by(Player.last_name, Player.first_name)
-        )
-    )
+    # stored link or a match that references one does not break. The flag is what the
+    # restore screen lists from: without it they are reachable only by remembered id.
+    statement = select(Player).where(Player.coach_id == coach.id)
+    if not include_archived:
+        statement = statement.where(Player.archived_at.is_(None))
+    return list(db.scalars(statement.order_by(Player.last_name, Player.first_name)))
 
 
 @router.get("/{player_id}", response_model=PlayerRead)
 def get_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    player = db.get(Player, player_id)
-    # Another coach's player gets the 404 an unknown id gets, not a 403: a 403 would
-    # confirm the id exists, and ids must stay unenumerable across coaches.
-    if player is None or player.coach_id != coach.id:
-        raise HTTPException(status_code=404, detail="Player not found")
+    return owned_player(player_id, db, coach)
+
+
+@router.post("/{player_id}/archive", response_model=PlayerRead)
+def archive_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
+    player = owned_player(player_id, db, coach)
+    # A second archive keeps the first timestamp: the offline client retries queued
+    # requests, and a retry is not a second departure from the roster.
+    if player.archived_at is None:
+        # Python's clock, as in the auth routes' computed expiries. clock_timestamp()
+        # belongs to the column defaults, where rows written in one transaction each
+        # need a value of their own.
+        player.archived_at = datetime.now(UTC)
+        db.commit()
+    return player
+
+
+@router.post("/{player_id}/restore", response_model=PlayerRead)
+def restore_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
+    player = owned_player(player_id, db, coach)
+    # Restoring an active player is a no-op rather than a 409, for the reason archiving
+    # twice is: a retried request must neither error nor move the row.
+    if player.archived_at is not None:
+        player.archived_at = None
+        db.commit()
     return player
 
 

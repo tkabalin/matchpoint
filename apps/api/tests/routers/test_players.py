@@ -263,11 +263,12 @@ def test_list_players_returns_all_sorted_by_last_then_first_name(
     ]
 
 
+@pytest.mark.parametrize("params", [{}, {"include_archived": "false"}])
 def test_list_players_omits_archived_players(
-    client: TestClient, db_session: Session, coach: Coach
+    client: TestClient, db_session: Session, coach: Coach, params: dict[str, str]
 ) -> None:
-    """Archiving is a soft delete, so the roster has to filter on it. Set directly
-    here — no endpoint writes archived_at yet."""
+    """Archiving is a soft delete, so the roster filters on it: by default, and when
+    exclusion is asked for explicitly."""
     make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
     make_player(
         db_session,
@@ -278,7 +279,48 @@ def test_list_players_omits_archived_players(
     )
     db_session.commit()
 
-    response = client.get("/players")
+    response = client.get("/players", params=params)
+
+    assert response.status_code == 200
+    assert [p["last_name"] for p in response.json()] == ["Swiatek"]
+
+
+def test_list_players_includes_archived_when_asked(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """What a roster screen offering restore lists from. The archived player sorts
+    first, so a filter still being applied shows up as a missing name, not a reorder."""
+    make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
+    make_player(
+        db_session,
+        first_name="Ash",
+        last_name="Barty",
+        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
+        coach_id=coach.id,
+    )
+    db_session.commit()
+
+    response = client.get("/players", params={"include_archived": "true"})
+
+    assert response.status_code == 200
+    assert [p["last_name"] for p in response.json()] == ["Barty", "Swiatek"]
+
+
+def test_list_players_including_archived_stays_within_the_caller(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The flag widens which of the caller's players come back, never whose."""
+    make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
+    # No coach_id, so the factory mints the other coach itself.
+    make_player(
+        db_session,
+        first_name="Coco",
+        last_name="Gauff",
+        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
+    )
+    db_session.commit()
+
+    response = client.get("/players", params={"include_archived": "true"})
 
     assert response.status_code == 200
     assert [p["last_name"] for p in response.json()] == ["Swiatek"]
@@ -510,6 +552,104 @@ def test_update_player_unknown_id_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_archive_player_records_when_it_happened(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(f"/players/{player.id}/archive")
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is not None
+    assert player.archived_at is not None
+
+
+def test_archive_player_leaves_the_roster_not_the_lookup(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The whole point of a soft delete: off the active roster, still resolvable by the
+    id a stored link or a recorded match holds."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    client.post(f"/players/{player.id}/archive")
+
+    assert client.get("/players").json() == []
+    assert client.get(f"/players/{player.id}").status_code == 200
+
+
+def test_archiving_twice_keeps_the_first_timestamp(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The offline client retries queued requests, so a repeat must answer 200 and
+    leave the row where it was — the timestamp records one departure, not the retry."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    first = client.post(f"/players/{player.id}/archive")
+
+    second = client.post(f"/players/{player.id}/archive")
+
+    assert second.status_code == 200
+    assert second.json()["archived_at"] == first.json()["archived_at"]
+
+
+def test_restore_player_returns_it_to_the_roster(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(
+        db_session,
+        first_name="Ash",
+        last_name="Barty",
+        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
+        coach_id=coach.id,
+    )
+    db_session.commit()
+
+    response = client.post(f"/players/{player.id}/restore")
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is None
+    assert [p["last_name"] for p in client.get("/players").json()] == ["Barty"]
+
+
+def test_restoring_an_active_player_is_a_no_op(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Idempotent for archiving's reason, and not a 409: a retry finding the row
+    already as it wants it has nothing to complain about."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(f"/players/{player.id}/restore")
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is None
+
+
+@pytest.mark.parametrize("action", ["archive", "restore"])
+def test_archive_and_restore_of_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach, action: str
+) -> None:
+    """The write across the boundary: the same 404 the read gets, and the row untouched,
+    since a 403 would confirm the id exists."""
+    other_player = make_player(db_session, archived_at=datetime(2022, 3, 23, tzinfo=UTC))
+    db_session.commit()
+
+    response = client.post(f"/players/{other_player.id}/{action}")
+
+    assert response.status_code == 404
+    assert other_player.archived_at == datetime(2022, 3, 23, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("action", ["archive", "restore"])
+@pytest.mark.usefixtures("coach")
+def test_archive_and_restore_of_an_unknown_player_is_404(client: TestClient, action: str) -> None:
+    response = client.post(f"/players/{uuid.uuid4()}/{action}")
+
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -517,6 +657,8 @@ def test_update_player_unknown_id_is_404(client: TestClient) -> None:
         ("get", "/players"),
         ("get", f"/players/{uuid.UUID(int=0)}"),
         ("patch", f"/players/{uuid.UUID(int=0)}"),
+        ("post", f"/players/{uuid.UUID(int=0)}/archive"),
+        ("post", f"/players/{uuid.UUID(int=0)}/restore"),
     ],
 )
 def test_player_routes_require_a_session(client: TestClient, method: str, path: str) -> None:

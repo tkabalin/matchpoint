@@ -861,7 +861,12 @@ export type UpdateMatchResponse = UpdateMatchResponses[keyof UpdateMatchResponse
 export type ListPlayersData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Include Archived
+         */
+        include_archived?: boolean;
+    };
     url: '/players';
 };
 
@@ -870,6 +875,10 @@ export type ListPlayersErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
 };
 
 export type ListPlayersError = ListPlayersErrors[keyof ListPlayersErrors];
@@ -981,3 +990,71 @@ export type UpdatePlayerResponses = {
 };
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
+
+export type ArchivePlayerData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/archive';
+};
+
+export type ArchivePlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ArchivePlayerError = ArchivePlayerErrors[keyof ArchivePlayerErrors];
+
+export type ArchivePlayerResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type ArchivePlayerResponse = ArchivePlayerResponses[keyof ArchivePlayerResponses];
+
+export type RestorePlayerData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/restore';
+};
+
+export type RestorePlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestorePlayerError = RestorePlayerErrors[keyof RestorePlayerErrors];
+
+export type RestorePlayerResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type RestorePlayerResponse = RestorePlayerResponses[keyof RestorePlayerResponses];

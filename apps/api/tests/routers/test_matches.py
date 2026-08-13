@@ -350,6 +350,21 @@ def test_list_matches_omits_another_coachs_matches(
     assert [m["id"] for m in response.json()] == [str(mine.id)]
 
 
+def test_matches_of_an_archived_player_stay_listed_and_readable(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Archiving clears a player off the roster, not their matches off the record: both
+    match routes scope by owner and never by player state."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+
+    assert client.post(f"/players/{player.id}/archive").status_code == 200
+
+    assert [m["id"] for m in client.get("/matches").json()] == [str(match.id)]
+    assert client.get(f"/matches/{match.id}").status_code == 200
+
+
 def test_list_matches_filtered_by_player(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
