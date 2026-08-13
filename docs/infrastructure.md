@@ -17,19 +17,16 @@ rationale behind each choice.
 | Domain   | `matchpoint.thomaskabalin.com` |
 | Backups  | Daily snapshots at 02:00       |
 
-**RackZAR** was chosen for low latency, offering a Cape Town–based data centre, alongside good
-pricing, sufficient specs for the project's needs, and a solid uptime track record with a 99.9%
-guarantee and backup power.
+**RackZAR** was chosen for its Cape Town data centre (low latency), reasonable pricing, and a 99.9%
+uptime guarantee with backup power.
 
 **Ubuntu 24 LTS** was chosen over 26 LTS on stability grounds: it has been around for longer and is
 therefore less likely to run into issues than a newer release.
 
-**Backup timing**: daily snapshot backups are scheduled for 02:00, a period of low traffic and low
-development activity, to minimise any impact on performance or in-progress work.
+**Backup timing**: daily snapshot backups run at 02:00, outside peak traffic and development hours.
 
-**Domain**: `thomaskabalin.com` is a personal domain, already owned, requiring no additional
-registration. MatchPoint is hosted on the `matchpoint` subdomain of this domain, avoiding the need
-to register or manage a separate domain.
+**Domain**: `thomaskabalin.com` is a personal domain, already owned. MatchPoint is on its
+`matchpoint` subdomain.
 
 ## Access & Security
 
@@ -56,15 +53,13 @@ root, in order to:
 
 ### Terminal access
 
-**Terminus** is used for urgent or emergency SSH access to the server (e.g. from mobile, when away
-from the primary development machine), ensuring the server can be reached and managed promptly if an
-issue arises outside of normal working hours.
+**Terminus** is for urgent SSH from mobile when away from the development machine, so the server is
+reachable outside working hours.
 
 ## CI/CD Runner
 
-The GitLab self-hosted runner is **not** hosted on the production VPS. It runs instead on
-**ThinkTank**, a homelab machine, which already runs Docker alongside a number of other self-hosted
-services. Running the runner there rather than on the VPS is on the basis that:
+The GitLab self-hosted runner is **not** on the production VPS. It runs on **ThinkTank**, a homelab
+machine that already runs Docker and other services. It's there instead of on the VPS because:
 
 - Runner downtime is acceptable, as it only affects CI/CD pipeline execution, not the live
   application
@@ -88,8 +83,7 @@ so it is recorded with the runner's own documentation rather than duplicated her
 - **Origin IP hiding**: with the proxy enabled, only Cloudflare's IPs are publicly visible, not the
   VPS's actual IP. This reduces exposure to opportunistic scanning and exploit bots probing the box
   directly, which is a genuine risk for cheap South African VPS IP ranges.
-- **Basic DDoS absorption**: provided free and automatically, with no additional configuration
-  required.
+- **Basic DDoS absorption**: free and automatic, no configuration needed.
 
 Origin IP hiding only holds if the origin actually refuses direct connections — otherwise anyone who
 finds the real IP (DNS history, a scan of the hosting provider's ranges, a misconfigured record)
