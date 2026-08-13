@@ -417,8 +417,9 @@ def test_me_with_a_token_no_login_minted_is_a_401(client: TestClient, db_session
 def test_me_with_an_expired_session_is_a_401_and_discards_it(
     client: TestClient, db_session: Session
 ) -> None:
-    """Being presented is the one moment an expired row is in hand, so rejection is
-    also when it is deleted; the rows never presented again are left to accumulate."""
+    """Being presented is the one moment a single expired row is in hand, so rejection
+    is also when it is deleted; the rows never presented again are caught by the
+    probabilistic sweep."""
     coach = make_coach(db_session)
     sign_in(client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(seconds=1))
 
@@ -505,6 +506,46 @@ def test_me_leaves_a_session_in_its_first_half_alone(
     assert client.get("/coaches/me").status_code == 200
 
     assert session_row.expires_at == expires_at
+
+
+def test_an_authenticated_request_may_sweep_all_expired_sessions(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Probabilistic GC: a fraction of authenticated requests sweep every expired
+    row from the table, catching the sessions no login ever presents again."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    other_coach = make_coach(db_session)
+    expired = make_coach_session(
+        db_session, coach_id=other_coach.id, expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+    live = make_coach_session(db_session, coach_id=other_coach.id)
+    db_session.commit()
+
+    monkeypatch.setattr("matchpoint_api.auth.secrets.randbelow", lambda _: 0)
+    assert client.get("/coaches/me").status_code == 200
+
+    assert db_session.get(CoachSession, expired.id) is None
+    assert db_session.get(CoachSession, live.id) is not None
+
+
+def test_a_missed_gc_roll_leaves_expired_sessions_alone(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When the roll misses, no sweep runs, so expired sessions from other coaches
+    survive until a future request's roll hits or the owning coach logs in."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    other_coach = make_coach(db_session)
+    expired = make_coach_session(
+        db_session, coach_id=other_coach.id, expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+    db_session.commit()
+
+    monkeypatch.setattr("matchpoint_api.auth.secrets.randbelow", lambda _: 1)
+    assert client.get("/coaches/me").status_code == 200
+
+    assert db_session.get(CoachSession, expired.id) is not None
 
 
 def test_me_never_returns_the_password_hash(client: TestClient, db_session: Session) -> None:

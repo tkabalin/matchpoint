@@ -45,6 +45,12 @@ SESSION_COOKIE = (
 # only decides when an *abandoned* login dies.
 SESSION_LIFETIME = timedelta(days=30)
 
+# One in this many authenticated requests sweeps every expired session from the
+# table. The pattern is PHP's session.gc_probability: probabilistic cleanup on
+# ordinary requests, so the table stays bounded without a cron job or a background
+# task. At club scale the table is small and the DELETE is trivially fast.
+SESSION_GC_DENOMINATOR = 50
+
 # The email-verification cookie: same conditional prefix, same reasons, distinct name
 # — it proves a different, lesser fact ("this browser answered a code sent to that
 # address") and must never be mistakable for a login.
@@ -210,8 +216,8 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
         # deleted here. By token_hash rather than through the row just loaded: a client
         # retrying a queued request can present one dead cookie twice at once, and the
         # second ORM delete would find its row already gone and warn about the rowcount.
-        # This only ever catches a login someone came back for; the rows nobody presents
-        # again are deliberately left to accumulate — no sweep runs.
+        # This only catches a login someone came back for; the probabilistic sweep
+        # below handles the rows nobody presents again.
         db.execute(delete(CoachSession).where(CoachSession.token_hash == token_hash))
         db.commit()
         raise _unauthenticated()
@@ -226,6 +232,12 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
         # expire on the original one and sign an active coach out. Left for the
         # middleware to send, for the reason its docstring gives.
         request.state.renewed_session_token = token
+    # Probabilistic GC: on a random fraction of requests, sweep every expired row.
+    # The per-request and per-login deletes handle sessions someone came back for;
+    # this catches the rest, namely coaches who never log in again.
+    if secrets.randbelow(SESSION_GC_DENOMINATOR) == 0:
+        db.execute(delete(CoachSession).where(CoachSession.expires_at <= now))
+        db.commit()
     return coach
 
 
