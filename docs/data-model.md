@@ -120,7 +120,10 @@ and a row missing any of them is not an account.
 **Deletion is soft where history depends on it.** A player with matches recorded against them cannot
 be removed without taking that history along, so `archived_at` takes them off the active roster
 while leaving them readable by id. Archiving stops at the roster: the matches recorded against a
-player stay listed and resolvable, since that history is what the soft delete exists to keep.
+player stay listed and resolvable, since that history is what the soft delete exists to keep. A
+match is deleted outright, because a match entered by mistake is cleared away before anything is
+recorded against it. A table that comes to reference matches declares no `ondelete` like every other
+foreign key here, so Postgres refuses to delete a match once point data hangs off it.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every

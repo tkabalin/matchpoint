@@ -9,6 +9,10 @@ paths:
   against them cannot be removed without taking the match history along, and analytics that compare
   a player across matches would lose the comparison. Don't add a hard-delete path; new tables that
   anything else references get the same treatment.
+- A match is the exception while nothing references it: one entered by mistake hard-deletes
+  outright. A points table's no-`ondelete` foreign key takes that away, and nothing catches the
+  `IntegrityError` it raises, so adding that table includes choosing the status the API answers a
+  refused delete with (`docs/data-model.md` records the policy).
 
 ## Ids Are Client-Assignable UUIDs
 
