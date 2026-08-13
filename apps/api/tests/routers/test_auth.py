@@ -3,6 +3,7 @@ import re
 from datetime import UTC, datetime, timedelta
 from typing import cast
 
+import httpx2
 import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
@@ -22,10 +23,17 @@ from matchpoint_api.auth import (
     new_session_token,
 )
 from matchpoint_api.mail import EmailSendError
-from matchpoint_api.models import Coach, CoachSession, EmailVerification
+from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password
-from tests.factories import make_coach, make_coach_session, make_email_verification, verify_email
+from tests.factories import (
+    make_coach,
+    make_coach_session,
+    make_email_verification,
+    make_password_reset,
+    sign_in,
+    verify_email,
+)
 
 SIGN_UP = {
     "email": "mike@example.com",
@@ -504,6 +512,18 @@ def _record_email(client: TestClient) -> RecordingEmailSender:
     return recorder
 
 
+class FailingEmailSender:
+    """RecordingEmailSender's counterpart for the 502 paths: every send fails the
+    way a provider refusal does."""
+
+    def send(self, *, to: str, subject: str, text: str) -> None:
+        raise EmailSendError("provider said no")
+
+
+def _fail_email(client: TestClient) -> None:
+    cast(FastAPI, client.app).state.email_sender = FailingEmailSender()
+
+
 def _code_in(body: str) -> str:
     match = re.search(r"\b\d{6}\b", body)
     assert match, f"no six-digit code in {body!r}"
@@ -542,11 +562,7 @@ def test_a_failed_send_answers_502(client: TestClient, db_session: Session) -> N
     would mean the successful path had to hold the transaction open across a network call.
     """
 
-    class FailingEmailSender:
-        def send(self, *, to: str, subject: str, text: str) -> None:
-            raise EmailSendError("provider said no")
-
-    cast(FastAPI, client.app).state.email_sender = FailingEmailSender()
+    _fail_email(client)
 
     response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
 
@@ -560,11 +576,7 @@ def test_a_failed_send_gives_the_address_its_code_budget_back(client: TestClient
     per-email tier holds three tokens, and a provider having a bad minute would spend all
     three on emails nobody received, then refuse the fourth attempt for five minutes."""
 
-    class FailingEmailSender:
-        def send(self, *, to: str, subject: str, text: str) -> None:
-            raise EmailSendError("provider said no")
-
-    cast(FastAPI, client.app).state.email_sender = FailingEmailSender()
+    _fail_email(client)
     for _ in range(3):
         assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 502
 
@@ -930,3 +942,346 @@ def test_the_flow_runs_on_the_default_logging_sender(
     response = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
 
     assert response.status_code == 200
+
+
+# --- Forgot password: /auth/forgot-password and /auth/reset-password ---
+
+RESET_PASSWORD = "a-brand-new-password"
+
+
+def _forgot(client: TestClient, email: str = SIGN_UP["email"]) -> str:
+    """Run the forgot step and hand back the code that was 'emailed'."""
+    recorder = _record_email(client)
+    assert client.post("/auth/forgot-password", json={"email": email}).status_code == 202
+    return _code_in(recorder.sent[-1][2])
+
+
+def _reset(client: TestClient, otp: str, **overrides: str) -> httpx2.Response:
+    body = {"email": SIGN_UP["email"], "otp": otp, "new_password": RESET_PASSWORD} | overrides
+    return client.post("/auth/reset-password", json=body)
+
+
+def test_forgetting_a_password_emails_a_code(client: TestClient, db_session: Session) -> None:
+    make_coach(db_session, email=SIGN_UP["email"])
+    recorder = _record_email(client)
+
+    response = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+
+    assert response.status_code == 202
+    [(to, subject, body)] = recorder.sent
+    assert to == SIGN_UP["email"]
+    assert "reset" in subject.lower()
+    assert _code_in(body)
+
+
+def test_an_unknown_address_answers_the_same_202_with_no_mail_and_no_row(
+    client: TestClient, db_session: Session
+) -> None:
+    """#47's policy for reset: whether an address holds an account is not this
+    endpoint's to answer. Unlike sign-up's 409 there is no form that needs it, so
+    status and body are one answer for both — only the mail differs."""
+    coach = make_coach(db_session, email=SIGN_UP["email"])
+    recorder = _record_email(client)
+
+    unknown = client.post("/auth/forgot-password", json={"email": "ghost@example.com"})
+    known = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+
+    assert unknown.status_code == known.status_code == 202
+    assert unknown.json() == known.json()
+    assert [to for to, _, _ in recorder.sent] == [SIGN_UP["email"]]
+    assert db_session.scalars(select(PasswordReset)).one().coach_id == coach.id
+
+
+def test_the_reset_code_is_stored_hashed_and_expiring(
+    client: TestClient, db_session: Session
+) -> None:
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    coach = db_session.scalars(select(Coach)).one()
+    row = db_session.scalars(select(PasswordReset)).one()
+    assert row.coach_id == coach.id
+    assert row.otp_hash == hash_otp(code)
+    assert code not in hash_otp(code)
+    assert row.attempts == 0
+    assert timedelta() < row.expires_at - datetime.now(UTC) <= OTP_LIFETIME
+
+
+def test_a_mixed_case_address_finds_its_account(client: TestClient, db_session: Session) -> None:
+    """Coach rows are stored lowercased, so only a folded lookup can find mike@ when
+    MIKE@ forgets a password — anything else would 202 and mail nobody."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    recorder = _record_email(client)
+
+    response = client.post("/auth/forgot-password", json={"email": "MIKE@Example.COM"})
+
+    assert response.status_code == 202
+    assert recorder.sent[-1][0] == SIGN_UP["email"]
+    assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 1
+
+
+def test_forgetting_again_replaces_the_code(client: TestClient, db_session: Session) -> None:
+    """One live code per account, always: a resend must replace the old code rather
+    than mint a second concurrently-valid one — request-otp's rule, upheld by the
+    same upsert-on-unique shape."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    first = _forgot(client)
+    second = _forgot(client)
+
+    assert db_session.scalars(select(PasswordReset)).one().otp_hash == hash_otp(second)
+
+    assert _reset(client, first).status_code == 400
+    assert _reset(client, second).status_code == 204
+
+
+def test_forgetting_sweeps_expired_rows_and_leaves_live_ones(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cleanup this table gets instead of a cron job, at request-otp's site for
+    request-otp's reason. Live rows are someone's pending reset and must survive."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    expired = make_password_reset(db_session, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    live = make_password_reset(db_session)
+    db_session.commit()
+
+    _forgot(client)
+
+    assert db_session.get(PasswordReset, expired.id) is None
+    assert db_session.get(PasswordReset, live.id) is not None
+
+
+def test_a_fourth_code_for_one_account_is_refused(client: TestClient, db_session: Session) -> None:
+    """The per-email tier, sized as request-otp's: five attempts per code bounds
+    nothing if codes can be minted without bound, and every message spends the same
+    provider quota and sender reputation."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    recorder = _record_email(client)
+    for _ in range(3):
+        body = {"email": SIGN_UP["email"]}
+        assert client.post("/auth/forgot-password", json=body).status_code == 202
+
+    response = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert int(response.headers["Retry-After"]) > 60
+    assert len(recorder.sent) == 3
+
+
+def test_forgot_password_cycling_addresses_meets_the_address_burst(client: TestClient) -> None:
+    """Unknown addresses cost nothing to 202, so only the arrival tiers keep a prober
+    from sweeping the address space for free."""
+    _record_email(client)
+    for n in range(10):
+        response = client.post("/auth/forgot-password", json={"email": f"ghost{n}@example.com"})
+        assert response.status_code == 202
+
+    refused = client.post("/auth/forgot-password", json={"email": "ghost10@example.com"})
+
+    assert refused.status_code == 429
+
+
+def test_forgot_password_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
+    """request-otp's reasoning: behind Cloudflare the per-address key is an edge
+    address an attacker can occupy many of, so only the shared bucket bounds what
+    gets mailed in total."""
+    _record_email(client)
+    from_elsewhere = TestClient(client.app, client=("203.0.113.1", 50000))
+    for n in range(10):
+        body = {"email": f"ghost-{n}@example.com"}
+        assert from_elsewhere.post("/auth/forgot-password", json=body).status_code == 202
+
+    latecomer = TestClient(client.app, client=("203.0.113.2", 50000))
+
+    response = latecomer.post("/auth/forgot-password", json={"email": "late@example.com"})
+    assert response.status_code == 429
+
+
+def test_a_failed_send_answers_502_and_keeps_the_row(
+    client: TestClient, db_session: Session
+) -> None:
+    """Inline send, request-otp's contract: a coach must not be sent to the code-entry
+    screen to wait for mail the provider never accepted. The row expires on its own,
+    and the retry the 502 asks for replaces it."""
+    make_coach(db_session, email=SIGN_UP["email"])
+
+    _fail_email(client)
+
+    response = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == SEND_FAILED
+    assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 1
+
+
+def test_a_failed_reset_send_gives_the_address_its_code_budget_back(
+    client: TestClient, db_session: Session
+) -> None:
+    """request-otp's refund, for the same tier: three provider failures must not spend
+    the budget the 502's "please try again" needs."""
+    make_coach(db_session, email=SIGN_UP["email"])
+
+    _fail_email(client)
+    for _ in range(3):
+        body = {"email": SIGN_UP["email"]}
+        assert client.post("/auth/forgot-password", json=body).status_code == 502
+
+    recorder = _record_email(client)
+    response = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
+
+    assert response.status_code == 202
+    assert len(recorder.sent) == 1
+
+
+def test_a_correct_code_resets_the_password(client: TestClient, db_session: Session) -> None:
+    """The whole point, proved through login: the old password stops working and the
+    new one signs in. No cookie rides on the 204 — a reset proves an inbox, not a
+    login, so the coach signs in with what they just chose."""
+    _sign_up(client, db_session)
+    code = _forgot(client)
+
+    response = _reset(client, code)
+
+    assert response.status_code == 204
+    assert "set-cookie" not in response.headers
+    old = client.post("/auth/login", json=LOGIN)
+    assert old.status_code == 401
+    new = client.post("/auth/login", json=LOGIN | {"password": RESET_PASSWORD})
+    assert new.status_code == 200
+
+
+def test_a_reset_revokes_every_live_session(client: TestClient, db_session: Session) -> None:
+    """Someone else holding the old credential may be signed in with it right now; a
+    reset that left those sessions standing would change nothing. Another coach's
+    sessions are not this reset's to touch."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    make_coach_session(db_session, coach_id=coach.id)
+    bystander = make_coach_session(db_session)
+    db_session.commit()
+    code = _forgot(client, email=coach.email)
+
+    response = _reset(client, code, email=coach.email)
+
+    assert response.status_code == 204
+    remaining = db_session.scalars(select(CoachSession)).all()
+    assert [row.id for row in remaining] == [bystander.id]
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_the_reset_row_is_consumed(client: TestClient, db_session: Session) -> None:
+    """Single-use: the code dies the instant it works, so a replay — the attacker's
+    move against a leaked inbox — wins nothing."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+    assert _reset(client, code).status_code == 204
+
+    replay = _reset(client, code)
+
+    assert replay.status_code == 400
+    assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
+
+
+def test_a_wrong_reset_code_is_refused_and_charged(client: TestClient, db_session: Session) -> None:
+    _sign_up(client, db_session)
+    code = _forgot(client)
+
+    response = _reset(client, _wrong_guess_for(code))
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Incorrect or expired code"}
+    # The charge outlives the refusal, and the password does not move.
+    assert db_session.scalars(select(PasswordReset)).one().attempts == 1
+    assert client.post("/auth/login", json=LOGIN).status_code == 200
+
+
+def test_an_unknown_address_answers_exactly_like_a_wrong_reset_code(
+    client: TestClient, db_session: Session
+) -> None:
+    """One 400 for every failure, verify-otp's line: wrong, expired, exhausted and
+    never-asked are one fact to the caller."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    unknown = _reset(client, code, email="ghost@example.com")
+    wrong = _reset(client, _wrong_guess_for(code))
+
+    assert unknown.status_code == wrong.status_code == 400
+    assert unknown.json() == wrong.json()
+
+
+def test_an_expired_reset_code_is_refused(client: TestClient, db_session: Session) -> None:
+    coach = make_coach(db_session, email=SIGN_UP["email"])
+    make_password_reset(
+        db_session,
+        coach_id=coach.id,
+        otp_hash=hash_otp("123456"),
+        expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    db_session.commit()
+
+    response = _reset(client, "123456")
+
+    assert response.status_code == 400
+
+
+def test_the_attempt_budget_kills_the_reset(client: TestClient, db_session: Session) -> None:
+    """The actual bound on guessing a code whose prize is the account itself: five
+    wrong answers and the row dies, so even the right code wins nothing after.
+    Counted in the database, where a deploy cannot refill it."""
+    _sign_up(client, db_session)
+    code = _forgot(client)
+    for _ in range(OTP_ATTEMPT_LIMIT):
+        assert _reset(client, _wrong_guess_for(code)).status_code == 400
+
+    assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
+    assert _reset(client, code).status_code == 400
+    assert client.post("/auth/login", json=LOGIN).status_code == 200
+
+
+def test_a_guess_short_of_the_budget_does_not_cost_the_reset(
+    client: TestClient, db_session: Session
+) -> None:
+    """The budget is five, not fewer: a coach who fat-fingers the code four times is
+    exactly who the cap must not lock out."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+    for _ in range(OTP_ATTEMPT_LIMIT - 1):
+        _reset(client, _wrong_guess_for(code))
+
+    assert _reset(client, code).status_code == 204
+
+
+def test_reset_folds_the_address_case(client: TestClient, db_session: Session) -> None:
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    response = _reset(client, code, email="MIKE@Example.COM")
+
+    assert response.status_code == 204
+
+
+def test_reset_guess_arrivals_beyond_the_address_burst_are_refused(client: TestClient) -> None:
+    """The second layer behind the attempt budget, verify-otp's shape: arrivals stay
+    bounded whether or not the address holds an account."""
+    for n in range(10):
+        response = _reset(client, "123456", email=f"ghost{n}@example.com")
+        assert response.status_code == 400
+
+    refused = _reset(client, "123456", email="ghost@example.com")
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_a_rejected_reset_echoes_neither_secret(client: TestClient) -> None:
+    """The 422 redaction for both fields at once: a bad email error reports the whole
+    body as its input, new password and code included."""
+    response = client.post(
+        "/auth/reset-password",
+        json={"email": "not-an-address", "otp": "123456", "new_password": RESET_PASSWORD},
+    )
+
+    assert response.status_code == 422
+    assert RESET_PASSWORD not in response.text
+    assert "123456" not in response.text

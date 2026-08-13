@@ -21,7 +21,14 @@ from matchpoint_api.auth import (
     hash_token,
     new_session_token,
 )
-from matchpoint_api.models import Coach, CoachSession, EmailVerification, Match, Player
+from matchpoint_api.models import (
+    Coach,
+    CoachSession,
+    EmailVerification,
+    Match,
+    PasswordReset,
+    Player,
+)
 
 
 def make_coach(session: Session, **overrides: Any) -> Coach:
@@ -127,6 +134,24 @@ def verify_email(
     session.commit()
     client.cookies.set(VERIFICATION_COOKIE, token)
     return verification
+
+
+def make_password_reset(session: Session, **overrides: Any) -> PasswordReset:
+    if "coach_id" not in overrides:
+        overrides["coach_id"] = make_coach(session).id
+    # The default hash is a real SHA-256 for shape only, as make_email_verification's
+    # is — a test that wants a code a request can answer passes otp_hash=hash_otp(code)
+    # over a code it keeps. The expiry outlives any test; tests about expiry pass their own.
+    reset = PasswordReset(
+        **{
+            "otp_hash": hashlib.sha256(uuid.uuid4().bytes).hexdigest(),
+            "expires_at": datetime.now(UTC) + timedelta(minutes=10),
+        }
+        | overrides
+    )
+    session.add(reset)
+    session.flush()
+    return reset
 
 
 def make_player(session: Session, **overrides: Any) -> Player:
