@@ -60,6 +60,16 @@ export type ErrorDetail = {
 };
 
 /**
+ * ForgotPasswordRequest
+ */
+export type ForgotPasswordRequest = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * Gender
  */
 export type Gender = 'male' | 'female' | 'other';
@@ -223,6 +233,16 @@ export type PlayerRead = {
 };
 
 /**
+ * ResetPasswordRequest
+ */
+export type ResetPasswordRequest = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * SetsFormat
  *
  * How many sets the match is played over.
@@ -305,6 +325,24 @@ export type LoginRequestWritable = {
 };
 
 /**
+ * ResetPasswordRequest
+ */
+export type ResetPasswordRequestWritable = {
+    /**
+     * Email
+     */
+    email: string;
+    /**
+     * New Password
+     */
+    new_password: string;
+    /**
+     * Otp
+     */
+    otp: string;
+};
+
+/**
  * VerifyOtpRequest
  */
 export type VerifyOtpRequestWritable = {
@@ -316,6 +354,37 @@ export type VerifyOtpRequestWritable = {
      * Otp
      */
     otp: string;
+};
+
+export type ForgotPasswordData = {
+    body: ForgotPasswordRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/forgot-password';
+};
+
+export type ForgotPasswordErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many codes requested
+     */
+    429: ErrorDetail;
+    /**
+     * Couldn't send that code, please try again
+     */
+    502: ErrorDetail;
+};
+
+export type ForgotPasswordError = ForgotPasswordErrors[keyof ForgotPasswordErrors];
+
+export type ForgotPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    202: unknown;
 };
 
 export type LoginData = {
@@ -401,6 +470,39 @@ export type RequestOtpResponses = {
      */
     202: unknown;
 };
+
+export type ResetPasswordData = {
+    body: ResetPasswordRequestWritable;
+    path?: never;
+    query?: never;
+    url: '/auth/reset-password';
+};
+
+export type ResetPasswordErrors = {
+    /**
+     * Incorrect or expired code
+     */
+    400: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many attempts
+     */
+    429: ErrorDetail;
+};
+
+export type ResetPasswordError = ResetPasswordErrors[keyof ResetPasswordErrors];
+
+export type ResetPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ResetPasswordResponse = ResetPasswordResponses[keyof ResetPasswordResponses];
 
 export type VerifyOtpData = {
     body: VerifyOtpRequestWritable;

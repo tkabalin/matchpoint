@@ -70,6 +70,15 @@ def create_app() -> FastAPI:
     app.state.verify_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.verify_otp_total_limit = RateLimiter(per_minute=30, burst=10)
 
+    # forgot-password and reset-password: request-otp's and verify-otp's tiers over
+    # again — the same costs (outbound email, then code guesses) at the same sizes,
+    # in buckets of their own so a sign-up flood cannot starve password recovery.
+    app.state.forgot_password_per_email_limit = RateLimiter(per_minute=0.2, burst=3)
+    app.state.forgot_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.forgot_password_total_limit = RateLimiter(per_minute=30, burst=10)
+    app.state.reset_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.reset_password_total_limit = RateLimiter(per_minute=30, burst=10)
+
     # Outbound email, on app state for the buckets' reason — every create_app() gets
     # a sender of its own, so no test can send real mail and any test can read what
     # was sent by swapping in a recorder. Which sender is settings' call (mail.py).

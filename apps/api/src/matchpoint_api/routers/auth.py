@@ -23,9 +23,15 @@ from matchpoint_api.auth import (
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.mail import EmailSender, EmailSendError
-from matchpoint_api.models import Coach, CoachSession, EmailVerification
-from matchpoint_api.rate_limit import RateLimiter, take_all
-from matchpoint_api.schemas.auth import LoginRequest, OtpRequest, VerifyOtpRequest
+from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
+from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
+from matchpoint_api.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    OtpRequest,
+    ResetPasswordRequest,
+    VerifyOtpRequest,
+)
 from matchpoint_api.schemas.coach import CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import DUMMY_HASH, hash_password, needs_rehash, verify_password
@@ -54,7 +60,7 @@ def limit_login_rate(request: Request) -> None:
     """
     per_ip: RateLimiter = request.app.state.login_per_ip_limit
     total: RateLimiter = request.app.state.login_total_limit
-    take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
+    take_all((per_ip, client_key(request)), (total, "total"))
 
 
 def reject_login(request: Request, email: str) -> NoReturn:
@@ -216,7 +222,7 @@ def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
     total: RateLimiter = request.app.state.request_otp_total_limit
     take_all(
         (per_email, email),
-        (per_ip, request.client.host if request.client else ""),
+        (per_ip, client_key(request)),
         (total, "total"),
     )
     now = datetime.now(UTC)
@@ -309,7 +315,7 @@ def limit_verify_otp_rate(request: Request) -> None:
     """
     per_ip: RateLimiter = request.app.state.verify_otp_per_ip_limit
     total: RateLimiter = request.app.state.verify_otp_total_limit
-    take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
+    take_all((per_ip, client_key(request)), (total, "total"))
 
 
 @router.post(
@@ -387,3 +393,160 @@ def verify_otp(data: VerifyOtpRequest, db: DbSession, response: Response) -> Non
     )
     db.commit()
     set_verification_cookie(response, token)
+
+
+# Forgot password (#50): forgot-password emails a code to a registered address,
+# reset-password trades code and address for a new password.
+
+
+# 202 whether or not the address holds an account (#47's policy for reset, built in
+# from the start): unlike sign-up's 409 no form needs the distinction — a coach who
+# typoed their address just gets no mail. What the uniform answer cannot hide is
+# timing (the known address does an upsert and a send), a kept oracle for request-otp's
+# reason: its 409 answers the same question openly, metered by the same tier sizes.
+@router.post(
+    "/forgot-password",
+    status_code=202,
+    responses={
+        429: {"model": ErrorDetail, "description": "Too many codes requested"},
+        502: {"model": ErrorDetail, "description": SEND_FAILED},
+    },
+)
+def forgot_password(data: ForgotPasswordRequest, request: Request, db: DbSession) -> None:
+    # lower() folds the whole address as login does: the coach lookup and the
+    # per-email bucket must agree on what MIKE@ names.
+    email = data.email.lower()
+    # In the handler for request-otp's reason (the per-email key needs the parsed
+    # body), bounding request-otp's cost — outbound email, quota, reputation — which
+    # this endpoint, unlike request-otp behind its 409, can aim at a registered
+    # coach's inbox. The per-email tier also meters code minting per account, which
+    # is what keeps the row's attempt budget meaning something.
+    #
+    # Charged on arrival, so knowing an address can hold its bucket drained — the
+    # lockout shape login's budget designed out. Accepted here because every charged
+    # request mails the owner the code that now works: what a stranger can deny is
+    # the asking, not the recovering.
+    per_email: RateLimiter = request.app.state.forgot_password_per_email_limit
+    per_ip: RateLimiter = request.app.state.forgot_password_per_ip_limit
+    total: RateLimiter = request.app.state.forgot_password_total_limit
+    take_all(
+        (per_email, email),
+        (per_ip, client_key(request)),
+        (total, "total"),
+    )
+    now = datetime.now(UTC)
+    # The whole table's expired rows, at request-otp's site for request-otp's reason:
+    # rate-limited and about to do a network send, so a bounded DELETE is noise.
+    db.execute(delete(PasswordReset).where(PasswordReset.expires_at <= now))
+    coach_id = db.scalar(select(Coach.id).where(Coach.email == email))
+    if coach_id is None:
+        # The sweep still lands — this commit is all the unknown address gets.
+        db.commit()
+        return
+    otp = new_otp()
+    fresh = {"otp_hash": hash_otp(otp), "attempts": 0, "expires_at": now + OTP_LIFETIME}
+    # An upsert on coach_id, exactly as request-otp upserts on email: concurrent
+    # requests must land on the single row, and a resend must *replace* the old code —
+    # one live code per account, always. Anyone can trigger the replacement, killing a
+    # code the coach is mid-typing — accepted, since the replacement is mailed to the
+    # same inbox. updated_at by hand because ON CONFLICT is an INSERT to SQLAlchemy,
+    # so onupdate never fires for it.
+    db.execute(
+        insert(PasswordReset)
+        .values(coach_id=coach_id, **fresh)
+        .on_conflict_do_update(
+            index_elements=[PasswordReset.coach_id],
+            set_={**fresh, "updated_at": func.clock_timestamp()},
+        )
+    )
+    db.commit()
+    # After the commit and inline, for request-otp's reasons: never mail a code that
+    # failed to store, and never 202 before the provider has actually accepted.
+    sender: EmailSender = request.app.state.email_sender
+    try:
+        sender.send(
+            to=email,
+            subject="Your MatchPoint password reset code",
+            text=f"Your password reset code is {otp}. "
+            f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes. "
+            "If you didn't ask to reset your password, you can ignore this email.",
+        )
+    except EmailSendError:
+        # The row stays and the per-email token goes back, as at request-otp: that
+        # tier meters mail to an inbox and this message never reached one.
+        per_email.refund(email)
+        raise HTTPException(status_code=502, detail=SEND_FAILED) from None
+
+
+def limit_reset_password_rate(request: Request) -> None:
+    """Bound guess arrivals — the second layer, not the bound itself.
+
+    The real cap on guessing a code is its row's attempt budget, counted in the
+    database where a deploy cannot refill it. That budget is third-party drainable,
+    as verify-otp's is: five junk guesses from anyone who knows the address kill a
+    live code. The stake here is a coach's recovery, not a stranger's sign-up, and
+    it is weighed rather than inherited — a guess IS a failed verification, so
+    login's charge-after-failure fix cannot transfer, and the code cannot afford a
+    looser cap when its prize is the account. What keeps the drain harassment
+    rather than closure is that a killed code is one forgot-password away from
+    replaced, with every kill announced by the mail it forces. The design that
+    removes the lever outright is an unguessable emailed link; the six-digit code
+    was chosen with eyes open, for sign-up's autofill reasons.
+
+    In the decorator's dependencies since no tier here needs the parsed body.
+    """
+    per_ip: RateLimiter = request.app.state.reset_password_per_ip_limit
+    total: RateLimiter = request.app.state.reset_password_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+
+
+@router.post(
+    "/reset-password",
+    status_code=204,
+    dependencies=[Depends(limit_reset_password_rate)],
+    responses={
+        400: {"model": ErrorDetail, "description": INCORRECT_CODE},
+        429: {"model": ErrorDetail, "description": "Too many attempts"},
+    },
+)
+def reset_password(data: ResetPasswordRequest, db: DbSession) -> None:
+    email = data.email.lower()
+    now = datetime.now(UTC)
+    # An unknown address takes _incorrect_code's one 400 like every other failure
+    # here: nobody asked a code for it, so no code can be right. The extra query a
+    # known address then runs is timing-separable, verify-otp's kept oracle again.
+    coach = db.scalar(select(Coach).where(Coach.email == email))
+    if coach is None:
+        raise _incorrect_code()
+    # Find the row and charge the guess in one statement, before the code is
+    # compared — verify-otp's move, for verify-otp's reasons: charging after a read
+    # would cap the counter but not the guessing, and the row lock this takes is
+    # what leaves the success path below a single winner.
+    charged = db.execute(
+        update(PasswordReset)
+        .where(PasswordReset.coach_id == coach.id, PasswordReset.expires_at > now)
+        .values(attempts=PasswordReset.attempts + 1)
+        .returning(PasswordReset.id, PasswordReset.otp_hash, PasswordReset.attempts)
+    ).one_or_none()
+    if charged is None:
+        raise _incorrect_code()
+    row_id, otp_hash, attempts = charged._tuple()
+    if not secrets.compare_digest(otp_hash, hash_otp(data.otp.get_secret_value())):
+        if attempts >= OTP_ATTEMPT_LIMIT:
+            # Budget spent, row dies: back to "no reset outstanding", and a fresh
+            # forgot-password (its own limiter permitting) is the only way forward.
+            db.execute(delete(PasswordReset).where(PasswordReset.id == row_id))
+        db.commit()
+        raise _incorrect_code()
+    # The Argon2 run is gated behind a correct code, so this endpoint hands
+    # unauthenticated traffic no hashing work — failures never reach it.
+    coach.password_hash = hash_password(data.new_password.get_secret_value())
+    # Consuming the row is what makes the code single-use: a concurrent request
+    # answering the same code blocked on the charge's lock, and re-evaluates its
+    # `expires_at > now` against a row that no longer exists.
+    db.execute(delete(PasswordReset).where(PasswordReset.id == row_id))
+    # Every live session dies with the old password. The point of a reset is that
+    # someone else may hold the old credential — and if they are signed in with it,
+    # a reset that left those sessions standing would change nothing.
+    db.execute(delete(CoachSession).where(CoachSession.coach_id == coach.id))
+    db.commit()

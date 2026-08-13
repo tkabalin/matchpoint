@@ -25,7 +25,7 @@ import math
 import threading
 import time
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 # One lock for every bucket in the process rather than one per limiter, so a request
 # counted against several buckets can read them all and spend them all without another
@@ -129,6 +129,18 @@ class RateLimiter:
             for key, (tokens, counted_at) in self._buckets.items()
             if now - counted_at < (self._burst - tokens) / self._rate
         }
+
+
+def client_key(request: Request) -> str:
+    """The key every per-IP tier buckets on: the caller's address as the server
+    reports it, or "" for a client the test transport left unset.
+
+    One function rather than an expression at each tier, so a change to how the
+    caller's address is derived (say, trusting a different proxy header) lands in
+    all of them at once — one missed site would quietly collapse that endpoint's
+    per-IP tier into a single shared bucket, and no test would see it.
+    """
+    return request.client.host if request.client else ""
 
 
 def take_all(*buckets: tuple[RateLimiter, str]) -> None:

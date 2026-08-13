@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, EmailVerification
-from matchpoint_api.rate_limit import RateLimiter, take_all
+from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.coach import CoachCreate, CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import hash_password
@@ -38,7 +38,7 @@ def limit_sign_up_rate(request: Request) -> None:
     """
     per_ip: RateLimiter = request.app.state.sign_up_per_ip_limit
     total: RateLimiter = request.app.state.sign_up_total_limit
-    take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
+    take_all((per_ip, client_key(request)), (total, "total"))
 
 
 def _email_not_verified() -> HTTPException:

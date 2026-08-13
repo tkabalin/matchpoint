@@ -13,6 +13,7 @@ requests; in an editor that doesn't, paste the block into an online Mermaid view
 erDiagram
     coaches ||--o{ players : owns
     coaches ||--o{ coach_sessions : "signs in as"
+    coaches ||--o| password_resets : "resets password via"
     players ||--o{ matches : plays
 
     coaches {
@@ -38,6 +39,16 @@ erDiagram
         varchar(254) email UK "the address proving itself, stored lowercased"
         varchar(64) otp_hash "nullable: sha-256 of the emailed code"
         varchar(64) token_hash UK "nullable: sha-256 of the verification cookie token"
+        int attempts "wrong guesses against the current code"
+        timestamptz expires_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    password_resets {
+        uuid id PK
+        uuid coach_id FK,UK "the account being reset; unique, so one live code each"
+        varchar(64) otp_hash "sha-256 of the emailed code"
         int attempts "wrong guesses against the current code"
         timestamptz expires_at
         timestamptz created_at

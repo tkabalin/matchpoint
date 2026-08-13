@@ -3,8 +3,25 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, verifyOtp } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, verifyOtp } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+
+/**
+ * Forgot Password
+ */
+export const forgotPasswordMutation = (options?: Partial<Options<ForgotPasswordData>>): UseMutationOptions<unknown, ForgotPasswordError, Options<ForgotPasswordData>> => {
+    const mutationOptions: UseMutationOptions<unknown, ForgotPasswordError, Options<ForgotPasswordData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await forgotPassword({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
 
 /**
  * Login
@@ -47,6 +64,23 @@ export const requestOtpMutation = (options?: Partial<Options<RequestOtpData>>): 
     const mutationOptions: UseMutationOptions<unknown, RequestOtpError, Options<RequestOtpData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await requestOtp({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Reset Password
+ */
+export const resetPasswordMutation = (options?: Partial<Options<ResetPasswordData>>): UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> => {
+    const mutationOptions: UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await resetPassword({
                 ...options,
                 ...fnOptions,
                 throwOnError: true
