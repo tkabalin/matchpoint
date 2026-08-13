@@ -30,6 +30,16 @@ paths:
   the project's choice, and a status FastAPI does not auto-declare. Checking it beats leaving it to
   the foreign key, which surfaces as a 500 from an `IntegrityError`.
 
+## Auth Endpoints Answer Known and Unknown Addresses Alike
+
+- An endpoint taking an email from an unauthenticated caller must answer known and unknown addresses
+  identically: status, body, and the 429/`Retry-After` a drained rate limit produces. The one
+  exception is the sign-up entry point's 409, and it is not a precedent — the policy and its
+  reasoning live in `docs/security.md`; argue there before adding a second exception.
+- Timing is part of the promise on credential checks: login burns a dummy Argon2 verification for an
+  unknown email rather than exiting early. Match that pattern before adding any auth path that
+  hashes or queries conditionally.
+
 ## A Conflict on a Unique Column Is a Caught 409
 
 - A value colliding with a `UNIQUE` constraint is a **409**, raised from a caught `IntegrityError`
