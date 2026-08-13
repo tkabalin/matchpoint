@@ -119,3 +119,7 @@ and a row missing any of them is not an account.
 **Deletion is soft where history depends on it.** A player with matches recorded against them cannot
 be removed without taking that history along, so `archived_at` takes them off the active roster
 while leaving them readable by id.
+
+**Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
+coach's roster, and the matches recorded against it. A page size would buy nothing and cost every
+caller the work of reassembling a list, so it is worth revisiting only if a list outgrows that.
