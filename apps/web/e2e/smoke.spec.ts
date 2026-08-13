@@ -14,3 +14,8 @@ test("loads the sign-up form at /sign-up", async ({ page }) => {
   await page.goto("/sign-up");
   await expect(page.getByRole("heading", { name: "Sign Up" })).toBeVisible();
 });
+
+test("loads the home page at /home", async ({ page }) => {
+  await page.goto("/home");
+  await expect(page.getByRole("heading", { name: "Welcome to Home" })).toBeVisible();
+});
