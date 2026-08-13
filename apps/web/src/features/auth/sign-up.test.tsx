@@ -193,11 +193,71 @@ test("blocks the OTP submit until a code is entered", async () => {
   expect(submit).toBeEnabled();
 });
 
-async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
-  await goToOtpStep(user);
+async function fillAndSubmitOtp(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Code"), "123456");
   await user.click(screen.getByRole("button", { name: "Verify" }));
+}
+
+test("sends the email and code to /api/auth/verify-otp with cookies included", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(() => new Response(null, { status: 200 }));
+
+  await fillAndSubmitOtp(user);
   await screen.findByLabelText("Password");
+
+  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(url).toBe("/api/auth/verify-otp");
+  expect(init?.credentials).toBe("include");
+  expect(JSON.parse(String(init?.body))).toEqual({ email: "coach@example.com", otp: "123456" });
+});
+
+test("shows the server's error and stays on the OTP step on a 400 response", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(
+    () => new Response(JSON.stringify({ detail: "Incorrect or expired code" }), { status: 400 }),
+  );
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("shows a generic error when the verify-otp request fails outright", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("sends one verify-otp however impatiently Verify is clicked", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  const respond = stubPendingFetch();
+
+  await fillAndSubmitOtp(user);
+  const submit = screen.getByRole("button", { name: "Verify" });
+  expect(submit).toBeDisabled();
+  await user.click(submit);
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  respond(new Response(null, { status: 200 }));
+  expect(await screen.findByLabelText("Password")).toBeInTheDocument();
+});
+
+async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
+  await goToOtpStep(user);
+  stubFetch(() => new Response(null, { status: 200 }));
+  await fillAndSubmitOtp(user);
+  await screen.findByLabelText("Password");
+  vi.unstubAllGlobals();
 }
 
 test("renders the password and confirm fields once the password step is reached", async () => {

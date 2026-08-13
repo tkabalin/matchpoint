@@ -56,11 +56,38 @@ export function SignUp() {
     }
   }
 
-  function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Verifying the code against the server is separate, later work (#45) —
-    // for now, entering a code just advances to the password step locally.
-    setStep("password");
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      let response: Response;
+      try {
+        response = await fetch("/api/auth/verify-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, otp }),
+        });
+      } catch {
+        setError("Could not reach the server. Try again.");
+        return;
+      }
+
+      if (response.status === 200) {
+        // No token to capture — the verification cookie the backend just set is
+        // what POST /coaches (the next step) will present, not anything held here.
+        setStep("password");
+        return;
+      }
+
+      // 400 (wrong/expired code) or 429 (too many attempts).
+      const body = (await response.json()) as { detail?: string };
+      setError(body.detail ?? "Could not verify that code.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
@@ -131,7 +158,8 @@ export function SignUp() {
         <p>We sent a code to {email}.</p>
         <label htmlFor="otp">Code</label>
         <input id="otp" type="text" value={otp} onChange={(event) => setOtp(event.target.value)} />
-        <button type="submit" disabled={!canSubmitOtp}>
+        {error && <p role="alert">{error}</p>}
+        <button type="submit" disabled={!canSubmitOtp || submitting}>
           Verify
         </button>
       </form>
