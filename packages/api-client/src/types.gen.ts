@@ -442,6 +442,10 @@ export type CreateCoachData = {
 
 export type CreateCoachErrors = {
     /**
+     * Email not verified
+     */
+    401: ErrorDetail;
+    /**
      * Email already registered
      */
     409: ErrorDetail;

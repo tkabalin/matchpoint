@@ -25,7 +25,7 @@ from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password
-from tests.factories import make_coach, make_coach_session, make_email_verification
+from tests.factories import make_coach, make_coach_session, make_email_verification, verify_email
 
 SIGN_UP = {
     "email": "mike@example.com",
@@ -35,12 +35,15 @@ SIGN_UP = {
 LOGIN = {"email": "mike@example.com", "password": "a-good-password"}
 
 
-def _sign_up(client: TestClient) -> None:
+def _sign_up(client: TestClient, db_session: Session) -> None:
+    verify_email(client, db_session, SIGN_UP["email"])
     assert client.post("/coaches", json=SIGN_UP).status_code == 201
 
 
-def test_logging_in_returns_the_coach_and_sets_the_session_cookie(client: TestClient) -> None:
-    _sign_up(client)
+def test_logging_in_returns_the_coach_and_sets_the_session_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    _sign_up(client, db_session)
 
     response = client.post("/auth/login", json=LOGIN)
 
@@ -52,7 +55,7 @@ def test_logging_in_returns_the_coach_and_sets_the_session_cookie(client: TestCl
     assert client.cookies.get(SESSION_COOKIE)
 
 
-def test_the_cookie_is_locked_down(client: TestClient) -> None:
+def test_the_cookie_is_locked_down(client: TestClient, db_session: Session) -> None:
     """The flags are the design: HttpOnly is what keeps the token away from script,
     Secure keeps it off plain http, SameSite=Lax is the CSRF line, and Max-Age is the
     lifetime auth.py promises. None is separable from 'set a cookie'.
@@ -62,7 +65,7 @@ def test_the_cookie_is_locked_down(client: TestClient) -> None:
     alongside ours, and a browser only honours the prefix on a cookie that is Secure,
     Path=/ and carries no Domain — so the three are asserted with it rather than apart.
     """
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     header = client.post("/auth/login", json=LOGIN).headers["set-cookie"]
 
@@ -81,7 +84,7 @@ def test_logging_in_stores_the_hash_of_the_token_and_never_the_token(
 ) -> None:
     """The row must let a presented token authenticate without letting a copy of the
     table do the same, which is exactly 'stores the SHA-256, not the value'."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     client.post("/auth/login", json=LOGIN)
     token = client.cookies[SESSION_COOKIE]
 
@@ -92,7 +95,7 @@ def test_logging_in_stores_the_hash_of_the_token_and_never_the_token(
 
 
 def test_a_login_expires_a_lifetime_from_now(client: TestClient, db_session: Session) -> None:
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     client.post("/auth/login", json=LOGIN)
 
@@ -103,7 +106,7 @@ def test_a_login_expires_a_lifetime_from_now(client: TestClient, db_session: Ses
 def test_each_login_is_its_own_session(client: TestClient, db_session: Session) -> None:
     """Two devices, two rows: logging in on the phone must not sign out the laptop,
     and logging out one must be able to leave the other alive."""
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     client.post("/auth/login", json=LOGIN)
     client.post("/auth/login", json=LOGIN)
@@ -117,7 +120,7 @@ def test_logging_in_clears_the_coach_s_expired_sessions(
     """A session nobody presents again is a row nothing would otherwise delete. Signing
     in is the one moment this coach's dead rows are cheap to find — the foreign key's
     index is already the lookup — so the login that would add to the pile clears it."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     coach = db_session.scalars(select(Coach).where(Coach.email == "mike@example.com")).one()
     make_coach_session(
         db_session, coach_id=coach.id, expires_at=datetime.now(UTC) - timedelta(seconds=1)
@@ -136,7 +139,7 @@ def test_logging_in_leaves_other_coaches_expired_sessions_alone(
 ) -> None:
     """Scoped to the coach signing in. Widening it to every expired row would put a
     whole-table delete on the login path to do one coach's worth of work."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     other_coach = make_coach(db_session)
     other_session = make_coach_session(
         db_session, coach_id=other_coach.id, expires_at=datetime.now(UTC) - timedelta(seconds=1)
@@ -151,7 +154,7 @@ def test_logging_in_leaves_other_coaches_expired_sessions_alone(
 def test_a_wrong_password_is_rejected_without_a_session(
     client: TestClient, db_session: Session
 ) -> None:
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     response = client.post("/auth/login", json=LOGIN | {"password": "the-wrong-password"})
 
@@ -161,10 +164,12 @@ def test_a_wrong_password_is_rejected_without_a_session(
     assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 0
 
 
-def test_an_unknown_email_answers_exactly_like_a_wrong_password(client: TestClient) -> None:
+def test_an_unknown_email_answers_exactly_like_a_wrong_password(
+    client: TestClient, db_session: Session
+) -> None:
     """The response half of the enumeration defence: status and body identical, so
     nothing in what comes back says whether the address has an account."""
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     unknown_email = client.post("/auth/login", json=LOGIN | {"email": "ghost@example.com"})
     wrong_password = client.post("/auth/login", json=LOGIN | {"password": "the-wrong-password"})
@@ -193,19 +198,21 @@ def test_an_unknown_email_still_burns_a_verification(
     assert calls == [("a-good-password", DUMMY_HASH)]
 
 
-def test_a_mixed_case_email_finds_the_account(client: TestClient) -> None:
+def test_a_mixed_case_email_finds_the_account(client: TestClient, db_session: Session) -> None:
     """Rows are stored lowercased and EmailStr folds only the domain, so the route's
     lower() is what lets a coach who signs in as MIKE@ find mike@'s row."""
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     assert client.post("/auth/login", json=LOGIN | {"email": "MIKE@Example.COM"}).status_code == 200
 
 
-def test_a_password_below_the_sign_up_floor_is_a_401_not_a_422(client: TestClient) -> None:
+def test_a_password_below_the_sign_up_floor_is_a_401_not_a_422(
+    client: TestClient, db_session: Session
+) -> None:
     """LoginRequest deliberately has no min_length: the floor is sign-up policy for new
     passwords, and raising it later must not lock out coaches enrolled under the old
     one. A short password is simply wrong, not malformed."""
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     response = client.post("/auth/login", json=LOGIN | {"password": "x"})
 
@@ -380,7 +387,7 @@ def test_an_arrival_beyond_the_address_burst_spends_no_verification(
 
 
 def test_a_correct_password_is_never_refused_by_the_account_tier(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """What keeps a per-account bound from being an account-lockout lever. Only a failed
     verification is charged, so a flood against a known address — and sign-up's 409 hands
@@ -390,7 +397,7 @@ def test_a_correct_password_is_never_refused_by_the_account_tier(
 
     The stub answers the real password and refuses the rest, so both branches of the
     handler run for real; what it saves is thirty Argon2 runs, not the logic."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     monkeypatch.setattr(
         "matchpoint_api.routers.auth.verify_password",
         lambda password, password_hash: password == LOGIN["password"],
@@ -408,7 +415,7 @@ def test_a_correct_password_is_never_refused_by_the_account_tier(
 def test_logging_out_revokes_the_session_and_clears_the_cookie(
     client: TestClient, db_session: Session
 ) -> None:
-    _sign_up(client)
+    _sign_up(client, db_session)
     client.post("/auth/login", json=LOGIN)
 
     response = client.post("/auth/logout")
@@ -424,7 +431,7 @@ def test_logging_out_only_ends_the_presented_session(
 ) -> None:
     """Logout revokes the one login it was sent from; the coach's other devices keep
     their rows and stay signed in."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     client.post("/auth/login", json=LOGIN)
     other_device_token = client.cookies[SESSION_COOKIE]
     client.cookies.clear()
@@ -449,8 +456,12 @@ def test_logging_out_with_a_forged_cookie_revokes_nothing(
     walks the delete instead, so it is the one that must be seen to delete *nothing* —
     a forged token reaching someone else's session row would be revocation as a service.
     The 204 and the cleared cookie are the same statelessness the other logouts promise."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     client.post("/auth/login", json=LOGIN)
+    # Dropped rather than overwritten: the hand-set copy below has a different jar
+    # identity than the server's, so both would be sent, and which duplicate the
+    # server reads depends on jar insertion order — the forged one must be alone.
+    client.cookies.delete(SESSION_COOKIE)
     client.cookies.set(SESSION_COOKIE, new_session_token())
 
     response = client.post("/auth/logout")
@@ -583,7 +594,7 @@ def test_a_registered_address_is_refused_with_no_code(
 ) -> None:
     """The 409 the shipped sign-up form branches on. Nothing is stored and nothing is
     sent: a registered address has no business receiving sign-up codes."""
-    _sign_up(client)
+    _sign_up(client, db_session)
     recorder = _record_email(client)
 
     response = client.post("/auth/request-otp", json={"email": "mike@example.com"})
@@ -594,10 +605,10 @@ def test_a_registered_address_is_refused_with_no_code(
     assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 0
 
 
-def test_a_mixed_case_address_meets_the_409(client: TestClient) -> None:
+def test_a_mixed_case_address_meets_the_409(client: TestClient, db_session: Session) -> None:
     """Coach rows are stored lowercased, so only a folded lookup can find mike@ when
     MIKE@ asks for a code — anything else would mail sign-up codes to taken addresses."""
-    _sign_up(client)
+    _sign_up(client, db_session)
 
     response = client.post("/auth/request-otp", json={"email": "MIKE@Example.COM"})
 
@@ -771,6 +782,20 @@ def test_answering_the_code_retires_it_for_the_token(
     assert token not in hash_token(token)
     assert row.attempts == 0
     assert timedelta() < row.expires_at - datetime.now(UTC) <= VERIFICATION_LIFETIME
+
+
+def test_the_whole_flow_ends_in_an_account(client: TestClient) -> None:
+    """Request, answer, sign up — through the real routes end to end. Every other
+    sign-up test arranges the verification directly, so this is the one that fails
+    if what verify-otp mints ever drifts from what POST /coaches demands."""
+    code = _request_otp(client)
+    answered = client.post("/auth/verify-otp", json={"email": PENDING_EMAIL, "otp": code})
+    assert answered.status_code == 200
+
+    response = client.post("/coaches", json=SIGN_UP | {"email": PENDING_EMAIL})
+
+    assert response.status_code == 201
+    assert response.json()["email"] == PENDING_EMAIL
 
 
 def test_a_wrong_code_is_refused_and_charged(client: TestClient, db_session: Session) -> None:

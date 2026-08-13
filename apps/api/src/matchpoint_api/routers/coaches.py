@@ -1,13 +1,15 @@
+from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.errors import UniqueViolation
+from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import CurrentCoach
+from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach
+from matchpoint_api.models import Coach, EmailVerification
 from matchpoint_api.rate_limit import RateLimiter, take_all
 from matchpoint_api.schemas.coach import CoachCreate, CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
@@ -48,24 +50,67 @@ def limit_sign_up_rate(request: Request) -> None:
     take_all((per_ip, request.client.host if request.client else ""), (total, "total"))
 
 
-# Deliberately open: anyone can create an account. Right for usability testing with the
-# client, but a choice rather than an oversight — as is the 409 below, which tells an
-# unauthenticated caller whether an address has an account.
-#
-# The 409 is declared because the sign-up form has to branch on "email taken", which is
-# not true of the 404s the other routers raise and leave undeclared. Declared with a
-# model and not a bare description, for the reason ErrorDetail gives.
+def _email_not_verified() -> HTTPException:
+    # One message for a missing cookie, an unknown token, a mismatched email, an expired
+    # verification and one already spent: to the caller they are the same fact, and
+    # distinguishing them would only describe the server's bookkeeping to whoever is probing.
+    #
+    # "Already spent" is the arguable one — a sign-up whose 201 was lost retries into it and
+    # is told to verify an address that now has an account. The 409 is not available there:
+    # it would tell a caller holding no live verification whether an address is registered.
+    # Recovery costs a step instead, since requesting a fresh code 409s.
+    return HTTPException(status_code=401, detail="Email not verified")
+
+
+# Creating an account demands the verification cookie verify-otp minted (#44), so the only
+# emails that reach a coach row are ones a code was just delivered to. That also takes the
+# 409 out of enumeration range: without a cookie for the address the answer is the 401, so
+# enumeration is request-otp's question now, metered by its per-email limit. It stays
+# declared — with a model, for the reason ErrorDetail gives — because the sign-up form has
+# to branch on "email taken", which is not true of the 404s the other routers leave
+# undeclared.
 @router.post(
     "",
     status_code=201,
     response_model=CoachRead,
     dependencies=[Depends(limit_sign_up_rate)],
     responses={
+        401: {"model": ErrorDetail, "description": "Email not verified"},
         409: {"model": ErrorDetail, "description": "Email already registered"},
         429: {"model": ErrorDetail, "description": "Too many sign-up attempts"},
     },
 )
-def create_coach(data: CoachCreate, db: DbSession) -> Coach:
+def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
+    # From request.cookies rather than a Cookie() parameter, for current_coach's reason: a
+    # declared cookie parameter reaches the spec and the generated client's signature. Checked
+    # here rather than in a dependency because the match below needs the validated body and the
+    # consume must share the insert's transaction — so a bad body 422s before a missing cookie
+    # 401s.
+    token = request.cookies.get(VERIFICATION_COOKIE)
+    if token is None:
+        raise _email_not_verified()
+    # One statement is the validity check, the email match and the consumption, so single-use
+    # needs no lock and expiry has no read-then-act window. The email is in the WHERE because
+    # a cookie proving mike@ must not authorise an account for sam@ — lowercased to match what
+    # verify-otp wrote, since EmailStr only folds the domain. The 409 path rolls it back, which
+    # is right: the coach already exists, so the cookie had nothing to authorise.
+    #
+    # Consumed before the Argon2 work below, so an unverified request costs no hash — paid for
+    # by holding a connection and this row's lock across a hash security.py gates at two at a
+    # time, so a sign-up burst parks connections `idle in transaction`. Bounded (burst 10,
+    # engine default pool 15), but that pool is shared with login, so whichever burst grows
+    # takes the pool size with it.
+    consumed = db.execute(
+        delete(EmailVerification)
+        .where(
+            EmailVerification.token_hash == hash_token(token),
+            EmailVerification.email == data.email.lower(),
+            EmailVerification.expires_at > datetime.now(UTC),
+        )
+        .returning(EmailVerification.id)
+    ).one_or_none()
+    if consumed is None:
+        raise _email_not_verified()
     # Fields named rather than the Model(**data.model_dump()) splat the other create
     # routes use: password is not password_hash, so there is no field-for-column mapping
     # for a splat to rely on. Hashing before db.add, so a rejected body costs no hash.

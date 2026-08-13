@@ -188,9 +188,9 @@ def _incorrect_code() -> HTTPException:
 
 # The 409 is declared for the same reason sign-up's is: the form branches on it,
 # inline on the email field. The cost of telling an unauthenticated caller whether an
-# address holds an account is the tradeoff sign-up already made (#47 owns revisiting
-# it) — and once #44 lands this endpoint is where that question moves, since
-# /coaches' own 409 stops being reachable without a verification cookie.
+# address holds an account is a tradeoff this endpoint now owns alone (#47 owns
+# revisiting it): /coaches' own 409 stopped being reachable without a verification
+# cookie when #44 landed, so this is where that question lives.
 @router.post(
     "/request-otp",
     status_code=202,

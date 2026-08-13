@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from psycopg.errors import CheckViolation
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
@@ -14,15 +14,16 @@ from sqlalchemy.orm.attributes import flag_modified
 from matchpoint_api.auth import (
     SESSION_COOKIE,
     SESSION_LIFETIME,
+    VERIFICATION_COOKIE,
     CurrentCoach,
     hash_token,
     new_session_token,
 )
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
-from matchpoint_api.models import Coach, CoachSession
+from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.security import verify_password
-from tests.factories import make_coach, make_coach_session
+from tests.factories import make_coach, make_coach_session, verify_email
 
 SIGN_UP = {
     "email": "mike@example.com",
@@ -47,7 +48,9 @@ def _sign_in(client: TestClient, db_session: Session, coach: Coach, **session_ov
     return session_row
 
 
-def test_signing_up_returns_the_new_coach(client: TestClient) -> None:
+def test_signing_up_returns_the_new_coach(client: TestClient, db_session: Session) -> None:
+    verify_email(client, db_session, "mike@example.com")
+
     response = client.post("/coaches", json=SIGN_UP)
 
     assert response.status_code == 201
@@ -59,9 +62,13 @@ def test_signing_up_returns_the_new_coach(client: TestClient) -> None:
     assert body["updated_at"] is not None
 
 
-def test_signing_up_never_echoes_the_password_or_its_hash(client: TestClient) -> None:
+def test_signing_up_never_echoes_the_password_or_its_hash(
+    client: TestClient, db_session: Session
+) -> None:
     """The response is filtered by CoachRead, which carries neither field. Asserted on
     the plaintext too, since that one came in on this very request."""
+    verify_email(client, db_session, "mike@example.com")
+
     response = client.post("/coaches", json=SIGN_UP)
 
     assert "password_hash" not in response.json()
@@ -74,6 +81,8 @@ def test_signing_up_stores_a_hash_the_password_verifies_against(
 ) -> None:
     """The end the route owns: the plaintext must not reach the column, and what does
     reach it has to be something a later login can check the password against."""
+    verify_email(client, db_session, "mike@example.com")
+
     response = client.post("/coaches", json=SIGN_UP)
 
     coach = db_session.get(Coach, uuid.UUID(response.json()["id"]))
@@ -89,7 +98,9 @@ def test_two_coaches_sharing_a_password_get_different_hashes(
 ) -> None:
     """Per-hash salt, seen from the outside: two coaches who happened to choose the same
     password must not be visibly sharing it to anyone who reads the table."""
+    verify_email(client, db_session, "mike@example.com")
     first = client.post("/coaches", json=SIGN_UP | {"email": "mike@example.com"})
+    verify_email(client, db_session, "sam@example.com")
     second = client.post("/coaches", json=SIGN_UP | {"email": "sam@example.com"})
 
     hashes = set()
@@ -101,11 +112,16 @@ def test_two_coaches_sharing_a_password_get_different_hashes(
     assert len(hashes) == 2
 
 
-def test_a_mixed_case_email_is_stored_and_read_back_lowercased(client: TestClient) -> None:
+def test_a_mixed_case_email_is_stored_and_read_back_lowercased(
+    client: TestClient, db_session: Session
+) -> None:
     """EmailStr folds the domain, so the local part is the model's `validates` to do — and
     this is the test that fails if that ever comes out. Read back through a real login and
     /coaches/me, address typed with capitals both times, because that whole round trip is
-    what storing lowercase exists to keep working."""
+    what storing lowercase exists to keep working. The verification row holds the folded
+    address, so the mixed-case submission also proves the route folds before matching it."""
+    verify_email(client, db_session, "Mike@Example.com")
+
     response = client.post("/coaches", json=SIGN_UP | {"email": "Mike@Example.com"})
 
     assert response.status_code == 201
@@ -124,8 +140,14 @@ def test_signing_up_twice_with_one_email_is_a_conflict(
 
     The body is asserted too, because the route declares the 409 as ErrorDetail and the
     generated client is typed from that declaration — a response that stopped matching it
-    would be a client reading a field that is not there."""
+    would be a client reading a field that is not there.
+
+    The second attempt gets a verification of its own — the first was consumed — so what
+    is refused here is the duplicate email, not a spent cookie (that 401 has its own
+    test)."""
+    verify_email(client, db_session, "mike@example.com")
     assert client.post("/coaches", json=SIGN_UP).status_code == 201
+    verify_email(client, db_session, "mike@example.com")
 
     response = client.post("/coaches", json=SIGN_UP)
 
@@ -134,11 +156,15 @@ def test_signing_up_twice_with_one_email_is_a_conflict(
     assert db_session.scalar(select(func.count()).select_from(Coach)) == 1
 
 
-def test_an_email_differing_only_in_case_is_a_conflict(client: TestClient) -> None:
+def test_an_email_differing_only_in_case_is_a_conflict(
+    client: TestClient, db_session: Session
+) -> None:
     """The case a plain UNIQUE constraint would miss, since Postgres compares it
     case-sensitively — it is the model lowercasing on the way in that turns this into the
     same address, and so into the conflict above."""
+    verify_email(client, db_session, "mike@example.com")
     assert client.post("/coaches", json=SIGN_UP | {"email": "mike@example.com"}).status_code == 201
+    verify_email(client, db_session, "MIKE@Example.com")
 
     response = client.post("/coaches", json=SIGN_UP | {"email": "MIKE@Example.com"})
 
@@ -156,13 +182,21 @@ def test_an_integrity_error_that_is_not_a_duplicate_email_is_not_a_conflict(
     makes unreachable: `validates` lowercases every email on assignment, so
     coach_email_lowercase can only be tripped by a write that skipped it. Writing into the
     instance dictionary is that write — validators hook attribute assignment, not the dict
-    behind it — and flag_modified is what still gets the change into the next flush, which
-    is the flush the route's own commit performs.
+    behind it — and flag_modified is what still gets the change into the next flush. That
+    flush has to be the one the route's own commit performs, and the route flushes earlier
+    than it used to: consuming the verification autoflushes whatever is already dirty. So
+    the doctoring waits inside a before_flush hook until the route's new Coach is pending —
+    the one flush that is the commit's.
     """
     coach = make_coach(db_session)
     db_session.commit()
-    vars(coach)["email"] = "MIKE@example.com"
-    flag_modified(coach, "email")
+    verify_email(client, db_session, "mike@example.com")
+
+    @event.listens_for(db_session, "before_flush")
+    def _doctor(session: Session, _context: object, _instances: object) -> None:
+        if any(isinstance(pending, Coach) for pending in session.new):
+            vars(coach)["email"] = "MIKE@example.com"
+            flag_modified(coach, "email")
 
     with pytest.raises(IntegrityError) as caught:
         client.post("/coaches", json=SIGN_UP)
@@ -202,6 +236,103 @@ def test_a_rejected_sign_up_does_not_echo_the_password(client: TestClient) -> No
     assert "hunter2" not in on_the_password.text
     assert on_the_email.status_code == 422
     assert "a-good-password" not in on_the_email.text
+
+
+def test_signing_up_without_a_verification_cookie_is_a_401(
+    client: TestClient, db_session: Session
+) -> None:
+    """The check #44 exists for: no proof the address was verified, no account. The body
+    is asserted because the route declares the 401 as ErrorDetail and the generated
+    client is typed from that declaration."""
+    response = client.post("/coaches", json=SIGN_UP)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Email not verified"}
+    assert db_session.scalar(select(func.count()).select_from(Coach)) == 0
+
+
+def test_signing_up_with_a_cookie_for_another_email_is_a_401(
+    client: TestClient, db_session: Session
+) -> None:
+    """A cookie proving sam@ was verified must not authorise an account for mike@ —
+    and being refused must not burn sam's verification, which the mismatch never
+    matched."""
+    verify_email(client, db_session, "sam@example.com")
+
+    response = client.post("/coaches", json=SIGN_UP)
+
+    assert response.status_code == 401
+    assert db_session.scalar(select(func.count()).select_from(Coach)) == 0
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 1
+
+
+def test_signing_up_with_an_expired_verification_is_a_401(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cookie's Max-Age usually gets there first, but the row's expiry is the bound
+    the server owns — a replayed cookie must not outlive it."""
+    verify_email(
+        client, db_session, "mike@example.com", expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+
+    assert client.post("/coaches", json=SIGN_UP).status_code == 401
+
+
+def test_signing_up_with_a_token_verify_otp_never_minted_is_a_401(client: TestClient) -> None:
+    """A forged cookie: syntactically fine, hashing to nothing in the table. Same 401 as
+    no cookie at all — the difference is server bookkeeping, not something to describe
+    to whoever is probing."""
+    client.cookies.set(VERIFICATION_COOKIE, new_session_token())
+
+    assert client.post("/coaches", json=SIGN_UP).status_code == 401
+
+
+def test_signing_up_consumes_the_verification(client: TestClient, db_session: Session) -> None:
+    """Single-use, seen from the table: the row the cookie proved is gone the moment it
+    has done its job, so nothing is left for a second account to present."""
+    verify_email(client, db_session, "mike@example.com")
+
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 0
+
+
+def test_a_spent_verification_cookie_cannot_sign_up_again(
+    client: TestClient, db_session: Session
+) -> None:
+    """Single-use, seen from the wire: replaying the cookie that just created an account
+    is a 401 — not the 409 a fresh verification would earn, because the consumption
+    check runs before the duplicate email is ever asked about.
+
+    This is also the answer a sign-up whose 201 was lost gets when it retries, which is
+    the deliberate half of it: reaching the 409 there would mean answering an
+    unauthenticated caller's question about which addresses are registered, and
+    requesting a fresh code answers that caller's real question instead."""
+    verify_email(client, db_session, "mike@example.com")
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+
+    response = client.post("/coaches", json=SIGN_UP)
+
+    assert response.status_code == 401
+    assert db_session.scalar(select(func.count()).select_from(Coach)) == 1
+
+
+def test_a_conflict_does_not_burn_the_verification(client: TestClient, db_session: Session) -> None:
+    """The 409 path rolls the whole transaction back, consumption included: the consume
+    and the insert are one transaction, so a sign-up that fails leaves the table exactly
+    as it found it rather than half-applied.
+
+    Reaching this state takes a race — request-otp refuses a registered address, so the
+    only way to hold a live verification for one is to have someone else register the
+    address between your verify-otp and your sign-up. The preserved row wins that loser
+    nothing (every retry collides the same way); the invariant is what is under test."""
+    verify_email(client, db_session, "mike@example.com")
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+    verify_email(client, db_session, "mike@example.com")
+
+    assert client.post("/coaches", json=SIGN_UP).status_code == 409
+
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 1
 
 
 def test_sign_up_arrivals_beyond_the_burst_are_refused(client: TestClient) -> None:

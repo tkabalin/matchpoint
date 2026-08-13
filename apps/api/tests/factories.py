@@ -1,7 +1,9 @@
 """Plain-function factories for building model rows in tests.
 
 Rows are flush()ed, not committed, so they stay inside the test's rolled-back
-transaction like everything else done through db_session.
+transaction like everything else done through db_session. `verify_email` is the
+exception, and says at its own commit why: it stands in for a request that
+committed, so a route that rolls back must still find the row afterwards.
 """
 
 import hashlib
@@ -9,8 +11,10 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from matchpoint_api.auth import VERIFICATION_COOKIE, hash_token, new_session_token
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, Match, Player
 
 
@@ -72,6 +76,32 @@ def make_email_verification(session: Session, **overrides: Any) -> EmailVerifica
     )
     session.add(verification)
     session.flush()
+    return verification
+
+
+def verify_email(
+    client: TestClient, session: Session, email: str, **overrides: Any
+) -> EmailVerification:
+    # Gives the client the verification cookie POST /coaches demands, arranged rather
+    # than earned through request-otp and verify-otp — for _sign_in's reason (the tests
+    # this serves are about sign-up, not the OTP routes) plus one of its own: the real
+    # flow would send an email per test. Lowercased as verify-otp lowercases, since the
+    # row's CHECK refuses anything else; a test about the case fold submits the mixed
+    # case to the route, not here.
+    #
+    # Committed, unlike the factories above, and like _sign_in: the row stands in for
+    # one verify-otp committed, and the route rolls back on its 409 path — a row that
+    # was only flushed would vanish with the rollback instead of surviving it.
+    token = new_session_token()
+    verification = make_email_verification(
+        session,
+        email=email.lower(),
+        otp_hash=None,
+        token_hash=hash_token(token),
+        **overrides,
+    )
+    session.commit()
+    client.cookies.set(VERIFICATION_COOKIE, token)
     return verification
 
 
