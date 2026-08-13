@@ -77,19 +77,20 @@ path.
 
 ## Backend
 
-| Category         | Choice                         |
-| ---------------- | ------------------------------ |
-| Language         | Python 3.12                    |
-| API framework    | FastAPI 0.141 + Pydantic 2     |
-| ORM              | SQLAlchemy 2 (sync)            |
-| Migrations       | Alembic                        |
-| Package manager  | uv                             |
-| Lint / format    | Ruff 0.16                      |
-| Type checking    | Pyright                        |
-| Password hashing | Argon2id (argon2-cffi 25)      |
-| Sessions         | Opaque tokens, HttpOnly cookie |
-| Rate limiting    | In-process token bucket        |
-| Tests            | pytest 9                       |
+| Category            | Choice                         |
+| ------------------- | ------------------------------ |
+| Language            | Python 3.12                    |
+| API framework       | FastAPI 0.141 + Pydantic 2     |
+| ORM                 | SQLAlchemy 2 (sync)            |
+| Migrations          | Alembic                        |
+| Package manager     | uv                             |
+| Lint / format       | Ruff 0.16                      |
+| Type checking       | Pyright                        |
+| Password hashing    | Argon2id (argon2-cffi 25)      |
+| Sessions            | Opaque tokens, HttpOnly cookie |
+| Rate limiting       | In-process token bucket        |
+| Transactional email | Resend (HTTP API via httpx)    |
+| Tests               | pytest 9                       |
 
 ### Rationale
 
@@ -143,6 +144,14 @@ provides the hard bound. Alternatives considered: slowapi (pre-1.0, for a few do
 stdlib); Redis/Postgres counters (a stateful service to solve a multi-process problem we don't
 have); Caddy's rate_limit module (not in stock Caddy, proxy can't key on accounts); Cloudflare
 rate-limiting rules (can't key on accounts either, invisible to tests).
+
+**Resend over its HTTP API.** Sign-up verification emails a six-digit code, so the API needs to send
+mail. Resend is quick to work with -- domain verification is three DNS records -- and its free
+tier's 3,000 messages a month is well clear of anything this project will send. HTTP rather than
+SMTP because a low-cost VPS has no IP reputation to send on and port 25 is one more thing to get
+blocked on; the provider owns deliverability. Senders sit behind a Protocol chosen by configuration
+(`mail.py`), so a second provider is one class and one entry. Alternative considered: SMTP from the
+box (reputation, port 25, more moving parts).
 
 ## Infrastructure
 

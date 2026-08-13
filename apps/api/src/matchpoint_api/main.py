@@ -59,6 +59,8 @@ def create_app() -> FastAPI:
     # request-otp: the cost is outbound email, not CPU. Per-email charges on arrival
     # and refunds a failed send, so only mail that reached an inbox is paid for
     # (routers/auth.py); the price is that knowing an address can block its sign-up.
+    # Sized under Resend's free tier, whose binding limit is 100 messages a day — the
+    # deploy smoke check spends from the same budget, one message per deploy to main.
     app.state.request_otp_per_email_limit = RateLimiter(per_minute=0.2, burst=3)
     app.state.request_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.request_otp_total_limit = RateLimiter(per_minute=30, burst=10)

@@ -29,8 +29,10 @@ Done by hand as the `thomas` admin user; CI never performs these steps.
      `600`, and the Cloudflare SSL mode set to **Full (strict)**. The web container drops
      `CAP_DAC_OVERRIDE`, so a key owned by any other user is unreadable to Caddy and TLS will not
      load.
-3. Create `/opt/matchpoint/.env` containing `POSTGRES_PASSWORD=<generated>`, mode `600` (`deploy.sh`
-   manages the `IMAGE_TAG` line and preserves the mode).
+3. Create `/opt/matchpoint/.env` containing `POSTGRES_PASSWORD=<generated>` and
+   `RESEND_API_KEY=<key>`, mode `600` (`deploy.sh` manages the `IMAGE_TAG` line and preserves the
+   mode). Both are `${VAR:?}` in `compose.yml`, so the stack refuses to start without them — the API
+   sends sign-up verification codes, and one that cannot mail cannot create an account.
 4. Create a project deploy token (GitLab → Settings → Repository → Deploy tokens) scoped to
    `read_package_registry` only (not a personal access token; deploy-token scopes are fixed at
    creation, so widening one later means issuing a new token) and add it to `/opt/matchpoint/.env`

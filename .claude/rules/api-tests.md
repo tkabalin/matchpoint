@@ -30,6 +30,16 @@ paths:
 - Build rows with the factories in `tests/factories.py` rather than constructing models inline, and
   add one there for each new model. They `flush()` rather than `commit()`, which is what keeps a
   fixture row inside the transaction the test rolls back.
+- **No test reaches a real email provider.** `tests/__init__.py` pins `settings.email_sender` to the
+  logging sender for the whole run, so a machine configured to send real mail still can't while
+  `pytest` is running. It lives in the package's own import, not a fixture, because test modules
+  build an app at import time — before any fixture runs. Keep it there, don't work around it, and
+  **don't repoint the suite's `@example.com` addresses at a provider sink** like
+  `delivered@resend.dev` to stop the `422` Resend answers them with. That 422 is the backstop:
+  `@example.com` is reserved by RFC 2606 and routes nowhere, so a run that escaped the guard fails
+  loudly and for free, where addresses a provider accepts would let the same escape pass silently
+  and burn a day's send quota. Anything that genuinely must reach the wire — the deploy smoke check,
+  and nothing else — uses a sink address.
 - `conftest.py` drops and recreates `matchpoint_test`, so it refuses any non-local database host.
   Don't loosen that guard to make a run work — point `MATCHPOINT_DATABASE_URL` at the local Compose
   Postgres instead. The opt-out env var exists for CI, where the service container is only reachable
