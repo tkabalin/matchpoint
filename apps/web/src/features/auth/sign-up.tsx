@@ -1,3 +1,4 @@
+import { createCoach, requestOtp, verifyOtp } from "@matchpoint/api-client";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -8,7 +9,10 @@ type Step = "email" | "otp" | "password";
 
 // Mirror the bounds the OpenAPI spec already publishes (CoachCreate.password,
 // VerifyOtpRequest.otp) so an ordinary typo is blocked client-side instead of
-// reaching the API as a 422 — one of which crashed the page outright (#51).
+// reaching the API as a 422 — one of which crashed the page outright (#51). The
+// generated client types the request bodies themselves (#52), but not these numeric
+// bounds — @hey-api emits no runtime validator, so this pair still needs to be kept in
+// sync by hand if the spec's ever change.
 const PASSWORD_MIN_LENGTH = 8;
 const OTP_LENGTH = 6;
 
@@ -42,26 +46,15 @@ export function SignUp() {
     setSubmitting(true);
 
     try {
-      let response: Response;
-      try {
-        response = await fetch("/api/auth/request-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email }),
-        });
-      } catch {
-        setError("Could not reach the server. Try again.");
-        return;
-      }
+      const { error: requestOtpError, response } = await requestOtp({ body: { email } });
 
-      if (response.status === 202) {
+      if (response?.status === 202) {
         setStep("otp");
         return;
       }
 
       // 409 (email already registered) — inline error, stay on the email step.
-      setError(await parseErrorMessage(response, "Could not request a code."));
+      setError(parseErrorMessage(requestOtpError, "Could not request a code."));
     } finally {
       setSubmitting(false);
     }
@@ -73,20 +66,9 @@ export function SignUp() {
     setSubmitting(true);
 
     try {
-      let response: Response;
-      try {
-        response = await fetch("/api/auth/verify-otp", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, otp }),
-        });
-      } catch {
-        setError("Could not reach the server. Try again.");
-        return;
-      }
+      const { error: verifyOtpError, response } = await verifyOtp({ body: { email, otp } });
 
-      if (response.status === 200) {
+      if (response?.status === 200) {
         // No token to capture — the verification cookie the backend just set is
         // what POST /coaches (the next step) will present, not anything held here.
         setStep("password");
@@ -94,7 +76,7 @@ export function SignUp() {
       }
 
       // 400 (wrong/expired code) or 429 (too many attempts).
-      setError(await parseErrorMessage(response, "Could not verify that code."));
+      setError(parseErrorMessage(verifyOtpError, "Could not verify that code."));
     } finally {
       setSubmitting(false);
     }
@@ -106,20 +88,11 @@ export function SignUp() {
     setSubmitting(true);
 
     try {
-      let response: Response;
-      try {
-        response = await fetch("/api/coaches", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ email, password, display_name: displayName }),
-        });
-      } catch {
-        setError("Could not reach the server. Try again.");
-        return;
-      }
+      const { error: createCoachError, response } = await createCoach({
+        body: { email, password, display_name: displayName },
+      });
 
-      if (response.status === 201) {
+      if (response?.status === 201) {
         // Sign in fresh with the new credentials, per the requested flow —
         // this doesn't land the coach on /home directly.
         await navigate({ to: "/" });
@@ -127,7 +100,7 @@ export function SignUp() {
       }
 
       // 400/401 (missing or invalid OTP verification) or 409 (duplicate email).
-      setError(await parseErrorMessage(response, "Could not create the account."));
+      setError(parseErrorMessage(createCoachError, "Could not create the account."));
     } finally {
       setSubmitting(false);
     }

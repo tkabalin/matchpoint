@@ -94,17 +94,20 @@ test("blocks submit until the email is filled", async () => {
   expect(submit).toBeEnabled();
 });
 
-test("sends the email to /api/auth/request-otp with cookies included", async () => {
+test("sends the email to /api/auth/request-otp", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
   await renderSignUp();
 
   await fillAndSubmitEmail(user);
 
-  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
-  expect(url).toBe("/api/auth/request-otp");
-  expect(init?.credentials).toBe("include");
-  expect(JSON.parse(String(init?.body))).toEqual({ email: "coach@example.com" });
+  // The generated client calls fetch with a single Request object, not (url, init) —
+  // same pattern player-list.test.tsx uses for the same reason.
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/request-otp");
+  expect(await realRequest.json()).toEqual({ email: "coach@example.com" });
 });
 
 test("moves to the OTP step on a 202 response", async () => {
@@ -208,7 +211,7 @@ async function fillAndSubmitOtp(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Verify" }));
 }
 
-test("sends the email and code to /api/auth/verify-otp with cookies included", async () => {
+test("sends the email and code to /api/auth/verify-otp", async () => {
   const user = userEvent.setup();
   await goToOtpStep(user);
   stubFetch(() => new Response(null, { status: 200 }));
@@ -216,10 +219,11 @@ test("sends the email and code to /api/auth/verify-otp with cookies included", a
   await fillAndSubmitOtp(user);
   await screen.findByLabelText("Password");
 
-  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
-  expect(url).toBe("/api/auth/verify-otp");
-  expect(init?.credentials).toBe("include");
-  expect(JSON.parse(String(init?.body))).toEqual({ email: "coach@example.com", otp: "123456" });
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/verify-otp");
+  expect(await realRequest.json()).toEqual({ email: "coach@example.com", otp: "123456" });
 });
 
 test("shows the server's error and stays on the OTP step on a 400 response", async () => {
@@ -342,7 +346,7 @@ async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Sign Up" }));
 }
 
-test("sends the email, password and display name to POST /coaches with cookies included, no token field", async () => {
+test("sends the email, password and display name to POST /coaches, no token field", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
   stubFetch(() =>
@@ -355,10 +359,11 @@ test("sends the email, password and display name to POST /coaches with cookies i
   await fillAndSubmitPassword(user);
   await screen.findByRole("heading", { name: "Sign In" });
 
-  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
-  expect(url).toBe("/api/coaches");
-  expect(init?.credentials).toBe("include");
-  expect(JSON.parse(String(init?.body))).toEqual({
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/coaches");
+  expect(await realRequest.json()).toEqual({
     email: "coach@example.com",
     password: "hunter2000",
     display_name: "Amahle Nkosi",

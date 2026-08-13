@@ -1,3 +1,4 @@
+import { login } from "@matchpoint/api-client";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -16,29 +17,16 @@ export function SignIn() {
     event.preventDefault();
     setError(null);
 
-    let response: Response;
-    try {
-      response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-    } catch {
-      setError("Could not reach the server. Try again.");
-      return;
-    }
+    const { error: loginError, response } = await login({ body: { email, password } });
 
-    if (response.ok) {
+    if (response?.status === 200) {
       await navigate({ to: "/home" });
       return;
     }
 
     // The backend deliberately returns the same message whether the email or the
-    // password was wrong — shown verbatim, never re-worded per field. A 422 (e.g. an
-    // empty body) is possible too, whose detail is an array rather than a string —
-    // parseErrorMessage is what keeps that from crashing the page (#51).
-    setError(await parseErrorMessage(response, "Could not sign in."));
+    // password was wrong — shown verbatim, never re-worded per field.
+    setError(parseErrorMessage(loginError, "Could not sign in."));
   }
 
   return (

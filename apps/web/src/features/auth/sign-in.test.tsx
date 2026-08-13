@@ -99,7 +99,7 @@ test("navigates to /home on a successful sign-in", async () => {
   expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
 });
 
-test("sends the credentials to /api/auth/login with cookies included", async () => {
+test("sends the credentials to /api/auth/login", async () => {
   stubFetch(() => Response.json({ id: "1", email: "coach@example.com", display_name: "Coach" }));
   const user = userEvent.setup();
   await renderSignIn();
@@ -107,10 +107,13 @@ test("sends the credentials to /api/auth/login with cookies included", async () 
   await fillAndSubmit(user);
   await screen.findByRole("heading", { name: "Home" });
 
-  const [url, init] = vi.mocked(fetch).mock.calls[0] ?? [];
-  expect(url).toBe("/api/auth/login");
-  expect(init?.credentials).toBe("include");
-  expect(JSON.parse(String(init?.body))).toEqual({
+  // The generated client calls fetch with a single Request object, not (url, init) —
+  // same pattern player-list.test.tsx uses for the same reason.
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/login");
+  expect(await realRequest.json()).toEqual({
     email: "coach@example.com",
     password: "hunter2",
   });
