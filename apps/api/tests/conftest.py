@@ -18,6 +18,11 @@ LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 ALLOW_NONLOCAL_ENV = "MATCHPOINT_TEST_ALLOW_NONLOCAL_DB"
 
 
+# The email sender is pinned in `tests/__init__.py`, not here: this module imports
+# `matchpoint_api.main`, which builds an app at import time, so the pin has to be in
+# something that runs before any fixture — the package's own import.
+
+
 @pytest.fixture(scope="session")
 def _test_engine() -> Iterator[Engine]:
     """A fresh matchpoint_test database on the Compose server, migrated to Alembic head."""
