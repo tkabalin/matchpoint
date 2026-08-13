@@ -21,7 +21,9 @@ from matchpoint_api.auth import (
     hash_token,
     new_session_token,
 )
+from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
+from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password
 from tests.factories import make_coach, make_coach_session, make_email_verification
 
@@ -518,6 +520,48 @@ def test_requesting_a_code_emails_it_to_the_address(client: TestClient) -> None:
     assert to == PENDING_EMAIL
     assert "code" in subject.lower()
     assert _code_in(body)
+
+
+def test_a_failed_send_answers_502(client: TestClient, db_session: Session) -> None:
+    """The reason the send is inline rather than deferred: a coach must not be sent to the
+    code-entry screen to wait for mail the provider never accepted.
+
+    The row survives it. Nothing needs to roll back — it expires on its own, and the retry
+    this 502 is asking for overwrites it — and undoing the commit to make the failure tidy
+    would mean the successful path had to hold the transaction open across a network call.
+    """
+
+    class FailingEmailSender:
+        def send(self, *, to: str, subject: str, text: str) -> None:
+            raise EmailSendError("provider said no")
+
+    cast(FastAPI, client.app).state.email_sender = FailingEmailSender()
+
+    response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == SEND_FAILED
+    assert db_session.scalars(select(EmailVerification)).one().email == PENDING_EMAIL
+
+
+def test_a_failed_send_gives_the_address_its_code_budget_back(client: TestClient) -> None:
+    """Otherwise the 502's "please try again" is advice the next request cannot take: the
+    per-email tier holds three tokens, and a provider having a bad minute would spend all
+    three on emails nobody received, then refuse the fourth attempt for five minutes."""
+
+    class FailingEmailSender:
+        def send(self, *, to: str, subject: str, text: str) -> None:
+            raise EmailSendError("provider said no")
+
+    cast(FastAPI, client.app).state.email_sender = FailingEmailSender()
+    for _ in range(3):
+        assert client.post("/auth/request-otp", json={"email": PENDING_EMAIL}).status_code == 502
+
+    recorder = _record_email(client)
+    response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
+
+    assert response.status_code == 202
+    assert len(recorder.sent) == 1
 
 
 def test_the_code_is_stored_hashed_and_expiring(client: TestClient, db_session: Session) -> None:

@@ -106,6 +106,43 @@ def test_a_refused_request_spends_nothing(clock: Clock) -> None:
     limiter.take("1.2.3.4")
 
 
+def test_a_refunded_request_leaves_the_bucket_as_it_found_it(clock: Clock) -> None:
+    """What request-otp's 502 path relies on: a send the provider refused must not spend
+    the budget for mail to that address, or the retry it asks for meets a 429."""
+    limiter = RateLimiter(per_minute=60, burst=1)
+    limiter.take("new@example.com")
+
+    limiter.refund("new@example.com")
+
+    limiter.take("new@example.com")
+    take_expecting_429(limiter, "new@example.com")
+
+
+def test_a_refund_cannot_bank_more_than_the_burst(clock: Clock) -> None:
+    """A refund is a token back, not a token minted: crediting a bucket beyond its burst
+    would make an unspent cost a way to widen the bound rather than restore it."""
+    limiter = RateLimiter(per_minute=60, burst=2)
+    limiter.take("new@example.com")
+
+    for _ in range(5):
+        limiter.refund("new@example.com")
+
+    limiter.take("new@example.com")
+    limiter.take("new@example.com")
+    take_expecting_429(limiter, "new@example.com")
+
+
+def test_refunding_a_key_that_never_spent_is_harmless(clock: Clock) -> None:
+    """Untouched keys have nothing owed back, and must not be dragged into the dict the
+    pruning is there to keep small."""
+    limiter = RateLimiter(per_minute=60, burst=1)
+
+    limiter.refund("new@example.com")
+
+    limiter.take("new@example.com")
+    take_expecting_429(limiter, "new@example.com")
+
+
 def test_taking_from_several_buckets_admits_only_when_all_of_them_can_pay(clock: Clock) -> None:
     limiter = RateLimiter(per_minute=60, burst=2)
     drained = RateLimiter(per_minute=60, burst=1)
