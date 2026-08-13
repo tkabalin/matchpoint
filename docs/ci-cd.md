@@ -150,14 +150,11 @@ title, whoever started the pipeline, and a colour bar for the outcome:
 The commit's author is named as well, but only when that is someone other than whoever started the
 pipeline — on a merge the two differ, and the person who started it is the one around to act.
 
-The failure alert deliberately doesn't depend on the deploy job: a pipeline that breaks in lint,
-test or build never reaches deployment, which is exactly when a broken `main` is worth announcing.
-It can't name the job that broke, though: no CI variable carries that, and the job token is refused
-on the API listing a pipeline's jobs, so naming it would mean minting and rotating a `read_api`
-token. There is no "deploy started" message and nothing at all for branch or MR pipelines — the
-signal is the outcome, not the attempt; a failed registry prune is silent too, since it must not
-redden a successful deploy. Both jobs drop out of the pipeline entirely while `SLACK_WEBHOOK_URL` is
-unset or blank, rather than failing it.
+The failure alert fires for any broken `main` pipeline, not only failed deploys — a lint or test
+break that never reaches deployment is exactly when a broken `main` is worth announcing.
+Limitations: it can't name the specific failing job (no CI variable carries that), there is no
+"deploy started" message, and branch/MR pipelines are silent. Both alert jobs drop out of the
+pipeline entirely while `SLACK_WEBHOOK_URL` is unset.
 
 ## Production stack
 

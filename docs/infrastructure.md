@@ -33,16 +33,10 @@ therefore less likely to run into issues than a newer release.
 **Principle of least privilege** governs SSH access; access is limited to what's needed, nothing
 more.
 
-**Non-root operation**: a standard user account (`thomas`) is used for day-to-day access instead of
-root, in order to:
-
-- Reduce the blast radius of mistakes (accidental destructive commands are scoped to what that user
-  can do)
-- Increase auditability (actions are attributable to a named user rather than a shared root account)
-
 ### Hardening checklist
 
-- Non-root user (`thomas`) with sudo privileges, key-only SSH authentication
+- Non-root user (`thomas`) for day-to-day access, with sudo privileges and key-only SSH
+  authentication
 - Root login disabled
 - Password authentication disabled
 - Unattended security upgrades enabled
@@ -50,11 +44,7 @@ root, in order to:
 - UFW firewall: SSH open to any source; HTTP/HTTPS restricted to Cloudflare's published IP ranges
   only, not open to the internet
 - 2GB swap configured
-
-### Terminal access
-
-**Terminus** is for urgent SSH from mobile when away from the development machine, so the server is
-reachable outside working hours.
+- Terminus for emergency SSH from mobile
 
 ## CI/CD Runner
 

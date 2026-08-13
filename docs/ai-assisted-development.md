@@ -3,8 +3,8 @@
 MatchPoint is developed with AI coding assistants (primarily
 [Claude Code](https://claude.com/claude-code)) as a routine part of the workflow. This document
 records the conventions and mechanisms that make that work reliably, and why. All of it is checked
-into the repository, so every developer inherits the
-same assistant behaviour rather than configuring their own in isolation.
+into the repository, so every developer inherits the same assistant behaviour rather than
+configuring their own in isolation.
 
 ## Guiding principles
 

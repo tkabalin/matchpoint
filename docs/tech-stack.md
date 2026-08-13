@@ -36,16 +36,13 @@ latest, since community support and documentation coverage peak there.
 
 ### Rationale
 
-**React + Vite SPA.** A Single Page Application (SPA) loads once and handles all navigation in the
-browser without full page reloads from the server. This matters here because a Progressive Web App
-(PWA) -- a web app that can be installed to the home screen and work offline -- boots from a cached
-app shell, which is inherently SPA behaviour. Server-Side Rendering (SSR), where the server
-generates each page's HTML on request, provides nothing for an app that must function without a
-server connection. `vite-plugin-pwa` is the most mature PWA tooling in the React ecosystem. No Node
-server to run -- the built app is static files behind a reverse proxy, pairing cleanly with a Python
-API on a cheap VPS. Alternatives considered: Next.js (brings App Router/RSC concepts and a Node
-runtime we don't need; actively fights the offline app-shell model unless used as a static export,
-at which point it's Vite with extra steps).
+**React + Vite SPA.** A PWA boots from a cached app shell, which is inherently SPA behaviour; SSR
+provides nothing for an app that must function without a server connection. `vite-plugin-pwa` is the
+most mature PWA tooling in the React ecosystem. No Node server to run -- the built app is static
+files behind a reverse proxy, pairing cleanly with a Python API on a cheap VPS. Alternatives
+considered: Next.js (brings App Router/RSC concepts and a Node runtime we don't need; actively
+fights the offline app-shell model unless used as a static export, at which point it's Vite with
+extra steps).
 
 **PWA over native.** No app-store friction, which is critical for rapid usability-testing iterations
 with the client. iOS is now genuinely workable: installed PWAs are exempt from Safari's 7-day

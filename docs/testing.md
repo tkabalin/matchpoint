@@ -78,15 +78,11 @@ service container.
 
 ### Why not mock the database
 
-The usual advice — mock a dependency so a unit test runs in isolation — is deliberately not followed
-for the database. A mocked session can't reproduce Postgres-specific behaviour (aggregate functions,
-date/interval arithmetic, `NUMERIC` rounding) that the analytics queries rely on; a test suite green
-against a mock but wrong against real Postgres is worse than no test, because it asserts confidence
-that doesn't exist. The savepoint-rollback fixture (`db_session`) keeps the cost of using a real
-database close to that of a mock — each test starts from a clean, migrated schema and rolls back on
-teardown, so tests stay fast and isolated without hand-written fakes to keep in sync with the
-schema. Mocking stays legitimate for genuine third-party dependencies (an external API, a payment
-provider) should MatchPoint ever acquire one — none exist today.
+A mocked session can't reproduce Postgres-specific behaviour (aggregate functions, date/interval
+arithmetic, `NUMERIC` rounding) that the analytics queries rely on; a test suite green against a
+mock but wrong against real Postgres is worse than no test. The savepoint-rollback fixture keeps the
+cost close to that of a mock, so there is no speed reason to give up the fidelity. Mocking stays
+legitimate for genuine third-party dependencies should MatchPoint ever acquire one.
 
 ## CI and coverage
 
