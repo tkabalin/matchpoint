@@ -364,18 +364,165 @@ def test_get_player_malformed_id_is_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_update_player_changes_only_the_fields_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The point of exclude_unset: last_name is absent from the body, so it survives a
+    PATCH that renames the player."""
+    player = make_player(
+        db_session, first_name="Serena", last_name="Williams", notes="Serve +1.", coach_id=coach.id
+    )
+    db_session.commit()
+
+    response = client.patch(f"/players/{player.id}", json={"first_name": "Venus"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["first_name"] == "Venus"
+    assert body["last_name"] == "Williams"
+    assert body["notes"] == "Serve +1."
+
+    saved = db_session.get(Player, player.id)
+    assert saved is not None
+    assert saved.first_name == "Venus"
+
+
+def test_update_player_clears_a_nullable_field_with_an_explicit_null(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Null is how a client empties a field, which is the whole reason absent and null
+    have to stay distinguishable."""
+    player = make_player(
+        db_session, date_of_birth=date(1981, 9, 26), notes="Serve +1.", coach_id=coach.id
+    )
+    db_session.commit()
+
+    response = client.patch(f"/players/{player.id}", json={"date_of_birth": None})
+
+    assert response.status_code == 200
+    assert response.json()["date_of_birth"] is None
+    assert response.json()["notes"] == "Serve +1."
+
+    saved = db_session.get(Player, player.id)
+    assert saved is not None
+    assert saved.date_of_birth is None
+
+
+@pytest.mark.parametrize("field", ["first_name", "last_name"])
+def test_update_player_rejects_a_null_name_part(
+    client: TestClient, db_session: Session, coach: Coach, field: str
+) -> None:
+    """The columns are NOT NULL, and UNSET is what turns null into this 422 rather than
+    an IntegrityError on the flush."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.patch(f"/players/{player.id}", json={field: None})
+
+    assert response.status_code == 422
+
+
+def test_update_player_with_an_empty_body_changes_nothing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A PATCH with nothing set is a 200 no-op rather than an error: with every field
+    optional there is no body that could be too empty to be valid."""
+    player = make_player(db_session, first_name="Serena", last_name="Williams", coach_id=coach.id)
+    db_session.commit()
+
+    response = client.patch(f"/players/{player.id}", json={})
+
+    assert response.status_code == 200
+    assert response.json()["first_name"] == "Serena"
+    assert response.json()["last_name"] == "Williams"
+
+
+def test_update_player_bumps_updated_at(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Nothing in the route touches updated_at, so this pins that the column's onupdate
+    is what moves it."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    before = player.updated_at
+
+    response = client.patch(f"/players/{player.id}", json={"first_name": "Iga"})
+
+    assert response.status_code == 200
+    assert datetime.fromisoformat(response.json()["updated_at"]) > before
+
+
+def test_update_player_ignores_coach_id_and_archived_at(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Neither field is on PlayerUpdate, so pydantic drops them rather than 422ing —
+    what matters is that a PATCH cannot hand a player to another coach or archive one.
+    """
+    other = make_coach(db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.patch(
+        f"/players/{player.id}",
+        json={"coach_id": str(other.id), "archived_at": "2020-01-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["coach_id"] == str(coach.id)
+    assert body["archived_at"] is None
+
+
+def test_update_player_rejects_a_future_date_of_birth(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The create bounds are shared with the update, so an edit cannot land a date the
+    create route would have refused."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    tomorrow = date.today() + timedelta(days=1)
+
+    response = client.patch(f"/players/{player.id}", json={"date_of_birth": tomorrow.isoformat()})
+
+    assert response.status_code == 422
+
+
+def test_update_player_of_another_coach_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """404 and not 403, as on the fetch — and the row has to come through untouched."""
+    other_player = make_player(db_session, first_name="Coco", last_name="Gauff")
+    db_session.commit()
+
+    response = client.patch(f"/players/{other_player.id}", json={"first_name": "Iga"})
+
+    assert response.status_code == 404
+
+    saved = db_session.get(Player, other_player.id)
+    assert saved is not None
+    assert saved.first_name == "Coco"
+
+
+@pytest.mark.usefixtures("coach")
+def test_update_player_unknown_id_is_404(client: TestClient) -> None:
+    response = client.patch(f"/players/{uuid.uuid4()}", json={"first_name": "Iga"})
+
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
         ("post", "/players"),
         ("get", "/players"),
         ("get", f"/players/{uuid.UUID(int=0)}"),
+        ("patch", f"/players/{uuid.UUID(int=0)}"),
     ],
 )
 def test_player_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
     """No cookie, no roster: every player route answers 401 before anything else —
-    including validation, which is why the POST can send an empty body."""
-    response = client.request(method, path, json={} if method == "post" else None)
+    including validation, which is why the writes can send an empty body."""
+    response = client.request(method, path, json={} if method in {"post", "patch"} else None)
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}

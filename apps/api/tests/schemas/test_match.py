@@ -1,8 +1,9 @@
-"""Unit tests for the MatchCreate validation rules — no fixtures, no database.
+"""Unit tests for the MatchCreate and MatchUpdate validation rules — no fixtures, no
+database.
 
-Everything MatchCreate does resolves during model construction, so the exhaustive
+Everything the two schemas do resolves during model construction, so the exhaustive
 cases belong here, where they cost a millisecond instead of a round trip.
-`tests/routers/test_matches.py` covers that the rules are wired into the route.
+`tests/routers/test_matches.py` covers that the rules are wired into the routes.
 """
 
 from datetime import date, timedelta
@@ -12,7 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from matchpoint_api.models import SetsFormat, Surface
-from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate
+from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate, MatchUpdate
 
 PLAYER_ID = "3f8c1a2e-0b4d-4c7e-9a51-2d6f8b0e4c13"
 REQUIRED: dict[str, Any] = {"player_id": PLAYER_ID, "played_on": "2026-08-01"}
@@ -165,3 +166,65 @@ def test_strips_a_text_field_before_measuring_its_length(field: str) -> None:
 def test_rejects_a_text_field_over_the_length_limit(field: str) -> None:
     with pytest.raises(ValidationError):
         _match(**{field: "x" * 101})
+
+
+# --- MatchUpdate -------------------------------------------------------------
+#
+# The field annotations are MatchCreate's, so the cases here are the ones the two
+# schemas differ on: what a dump carries, what null does per field, and player_id.
+
+
+def test_an_empty_update_carries_no_fields() -> None:
+    """What makes the empty PATCH a no-op: exclude_unset leaves the route nothing to
+    apply, rather than handing it every field's default."""
+    assert MatchUpdate.model_validate({}).model_dump(exclude_unset=True) == {}
+
+
+def test_an_update_carries_only_the_fields_sent() -> None:
+    update = MatchUpdate.model_validate({"event": "Wimbledon"})
+
+    assert update.model_dump(exclude_unset=True) == {"event": "Wimbledon"}
+
+
+def test_an_update_drops_a_player_id() -> None:
+    """player_id is immutable by omission, so it dumps to nothing at all: the route's
+    loop never sees a field it could use to move the match."""
+    assert MatchUpdate.model_validate({"player_id": PLAYER_ID}).model_dump(exclude_unset=True) == {}
+
+
+def test_an_update_rejects_a_null_played_on() -> None:
+    """The column is NOT NULL, so the UNSET default has to leave the annotation
+    non-optional: null is a 422 here rather than an IntegrityError later."""
+    with pytest.raises(ValidationError):
+        MatchUpdate.model_validate({"played_on": None})
+
+
+@pytest.mark.parametrize("field", ["opponent_name", "surface", "event", "sets_format"])
+def test_an_update_accepts_a_null_for_every_nullable_field(field: str) -> None:
+    """The mirror of the test above, so a field cannot quietly move between the two
+    groups: everything over a nullable column takes null as "clear it"."""
+    assert MatchUpdate.model_validate({field: None}).model_dump(exclude_unset=True) == {field: None}
+
+
+def test_an_update_applies_the_text_bounds() -> None:
+    with pytest.raises(ValidationError):
+        MatchUpdate.model_validate({"opponent_name": "x" * 101})
+
+
+def test_an_update_rejects_a_played_on_of_tomorrow() -> None:
+    """The bounds are one shared annotation, so an update cannot drift from a create."""
+    with pytest.raises(ValidationError):
+        MatchUpdate.model_validate({"played_on": date.today() + timedelta(days=1)})
+
+
+def test_an_update_rejects_a_played_on_outside_the_past_limit() -> None:
+    just_outside = date.today() - timedelta(days=365.25 * MAX_PAST_YEARS + 1)
+
+    with pytest.raises(ValidationError):
+        MatchUpdate.model_validate({"played_on": just_outside})
+
+
+def test_an_update_accepts_a_played_on_inside_the_bounds() -> None:
+    today = date.today()
+
+    assert MatchUpdate.model_validate({"played_on": today}).played_on == today

@@ -1,12 +1,12 @@
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, Match
+from matchpoint_api.models import Coach, Match, Surface
 from tests.factories import make_coach, make_match, make_player, sign_in
 
 
@@ -460,18 +460,175 @@ def test_get_match_malformed_id_is_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_update_match_changes_only_the_fields_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The point of exclude_unset: the fields absent from the body survive a PATCH that
+    corrects the surface."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+        surface=Surface.HARD,
+        event="Roland-Garros",
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"surface": "clay"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["surface"] == "clay"
+    assert body["opponent_name"] == "Aryna"
+    assert body["event"] == "Roland-Garros"
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.surface is Surface.CLAY
+
+
+def test_update_match_clears_a_nullable_field_with_an_explicit_null(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Null is how a client empties a field, which is the whole reason absent and null
+    have to stay distinguishable."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+        event="Roland-Garros",
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"opponent_name": None})
+
+    assert response.status_code == 200
+    assert response.json()["opponent_name"] is None
+    assert response.json()["event"] == "Roland-Garros"
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.opponent_name is None
+
+
+def test_update_match_rejects_a_null_played_on(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The column is NOT NULL, and UNSET is what turns null into this 422 rather than an
+    IntegrityError on the flush."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"played_on": None})
+
+    assert response.status_code == 422
+
+
+def test_update_match_with_an_empty_body_changes_nothing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A PATCH with nothing set is a 200 no-op rather than an error: with every field
+    optional there is no body that could be too empty to be valid."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={})
+
+    assert response.status_code == 200
+    assert response.json()["opponent_name"] == "Aryna"
+    assert response.json()["played_on"] == "2026-08-01"
+
+
+def test_update_match_bumps_updated_at(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Nothing in the route touches updated_at, so this pins that the column's onupdate
+    is what moves it."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    before = match.updated_at
+
+    response = client.patch(f"/matches/{match.id}", json={"event": "Roland-Garros"})
+
+    assert response.status_code == 200
+    assert datetime.fromisoformat(response.json()["updated_at"]) > before
+
+
+def test_update_match_cannot_move_the_match_to_another_player(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """player_id is immutable by being absent from MatchUpdate, so pydantic drops it
+    rather than 422ing. The other player is the caller's own, so what this pins is that
+    the field cannot be written at all, not merely that its owner is checked."""
+    player = make_player(db_session, coach_id=coach.id)
+    other_player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = client.patch(
+        f"/matches/{match.id}", json={"player_id": str(other_player.id), "event": "Wimbledon"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["player_id"] == str(player.id)
+    assert body["event"] == "Wimbledon"
+
+
+def test_update_match_rejects_a_future_played_on(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The create bounds are shared with the update, so an edit cannot land a date the
+    create route would have refused."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    tomorrow = date.today() + timedelta(days=1)
+
+    response = client.patch(f"/matches/{match.id}", json={"played_on": tomorrow.isoformat()})
+
+    assert response.status_code == 422
+
+
+def test_update_match_of_another_coach_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """404 and not 403, as on the fetch — and the row has to come through untouched."""
+    other_match = make_match(db_session, opponent_name="Aryna")
+    db_session.commit()
+
+    response = client.patch(f"/matches/{other_match.id}", json={"opponent_name": "Iga"})
+
+    assert response.status_code == 404
+
+    saved = db_session.get(Match, other_match.id)
+    assert saved is not None
+    assert saved.opponent_name == "Aryna"
+
+
+@pytest.mark.usefixtures("coach")
+def test_update_match_unknown_id_is_404(client: TestClient) -> None:
+    response = client.patch(f"/matches/{uuid.uuid4()}", json={"event": "Wimbledon"})
+
+    assert response.status_code == 404
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
         ("post", "/matches"),
         ("get", "/matches"),
         ("get", f"/matches/{uuid.UUID(int=0)}"),
+        ("patch", f"/matches/{uuid.UUID(int=0)}"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
     """No cookie, no history: every match route answers 401 before anything else —
-    including validation, which is why the POST can send an empty body."""
-    response = client.request(method, path, json={} if method == "post" else None)
+    including validation, which is why the writes can send an empty body."""
+    response = client.request(method, path, json={} if method in {"post", "patch"} else None)
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}

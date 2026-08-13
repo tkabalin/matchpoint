@@ -165,6 +165,26 @@ export type MatchRead = {
 };
 
 /**
+ * MatchUpdate
+ */
+export type MatchUpdate = {
+    /**
+     * Event
+     */
+    event?: string | null;
+    /**
+     * Opponent Name
+     */
+    opponent_name?: string | null;
+    /**
+     * Played On
+     */
+    played_on?: string;
+    sets_format?: SetsFormat | null;
+    surface?: Surface | null;
+};
+
+/**
  * OtpRequest
  */
 export type OtpRequest = {
@@ -240,6 +260,30 @@ export type PlayerRead = {
      * Updated At
      */
     updated_at: string;
+};
+
+/**
+ * PlayerUpdate
+ */
+export type PlayerUpdate = {
+    /**
+     * Date Of Birth
+     */
+    date_of_birth?: string | null;
+    dominant_hand?: DominantHand | null;
+    /**
+     * First Name
+     */
+    first_name?: string;
+    gender?: Gender | null;
+    /**
+     * Last Name
+     */
+    last_name?: string;
+    /**
+     * Notes
+     */
+    notes?: string | null;
 };
 
 /**
@@ -755,6 +799,40 @@ export type GetMatchResponses = {
 
 export type GetMatchResponse = GetMatchResponses[keyof GetMatchResponses];
 
+export type UpdateMatchData = {
+    body: MatchUpdate;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}';
+};
+
+export type UpdateMatchErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateMatchError = UpdateMatchErrors[keyof UpdateMatchErrors];
+
+export type UpdateMatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatchRead;
+};
+
+export type UpdateMatchResponse = UpdateMatchResponses[keyof UpdateMatchResponses];
+
 export type ListPlayersData = {
     body?: never;
     path?: never;
@@ -844,3 +922,37 @@ export type GetPlayerResponses = {
 };
 
 export type GetPlayerResponse = GetPlayerResponses[keyof GetPlayerResponses];
+
+export type UpdatePlayerData = {
+    body: PlayerUpdate;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}';
+};
+
+export type UpdatePlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdatePlayerError = UpdatePlayerErrors[keyof UpdatePlayerErrors];
+
+export type UpdatePlayerResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];

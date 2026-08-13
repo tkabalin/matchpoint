@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
+import type { CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -140,6 +140,18 @@ export const createMatch = <ThrowOnError extends boolean = false>(options: Optio
 export const getMatch = <ThrowOnError extends boolean = false>(options: Options<GetMatchData, ThrowOnError>): RequestResult<GetMatchResponses, GetMatchErrors, ThrowOnError> => (options.client ?? client).get<GetMatchResponses, GetMatchErrors, ThrowOnError>({ url: '/matches/{match_id}', ...options });
 
 /**
+ * Update Match
+ */
+export const updateMatch = <ThrowOnError extends boolean = false>(options: Options<UpdateMatchData, ThrowOnError>): RequestResult<UpdateMatchResponses, UpdateMatchErrors, ThrowOnError> => (options.client ?? client).patch<UpdateMatchResponses, UpdateMatchErrors, ThrowOnError>({
+    url: '/matches/{match_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * List Players
  */
 export const listPlayers = <ThrowOnError extends boolean = false>(options?: Options<ListPlayersData, ThrowOnError>): RequestResult<ListPlayersResponses, ListPlayersErrors, ThrowOnError> => (options?.client ?? client).get<ListPlayersResponses, ListPlayersErrors, ThrowOnError>({ url: '/players', ...options });
@@ -160,3 +172,15 @@ export const createPlayer = <ThrowOnError extends boolean = false>(options: Opti
  * Get Player
  */
 export const getPlayer = <ThrowOnError extends boolean = false>(options: Options<GetPlayerData, ThrowOnError>): RequestResult<GetPlayerResponses, GetPlayerErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerResponses, GetPlayerErrors, ThrowOnError>({ url: '/players/{player_id}', ...options });
+
+/**
+ * Update Player
+ */
+export const updatePlayer = <ThrowOnError extends boolean = false>(options: Options<UpdatePlayerData, ThrowOnError>): RequestResult<UpdatePlayerResponses, UpdatePlayerErrors, ThrowOnError> => (options.client ?? client).patch<UpdatePlayerResponses, UpdatePlayerErrors, ThrowOnError>({
+    url: '/players/{player_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});

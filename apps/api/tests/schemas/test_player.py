@@ -1,8 +1,9 @@
-"""Unit tests for the PlayerCreate validation rules — no fixtures, no database.
+"""Unit tests for the PlayerCreate and PlayerUpdate validation rules — no fixtures, no
+database.
 
 The `date_of_birth` bounds, `ShortText` and `LongText` all resolve during model
 construction, which makes them the only genuinely pure surface the API has today.
-`test_players.py` covers that these rules are wired into the route; the exhaustive
+`test_players.py` covers that these rules are wired into the routes; the exhaustive
 cases belong here, where they cost a millisecond instead of a round trip.
 """
 
@@ -12,7 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from matchpoint_api.models import DominantHand, Gender
-from matchpoint_api.schemas.player import MAX_AGE_YEARS, PlayerCreate
+from matchpoint_api.schemas.player import MAX_AGE_YEARS, PlayerCreate, PlayerUpdate
 
 NAME_LIMIT = 100
 NOTES_LIMIT = 2000
@@ -166,3 +167,70 @@ def test_rejects_blank_notes(value: str) -> None:
 
 def test_accepts_an_explicit_null_for_notes() -> None:
     assert _player(notes=None).notes is None
+
+
+# --- PlayerUpdate ------------------------------------------------------------
+#
+# The field annotations are PlayerCreate's, so the cases here are the ones the two
+# schemas differ on: what a dump carries, and what null does per field.
+
+
+def test_an_empty_update_carries_no_fields() -> None:
+    """What makes the empty PATCH a no-op: exclude_unset leaves the route nothing to
+    apply, rather than handing it every field's default."""
+    assert PlayerUpdate.model_validate({}).model_dump(exclude_unset=True) == {}
+
+
+def test_an_update_carries_only_the_fields_sent() -> None:
+    update = PlayerUpdate.model_validate({"first_name": "Iga"})
+
+    assert update.model_dump(exclude_unset=True) == {"first_name": "Iga"}
+
+
+def test_an_update_distinguishes_an_absent_field_from_a_null_one() -> None:
+    """The distinction the whole schema shape exists for: null reaches the route as a
+    value to store, where an omitted field never appears."""
+    update = PlayerUpdate.model_validate({"date_of_birth": None})
+
+    assert update.model_dump(exclude_unset=True) == {"date_of_birth": None}
+
+
+@pytest.mark.parametrize("field", NAME_FIELDS)
+def test_an_update_rejects_a_null_name_part(field: str) -> None:
+    """Both columns are NOT NULL, so the UNSET default has to leave the annotation
+    non-optional: null is a 422 here rather than an IntegrityError later."""
+    with pytest.raises(ValidationError):
+        PlayerUpdate.model_validate({field: None})
+
+
+@pytest.mark.parametrize("field", ["date_of_birth", "dominant_hand", "gender", "notes"])
+def test_an_update_accepts_a_null_for_every_nullable_field(field: str) -> None:
+    """The mirror of the test above, so a field cannot quietly move between the two
+    groups: everything over a nullable column takes null as "clear it"."""
+    assert PlayerUpdate.model_validate({field: None}).model_dump(exclude_unset=True) == {
+        field: None
+    }
+
+
+def test_an_update_applies_the_name_bounds() -> None:
+    with pytest.raises(ValidationError):
+        PlayerUpdate.model_validate({"first_name": "x" * (NAME_LIMIT + 1)})
+
+
+def test_an_update_rejects_a_date_of_birth_of_tomorrow() -> None:
+    """The bounds are one shared annotation, so an update cannot drift from a create."""
+    with pytest.raises(ValidationError):
+        PlayerUpdate.model_validate({"date_of_birth": date.today() + timedelta(days=1)})
+
+
+def test_an_update_rejects_a_date_of_birth_outside_the_age_limit() -> None:
+    just_outside = date.today() - timedelta(days=365.25 * MAX_AGE_YEARS + 1)
+
+    with pytest.raises(ValidationError):
+        PlayerUpdate.model_validate({"date_of_birth": just_outside})
+
+
+def test_an_update_accepts_a_date_of_birth_inside_the_bounds() -> None:
+    today = date.today()
+
+    assert PlayerUpdate.model_validate({"date_of_birth": today}).date_of_birth == today

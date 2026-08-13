@@ -9,7 +9,7 @@ from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Match, Player
 from matchpoint_api.schemas.errors import ErrorDetail
-from matchpoint_api.schemas.match import MatchCreate, MatchRead
+from matchpoint_api.schemas.match import MatchCreate, MatchRead, MatchUpdate
 
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
@@ -78,4 +78,25 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
     )
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
+    return match
+
+
+@router.patch("/{match_id}", response_model=MatchRead)
+def update_match(
+    match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
+) -> Match:
+    # Scoped through the player as get_match is, and 404 for the same reason.
+    match = db.scalar(
+        select(Match)
+        .join(Player, Match.player_id == Player.id)
+        .where(Match.id == match_id, Player.coach_id == coach.id)
+    )
+    if match is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+    # exclude_unset, so an absent field is left as it is and a null clears the column.
+    # player_id is not on MatchUpdate, so the loop cannot move a match to another
+    # player. updated_at is the column's onupdate, never set here.
+    for field, value in data.model_dump(exclude_unset=True).items():
+        setattr(match, field, value)
+    db.commit()
     return match

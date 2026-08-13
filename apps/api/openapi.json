@@ -311,6 +311,63 @@
         "title": "MatchRead",
         "type": "object"
       },
+      "MatchUpdate": {
+        "properties": {
+          "event": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "opponent_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opponent Name"
+          },
+          "played_on": {
+            "format": "date",
+            "title": "Played On",
+            "type": "string"
+          },
+          "sets_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetsFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "surface": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Surface"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "MatchUpdate",
+        "type": "object"
+      },
       "OtpRequest": {
         "properties": {
           "email": {
@@ -493,6 +550,69 @@
           "updated_at"
         ],
         "title": "PlayerRead",
+        "type": "object"
+      },
+      "PlayerUpdate": {
+        "properties": {
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
+          "dominant_hand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DominantHand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "First Name",
+            "type": "string"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Last Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "title": "PlayerUpdate",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -1273,6 +1393,67 @@
         "tags": [
           "matches"
         ]
+      },
+      "patch": {
+        "operationId": "update_match",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Match",
+        "tags": [
+          "matches"
+        ]
       }
     },
     "/players": {
@@ -1407,6 +1588,67 @@
           }
         },
         "summary": "Get Player",
+        "tags": [
+          "players"
+        ]
+      },
+      "patch": {
+        "operationId": "update_player",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Player",
         "tags": [
           "players"
         ]

@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, updateCurrentCoach, verifyOtp } from '../sdk.gen';
-import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { createCoach, createMatch, createPlayer, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
+import type { CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
 
 /**
  * Forgot Password
@@ -264,6 +264,23 @@ export const getMatchOptions = (options: Options<GetMatchData>) => queryOptions<
     queryKey: getMatchQueryKey(options)
 });
 
+/**
+ * Update Match
+ */
+export const updateMatchMutation = (options?: Partial<Options<UpdateMatchData>>): UseMutationOptions<UpdateMatchResponse, UpdateMatchError, Options<UpdateMatchData>> => {
+    const mutationOptions: UseMutationOptions<UpdateMatchResponse, UpdateMatchError, Options<UpdateMatchData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await updateMatch({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const listPlayersQueryKey = (options?: Options<ListPlayersData>) => createQueryKey('listPlayers', options);
 
 /**
@@ -316,3 +333,20 @@ export const getPlayerOptions = (options: Options<GetPlayerData>) => queryOption
     },
     queryKey: getPlayerQueryKey(options)
 });
+
+/**
+ * Update Player
+ */
+export const updatePlayerMutation = (options?: Partial<Options<UpdatePlayerData>>): UseMutationOptions<UpdatePlayerResponse, UpdatePlayerError, Options<UpdatePlayerData>> => {
+    const mutationOptions: UseMutationOptions<UpdatePlayerResponse, UpdatePlayerError, Options<UpdatePlayerData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await updatePlayer({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
