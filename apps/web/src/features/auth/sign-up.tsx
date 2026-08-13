@@ -12,6 +12,12 @@ export function SignUp() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Neither request is safely repeatable, so the button is closed for the duration of
+  // one rather than left open to an impatient second click: a second request-otp
+  // replaces the code the first one emailed, and a second sign-up presents a cookie the
+  // first already spent, which comes back as "Email not verified" for an account that
+  // was in fact created.
+  const [submitting, setSubmitting] = useState(false);
 
   const canSubmitEmail = email !== "";
   const canSubmitOtp = otp !== "";
@@ -21,28 +27,33 @@ export function SignUp() {
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setSubmitting(true);
 
-    let response: Response;
     try {
-      response = await fetch("/api/auth/request-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email }),
-      });
-    } catch {
-      setError("Could not reach the server. Try again.");
-      return;
-    }
+      let response: Response;
+      try {
+        response = await fetch("/api/auth/request-otp", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email }),
+        });
+      } catch {
+        setError("Could not reach the server. Try again.");
+        return;
+      }
 
-    if (response.status === 202) {
-      setStep("otp");
-      return;
-    }
+      if (response.status === 202) {
+        setStep("otp");
+        return;
+      }
 
-    // 409 (email already registered) — inline error, stay on the email step.
-    const body = (await response.json()) as { detail?: string };
-    setError(body.detail ?? "Could not request a code.");
+      // 409 (email already registered) — inline error, stay on the email step.
+      const body = (await response.json()) as { detail?: string };
+      setError(body.detail ?? "Could not request a code.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
@@ -55,30 +66,35 @@ export function SignUp() {
   async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setSubmitting(true);
 
-    let response: Response;
     try {
-      response = await fetch("/api/coaches", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ email, password }),
-      });
-    } catch {
-      setError("Could not reach the server. Try again.");
-      return;
-    }
+      let response: Response;
+      try {
+        response = await fetch("/api/coaches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ email, password }),
+        });
+      } catch {
+        setError("Could not reach the server. Try again.");
+        return;
+      }
 
-    if (response.status === 201) {
-      // Sign in fresh with the new credentials, per the requested flow —
-      // this doesn't land the coach on /home directly.
-      await navigate({ to: "/" });
-      return;
-    }
+      if (response.status === 201) {
+        // Sign in fresh with the new credentials, per the requested flow —
+        // this doesn't land the coach on /home directly.
+        await navigate({ to: "/" });
+        return;
+      }
 
-    // 400/401 (missing or invalid OTP verification) or 409 (duplicate email).
-    const body = (await response.json()) as { detail?: string };
-    setError(body.detail ?? "Could not create the account.");
+      // 400/401 (missing or invalid OTP verification) or 409 (duplicate email).
+      const body = (await response.json()) as { detail?: string };
+      setError(body.detail ?? "Could not create the account.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   if (step === "password") {
@@ -101,7 +117,7 @@ export function SignUp() {
         />
         {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
         {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={!canSubmitPassword}>
+        <button type="submit" disabled={!canSubmitPassword || submitting}>
           Sign Up
         </button>
       </form>
@@ -133,7 +149,7 @@ export function SignUp() {
         onChange={(event) => setEmail(event.target.value)}
       />
       {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={!canSubmitEmail}>
+      <button type="submit" disabled={!canSubmitEmail || submitting}>
         Continue
       </button>
     </form>

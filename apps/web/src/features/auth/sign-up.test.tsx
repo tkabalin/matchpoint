@@ -21,6 +21,18 @@ function stubFetch(response: () => Response) {
   );
 }
 
+/** Stubs a fetch that stays unresolved until the returned function answers it, so the
+ * in-flight window is observable from a test — the double-submit guard exists only
+ * during it, and a stubFetch response is already settled by the time a click returns. */
+function stubPendingFetch() {
+  let respond!: (response: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    respond = resolve;
+  });
+  vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
+  return respond;
+}
+
 /** Renders SignUp inside a real (in-memory) router rather than mocking useNavigate,
  * so a successful sign-up is verified by what actually ends up on screen — same
  * pattern as sign-in.test.tsx. Needed for every test now, not just the navigation
@@ -128,6 +140,22 @@ test("shows a generic error when the request fails outright", async () => {
   await fillAndSubmitEmail(user);
 
   expect(await screen.findByRole("alert")).toBeInTheDocument();
+});
+
+test("sends one request-otp however impatiently Continue is clicked", async () => {
+  const respond = stubPendingFetch();
+  const user = userEvent.setup();
+  await renderSignUp();
+
+  await fillAndSubmitEmail(user);
+  const submit = screen.getByRole("button", { name: "Continue" });
+  expect(submit).toBeDisabled();
+  await user.click(submit);
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  respond(new Response(null, { status: 202 }));
+  expect(await screen.findByLabelText("Code")).toBeInTheDocument();
 });
 
 async function goToOtpStep(user: ReturnType<typeof userEvent.setup>) {
@@ -255,6 +283,26 @@ test("shows the server's error and stays on the password step when verification 
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Email verification required");
   expect(screen.getByLabelText("Password")).toBeInTheDocument();
+});
+
+test("sends one POST /coaches however impatiently Sign Up is clicked", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  const respond = stubPendingFetch();
+
+  await fillAndSubmitPassword(user);
+  const submit = screen.getByRole("button", { name: "Sign Up" });
+  expect(submit).toBeDisabled();
+  await user.click(submit);
+
+  // The second request would present a cookie the first one spent, so the account it
+  // just created would come back as a 401 telling the coach to verify their email.
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  respond(
+    Response.json({ id: "1", email: "coach@example.com", display_name: "" }, { status: 201 }),
+  );
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
 test("shows a generic error when the complete-sign-up request fails outright", async () => {
