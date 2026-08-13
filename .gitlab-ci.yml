@@ -453,6 +453,15 @@ smoke:
       # Caddy serves the SPA from the web container, built from the same
       # IMAGE_TAG the API just confirmed, so a 200 is all this has left to add.
       curl -fsS -o /dev/null "$site/"
+      # A provider key that is present but wrong looks healthy until a coach
+      # tries to sign up: /health cannot see it, and the test suite cannot
+      # reach a provider by design. One real send per deploy catches it, and a
+      # 502 here failing the deploy is the point — sign-up is bricked without
+      # mail. delivered@resend.dev is Resend's delivery sink; they answer 422
+      # to @example.com, which would read exactly like a bad key.
+      curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
+        -d "{\"email\":\"delivered+$CI_PIPELINE_ID@resend.dev\"}" \
+        "$site/api/auth/request-otp"
 
 # Slack messages via an incoming-webhook URL in the (protected, masked)
 # SLACK_WEBHOOK_URL variable; both jobs drop out of the pipeline entirely while
