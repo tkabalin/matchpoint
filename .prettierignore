@@ -19,8 +19,11 @@ packages/api-client/src/
 
 # Vendored Claude Code skills — kept byte-identical to upstream, so reformatting
 # would make them diff against their source for no benefit. Skills written here are
-# ours to format, so the ignore names the vendored one rather than the whole folder.
+# ours to format, so the ignore names each vendored one rather than the whole folder.
 .claude/skills/shadcn/
+.claude/skills/resend/
+.claude/skills/react-email/
+.claude/skills/email-best-practices/
 
 # Test artifacts
 coverage/
