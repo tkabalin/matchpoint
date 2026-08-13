@@ -2,13 +2,22 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { parseErrorMessage } from "./parse-error";
+
 type Step = "email" | "otp" | "password";
+
+// Mirror the bounds the OpenAPI spec already publishes (CoachCreate.password,
+// VerifyOtpRequest.otp) so an ordinary typo is blocked client-side instead of
+// reaching the API as a 422 — one of which crashed the page outright (#51).
+const PASSWORD_MIN_LENGTH = 8;
+const OTP_LENGTH = 6;
 
 export function SignUp() {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -20,9 +29,12 @@ export function SignUp() {
   const [submitting, setSubmitting] = useState(false);
 
   const canSubmitEmail = email !== "";
-  const canSubmitOtp = otp !== "";
+  const canSubmitOtp = otp.length === OTP_LENGTH;
+  const otpWrongLength = otp !== "" && otp.length !== OTP_LENGTH;
   const passwordsMismatch = confirmPassword !== "" && password !== confirmPassword;
-  const canSubmitPassword = password !== "" && password === confirmPassword;
+  const passwordTooShort = password !== "" && password.length < PASSWORD_MIN_LENGTH;
+  const canSubmitPassword =
+    displayName !== "" && password.length >= PASSWORD_MIN_LENGTH && password === confirmPassword;
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -49,8 +61,7 @@ export function SignUp() {
       }
 
       // 409 (email already registered) — inline error, stay on the email step.
-      const body = (await response.json()) as { detail?: string };
-      setError(body.detail ?? "Could not request a code.");
+      setError(await parseErrorMessage(response, "Could not request a code."));
     } finally {
       setSubmitting(false);
     }
@@ -83,8 +94,7 @@ export function SignUp() {
       }
 
       // 400 (wrong/expired code) or 429 (too many attempts).
-      const body = (await response.json()) as { detail?: string };
-      setError(body.detail ?? "Could not verify that code.");
+      setError(await parseErrorMessage(response, "Could not verify that code."));
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +112,7 @@ export function SignUp() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({ email, password, display_name: displayName }),
         });
       } catch {
         setError("Could not reach the server. Try again.");
@@ -117,8 +127,7 @@ export function SignUp() {
       }
 
       // 400/401 (missing or invalid OTP verification) or 409 (duplicate email).
-      const body = (await response.json()) as { detail?: string };
-      setError(body.detail ?? "Could not create the account.");
+      setError(await parseErrorMessage(response, "Could not create the account."));
     } finally {
       setSubmitting(false);
     }
@@ -128,6 +137,13 @@ export function SignUp() {
     return (
       <form onSubmit={handlePasswordSubmit}>
         <h1>Sign Up</h1>
+        <label htmlFor="display-name">Display name</label>
+        <input
+          id="display-name"
+          type="text"
+          value={displayName}
+          onChange={(event) => setDisplayName(event.target.value)}
+        />
         <label htmlFor="password">Password</label>
         <input
           id="password"
@@ -142,6 +158,7 @@ export function SignUp() {
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
         />
+        {passwordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
         {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
         {error && <p role="alert">{error}</p>}
         <button type="submit" disabled={!canSubmitPassword || submitting}>
@@ -158,6 +175,7 @@ export function SignUp() {
         <p>We sent a code to {email}.</p>
         <label htmlFor="otp">Code</label>
         <input id="otp" type="text" value={otp} onChange={(event) => setOtp(event.target.value)} />
+        {otpWrongLength && <p role="alert">Enter the 6-digit code.</p>}
         {error && <p role="alert">{error}</p>}
         <button type="submit" disabled={!canSubmitOtp || submitting}>
           Verify

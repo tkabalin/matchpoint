@@ -2,6 +2,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { parseErrorMessage } from "./parse-error";
+
 export function SignIn() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
@@ -33,9 +35,10 @@ export function SignIn() {
     }
 
     // The backend deliberately returns the same message whether the email or the
-    // password was wrong — shown verbatim, never re-worded per field.
-    const body = (await response.json()) as { detail?: string };
-    setError(body.detail ?? "Could not sign in.");
+    // password was wrong — shown verbatim, never re-worded per field. A 422 (e.g. an
+    // empty body) is possible too, whose detail is an array rather than a string —
+    // parseErrorMessage is what keeps that from crashing the page (#51).
+    setError(await parseErrorMessage(response, "Could not sign in."));
   }
 
   return (

@@ -193,6 +193,16 @@ test("blocks the OTP submit until a code is entered", async () => {
   expect(submit).toBeEnabled();
 });
 
+test("blocks submit while the code is the wrong length, with a visible hint", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+
+  await user.type(screen.getByLabelText("Code"), "123");
+
+  expect(screen.getByRole("button", { name: "Verify" })).toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Enter the 6-digit code.");
+});
+
 async function fillAndSubmitOtp(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Code"), "123456");
   await user.click(screen.getByRole("button", { name: "Verify" }));
@@ -260,13 +270,41 @@ async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
   vi.unstubAllGlobals();
 }
 
-test("renders the password and confirm fields once the password step is reached", async () => {
+test("renders the display name, password and confirm fields once the password step is reached", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
 
+  expect(screen.getByLabelText("Display name")).toBeInTheDocument();
   expect(screen.getByLabelText("Password")).toBeInTheDocument();
   expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
   expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
+test("blocks submit until a display name is entered", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  await user.type(screen.getByLabelText("Password"), "hunter2000");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
+  const submit = screen.getByRole("button", { name: "Sign Up" });
+  expect(submit).toBeDisabled();
+
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  expect(submit).toBeEnabled();
+});
+
+test("blocks submit while the password is too short, with a visible error", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  await user.type(screen.getByLabelText("Password"), "short1");
+  await user.type(screen.getByLabelText("Confirm password"), "short1");
+
+  expect(screen.getByRole("button", { name: "Sign Up" })).toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Password must be at least 8 characters.",
+  );
 });
 
 test("blocks submit while the passwords differ, with a visible error", async () => {
@@ -276,36 +314,42 @@ test("blocks submit while the passwords differ, with a visible error", async () 
   const submit = screen.getByRole("button", { name: "Sign Up" });
   expect(submit).toBeDisabled();
 
-  await user.type(screen.getByLabelText("Password"), "hunter2");
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  await user.type(screen.getByLabelText("Password"), "hunter2000");
   expect(submit).toBeDisabled();
 
-  await user.type(screen.getByLabelText("Confirm password"), "hunter3");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2001");
   expect(submit).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
 });
 
-test("allows submit once the passwords match", async () => {
+test("allows submit once the display name is set and the passwords match", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
 
-  await user.type(screen.getByLabelText("Password"), "hunter2");
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2");
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  await user.type(screen.getByLabelText("Password"), "hunter2000");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
 
   expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Password"), "hunter2");
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2");
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  await user.type(screen.getByLabelText("Password"), "hunter2000");
+  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
   await user.click(screen.getByRole("button", { name: "Sign Up" }));
 }
 
-test("sends the email and password to POST /coaches with cookies included, no token field", async () => {
+test("sends the email, password and display name to POST /coaches with cookies included, no token field", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
   stubFetch(() =>
-    Response.json({ id: "1", email: "coach@example.com", display_name: "" }, { status: 201 }),
+    Response.json(
+      { id: "1", email: "coach@example.com", display_name: "Amahle Nkosi" },
+      { status: 201 },
+    ),
   );
 
   await fillAndSubmitPassword(user);
@@ -316,8 +360,31 @@ test("sends the email and password to POST /coaches with cookies included, no to
   expect(init?.credentials).toBe("include");
   expect(JSON.parse(String(init?.body))).toEqual({
     email: "coach@example.com",
-    password: "hunter2",
+    password: "hunter2000",
+    display_name: "Amahle Nkosi",
   });
+});
+
+test("shows a usable message instead of crashing on a real FastAPI 422 body", async () => {
+  // The exact shape that used to crash the page (#51): detail is an array of
+  // validation errors, not the hand-written {detail: "..."} every other test uses.
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  stubFetch(
+    () =>
+      new Response(
+        JSON.stringify({
+          detail: [{ loc: ["body", "display_name"], msg: "Field required", type: "missing" }],
+        }),
+        { status: 422 },
+      ),
+  );
+
+  await fillAndSubmitPassword(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Field required");
+  // A crash would unmount the whole tree, including the form itself.
+  expect(screen.getByLabelText("Password")).toBeInTheDocument();
 });
 
 test("navigates to / on a successful sign-up", async () => {
