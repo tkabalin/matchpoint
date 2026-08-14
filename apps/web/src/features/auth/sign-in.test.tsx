@@ -38,7 +38,17 @@ async function renderSignIn() {
     path: "/sign-up",
     component: () => <h1>Sign Up</h1>,
   });
-  const routeTree = rootRoute.addChildren([indexRoute, homeRoute, signUpRoute]);
+  const forgotPasswordRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/forgot-password",
+    component: () => <h1>Reset Password</h1>,
+  });
+  const routeTree = rootRoute.addChildren([
+    indexRoute,
+    homeRoute,
+    signUpRoute,
+    forgotPasswordRoute,
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -148,4 +158,13 @@ test("links to the sign-up page", async () => {
   await user.click(screen.getByRole("link", { name: "sign up here" }));
 
   expect(await screen.findByRole("heading", { name: "Sign Up" })).toBeInTheDocument();
+});
+
+test("links to the forgot-password page", async () => {
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await user.click(screen.getByRole("link", { name: "Reset it here" }));
+
+  expect(await screen.findByRole("heading", { name: "Reset Password" })).toBeInTheDocument();
 });

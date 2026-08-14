@@ -55,6 +55,9 @@ export function SignIn() {
       <p>
         If you don't have an account, <Link to="/sign-up">sign up here</Link>.
       </p>
+      <p>
+        Forgot your password? <Link to="/forgot-password">Reset it here</Link>.
+      </p>
     </div>
   );
 }
