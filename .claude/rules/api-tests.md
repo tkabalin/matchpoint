@@ -47,4 +47,12 @@ paths:
   Postgres instead. The opt-out env var exists for CI, where the service container is only reachable
   at an alias.
 
+## A Write Needs an Origin
+
+- State-changing requests are refused without an `Origin` header naming the app's own host
+  (`csrf.py`), and the `client` fixture sends one by default. A test that builds a `TestClient` of
+  its own passes `headers=ORIGIN_HEADERS` and `base_url=TEST_ORIGIN` from `conftest.py`, unless the
+  header itself is the subject (`test_csrf.py`), or every write it makes answers 403 for a reason
+  that has nothing to do with what it is testing.
+
 See `docs/testing.md` for the unit/integration/e2e split and framework rationale.

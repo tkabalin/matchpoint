@@ -88,6 +88,18 @@ password left standing. The presented session is not spared: revocation matches 
 so a thief holding a copy of that cookie sits on the same row. The device that proved the password
 is handed a fresh session instead, so it stays signed in without keeping the old token.
 
+## Cross-site request forgery
+
+`SameSite=Lax` stops cross-site writes from carrying the cookie, but treats every host under the
+same registrable domain as same-site. The app is served from a subdomain of a shared personal
+domain, so a sibling host's write would arrive with the session cookie attached.
+
+**Origin check middleware.** Every non-safe request (not GET/HEAD/OPTIONS) is refused with 403
+unless its `Origin` header matches the request's `Host`. The expected origin is derived from `Host`,
+not configured, so dev, tests and production need no value of their own. A missing or unparseable
+`Origin` is refused. The middleware sits outermost, so a refused request reads no session and spends
+no rate-limit token.
+
 ## Rate limiting
 
 Token buckets per key in process memory, with three tiers: per-IP, per-account, and per-endpoint.
