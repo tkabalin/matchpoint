@@ -147,6 +147,22 @@ as the authentication design above.
 be an open dump of every coach's email address. Pinned by a test asserting `GET /coaches`
 returns 404.
 
+## Server-side request forgery
+
+**No caller-named host is ever reached.** The API's only outbound connections are to Resend (URL
+fixed as a module constant in `mail.py`, pinned by a test) and Postgres (DSN from the environment).
+Neither takes a hostname or path from a request. Caddy's upstream is likewise fixed in the
+Caddyfile. `EmailStr` validates syntax only (`check_deliverability=False`), and OTP emails carry a
+code, not a link, so no submitted value becomes a network destination.
+
+**Starlette's trailing-slash redirect is proxy-contained.** `redirect_slashes` builds its 307
+`Location` from the `Host` header, but Caddy's site block matches one hostname, so a forged `Host`
+never reaches the API. Documented rather than disabled because turning it off would 404 every
+trailing-slash request.
+
+**httpx does not follow redirects by default.** `mail.py` inherits this default, so a provider
+answering 3xx fails the send rather than hopping to a new destination.
+
 ## Infrastructure
 
 **Single-origin architecture.** Caddy serves the SPA and reverse-proxies `/api/*` from one origin.
