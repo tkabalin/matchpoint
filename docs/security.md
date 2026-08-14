@@ -80,6 +80,14 @@ per-request cleanup cannot reach them. This keeps the table bounded without a cr
 **Password reset invalidates all sessions.** The purpose of a reset is that someone else may hold
 the old credential; leaving their sessions alive would defeat it.
 
+**Changing a password re-authenticates.** `POST /auth/change-password` demands the current password
+rather than trusting the session: a cookie proves this browser was signed in once, not that whoever
+holds it now knows the password, so without the check a stolen session is a permanent takeover. The
+change then ends every session and deletes any live reset code, both being credentials the old
+password left standing. The presented session is not spared: revocation matches on a token's hash,
+so a thief holding a copy of that cookie sits on the same row. The device that proved the password
+is handed a fresh session instead, so it stays signed in without keeping the old token.
+
 ## Rate limiting
 
 Token buckets per key in process memory, with three tiers: per-IP, per-account, and per-endpoint.
