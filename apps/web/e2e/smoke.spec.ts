@@ -19,3 +19,8 @@ test("loads the home page at /home", async ({ page }) => {
   await page.goto("/home");
   await expect(page.getByRole("heading", { name: "Welcome to Home" })).toBeVisible();
 });
+
+test("loads the forgot-password form at /forgot-password", async ({ page }) => {
+  await page.goto("/forgot-password");
+  await expect(page.getByRole("heading", { name: "Reset Password" })).toBeVisible();
+});
