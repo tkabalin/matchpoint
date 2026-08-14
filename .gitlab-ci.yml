@@ -459,7 +459,13 @@ smoke:
       # 502 here failing the deploy is the point — sign-up is bricked without
       # mail. delivered@resend.dev is Resend's delivery sink; they answer 422
       # to @example.com, which would read exactly like a bad key.
+      #
+      # Origin because a write without one is refused
+      # (apps/api/src/matchpoint_api/csrf.py), which makes this the one place
+      # the origin check is exercised through the real proxy chain: a 403 here
+      # is that check answering Cloudflare and Caddy, not the key.
       curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
+        -H "Origin: $site" \
         -d "{\"email\":\"delivered+$CI_PIPELINE_ID@resend.dev\"}" \
         "$site/api/auth/request-otp"
 

@@ -17,6 +17,11 @@ TEST_DATABASE = "matchpoint_test"
 LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 ALLOW_NONLOCAL_ENV = "MATCHPOINT_TEST_ALLOW_NONLOCAL_DB"
 
+# What a browser sends on a write and what `csrf.py` insists on. The client fixture sends
+# it by default; a client built by a test passes it too (`.claude/rules/api-tests.md`).
+TEST_ORIGIN = "https://testserver"
+ORIGIN_HEADERS = {"Origin": TEST_ORIGIN}
+
 
 # The email sender is pinned in `tests/__init__.py`, not here: this module imports
 # `matchpoint_api.main`, which builds an app at import time, so the pin has to be in
@@ -100,5 +105,5 @@ def client(request: pytest.FixtureRequest) -> Iterator[TestClient]:
     # https rather than the default http, because production is: the session cookie is
     # marked Secure, and the cookie jar refuses to send a Secure cookie back over plain
     # http — every cookie-authenticated request would arrive silently signed out.
-    with TestClient(app, base_url="https://testserver") as client:
+    with TestClient(app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS) as client:
         yield client

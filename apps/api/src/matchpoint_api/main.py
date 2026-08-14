@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 from matchpoint_api import __version__
 from matchpoint_api.auth import SessionRenewalMiddleware
 from matchpoint_api.config import settings
+from matchpoint_api.csrf import OriginCheckMiddleware
 from matchpoint_api.errors import validation_error_response
 from matchpoint_api.mail import create_email_sender
 from matchpoint_api.rate_limit import RateLimiter
@@ -44,6 +45,11 @@ def create_app() -> FastAPI:
     # cookie must reach the browser whichever response the request ends in, and a route
     # that raises never returns the object one could be written to.
     app.add_middleware(SessionRenewalMiddleware)
+
+    # Added last and therefore outermost, since add_middleware inserts at the front of
+    # the stack: a write from a foreign origin is refused before anything reads the
+    # session it carried or spends a rate-limit token on it.
+    app.add_middleware(OriginCheckMiddleware)
 
     # Sign-up: sized for security.py's two Argon2 slots (see routers/coaches.py).
     app.state.sign_up_per_ip_limit = RateLimiter(per_minute=10, burst=10)

@@ -26,6 +26,7 @@ from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
+from tests.conftest import ORIGIN_HEADERS
 from tests.factories import (
     make_coach,
     make_coach_session,
@@ -65,8 +66,9 @@ def test_logging_in_returns_the_coach_and_sets_the_session_cookie(
 
 def test_the_cookie_is_locked_down(client: TestClient, db_session: Session) -> None:
     """The flags are the design: HttpOnly is what keeps the token away from script,
-    Secure keeps it off plain http, SameSite=Lax is the CSRF line, and Max-Age is the
-    lifetime auth.py promises. None is separable from 'set a cookie'.
+    Secure keeps it off plain http, SameSite=Lax is the cross-site half of the CSRF line
+    (csrf.py holds the same-site half), and Max-Age is the lifetime auth.py promises. None
+    is separable from 'set a cookie'.
 
     The name is part of it too. `__Host-` is what stops a sibling subdomain of the apex
     we share from setting a Domain-scoped cookie of the same name for the browser to send
@@ -366,12 +368,12 @@ def test_login_has_a_total_bound_no_address_escapes(
     shared bucket can be what refuses the latecomer."""
     _stub_out_verification(monkeypatch)
     for address in ("203.0.113.1", "203.0.113.2"):
-        from_address = TestClient(client.app, client=(address, 50000))
+        from_address = TestClient(client.app, headers=ORIGIN_HEADERS, client=(address, 50000))
         for n in range(10):
             body = LOGIN | {"email": f"coach-{address}-{n}@example.com"}
             assert from_address.post("/auth/login", json=body).status_code == 401
 
-    latecomer = TestClient(client.app, client=("203.0.113.3", 50000))
+    latecomer = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.3", 50000))
 
     assert (
         latecomer.post("/auth/login", json=LOGIN | {"email": "late@example.com"}).status_code == 429
@@ -871,12 +873,12 @@ def test_request_otp_has_a_total_bound_no_address_escapes(client: TestClient) ->
     many of; only the shared bucket bounds what gets mailed in total — and what a young
     sending domain's reputation is exposed to."""
     _record_email(client)
-    from_elsewhere = TestClient(client.app, client=("203.0.113.1", 50000))
+    from_elsewhere = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.1", 50000))
     for n in range(10):
         body = {"email": f"new-{n}@example.com"}
         assert from_elsewhere.post("/auth/request-otp", json=body).status_code == 202
 
-    latecomer = TestClient(client.app, client=("203.0.113.2", 50000))
+    latecomer = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.2", 50000))
 
     response = latecomer.post("/auth/request-otp", json={"email": "late@example.com"})
     assert response.status_code == 429
@@ -1245,12 +1247,12 @@ def test_forgot_password_has_a_total_bound_no_address_escapes(client: TestClient
     address an attacker can occupy many of, so only the shared bucket bounds what
     gets mailed in total."""
     _record_email(client)
-    from_elsewhere = TestClient(client.app, client=("203.0.113.1", 50000))
+    from_elsewhere = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.1", 50000))
     for n in range(10):
         body = {"email": f"ghost-{n}@example.com"}
         assert from_elsewhere.post("/auth/forgot-password", json=body).status_code == 202
 
-    latecomer = TestClient(client.app, client=("203.0.113.2", 50000))
+    latecomer = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.2", 50000))
 
     response = latecomer.post("/auth/forgot-password", json={"email": "late@example.com"})
     assert response.status_code == 429
@@ -1491,7 +1493,9 @@ def _from_address(client: TestClient, address: str) -> TestClient:
 
     https rather than a bare TestClient's http, for the `client` fixture's reason.
     """
-    other = TestClient(client.app, base_url="https://testserver", client=(address, 50000))
+    other = TestClient(
+        client.app, base_url="https://testserver", headers=ORIGIN_HEADERS, client=(address, 50000)
+    )
     other.cookies.set(SESSION_COOKIE, client.cookies[SESSION_COOKIE])
     return other
 

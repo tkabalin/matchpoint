@@ -23,6 +23,7 @@ from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
 from matchpoint_api.security import verify_password
+from tests.conftest import ORIGIN_HEADERS, TEST_ORIGIN
 from tests.factories import make_coach, make_coach_session, sign_in, verify_email
 
 SIGN_UP = {
@@ -344,11 +345,11 @@ def test_sign_up_has_a_total_bound_no_address_escapes(client: TestClient) -> Non
     hit a ceiling. Two addresses drain the shared burst create_app sizes (10) without
     exhausting their own buckets; a third is refused on its very first request."""
     for address in ("203.0.113.1", "203.0.113.2"):
-        from_address = TestClient(client.app, client=(address, 50000))
+        from_address = TestClient(client.app, headers=ORIGIN_HEADERS, client=(address, 50000))
         for _ in range(5):
             assert from_address.post("/coaches", json={}).status_code == 422
 
-    latecomer = TestClient(client.app, client=("203.0.113.3", 50000))
+    latecomer = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.3", 50000))
 
     assert latecomer.post("/coaches", json={}).status_code == 429
 
@@ -362,11 +363,11 @@ def test_a_sign_up_refused_by_the_shared_tier_spends_no_per_address_token(
     per-address dict is asserted directly because "spent nothing" is a claim about state
     the response cannot show — an untouched bucket is one that was never even created."""
     for address in ("203.0.113.1", "203.0.113.2"):
-        from_address = TestClient(client.app, client=(address, 50000))
+        from_address = TestClient(client.app, headers=ORIGIN_HEADERS, client=(address, 50000))
         for _ in range(5):
             from_address.post("/coaches", json={})
 
-    mid_flood = TestClient(client.app, client=("203.0.113.9", 50000))
+    mid_flood = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.9", 50000))
     for _ in range(3):
         assert mid_flood.post("/coaches", json={}).status_code == 429
 
@@ -485,7 +486,7 @@ def test_a_renewal_reaches_the_browser_even_on_an_error_response(db_session: Ses
     )
     db_session.commit()
 
-    with TestClient(app, base_url="https://testserver") as failing_client:
+    with TestClient(app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS) as failing_client:
         failing_client.cookies.set(SESSION_COOKIE, token)
         response = failing_client.get("/boom")
 

@@ -12,7 +12,8 @@ table again — and the SPA would have to hold the token somewhere XSS can reach
 
 HttpOnly keeps the token invisible to script, and Caddy serves the SPA and the API
 from a single origin, so SameSite=Lax costs nothing and no cross-origin cookie design
-(CORS, SameSite=None) ever arises.
+(CORS, SameSite=None) ever arises. Lax stops a cross-site forgery but not a same-site
+one, which is `csrf.py`'s job.
 """
 
 import hashlib
