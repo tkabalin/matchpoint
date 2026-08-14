@@ -1,7 +1,7 @@
 import logging
 import re
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 import httpx2
 import pytest
@@ -25,7 +25,7 @@ from matchpoint_api.auth import (
 from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
 from matchpoint_api.routers.auth import SEND_FAILED
-from matchpoint_api.security import DUMMY_HASH, hash_password
+from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
 from tests.factories import (
     make_coach,
     make_coach_session,
@@ -1444,3 +1444,276 @@ def test_a_rejected_reset_echoes_neither_secret(client: TestClient) -> None:
     assert response.status_code == 422
     assert RESET_PASSWORD not in response.text
     assert "123456" not in response.text
+
+
+# --- Changing a password: POST /auth/change-password ---
+
+NEW_PASSWORD = "an-even-better-password"
+
+
+def _signed_in(client: TestClient, db_session: Session, **session_overrides: Any) -> Coach:
+    """A signed-in coach whose stored hash SIGN_UP's password really verifies against.
+
+    One real hash rather than a sign-up and a login: these tests are about the change,
+    not about how the session was earned.
+    """
+    coach = make_coach(
+        db_session, email=SIGN_UP["email"], password_hash=hash_password(SIGN_UP["password"])
+    )
+    sign_in(client, db_session, coach, **session_overrides)
+    return coach
+
+
+def _change(client: TestClient, **overrides: str) -> httpx2.Response:
+    """Change the password, leaving the rotated token as the client's only session cookie.
+
+    The jar would otherwise hold two of that name, sign_in's hand-set one and the one the
+    route sends, which differ by domain and so make a read of either ambiguous.
+    """
+    body = {"password": SIGN_UP["password"], "new_password": NEW_PASSWORD} | overrides
+    response = client.post("/auth/change-password", json=body)
+    if SESSION_COOKIE in response.cookies:
+        client.cookies.clear()
+        client.cookies.set(SESSION_COOKIE, response.cookies[SESSION_COOKIE])
+    return response
+
+
+def _stub_out_hashing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Answer every current password and store the new one as it arrived. These tests
+    need volume, not real hashing, and at two Argon2 runs a call the real thing costs a
+    third of a second per request."""
+    monkeypatch.setattr("matchpoint_api.routers.auth.verify_password", lambda *_: True)
+    monkeypatch.setattr("matchpoint_api.routers.auth.hash_password", lambda password: password)
+
+
+def _from_address(client: TestClient, address: str) -> TestClient:
+    """The same app and the same session, reached from another client address.
+
+    https rather than a bare TestClient's http, for the `client` fixture's reason.
+    """
+    other = TestClient(client.app, base_url="https://testserver", client=(address, 50000))
+    other.cookies.set(SESSION_COOKIE, client.cookies[SESSION_COOKIE])
+    return other
+
+
+def test_the_current_password_buys_a_new_one(client: TestClient, db_session: Session) -> None:
+    """The stored hash moves and the device that proved the password stays signed in, on
+    a token it was handed here rather than the one it arrived with."""
+    coach = _signed_in(client, db_session)
+    presented = client.cookies[SESSION_COOKIE]
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    assert verify_password(NEW_PASSWORD, coach.password_hash)
+    assert client.cookies[SESSION_COOKIE] != presented
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_the_token_the_change_was_made_with_stops_working(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the presented session is not spared: a thief with a copy of this cookie holds
+    the same token, so the row is the coach's device only by assumption. Sparing it would
+    leave the takeover the current-password check exists to end."""
+    _signed_in(client, db_session)
+    presented = client.cookies[SESSION_COOKIE]
+
+    assert _change(client).status_code == 204
+
+    client.cookies.set(SESSION_COOKIE, presented)
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_a_change_from_a_session_due_for_renewal_hands_back_the_new_token(
+    client: TestClient, db_session: Session
+) -> None:
+    """The rotated token and current_coach's renewal are sent through one channel, so the
+    browser is handed one cookie and it is this request's. Two writers, and the renewal's
+    would land last with a token this request has just deleted, signing the coach out."""
+    _signed_in(client, db_session, expires_at=datetime.now(UTC) + timedelta(days=1))
+
+    response = _change(client)
+
+    assert len(response.headers.get_list("set-cookie")) == 1
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_the_new_password_is_what_signs_in_afterwards(
+    client: TestClient, db_session: Session
+) -> None:
+    """Proved through login, the one route that reads a stored hash: the old password
+    stops working and the chosen one takes over."""
+    _signed_in(client, db_session)
+
+    assert _change(client).status_code == 204
+
+    assert client.post("/auth/login", json=LOGIN).status_code == 401
+    assert client.post("/auth/login", json=LOGIN | {"password": NEW_PASSWORD}).status_code == 200
+
+
+def test_a_wrong_current_password_changes_nothing(client: TestClient, db_session: Session) -> None:
+    """The re-authentication itself: a session alone does not move a password. The body is
+    asserted exactly because the route declares the 403 as ErrorDetail and the generated
+    client is typed from that."""
+    coach = _signed_in(client, db_session)
+    stored = coach.password_hash
+
+    response = _change(client, password="not-the-password")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    assert coach.password_hash == stored
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_changing_a_password_needs_a_session(client: TestClient) -> None:
+    """No session, no coach to re-authenticate: the 401 is the one /coaches/me raises,
+    which is exactly why a wrong password answers 403 instead."""
+    assert _change(client).status_code == 401
+
+
+def test_the_change_ends_the_coach_s_other_sessions(
+    client: TestClient, db_session: Session
+) -> None:
+    """A password change that left an attacker's session standing would have achieved
+    nothing. The device asking keeps its own, as DELETE /auth/sessions does; another
+    coach's sessions are not this change's to touch."""
+    coach = _signed_in(client, db_session)
+    other_device_token = new_session_token()
+    make_coach_session(db_session, coach_id=coach.id, token_hash=hash_token(other_device_token))
+    bystander = make_coach_session(db_session)
+    db_session.commit()
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    remaining = {row.token_hash for row in db_session.scalars(select(CoachSession)).all()}
+    assert remaining == {hash_token(client.cookies[SESSION_COOKIE]), bystander.token_hash}
+    assert client.get("/coaches/me").status_code == 200
+    client.cookies.clear()
+    client.cookies.set(SESSION_COOKIE, other_device_token)
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_a_pending_reset_code_dies_with_a_deliberate_change(
+    client: TestClient, db_session: Session
+) -> None:
+    """An emailed code still answerable after the coach has deliberately replaced their
+    password is a live credential they believe they have already replaced."""
+    _signed_in(client, db_session)
+    code = _forgot(client)
+
+    assert _change(client).status_code == 204
+
+    assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
+    assert _reset(client, code).status_code == 400
+
+
+def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wrong-guess budget, at the burst create_app sizes (5). What it bounds is a
+    stolen session hunting for the password it does not have, which is the only way this
+    route can be guessed against at all."""
+    _signed_in(client, db_session)
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        assert _change(client).status_code == 403
+
+    response = _change(client)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    # The per-coach tier's quote (30 s a token). It is the only tier with nothing left,
+    # the arrival tiers being ten deep against six requests.
+    assert int(response.headers["Retry-After"]) > 6
+
+
+def test_a_correct_password_is_never_refused_by_the_coach_tier(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why the budget counts failures rather than arrivals, reject_login's reasoning with
+    the lever removed: even while someone guesses against a session they stole, the coach
+    holding the real password can still change it.
+
+    The stub answers the real password and refuses the rest, so both branches run for
+    real; what it saves is six Argon2 runs, not the logic."""
+    _signed_in(client, db_session)
+    monkeypatch.setattr(
+        "matchpoint_api.routers.auth.verify_password",
+        lambda password, password_hash: password == SIGN_UP["password"],
+    )
+    for _ in range(5):
+        assert _change(client, password="wrong").status_code == 403
+    assert _change(client, password="wrong").status_code == 429
+
+    response = _change(client)
+
+    assert response.status_code == 204
+
+
+def test_change_arrivals_beyond_the_address_burst_are_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arrival tier this route's pair of Argon2 runs needs, at the burst create_app
+    sizes (10). Successes are what drain it, and they are exactly what the wrong-guess
+    tier deliberately never charges, so nothing else here bounds the hashing."""
+    _signed_in(client, db_session)
+    _stub_out_hashing(monkeypatch)
+    for _ in range(10):
+        assert _change(client).status_code == 204
+
+    refused = _change(client)
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_an_unauthenticated_flood_spends_none_of_the_change_budget(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why the tiers are taken in the handler and not the decorator's dependencies: ahead
+    of the session check, a stranger who can reach no hash at all would still drain the
+    shared bucket and stand between every coach and this route."""
+    for _ in range(20):
+        assert _change(client).status_code == 401
+
+    _signed_in(client, db_session)
+    _stub_out_hashing(monkeypatch)
+
+    assert _change(client).status_code == 204
+
+
+def test_change_password_has_a_total_bound_no_address_escapes(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign-up's shared-tier reasoning: behind Cloudflare the per-address key is an edge
+    address an attacker can occupy many of. Two addresses drain the shared burst (10)
+    without exhausting their own; a third is refused on its first request."""
+    _signed_in(client, db_session)
+    _stub_out_hashing(monkeypatch)
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = _from_address(client, address)
+        for _ in range(5):
+            assert _change(from_address).status_code == 204
+        # Every success rotates the session, so the next address has to carry the token
+        # this one finished on rather than the one it was handed.
+        client.cookies.set(SESSION_COOKIE, from_address.cookies[SESSION_COOKIE])
+
+    latecomer = _from_address(client, "203.0.113.3")
+
+    assert _change(latecomer).status_code == 429
+
+
+def test_a_rejected_change_echoes_neither_password(client: TestClient, db_session: Session) -> None:
+    """The 422 redaction over both fields at once: an error on the new password reports
+    the whole body as its input, the current one included. A session is arranged because
+    the dependency's 401 would otherwise answer before validation ever ran."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = _change(client, new_password="tiny")
+
+    assert response.status_code == 422
+    assert SIGN_UP["password"] not in response.text
+    assert "tiny" not in response.text

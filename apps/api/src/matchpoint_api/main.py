@@ -79,6 +79,14 @@ def create_app() -> FastAPI:
     app.state.reset_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.reset_password_total_limit = RateLimiter(per_minute=30, burst=10)
 
+    # change-password: two Argon2 runs a call, a verification and then a hash, so
+    # sign-up's arrival sizes rather than login's wider ones. Per-coach is login's
+    # wrong-guess budget again, charged only after a failed verification, so a coach who
+    # knows their own password is never refused (see routers/auth.py).
+    app.state.change_password_per_coach_limit = RateLimiter(per_minute=2, burst=5)
+    app.state.change_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.change_password_total_limit = RateLimiter(per_minute=30, burst=10)
+
     # Outbound email, on app state for the buckets' reason — every create_app() gets
     # a sender of its own, so no test can send real mail and any test can read what
     # was sent by swapping in a recorder. Which sender is settings' call (mail.py).

@@ -28,6 +28,7 @@ from matchpoint_api.mail import EmailSender, EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.auth import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     OtpRequest,
@@ -434,6 +435,19 @@ def verify_otp(data: VerifyOtpRequest, db: DbSession, response: Response) -> Non
     set_verification_cookie(response, token)
 
 
+def set_password(db: Session, coach: Coach, new_password: str) -> None:
+    """Give this coach a new password, and retire what the old one left behind.
+
+    The one password write, whichever proof got here: an emailed code, or the current
+    password. Every session and any live reset row go with the old password, all being
+    credentials it left standing; that row is unique on coach_id, so there is at most
+    one. No commit, for revoke_sessions' reason.
+    """
+    coach.password_hash = hash_password(new_password)
+    db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
+    revoke_sessions(db, coach.id)
+
+
 # Forgot password (#50): forgot-password emails a code to a registered address,
 # reset-password trades code and address for a new password.
 
@@ -579,13 +593,73 @@ def reset_password(data: ResetPasswordRequest, db: DbSession) -> None:
         raise _incorrect_code()
     # The Argon2 run is gated behind a correct code, so this endpoint hands
     # unauthenticated traffic no hashing work — failures never reach it.
-    coach.password_hash = hash_password(data.new_password.get_secret_value())
-    # Consuming the row is what makes the code single-use: a concurrent request
-    # answering the same code blocked on the charge's lock, and re-evaluates its
-    # `expires_at > now` against a row that no longer exists.
-    db.execute(delete(PasswordReset).where(PasswordReset.id == row_id))
-    # Every live session dies with the old password. The point of a reset is that
-    # someone else may hold the old credential — and if they are signed in with it,
-    # a reset that left those sessions standing would change nothing.
-    revoke_sessions(db, coach.id)
+    #
+    # The row set_password deletes is this one, which is what makes the code
+    # single-use: a concurrent request answering it blocked on the charge's lock, and
+    # re-evaluates its `expires_at > now` against a row that no longer exists. No
+    # session is spared, because the premise of a reset is that someone else may hold
+    # the old credential.
+    set_password(db, coach, data.new_password.get_secret_value())
     db.commit()
+
+
+# Changing a password (#59): reset-password's write again, proved by the current
+# password rather than an emailed code.
+#
+# Asking for that password rather than taking the session on trust is the whole point:
+# the cookie proves this browser was signed in once, not that whoever holds it now knows
+# the password. Without the check, a stolen session is a permanent account takeover: the
+# thief sets a password of their own and the coach cannot even recover to it.
+
+INCORRECT_PASSWORD = "Incorrect password"
+
+
+@router.post(
+    "/change-password",
+    status_code=204,
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
+        429: {"model": ErrorDetail, "description": "Too many attempts"},
+    },
+)
+def change_password(
+    data: ChangePasswordRequest, coach: CurrentCoach, request: Request, db: DbSession
+) -> None:
+    """Replace this coach's password, given the current one, and end every session.
+
+    The caller keeps working on a freshly issued session cookie. A wrong current password
+    answers 403, where a missing or dead session answers 401.
+    """
+    # In the handler, not the decorator's dependencies where the other Argon2-spending
+    # routes put theirs: metering after the session resolves stops a stranger draining
+    # the shared bucket, and costs nothing, since a 401 reaches no hash anyway.
+    per_ip: RateLimiter = request.app.state.change_password_per_ip_limit
+    total: RateLimiter = request.app.state.change_password_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+    if not verify_password(data.password.get_secret_value(), coach.password_hash):
+        # A budget of wrong guesses charged only for one, keyed on the account:
+        # reject_login's tier for reject_login's reasons, minus its lockout worry, since
+        # spending a token here needs a live session for the account it would lock out.
+        per_coach: RateLimiter = request.app.state.change_password_per_coach_limit
+        per_coach.take(str(coach.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    # The presented session goes with all the others, unlike at DELETE /auth/sessions: a
+    # thief holding a copy of this cookie authenticates against the same row, so sparing
+    # it would leave standing the very access this route exists to end.
+    set_password(db, coach, data.new_password.get_secret_value())
+    # A fresh session for the device that just proved the password, so it stays signed in
+    # holding a token no copy of the old one matches.
+    token = new_session_token()
+    db.add(
+        CoachSession(
+            coach_id=coach.id,
+            token_hash=hash_token(token),
+            expires_at=datetime.now(UTC) + SESSION_LIFETIME,
+        )
+    )
+    db.commit()
+    # Sent by the renewal middleware, for the reason its docstring gives. Writing where
+    # current_coach's renewal writes is what keeps the two from both setting the cookie:
+    # this runs after that dependency, so the token the browser is handed is this one.
+    request.state.renewed_session_token = token

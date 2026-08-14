@@ -5,6 +5,20 @@ export type ClientOptions = {
 };
 
 /**
+ * ChangePasswordRequest
+ */
+export type ChangePasswordRequest = {
+    /**
+     * New Password
+     */
+    new_password: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
  * CoachCreate
  */
 export type CoachCreate = {
@@ -409,6 +423,43 @@ export type VerifyOtpRequestWritable = {
      */
     otp: string;
 };
+
+export type ChangePasswordData = {
+    body: ChangePasswordRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/change-password';
+};
+
+export type ChangePasswordErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Incorrect password
+     */
+    403: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many attempts
+     */
+    429: ErrorDetail;
+};
+
+export type ChangePasswordError = ChangePasswordErrors[keyof ChangePasswordErrors];
+
+export type ChangePasswordResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ChangePasswordResponse = ChangePasswordResponses[keyof ChangePasswordResponses];
 
 export type ForgotPasswordData = {
     body: ForgotPasswordRequest;

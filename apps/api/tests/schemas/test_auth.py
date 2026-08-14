@@ -2,6 +2,7 @@ import pytest
 from pydantic import ValidationError
 
 from matchpoint_api.schemas.auth import (
+    ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     OtpRequest,
@@ -12,6 +13,7 @@ from matchpoint_api.schemas.auth import (
 LOGIN = {"email": "mike@example.com", "password": "a-good-password"}
 VERIFY = {"email": "mike@example.com", "otp": "123456"}
 RESET = {"email": "mike@example.com", "otp": "123456", "new_password": "a-new-password"}
+CHANGE = {"password": "a-good-password", "new_password": "a-new-password"}
 
 
 def test_a_valid_login_parses() -> None:
@@ -147,3 +149,20 @@ def test_the_repr_never_contains_the_new_password_or_code() -> None:
 
     assert "a-new-password" not in repr(request)
     assert "123456" not in repr(request)
+
+
+def test_a_valid_change_parses() -> None:
+    """No email: the session says whose password this is."""
+    request = ChangePasswordRequest.model_validate(CHANGE)
+
+    assert request.password.get_secret_value() == "a-good-password"
+    assert request.new_password.get_secret_value() == "a-new-password"
+
+
+def test_only_the_new_password_takes_the_sign_up_floor() -> None:
+    """The two fields carry different bounds deliberately, and swapping them is invisible
+    to every other test: a floor on the current password locks out a coach who enrolled
+    under an older one, and none on the new one makes this the way past sign-up's policy."""
+    assert ChangePasswordRequest.model_validate(CHANGE | {"password": "x"}).password is not None
+    with pytest.raises(ValidationError):
+        ChangePasswordRequest.model_validate(CHANGE | {"new_password": "x" * 7})

@@ -25,14 +25,21 @@ _Email = Annotated[EmailStr, StringConstraints(strip_whitespace=True, max_length
 # is simply a wrong code (400), not a malformed request.
 _Otp = Annotated[SecretStr, Field(min_length=OTP_LENGTH, max_length=OTP_LENGTH)]
 
+# The two password bounds, one annotation each so bodies meaning the same thing cannot
+# drift apart in the generated client (_Otp's reason). _Password is a credential being
+# checked against a stored hash, so it takes only the ceiling: the floor is sign-up
+# policy for *new* passwords, and applying it here would lock out every coach who
+# enrolled before a later raise of it. _NewPassword is a password being chosen, so it
+# takes both of CoachCreate's bounds.
+_Password = Annotated[SecretStr, Field(max_length=PASSWORD_MAX_LENGTH)]
+_NewPassword = Annotated[
+    SecretStr, Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+]
+
 
 class LoginRequest(BaseModel):
     email: _Email
-    # Only the ceiling, deliberately: PASSWORD_MIN_LENGTH is sign-up policy for *new*
-    # passwords, and enforcing it here would lock out every coach who enrolled before
-    # a later raise of the floor. Whether the password is right is the stored hash's
-    # question; the ceiling just bounds the request body, exactly as at sign-up.
-    password: Annotated[SecretStr, Field(max_length=PASSWORD_MAX_LENGTH)]
+    password: _Password
 
 
 class OtpRequest(BaseModel):
@@ -51,8 +58,12 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: _Email
     otp: _Otp
-    # Both of CoachCreate's bounds, floor included: this is a *new* password, so
-    # sign-up policy applies — unlike login's, which only bounds the body.
-    new_password: Annotated[
-        SecretStr, Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
-    ]
+    new_password: _NewPassword
+
+
+class ChangePasswordRequest(BaseModel):
+    # No email: the session says whose password this is. The current one is named
+    # `password` as login names it, for the same meaning and the same annotation, and is
+    # already kept out of a 422 body by errors.py under that name.
+    password: _Password
+    new_password: _NewPassword
