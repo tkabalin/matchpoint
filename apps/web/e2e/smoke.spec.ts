@@ -24,3 +24,8 @@ test("loads the forgot-password form at /forgot-password", async ({ page }) => {
   await page.goto("/forgot-password");
   await expect(page.getByRole("heading", { name: "Reset Password" })).toBeVisible();
 });
+
+test("loads the matches list at /matches", async ({ page }) => {
+  await page.goto("/matches");
+  await expect(page.getByRole("heading", { name: "Matches" })).toBeVisible();
+});

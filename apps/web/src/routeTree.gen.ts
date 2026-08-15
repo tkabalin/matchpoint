@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from "./routes/__root"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
 import { Route as HomeRouteImport } from "./routes/home"
+import { Route as MatchesRouteImport } from "./routes/matches"
 import { Route as PlayersRouteImport } from "./routes/players"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 
@@ -30,6 +31,11 @@ const HomeRoute = HomeRouteImport.update({
   path: "/home",
   getParentRoute: () => rootRouteImport,
 } as any)
+const MatchesRoute = MatchesRouteImport.update({
+  id: "/matches",
+  path: "/matches",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayersRoute = PlayersRouteImport.update({
   id: "/players",
   path: "/players",
@@ -45,6 +51,7 @@ export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
+  "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
@@ -52,6 +59,7 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
+  "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
@@ -60,21 +68,31 @@ export interface FileRoutesById {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
+  "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
   "/sign-up": typeof SignUpRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: "/" | "/forgot-password" | "/home" | "/players" | "/sign-up"
+  fullPaths:
+    "/" | "/forgot-password" | "/home" | "/matches" | "/players" | "/sign-up"
   fileRoutesByTo: FileRoutesByTo
-  to: "/" | "/forgot-password" | "/home" | "/players" | "/sign-up"
-  id: "__root__" | "/" | "/forgot-password" | "/home" | "/players" | "/sign-up"
+  to: "/" | "/forgot-password" | "/home" | "/matches" | "/players" | "/sign-up"
+  id:
+    | "__root__"
+    | "/"
+    | "/forgot-password"
+    | "/home"
+    | "/matches"
+    | "/players"
+    | "/sign-up"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
+  MatchesRoute: typeof MatchesRoute
   PlayersRoute: typeof PlayersRoute
   SignUpRoute: typeof SignUpRoute
 }
@@ -102,6 +120,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof HomeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/matches": {
+      id: "/matches"
+      path: "/matches"
+      fullPath: "/matches"
+      preLoaderRoute: typeof MatchesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/players": {
       id: "/players"
       path: "/players"
@@ -123,6 +148,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
+  MatchesRoute: MatchesRoute,
   PlayersRoute: PlayersRoute,
   SignUpRoute: SignUpRoute,
 }
