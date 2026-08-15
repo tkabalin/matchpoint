@@ -8,6 +8,7 @@ from matchpoint_api.auth import SessionRenewalMiddleware
 from matchpoint_api.config import settings
 from matchpoint_api.csrf import OriginCheckMiddleware
 from matchpoint_api.errors import validation_error_response
+from matchpoint_api.headers import SecurityHeadersMiddleware
 from matchpoint_api.mail import create_email_sender
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers import auth, coaches, matches, players
@@ -26,11 +27,16 @@ def operation_id(route: APIRoute) -> str:
 
 
 def create_app() -> FastAPI:
+    # Swagger at /docs stays up in production; it earns a relaxed CSP of its own in
+    # headers.py. ReDoc and Swagger's OAuth2 redirect are off: HTML pages nobody uses,
+    # and ReDoc's Google Fonts and blob: workers would roughly double that exemption.
     app = FastAPI(
         title="MatchPoint API",
         version=__version__,
         debug=settings.debug,
         generate_unique_id_function=operation_id,
+        redoc_url=None,
+        swagger_ui_oauth2_redirect_url=None,
     )
 
     # Replaces FastAPI's own 422 handler for every route at once, which is the point: a
@@ -46,10 +52,14 @@ def create_app() -> FastAPI:
     # that raises never returns the object one could be written to.
     app.add_middleware(SessionRenewalMiddleware)
 
-    # Added last and therefore outermost, since add_middleware inserts at the front of
-    # the stack: a write from a foreign origin is refused before anything reads the
-    # session it carried or spends a rate-limit token on it.
+    # Outside the renewal middleware and the routers, since add_middleware inserts at the
+    # front of the stack: a write from a foreign origin is refused before anything reads
+    # the session it carried or spends a rate-limit token on it.
     app.add_middleware(OriginCheckMiddleware)
+
+    # Added last and therefore outermost: the origin check answers its own 403 without
+    # calling through, so headers added inside it would miss that response.
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Sign-up: sized for security.py's two Argon2 slots (see routers/coaches.py).
     app.state.sign_up_per_ip_limit = RateLimiter(per_minute=10, burst=10)
