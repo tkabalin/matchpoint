@@ -644,7 +644,7 @@ def change_password(
         per_coach: RateLimiter = request.app.state.change_password_per_coach_limit
         per_coach.take(str(coach.id))
         raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
-    # The presented session goes with all the others, unlike at DELETE /auth/sessions: a
+    # The presented session goes with all the others, as at DELETE /auth/sessions: a
     # thief holding a copy of this cookie authenticates against the same row, so sparing
     # it would leave standing the very access this route exists to end.
     set_password(db, coach, data.new_password.get_secret_value())
