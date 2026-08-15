@@ -19,6 +19,13 @@ matchpoint.thomaskabalin.com {
 	# per request. Change the two together, or not at all.
 	log
 
+	# HSTS is a property of the host, not of one response, so it sits at site level
+	# and rides everything, API responses included. A year is safe: the domain lives
+	# behind Cloudflare with TLS permanently on, so there is no plain-HTTP future to
+	# get locked out of. No preload: that needs the registrable domain, which this
+	# subdomain does not own. Policy rationale: docs/security.md.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
 	# /api/* matches nothing for a bare /api, which would otherwise fall through
 	# to the SPA and answer an API call with index.html and a 200.
 	redir /api /api/ permanent
@@ -32,6 +39,18 @@ matchpoint.thomaskabalin.com {
 	# SPA fallback: without try_files, refreshing any client-side route 404s.
 	handle {
 		root * /srv
+
+		# The shell's security headers; API responses stamp their own set in
+		# app middleware (headers.py), which is why none are set on the proxy
+		# above. Everything the app loads is same-origin: Vite's bundles, the
+		# service worker, /api calls. data: images stay allowed for artwork
+		# CSS inlines. Policy rationale: docs/security.md.
+		header {
+			Content-Security-Policy "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+			X-Content-Type-Options nosniff
+			X-Frame-Options DENY
+			Referrer-Policy no-referrer
+		}
 
 		# Vite fingerprints every filename it emits under /assets, so those URLs
 		# never change content and can be cached for good. Everything else is the
