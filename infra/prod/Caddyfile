@@ -50,9 +50,10 @@ matchpoint.thomaskabalin.com {
 		# app middleware (headers.py), which is why none are set on the proxy
 		# above. Everything the app loads is same-origin: Vite's bundles, the
 		# service worker, /api calls. data: images stay allowed for artwork
-		# CSS inlines. Policy rationale: docs/security.md.
+		# CSS inlines, and inline styles for the <style> tags Base UI injects
+		# at runtime. Policy rationale: docs/security.md.
 		header {
-			Content-Security-Policy "default-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+			Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
 			X-Content-Type-Options nosniff
 			X-Frame-Options DENY
 			Referrer-Policy no-referrer
