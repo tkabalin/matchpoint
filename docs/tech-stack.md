@@ -27,6 +27,7 @@ latest, since community support and documentation coverage peak there.
 | Component library | shadcn/ui (Base UI)                        |
 | Routing           | TanStack Router                            |
 | API codegen       | @hey-api/openapi-ts                        |
+| Schema validation | Zod 4 (generated from the spec)            |
 | Server state      | TanStack Query                             |
 | Offline outbox    | _TBD -- TanStack Query mutations or Dexie_ |
 | Package manager   | pnpm 11.18 workspace                       |
@@ -74,6 +75,15 @@ optimistic UI.
 **@hey-api/openapi-ts.** FastAPI's auto-generated OpenAPI 3.1 spec feeds directly into typed
 TypeScript client generation with a TanStack Query plugin. This is now FastAPI's own recommended
 path.
+
+**Zod, generated rather than written.** The generated types describe field names and primitive
+types, and drop every constraint the spec carries beyond them: a date, a UUID and a length-bounded
+string all compile down to `string`. The same generator emits Zod schemas that keep those, so a
+request body can be checked against the real contract in a unit test, offline, with no server
+running. Generating them is the point: a hand-written schema is a second copy of the contract, free
+to drift toward whatever the code under test already does. Alternative considered: Valibot (smaller,
+and the generator supports it equally; Zod is the more widely known of the two, and bundle size does
+not bind on a validator used in tests and at one sync boundary).
 
 ## Backend
 

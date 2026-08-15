@@ -41,6 +41,26 @@ e2e runs on **Playwright**. The runners are kept apart by location and naming: V
 - Interactions go through `@testing-library/user-event`; queries prefer accessible roles
   (`getByRole("button", { name: "Save" })`), so tests double as a basic accessibility check.
 
+### Contract checks against the API
+
+The API's OpenAPI spec is the only description of the wire contract both sides agree on, so both
+checks are generated from it rather than written by hand:
+
+- **Types.** A function that builds a request body is annotated with the generated type: the match
+  payload builder returns `MatchCreate`. A field the API renames, removes, or retypes then fails
+  `tsc` in the web app instead of returning a 422 in front of a coach.
+- **Schemas.** The generator also emits Zod schemas alongside the types
+  (`@matchpoint/api-client/zod`). These keep what TypeScript erases: a date, a UUID, and a
+  length-bounded string are all just `string` once compiled. A test parses the built body with the
+  schema for the endpoint it is bound for.
+
+Neither reaches validation the spec cannot express. Bounds enforced in Python, such as a date that
+must not be in the future, appear nowhere in the schema and need their own check on the client.
+
+Prefer both over a hand-written mock of the API. A mock can be quietly edited until it agrees with
+the code under test, which is how a form ships green and 422s on every real submission; generated
+output cannot be edited without the generator's input changing first.
+
 ### E2E tests
 
 - Specs live in `apps/web/e2e/`, configured by `apps/web/playwright.config.ts`.
