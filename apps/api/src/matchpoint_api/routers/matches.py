@@ -109,14 +109,7 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
 def update_match(
     match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
 ) -> Match:
-    # Scoped through the player as get_match is, and 404 for the same reason.
-    match = db.scalar(
-        select(Match)
-        .join(Player, Match.player_id == Player.id)
-        .where(Match.id == match_id, Player.coach_id == coach.id)
-    )
-    if match is None:
-        raise HTTPException(status_code=404, detail="Match not found")
+    match = match_for_coach(db, match_id, coach.id)
     # player_id is not on MatchUpdate, so apply_to cannot move a match to another
     # player. updated_at is the column's onupdate, never set here.
     data.apply_to(match)
