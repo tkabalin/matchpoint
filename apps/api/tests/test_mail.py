@@ -69,7 +69,7 @@ def test_the_logging_sender_writes_the_whole_message_to_the_log(
 
 
 def test_the_resend_sender_posts_the_message_to_the_api() -> None:
-    """The whole request, because every part of it is load-bearing: the bearer key, the
+    """The whole request, because every part of it matters: the bearer key, the
     verified From address, and `text` — a body under the wrong key sends a blank email."""
     seen: list[httpx.Request] = []
 

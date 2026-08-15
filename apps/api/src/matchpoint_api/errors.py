@@ -64,7 +64,7 @@ def _scrub(error: dict[str, Any]) -> dict[str, Any]:
 def validation_error_response(exc: RequestValidationError) -> JSONResponse:
     """The 422 body, shaped exactly as FastAPI's own handler shapes it but redacted.
 
-    The shape is load-bearing: FastAPI auto-declares every route's 422 as
+    The shape matters: FastAPI auto-declares every route's 422 as
     `HTTPValidationError`, so the generated TypeScript client reads `detail` as a list of
     errors. Anything else here would be a body the client cannot parse.
     """

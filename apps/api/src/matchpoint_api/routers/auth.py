@@ -258,7 +258,7 @@ def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
     # the per-email key needs the parsed body — login's position, for login's reason.
     # The cost bounded here is not sign-up's CPU but outbound email: provider quota,
     # a young sending domain's reputation, and strangers' inboxes. The per-email tier
-    # is also load-bearing for guessing — five attempts per code means little if codes
+    # also caps guessing — five attempts per code means little if codes
     # can be minted without bound — and it meters probes of registered addresses the
     # same, so the 409 below cannot be farmed for enumeration at arrival rate.
     per_email: RateLimiter = request.app.state.request_otp_per_email_limit
