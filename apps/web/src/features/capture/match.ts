@@ -47,6 +47,38 @@ export const SCORING_SYSTEMS: readonly ScoringSystem[] = [
   "legacy",
 ];
 
+/**
+ * The most sets a match of this format can run to — a match can finish
+ * earlier (e.g. a straight-sets win), so this is a ceiling, not a
+ * prediction. The single place this gets derived from `ScoringSystem`, so
+ * nothing else (createMatch, a future MatchSet, a set-by-set summary UI)
+ * needs its own copy of this mapping.
+ *
+ * TODO: confirm against the brief/BBD once set/game rules are firmed up —
+ * "traditional" and "legacy" are placeholder assumptions (best-of-3) for now.
+ */
+export function maxSetsFor(scoringSystem: ScoringSystem): number {
+  switch (scoringSystem) {
+    case "mens_grand_slam":
+      return 5;
+    case "pro_set":
+      return 1;
+    case "traditional":
+    case "womens_grand_slam":
+    case "no_ad_scoring":
+    case "match_tiebreak_10_points":
+    case "short_sets":
+    case "legacy":
+      return 3;
+    default: {
+      // Exhaustiveness check: a new ScoringSystem member with no case above
+      // fails to compile here instead of silently falling through.
+      const unhandled: never = scoringSystem;
+      throw new Error(`unhandled scoringSystem: ${String(unhandled)}`);
+    }
+  }
+}
+
 // TODO: not built yet — fields TBD (set score, games, tiebreak, ...). Named
 // `MatchSet` rather than `Set` because `Set` is already the built-in JS/TS
 // collection type; reusing that name here would shadow it for this whole module.
@@ -93,7 +125,6 @@ export class Match {
     this.sets = fields.sets;
   }
 
-  //______________________________________Not sure if we will use this, but it is a good idea to have a factory method for creating a Match from untrusted input.
   // TODO: rough first pass at structural checks, matching Point.create's approach —
   // revisit once the outbox/sync layer settles on how untrusted this input really is.
   static create(input: unknown): Match {
@@ -144,15 +175,37 @@ export class Match {
       sets,
     });
   }
+
+  static fromJSON(json: unknown): Match {
+    return Match.create(json);
+  }
+
+  /**
+   * Used to build the next Match snapshot when a set finishes — Match is
+   * immutable (same as Point), so appending a set means constructing a whole
+   * new Match: `Match.create({ ...match.toJSON(), sets: [...match.sets, newSet] })`.
+   */
+  toJSON() {
+    return {
+      matchId: this.matchId,
+      timestamp: this.timestamp,
+      trackedPlayerId: this.trackedPlayerId,
+      opponentId: this.opponentId,
+      scoringSystem: this.scoringSystem,
+      firstServer: this.firstServer,
+      surfaceType: this.surfaceType,
+      // Copied, not the live array: otherwise a caller mutating the returned
+      // snapshot would mutate this Match too.
+      sets: [...this.sets],
+    };
+  }
 }
 
 /**
- * Creates a new Match, generating a fresh matchId.
- *
- * Beyond `Match.create`'s own field validation, this also derives `sets`'s
- * starting length from `scoringSystem` — see the switch below. Field validation
- * itself (non-empty ids, valid enum members, etc.) still happens in
- * `Match.create`, same as for any other caller.
+ * Creates a new Match, generating a fresh matchId. `sets` starts empty — a
+ * new match hasn't played any yet; see `maxSetsFor` for the format's ceiling,
+ * not a starting size. Field validation (non-empty ids, valid enum members,
+ * etc.) happens in `Match.create`, same as for any other caller.
  */
 export function createMatch(
   timestamp: string,
@@ -162,35 +215,6 @@ export function createMatch(
   surfaceType: SurfaceType,
   firstServer: FirstServer,
 ): Match {
-  // The most sets a match of this format can run to — a match can finish
-  // earlier (e.g. a straight-sets win), so this is a ceiling, not a prediction.
-  // TODO: confirm against the brief/BBD once set/game rules are firmed up —
-  // "traditional" and "legacy" are placeholder assumptions (best-of-3) for now.
-  let maxSets: number;
-  switch (scoringSystem) {
-    case "mens_grand_slam":
-      maxSets = 5;
-      break;
-    case "pro_set":
-      maxSets = 1;
-      break;
-    case "traditional":
-    case "womens_grand_slam":
-    case "no_ad_scoring":
-    case "match_tiebreak_10_points":
-    case "short_sets":
-    case "legacy":
-      maxSets = 3;
-      break;
-    default: {
-      // Exhaustiveness check: a new ScoringSystem member with no case above
-      // fails to compile here instead of silently falling through.
-      const unhandled: never = scoringSystem;
-      throw new Error(`unhandled scoringSystem: ${String(unhandled)}`);
-    }
-  }
-  const sets: MatchSet[] = Array.from({ length: maxSets }, () => ({}));
-
   return Match.create({
     matchId: crypto.randomUUID(),
     timestamp,
@@ -199,6 +223,6 @@ export function createMatch(
     scoringSystem,
     firstServer,
     surfaceType,
-    sets,
+    sets: [],
   });
 }
