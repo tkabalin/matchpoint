@@ -34,3 +34,13 @@ test("loads the stats placeholder at /stats", async ({ page }) => {
   await page.goto("/stats");
   await expect(page.getByRole("heading", { name: "Stats — coming soon" })).toBeVisible();
 });
+
+test("loads the profile placeholder at /profile", async ({ page }) => {
+  await page.goto("/profile");
+  await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+});
+
+test("loads the settings placeholder at /settings", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+});

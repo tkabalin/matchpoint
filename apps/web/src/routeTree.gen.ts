@@ -14,6 +14,8 @@ import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
 import { Route as HomeRouteImport } from "./routes/home"
 import { Route as MatchesRouteImport } from "./routes/matches"
 import { Route as PlayersRouteImport } from "./routes/players"
+import { Route as ProfileRouteImport } from "./routes/profile"
+import { Route as SettingsRouteImport } from "./routes/settings"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 import { Route as StatsRouteImport } from "./routes/stats"
 
@@ -42,6 +44,16 @@ const PlayersRoute = PlayersRouteImport.update({
   path: "/players",
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProfileRoute = ProfileRouteImport.update({
+  id: "/profile",
+  path: "/profile",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: "/sign-up",
   path: "/sign-up",
@@ -59,6 +71,8 @@ export interface FileRoutesByFullPath {
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
+  "/profile": typeof ProfileRoute
+  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
 }
@@ -68,6 +82,8 @@ export interface FileRoutesByTo {
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
+  "/profile": typeof ProfileRoute
+  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
 }
@@ -78,6 +94,8 @@ export interface FileRoutesById {
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
   "/players": typeof PlayersRoute
+  "/profile": typeof ProfileRoute
+  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
 }
@@ -89,6 +107,8 @@ export interface FileRouteTypes {
     | "/home"
     | "/matches"
     | "/players"
+    | "/profile"
+    | "/settings"
     | "/sign-up"
     | "/stats"
   fileRoutesByTo: FileRoutesByTo
@@ -98,6 +118,8 @@ export interface FileRouteTypes {
     | "/home"
     | "/matches"
     | "/players"
+    | "/profile"
+    | "/settings"
     | "/sign-up"
     | "/stats"
   id:
@@ -107,6 +129,8 @@ export interface FileRouteTypes {
     | "/home"
     | "/matches"
     | "/players"
+    | "/profile"
+    | "/settings"
     | "/sign-up"
     | "/stats"
   fileRoutesById: FileRoutesById
@@ -117,6 +141,8 @@ export interface RootRouteChildren {
   HomeRoute: typeof HomeRoute
   MatchesRoute: typeof MatchesRoute
   PlayersRoute: typeof PlayersRoute
+  ProfileRoute: typeof ProfileRoute
+  SettingsRoute: typeof SettingsRoute
   SignUpRoute: typeof SignUpRoute
   StatsRoute: typeof StatsRoute
 }
@@ -158,6 +184,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof PlayersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/profile": {
+      id: "/profile"
+      path: "/profile"
+      fullPath: "/profile"
+      preLoaderRoute: typeof ProfileRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/settings": {
+      id: "/settings"
+      path: "/settings"
+      fullPath: "/settings"
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/sign-up": {
       id: "/sign-up"
       path: "/sign-up"
@@ -181,6 +221,8 @@ const rootRouteChildren: RootRouteChildren = {
   HomeRoute: HomeRoute,
   MatchesRoute: MatchesRoute,
   PlayersRoute: PlayersRoute,
+  ProfileRoute: ProfileRoute,
+  SettingsRoute: SettingsRoute,
   SignUpRoute: SignUpRoute,
   StatsRoute: StatsRoute,
 }
