@@ -93,8 +93,10 @@ export interface MatchSet {}
  */
 export class Match {
   readonly matchId: string;
-  // ISO 8601 — year, month, day and time the match was played.
-  readonly timestamp: string;
+  // ISO 8601 date only (YYYY-MM-DD) — matches the backend's `played_on`
+  // column exactly (see apps/api/src/matchpoint_api/schemas/match.py), which
+  // has no time component. No time-of-day is captured here on purpose.
+  readonly playedOn: string;
   readonly trackedPlayerId: string;
   readonly opponentId: string;
   readonly scoringSystem: ScoringSystem;
@@ -108,7 +110,7 @@ export class Match {
   // `readonly` here only stops reassignment, not `.push(...)` on the array itself.
   private constructor(fields: {
     matchId: string;
-    timestamp: string;
+    playedOn: string;
     trackedPlayerId: string;
     opponentId: string;
     scoringSystem: ScoringSystem;
@@ -117,7 +119,7 @@ export class Match {
     sets: readonly MatchSet[];
   }) {
     this.matchId = fields.matchId;
-    this.timestamp = fields.timestamp;
+    this.playedOn = fields.playedOn;
     this.trackedPlayerId = fields.trackedPlayerId;
     this.opponentId = fields.opponentId;
     this.scoringSystem = fields.scoringSystem;
@@ -137,8 +139,21 @@ export class Match {
     if (typeof data.matchId !== "string" || data.matchId.length === 0) {
       throw new Error("match id must be a non-empty string");
     }
-    if (typeof data.timestamp !== "string" || Number.isNaN(Date.parse(data.timestamp))) {
-      throw new Error("match timestamp must be a valid ISO 8601 date-time string");
+    // Date-only (YYYY-MM-DD), not a datetime: matches the backend's `played_on`
+    // column, which has no time component (see the field comment above). The
+    // regex first, not just Date.parse, because Date.parse alone accepts far
+    // more than the backend does — a full datetime string would parse fine
+    // here and then fail against the backend later, exactly the mismatch
+    // this field exists to avoid. Future-date/lookback bounds are deliberately
+    // not re-checked here — those are business rules for the match setup form
+    // and the backend, not structural validation (see PlayedOn in
+    // apps/api/src/matchpoint_api/schemas/match.py).
+    if (
+      typeof data.playedOn !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(data.playedOn) ||
+      Number.isNaN(Date.parse(data.playedOn))
+    ) {
+      throw new Error("match playedOn must be a valid date string (YYYY-MM-DD)");
     }
     if (typeof data.trackedPlayerId !== "string" || data.trackedPlayerId.length === 0) {
       throw new Error("trackedPlayerId must be a non-empty string");
@@ -167,7 +182,7 @@ export class Match {
 
     return new Match({
       matchId: data.matchId,
-      timestamp: data.timestamp,
+      playedOn: data.playedOn,
       trackedPlayerId: data.trackedPlayerId,
       opponentId: data.opponentId,
       scoringSystem: data.scoringSystem as ScoringSystem,
@@ -189,7 +204,7 @@ export class Match {
   toJSON() {
     return {
       matchId: this.matchId,
-      timestamp: this.timestamp,
+      playedOn: this.playedOn,
       trackedPlayerId: this.trackedPlayerId,
       opponentId: this.opponentId,
       scoringSystem: this.scoringSystem,
@@ -209,7 +224,7 @@ export class Match {
  * etc.) happens in `Match.create`, same as for any other caller.
  */
 export function createMatch(
-  timestamp: string,
+  playedOn: string,
   trackedPlayerId: string,
   opponentId: string,
   scoringSystem: ScoringSystem,
@@ -218,7 +233,7 @@ export function createMatch(
 ): Match {
   return Match.create({
     matchId: crypto.randomUUID(),
-    timestamp,
+    playedOn,
     trackedPlayerId,
     opponentId,
     scoringSystem,
