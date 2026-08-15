@@ -58,5 +58,20 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // All network I/O goes through the generated client, which handles error
+    // typing, auth cookies and the base URL. A raw fetch() bypasses all of that.
+    files: ["apps/web/src/features/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.*"],
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "fetch",
+          message: "Use the generated client from @matchpoint/api-client, not raw fetch.",
+        },
+      ],
+    },
+  },
   prettier,
 );
