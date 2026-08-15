@@ -1,3 +1,4 @@
+import { zLoginBody } from "@matchpoint/api-client/zod";
 import {
   Outlet,
   RouterProvider,
@@ -123,7 +124,11 @@ test("sends the credentials to /api/auth/login", async () => {
   expect(request).toBeInstanceOf(Request);
   const realRequest = request as Request;
   expect(realRequest.url).toContain("/api/auth/login");
-  expect(await realRequest.json()).toEqual({
+  const body = await realRequest.json();
+  // The schema comes from the API's spec, the literal below from this test. Only the
+  // first can tell us the API would accept this body (see docs/testing.md).
+  expect(zLoginBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({
     email: "coach@example.com",
     password: "hunter2",
   });

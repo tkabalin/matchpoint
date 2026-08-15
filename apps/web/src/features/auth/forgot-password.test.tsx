@@ -1,3 +1,4 @@
+import { zForgotPasswordBody } from "@matchpoint/api-client/zod";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -71,7 +72,11 @@ test("sends the email to /api/auth/forgot-password", async () => {
   expect(request).toBeInstanceOf(Request);
   const realRequest = request as Request;
   expect(realRequest.url).toContain("/api/auth/forgot-password");
-  expect(await realRequest.json()).toEqual({ email: "coach@example.com" });
+  const body = await realRequest.json();
+  // The schema comes from the API's spec, the literal below from this test. Only the
+  // first can tell us the API would accept this body (see docs/testing.md).
+  expect(zForgotPasswordBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({ email: "coach@example.com" });
 });
 
 test("moves to the reset step on a 202 response", async () => {

@@ -1,3 +1,4 @@
+import { zCreateCoachBody, zRequestOtpBody, zVerifyOtpBody } from "@matchpoint/api-client/zod";
 import {
   Outlet,
   RouterProvider,
@@ -107,7 +108,11 @@ test("sends the email to /api/auth/request-otp", async () => {
   expect(request).toBeInstanceOf(Request);
   const realRequest = request as Request;
   expect(realRequest.url).toContain("/api/auth/request-otp");
-  expect(await realRequest.json()).toEqual({ email: "coach@example.com" });
+  const body = await realRequest.json();
+  // The schema comes from the API's spec, the literal below from this test. Only the
+  // first can tell us the API would accept this body (see docs/testing.md).
+  expect(zRequestOtpBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({ email: "coach@example.com" });
 });
 
 test("moves to the OTP step on a 202 response", async () => {
@@ -223,7 +228,9 @@ test("sends the email and code to /api/auth/verify-otp", async () => {
   expect(request).toBeInstanceOf(Request);
   const realRequest = request as Request;
   expect(realRequest.url).toContain("/api/auth/verify-otp");
-  expect(await realRequest.json()).toEqual({ email: "coach@example.com", otp: "123456" });
+  const body = await realRequest.json();
+  expect(zVerifyOtpBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({ email: "coach@example.com", otp: "123456" });
 });
 
 test("shows the server's error and stays on the OTP step on a 400 response", async () => {
@@ -363,7 +370,9 @@ test("sends the email, password and display name to POST /coaches, no token fiel
   expect(request).toBeInstanceOf(Request);
   const realRequest = request as Request;
   expect(realRequest.url).toContain("/api/coaches");
-  expect(await realRequest.json()).toEqual({
+  const body = await realRequest.json();
+  expect(zCreateCoachBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({
     email: "coach@example.com",
     password: "hunter2000",
     display_name: "Amahle Nkosi",
