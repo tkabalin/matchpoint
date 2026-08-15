@@ -637,24 +637,24 @@ def test_updating_to_a_display_name_outside_the_bounds_is_rejected(
         ("password_hash", "not-a-hash-either"),
     ],
 )
-def test_an_update_cannot_touch_a_field_the_schema_leaves_out(
+def test_an_update_refuses_a_field_the_schema_leaves_out(
     client: TestClient, db_session: Session, field: str, value: str
 ) -> None:
     """CoachUpdate carries display_name alone, so the sign-in identity and the credential
-    are out of reach here. Pydantic ignores an unknown key rather than refusing it, which
-    is accepted, so this is the test that pins the ignoring in both directions: the update
-    still succeeds, and the extra key changed nothing."""
+    are out of reach here. RequestModel's extra="forbid" turns the unknown key into a
+    422 rather than a silent drop, and the request changed nothing."""
     coach = make_coach(db_session, email="mike@example.com", password_hash="not-a-real-hash")
     sign_in(client, db_session, coach)
 
     response = client.patch("/coaches/me", json={"display_name": "Coach Mike", field: value})
 
-    assert response.status_code == 200
-    assert response.json()["email"] == "mike@example.com"
+    assert response.status_code == 422
+    # display_name too, though it is the one field the schema does carry: the refusal has
+    # to take the whole body with it, not apply the half it recognised.
     stored = db_session.execute(
-        select(Coach.email, Coach.password_hash).where(Coach.id == coach.id)
+        select(Coach.email, Coach.password_hash, Coach.display_name).where(Coach.id == coach.id)
     ).one()
-    assert stored == ("mike@example.com", "not-a-real-hash")
+    assert stored == ("mike@example.com", "not-a-real-hash", "Test Coach")
 
 
 def test_updating_without_a_cookie_is_a_401(client: TestClient) -> None:

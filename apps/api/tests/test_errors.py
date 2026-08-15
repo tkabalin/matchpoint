@@ -83,6 +83,23 @@ def test_a_password_nested_below_the_reported_field_is_redacted() -> None:
     assert errors[0]["input"] == {"coaches": [{"password": REDACTED}]}
 
 
+def test_an_unknown_keys_value_is_redacted() -> None:
+    """`extra="forbid"` reports the rejected key's own value, and an unknown key can hold
+    a secret under a name SECRET_FIELDS has no way to recognise: a misspelled `password`,
+    or a `confirm_password` a form sent whole."""
+    errors = detail(
+        {
+            "type": "extra_forbidden",
+            "loc": ["body", "confirm_password"],
+            "msg": "Extra inputs are not permitted",
+            "input": "a-good-password",
+        }
+    )
+
+    assert errors[0]["input"] == REDACTED
+    assert errors[0]["loc"] == ["body", "confirm_password"]
+
+
 def test_an_error_carrying_no_input_is_passed_through() -> None:
     """Not every validation error has an `input`, and reading one that is absent would
     turn a 422 into a 500."""

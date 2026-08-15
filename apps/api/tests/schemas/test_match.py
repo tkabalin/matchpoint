@@ -196,10 +196,11 @@ def test_an_update_carries_only_the_fields_sent() -> None:
     assert update.model_dump(exclude_unset=True) == {"event": "Wimbledon"}
 
 
-def test_an_update_drops_a_player_id() -> None:
-    """player_id is immutable by omission, so it dumps to nothing at all: the route's
-    loop never sees a field it could use to move the match."""
-    assert MatchUpdate.model_validate({"player_id": PLAYER_ID}).model_dump(exclude_unset=True) == {}
+def test_an_update_rejects_a_player_id() -> None:
+    """player_id is immutable by omission, and RequestModel's extra="forbid" turns
+    sending it into a 422 rather than a silent drop."""
+    with pytest.raises(ValidationError):
+        MatchUpdate.model_validate({"player_id": PLAYER_ID})
 
 
 def test_an_update_rejects_a_null_played_on() -> None:

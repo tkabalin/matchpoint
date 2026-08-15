@@ -1,6 +1,14 @@
 from typing import Annotated, Any
 
-from pydantic import StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints
+
+
+# Base for every request-body schema. extra="forbid" turns an unknown key into a 422:
+# the client is generated from this API's own spec, so a key we don't recognise is a
+# bug in the caller, and ignoring it makes a misspelled field look like success.
+class RequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 """A free-text field, bounded to match the String(100) columns on the models.

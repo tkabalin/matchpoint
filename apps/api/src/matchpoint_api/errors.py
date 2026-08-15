@@ -53,7 +53,10 @@ def _scrub(error: dict[str, Any]) -> dict[str, Any]:
     if "input" not in error:
         return error
     loc: Any = error.get("loc") or ()
-    if loc and loc[-1] in SECRET_FIELDS:
+    # An unknown key carries its own value as the input, under a name SECRET_FIELDS
+    # cannot classify: a misspelled `password`, or a `confirm_password` sent whole.
+    # `loc` still names the key, so redacting costs the caller nothing.
+    if error.get("type") == "extra_forbidden" or (loc and loc[-1] in SECRET_FIELDS):
         return {**error, "input": REDACTED}
     return {**error, "input": _redact(error["input"])}
 

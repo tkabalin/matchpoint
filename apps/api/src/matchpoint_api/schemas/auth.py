@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from pydantic import BaseModel, EmailStr, Field, SecretStr, StringConstraints
+from pydantic import EmailStr, Field, SecretStr, StringConstraints
 
 from matchpoint_api.auth import OTP_LENGTH
 from matchpoint_api.schemas.coach import (
@@ -8,6 +8,7 @@ from matchpoint_api.schemas.coach import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
 )
+from matchpoint_api.schemas.types import RequestModel
 
 # Comments rather than docstrings, as in schemas/coach.py: a schema docstring becomes
 # its description in the OpenAPI spec and the generated client.
@@ -37,31 +38,31 @@ _NewPassword = Annotated[
 ]
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(RequestModel):
     email: _Email
     password: _Password
 
 
-class OtpRequest(BaseModel):
+class OtpRequest(RequestModel):
     email: _Email
 
 
-class VerifyOtpRequest(BaseModel):
+class VerifyOtpRequest(RequestModel):
     email: _Email
     otp: _Otp
 
 
-class ForgotPasswordRequest(BaseModel):
+class ForgotPasswordRequest(RequestModel):
     email: _Email
 
 
-class ResetPasswordRequest(BaseModel):
+class ResetPasswordRequest(RequestModel):
     email: _Email
     otp: _Otp
     new_password: _NewPassword
 
 
-class ChangePasswordRequest(BaseModel):
+class ChangePasswordRequest(RequestModel):
     # No email: the session says whose password this is. The current one is named
     # `password` as login names it, for the same meaning and the same annotation, and is
     # already kept out of a 422 body by errors.py under that name.

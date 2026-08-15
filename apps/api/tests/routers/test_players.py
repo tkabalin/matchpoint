@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.models import Coach, DominantHand, Player
@@ -99,10 +100,9 @@ def test_create_player_without_optional_fields(client: TestClient) -> None:
 def test_create_player_cannot_set_coach_id_or_archived_at(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Neither field is on PlayerCreate, so pydantic drops them rather than 422ing —
-    what matters is that a client cannot hand a player to another coach or file one as
-    already archived. The row lands owned by the caller regardless of what was sent.
-    """
+    """Neither field is on PlayerCreate, so RequestModel's extra="forbid" makes sending
+    one a 422: a client cannot hand a player to another coach or file one as already
+    archived."""
     other = make_coach(db_session)
     db_session.commit()
 
@@ -111,10 +111,8 @@ def test_create_player_cannot_set_coach_id_or_archived_at(
         json=_payload(coach_id=str(other.id), archived_at="2020-01-01T00:00:00Z"),
     )
 
-    assert response.status_code == 201
-    body = response.json()
-    assert body["coach_id"] == str(coach.id)
-    assert body["archived_at"] is None
+    assert response.status_code == 422
+    assert db_session.scalar(select(func.count()).select_from(Player)) == 0
 
 
 @pytest.mark.usefixtures("coach")
@@ -494,12 +492,11 @@ def test_update_player_bumps_updated_at(
     assert datetime.fromisoformat(response.json()["updated_at"]) > before
 
 
-def test_update_player_ignores_coach_id_and_archived_at(
+def test_update_player_rejects_coach_id_and_archived_at(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Neither field is on PlayerUpdate, so pydantic drops them rather than 422ing —
-    what matters is that a PATCH cannot hand a player to another coach or archive one.
-    """
+    """Neither field is on PlayerUpdate, so RequestModel's extra="forbid" makes sending
+    one a 422: a PATCH cannot hand a player to another coach or archive one."""
     other = make_coach(db_session)
     player = make_player(db_session, coach_id=coach.id)
     db_session.commit()
@@ -509,10 +506,9 @@ def test_update_player_ignores_coach_id_and_archived_at(
         json={"coach_id": str(other.id), "archived_at": "2020-01-01T00:00:00Z"},
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["coach_id"] == str(coach.id)
-    assert body["archived_at"] is None
+    assert response.status_code == 422
+    assert player.coach_id == coach.id
+    assert player.archived_at is None
 
 
 def test_update_player_rejects_a_future_date_of_birth(

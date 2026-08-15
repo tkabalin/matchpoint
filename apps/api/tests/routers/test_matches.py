@@ -652,9 +652,10 @@ def test_update_match_bumps_updated_at(
 def test_update_match_cannot_move_the_match_to_another_player(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """player_id is immutable by being absent from MatchUpdate, so pydantic drops it
-    rather than 422ing. The other player is the caller's own, so what this pins is that
-    the field cannot be written at all, not merely that its owner is checked."""
+    """player_id is immutable by being absent from MatchUpdate, so RequestModel's
+    extra="forbid" answers it with a 422. The other player is the caller's own, so what
+    this pins is that the field cannot be written at all, not merely that its owner is
+    checked."""
     player = make_player(db_session, coach_id=coach.id)
     other_player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
@@ -664,10 +665,9 @@ def test_update_match_cannot_move_the_match_to_another_player(
         f"/matches/{match.id}", json={"player_id": str(other_player.id), "event": "Wimbledon"}
     )
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["player_id"] == str(player.id)
-    assert body["event"] == "Wimbledon"
+    assert response.status_code == 422
+    assert match.player_id == player.id
+    assert match.event is None
 
 
 def test_update_match_rejects_a_future_played_on(
