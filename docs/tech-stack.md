@@ -90,6 +90,7 @@ path.
 | Sessions            | Opaque tokens, HttpOnly cookie |
 | Rate limiting       | In-process token bucket        |
 | Transactional email | Resend (HTTP API via httpx)    |
+| Logging             | structlog 26                   |
 | Tests               | pytest 9                       |
 
 ### Rationale
@@ -152,6 +153,17 @@ SMTP because a low-cost VPS has no IP reputation to send on and port 25 is one m
 blocked on; the provider owns deliverability. Senders sit behind a Protocol chosen by configuration
 (`mail.py`), so a second provider is one class and one entry. Alternative considered: SMTP from the
 box (reputation, port 25, more moving parts).
+
+**structlog for logging.** Each request is logged as one JSON line carrying a request id that is
+also returned on the response, so a production question is a field filter over container logs and a
+reported error ties to the line it produced (`logs.py`). structlog is the standard structured
+logging library for Python: mature, and its contextvars binding puts the id on every line a request
+emits without threading it through call sites. The request line replaces uvicorn's access log rather
+than duplicating it. Secrets stay out the way `errors.py` keeps them out of a 422: the line carries
+no body, header or query value, and a processor redacts secret-named keys as a backstop.
+Alternatives considered: stdlib logging with a hand-rolled JSON formatter (the same result for more
+of our own plumbing); asgi-correlation-id for the request id (mature, but it would replace five
+lines inside a middleware the request line needs anyway).
 
 ## Infrastructure
 

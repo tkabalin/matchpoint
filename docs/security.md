@@ -97,8 +97,9 @@ domain, so a sibling host's write would arrive with the session cookie attached.
 **Origin check middleware.** Every non-safe request (not GET/HEAD/OPTIONS) is refused with 403
 unless its `Origin` header matches the request's `Host`. The expected origin is derived from `Host`,
 not configured, so dev, tests and production need no value of their own. A missing or unparseable
-`Origin` is refused. The middleware sits outermost, so a refused request reads no session and spends
-no rate-limit token.
+`Origin` is refused. The middleware sits ahead of the session and rate-limit work, so a refused
+request reads no session and spends no rate-limit token. Only the request log wraps it, so the
+refusal still leaves a logged line.
 
 ## Rate limiting
 
@@ -166,6 +167,17 @@ fields from the echoed input. A test fails if any schema adds a `SecretStr` fiel
 redaction set.
 
 `SecretStr` alone is insufficient: it handles reprs and tracebacks, not FastAPI's error body.
+
+## Secret redaction in logs
+
+The same posture over the request log (`logs.py`). The line each request emits carries method, path,
+status, duration and ids, never a body, header or query value, so a credential has no path into it
+by construction. A processor redacts any field whose key contains a secret stem, at any depth, as
+the backstop for log calls that design cannot see, and a test drives the sign-up, login, OTP and
+password-reset flows asserting no credential value reaches stderr.
+
+The one field that can hold arbitrary text is a rendered traceback. `hide_parameters=True` on the
+engine (`db.py`) keeps bound SQL parameters out of the DBAPI error messages that end up in one.
 
 ## Authorisation boundaries
 
