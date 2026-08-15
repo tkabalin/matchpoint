@@ -12,5 +12,10 @@ export default defineConfig({
     },
     "@hey-api/sdk",
     "@tanstack/react-query",
+    // The generated TypeScript types keep field names and primitive types and drop
+    // everything else the spec knows: `format: date` and `format: uuid` both erase
+    // to `string`, as do ShortText's length bounds. These schemas keep them, so a
+    // request body can be checked against the real contract in a unit test.
+    "zod",
   ],
 });

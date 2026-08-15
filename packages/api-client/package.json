@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./react-query": "./src/@tanstack/react-query.gen.ts"
+    "./react-query": "./src/@tanstack/react-query.gen.ts",
+    "./zod": "./src/zod.gen.ts"
   },
   "scripts": {
     "generate": "openapi-ts",
@@ -18,5 +19,8 @@
   },
   "peerDependencies": {
     "@tanstack/react-query": "catalog:"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }
