@@ -17,8 +17,18 @@ export type FirstServer = "player" | "opponent";
 export const FIRST_SERVERS: readonly FirstServer[] = ["player", "opponent"];
 
 // TODO: provisional — revisit once we know which surfaces coaches actually track.
-export type SurfaceType = "hard" | "clay" | "grass" | "carpet";
-export const SURFACE_TYPES: readonly SurfaceType[] = ["hard", "clay", "grass", "carpet"];
+// "unspecified" is a real, stored value here (not the absence of one — see
+// `createMatch`'s default) for a coach who doesn't know or doesn't care.
+// The backend has no equivalent member: `surface` is nullable instead, so
+// the sync layer needs to translate "unspecified" to null on the way out.
+export type SurfaceType = "hard" | "clay" | "grass" | "carpet" | "unspecified";
+export const SURFACE_TYPES: readonly SurfaceType[] = [
+  "hard",
+  "clay",
+  "grass",
+  "carpet",
+  "unspecified",
+];
 
 // The named format a coach picks at match setup. Started out as two separate
 // concepts — this named preset (`ScoringSystem`) plus a `ScoringRules` bag of
@@ -247,14 +257,22 @@ export class Match {
  * latter case this generates the per-match stand-in id point.ts's contract
  * assumes Match provides, so every Point still gets two real ids to compare
  * `winner`/`server` against — nothing else has to invent one.
+ *
+ * `scoringSystem`/`surfaceType` default rather than being required — a coach
+ * shouldn't be blocked setting up a match because they haven't picked a
+ * scoring format or don't know the surface. `"traditional"` is the
+ * assumed-common format; `"unspecified"` is a real SurfaceType value, not a
+ * missing one (see its definition above). Once coach preferences exist,
+ * that's the natural place to pass a saved default in instead of relying on
+ * these — these defaults just mean setup works without that existing yet.
  */
 export function createMatch(
   playedOn: string,
   trackedPlayerId: string,
   opponent: { opponentId: string } | { opponentName: string },
-  scoringSystem: ScoringSystem,
-  surfaceType: SurfaceType,
   firstServer: FirstServer,
+  scoringSystem: ScoringSystem = "traditional",
+  surfaceType: SurfaceType = "unspecified",
 ): Match {
   const opponentId = "opponentId" in opponent ? opponent.opponentId : crypto.randomUUID();
   const opponentName = "opponentId" in opponent ? null : opponent.opponentName;
