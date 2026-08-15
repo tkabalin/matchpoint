@@ -9,6 +9,11 @@ paths:
 - A `Create` schema carries only the fields a client may set. That is what makes
   `Model(**data.model_dump())` safe in the router: a column absent from the schema cannot be set
   through it, so ownership and server-managed state stay out of reach.
+- Every request-body schema subclasses `RequestModel` (`schemas/types.py`), whose `extra="forbid"`
+  answers an unknown key with a 422. The client is generated from this API's own spec, so a key we
+  don't recognise is a caller bug, and ignoring it makes a misspelled field look like success.
+  `tests/test_openapi.py` fails on a body schema that skipped the base, since nothing else would: it
+  produces a valid spec and a 200 that wrote nothing.
 - Server-owned fields — `coach_id`, the timestamps, `archived_at` — belong on `Read` and never on
   `Create`. Adding one to a `Create` schema turns the splat into mass assignment, quietly.
 - `Read` schemas set `model_config = ConfigDict(from_attributes=True)` and routes return the ORM
@@ -17,8 +22,10 @@ paths:
 ## `XUpdate` Is Every Mutable Column, All Optional
 
 - An `Update` schema carries the client-settable columns that may change after creation, every field
-  optional. The route applies `data.model_dump(exclude_unset=True)`, so an absent field is left
-  alone, which keeps "not sent" distinct from "set to null".
+  optional. It subclasses `UpdateModel` (`schemas/types.py`) and the route applies
+  `data.apply_to(obj)`, never a hand-written loop: an absent field is left alone, which keeps "not
+  sent" distinct from "set to null". No route reads a field off the model, which is what keeps
+  `UNSET`'s typing fiction harmless.
 - Fields over non-nullable columns keep their non-optional type and default to `UNSET`
   (`schemas/types.py`), so sending null is a 422 from pydantic; nullable columns declare `| None`,
   where null clears the value.
