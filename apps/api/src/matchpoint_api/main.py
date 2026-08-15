@@ -5,6 +5,7 @@ from fastapi.routing import APIRoute
 
 from matchpoint_api import __version__
 from matchpoint_api.auth import SessionRenewalMiddleware
+from matchpoint_api.body_limit import RequestBodyLimitMiddleware
 from matchpoint_api.config import settings
 from matchpoint_api.csrf import OriginCheckMiddleware
 from matchpoint_api.errors import validation_error_response
@@ -46,6 +47,11 @@ def create_app() -> FastAPI:
         _request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return validation_error_response(exc)
+
+    # Added first, so innermost: a mid-stream refusal is an HTTPException raised from
+    # `receive`, and it only reaches FastAPI's handler with no BaseHTTPMiddleware in
+    # between. Crossing one, it surfaces as a 400 "error parsing the body" instead.
+    app.add_middleware(RequestBodyLimitMiddleware)
 
     # Outside the routers for the same reason as the handler above: a renewed session
     # cookie must reach the browser whichever response the request ends in, and a route

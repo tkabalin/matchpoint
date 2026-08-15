@@ -33,6 +33,12 @@ matchpoint.thomaskabalin.com {
 	# handle_path strips the /api prefix, so the API keeps clean route paths;
 	# uvicorn runs with --root-path /api to compensate (see apps/api/Dockerfile).
 	handle_path /api/* {
+		# Refused here so an oversized body never reaches the app. Same figure as the
+		# app's own bound, which covers the paths this proxy does not front. The
+		# sizing rationale lives there (apps/api/src/matchpoint_api/body_limit.py).
+		request_body {
+			max_size 1MB
+		}
 		reverse_proxy api:8000
 	}
 
