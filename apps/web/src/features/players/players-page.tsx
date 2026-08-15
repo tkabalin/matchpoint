@@ -1,3 +1,5 @@
+import { BottomNav } from "@/components/bottom-nav";
+
 import { PlayerList } from "./player-list";
 
 export function PlayersPage() {
@@ -5,6 +7,7 @@ export function PlayersPage() {
     <div>
       <h1>Players</h1>
       <PlayerList />
+      <BottomNav />
     </div>
   );
 }
