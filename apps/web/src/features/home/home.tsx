@@ -10,7 +10,7 @@ import { useState } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
+import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -62,8 +62,9 @@ export function Home() {
             </span>
           </div>
           <p>{`Matches: ${lastViewedMatches.length}`}</p>
-          {/* Not a real link yet — the player profile route lands in a later issue. */}
-          <button type="button">View full profile</button>
+          <Link to="/players/$playerId" params={{ playerId: lastViewedPlayer.id }}>
+            View full profile
+          </Link>
         </div>
       )}
       <label htmlFor="player-search">Search players</label>
@@ -90,10 +91,16 @@ export function Home() {
         </div>
         <div className="flex gap-4 overflow-x-auto">
           {(players ?? []).map((player) => (
-            <div key={player.id} className="flex flex-col items-center gap-1">
+            <Link
+              key={player.id}
+              to="/players/$playerId"
+              params={{ playerId: player.id }}
+              onClick={() => setLastViewedPlayerId(player.id)}
+              className="flex flex-col items-center gap-1"
+            >
               <PlayerAvatar player={player} />
               <span>{player.first_name}</span>
-            </div>
+            </Link>
           ))}
           <Link to="/players" className="flex flex-col items-center gap-1">
             <div

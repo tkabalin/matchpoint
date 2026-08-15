@@ -1,5 +1,8 @@
 import { listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+
+import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 /**
  * The roster, read through the generated client.
@@ -19,7 +22,13 @@ export function PlayerList() {
     <ul>
       {data.map((player) => (
         <li key={player.id}>
-          {player.first_name} {player.last_name}
+          <Link
+            to="/players/$playerId"
+            params={{ playerId: player.id }}
+            onClick={() => setLastViewedPlayerId(player.id)}
+          >
+            {player.first_name} {player.last_name}
+          </Link>
         </li>
       ))}
     </ul>

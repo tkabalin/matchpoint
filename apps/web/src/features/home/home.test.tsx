@@ -12,7 +12,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
+import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 import { Home } from "./home";
 
@@ -147,6 +147,11 @@ async function renderHome() {
     path: "/stats",
     component: () => <h1>Stats</h1>,
   });
+  const playerProfileRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players/$playerId",
+    component: () => <h1>Player Profile</h1>,
+  });
   const routeTree = rootRoute.addChildren([
     homeRoute,
     profileRoute,
@@ -154,6 +159,7 @@ async function renderHome() {
     playersRoute,
     matchesRoute,
     statsRoute,
+    playerProfileRoute,
   ]);
   const router = createRouter({
     routeTree,
@@ -251,6 +257,18 @@ test("renders a bubble with initials for each player", async () => {
   expect(screen.getByText("Sipho")).toBeInTheDocument();
 });
 
+test("clicking a player bubble opens their profile and records them as last-viewed", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup();
+  await renderHome();
+  await screen.findByText("AN");
+
+  await user.click(screen.getByRole("link", { name: "AN Amahle" }));
+
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+  expect(getLastViewedPlayerId()).toBe(players[0]!.id);
+});
+
 test("'See all' links to the players roster", async () => {
   stubAuthenticatedHome();
   const user = userEvent.setup();
@@ -288,7 +306,19 @@ test("shows the last-viewed player once one has been viewed", async () => {
   expect(section.getByText("Amahle Nkosi")).toBeInTheDocument();
   expect(section.getByText("AN")).toBeInTheDocument();
   expect(section.getByText("Matches: 1")).toBeInTheDocument();
-  expect(section.getByRole("button", { name: "View full profile" })).toBeInTheDocument();
+  expect(section.getByRole("link", { name: "View full profile" })).toBeInTheDocument();
+});
+
+test("'View full profile' opens the last-viewed player's profile", async () => {
+  setLastViewedPlayerId(players[0]!.id);
+  stubAuthenticatedHomeWithLastViewedPlayer();
+  const user = userEvent.setup();
+  await renderHome();
+  await screen.findByRole("heading", { name: "Last viewed player" });
+
+  await user.click(screen.getByRole("link", { name: "View full profile" }));
+
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
 test("shows the squad's player count and matches played in the last 7 days", async () => {
