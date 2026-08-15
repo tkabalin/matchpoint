@@ -135,16 +135,17 @@ bearer tokens (stateless, but revocation needs a denylist — the sessions table
 — and the SPA must hold the token where JavaScript, and therefore XSS, can read it).
 
 **Hand-rolled in-process rate limiting.** Token buckets per key (`rate_limit.py`) bound the arrival
-rate on sign-up and login — endpoints that spend real work on unauthenticated input. The limit lives
-in the app because it must key on things only the app sees: the tightest tier is a wrong-guess
-budget keyed on the submitted email, charged only after a failed verification so the bound can't
-become a lockout. A 429 declared in the OpenAPI spec is a response the generated client can type and
-the test suite can exercise. Counters are process memory (single container, deploy-reset is
-harmless). Behind Cloudflare, per-address limiting is fairness; a shared per-endpoint bucket
-provides the hard bound. Alternatives considered: slowapi (pre-1.0, for a few dozen lines of
-stdlib); Redis/Postgres counters (a stateful service to solve a multi-process problem we don't
-have); Caddy's rate_limit module (not in stock Caddy, proxy can't key on accounts); Cloudflare
-rate-limiting rules (can't key on accounts either, invisible to tests).
+rate on sign-up and login, the endpoints that spend real work on unauthenticated input, and give
+each signed-in coach one budget across the whole API. The limit lives in the app because it must key
+on things only the app sees: the coach behind a session cookie, and on login a wrong-guess budget
+keyed on the submitted email, charged only after a failed verification so the bound can't become a
+lockout. A 429 declared in the OpenAPI spec is a response the generated client can type and the test
+suite can exercise. Counters are process memory (single container, deploy-reset is harmless). Behind
+Cloudflare, per-address limiting is fairness; a shared per-endpoint bucket provides the hard bound.
+Alternatives considered: slowapi (pre-1.0, for a few dozen lines of stdlib); Redis/Postgres counters
+(a stateful service to solve a multi-process problem we don't have); Caddy's rate_limit module (not
+in stock Caddy, proxy can't key on accounts); Cloudflare rate-limiting rules (can't key on accounts
+either, invisible to tests).
 
 **Resend over its HTTP API.** Sign-up verification emails a six-digit code, so the API needs to send
 mail. Resend is quick to work with -- domain verification is three DNS records -- and its free

@@ -103,7 +103,9 @@ refusal still leaves a logged line.
 
 ## Rate limiting
 
-Token buckets per key in process memory, with three tiers: per-IP, per-account, and per-endpoint.
+Token buckets per key in process memory: per-IP, per-account and per-endpoint tiers on the endpoints
+that spend real work on untrusted input, and one budget per coach across every authenticated
+request.
 
 **Token buckets over fixed windows.** What parks the threadpool is a burst, and a fixed window
 admits its whole allowance in one instant (and twice that straddling a boundary). A bucket's burst
@@ -122,6 +124,13 @@ locked out indefinitely. By charging only wrong guesses, a correct password is n
 **Atomic multi-tier check.** When a request is counted against multiple tiers, all are checked
 before any is charged. If any refuses, nothing is spent. The refusal uses the tier furthest from a
 token, so the client's `Retry-After` is honest across tiers.
+
+**Per-coach ceiling on authenticated traffic.** Every authenticated request spends from one budget
+keyed on the coach, charged inside the authentication dependency itself so no new route can be added
+outside it. The account is the key because behind a CDN the address is the edge's, and the charge
+lands only after the session cookie proves live, so nothing an outsider sends can drain a coach's
+budget. The burst is sized for the legitimate worst case, an offline outbox flushing a full match
+point by point, and the sustained rate for a runaway client rather than any human.
 
 ## Request size limits
 
