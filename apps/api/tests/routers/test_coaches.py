@@ -339,6 +339,7 @@ def test_sign_up_arrivals_beyond_the_burst_are_refused(client: TestClient) -> No
     assert int(response.headers["Retry-After"]) >= 1
 
 
+@pytest.mark.usefixtures("clock")
 def test_sign_up_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
     """The shared tier is the actual arrival bound: behind Cloudflare the per-address key
     is an edge address an attacker can occupy many of, so a spread-out flood must still
@@ -354,6 +355,7 @@ def test_sign_up_has_a_total_bound_no_address_escapes(client: TestClient) -> Non
     assert latecomer.post("/coaches", json={}).status_code == 429
 
 
+@pytest.mark.usefixtures("clock")
 def test_a_sign_up_refused_by_the_shared_tier_spends_no_per_address_token(
     client: TestClient,
 ) -> None:

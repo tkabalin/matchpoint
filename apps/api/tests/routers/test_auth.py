@@ -360,6 +360,7 @@ def test_cycling_accounts_does_not_escape_the_address_burst(
     assert twenty_first.status_code == 429
 
 
+@pytest.mark.usefixtures("clock")
 def test_login_has_a_total_bound_no_address_escapes(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -869,6 +870,7 @@ def test_cycling_addresses_meets_the_address_burst(client: TestClient) -> None:
     assert client.post("/auth/request-otp", json={"email": "new10@example.com"}).status_code == 429
 
 
+@pytest.mark.usefixtures("clock")
 def test_request_otp_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
     """Behind Cloudflare the per-address key is an edge address an attacker can occupy
     many of; only the shared bucket bounds what gets mailed in total — and what a young
@@ -1243,6 +1245,7 @@ def test_forgot_password_cycling_addresses_meets_the_address_burst(client: TestC
     assert refused.status_code == 429
 
 
+@pytest.mark.usefixtures("clock")
 def test_forgot_password_has_a_total_bound_no_address_escapes(client: TestClient) -> None:
     """request-otp's reasoning: behind Cloudflare the per-address key is an edge
     address an attacker can occupy many of, so only the shared bucket bounds what
@@ -1690,6 +1693,7 @@ def test_an_unauthenticated_flood_spends_none_of_the_change_budget(
     assert _change(client).status_code == 204
 
 
+@pytest.mark.usefixtures("clock")
 def test_change_password_has_a_total_bound_no_address_escapes(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:

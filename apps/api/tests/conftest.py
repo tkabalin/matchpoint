@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.orm import Session
 
+from matchpoint_api import rate_limit
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
@@ -26,6 +27,29 @@ ORIGIN_HEADERS = {"Origin": TEST_ORIGIN}
 # The email sender is pinned in `tests/__init__.py`, not here: this module imports
 # `matchpoint_api.main`, which builds an app at import time, so the pin has to be in
 # something that runs before any fixture — the package's own import.
+
+
+class Clock:
+    """A stand-in for the `time` module whose monotonic() the test sets by hand.
+
+    Refill behaviour is arithmetic over elapsed time, so testing it against the real
+    clock would mean sleeping through it — this keeps every case instant and exact.
+    Route tests that drain a bucket dry take it too: a frozen clock is what stops a
+    slow CI runner refilling the bucket mid-test.
+    """
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    clock = Clock()
+    monkeypatch.setattr(rate_limit, "time", clock)
+    return clock
 
 
 @pytest.fixture(scope="session")

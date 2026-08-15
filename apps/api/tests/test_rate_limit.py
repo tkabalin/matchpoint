@@ -1,29 +1,8 @@
 import pytest
 from fastapi import HTTPException
 
-from matchpoint_api import rate_limit
 from matchpoint_api.rate_limit import RateLimiter, take_all
-
-
-class Clock:
-    """A stand-in for the `time` module whose monotonic() the test sets by hand.
-
-    Refill behaviour is arithmetic over elapsed time, so testing it against the real
-    clock would mean sleeping through it — this keeps every case instant and exact.
-    """
-
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def monotonic(self) -> float:
-        return self.now
-
-
-@pytest.fixture
-def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
-    clock = Clock()
-    monkeypatch.setattr(rate_limit, "time", clock)
-    return clock
+from tests.conftest import Clock
 
 
 def take_expecting_429(limiter: RateLimiter, key: str) -> HTTPException:
