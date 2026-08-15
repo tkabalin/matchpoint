@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach, Player
+from matchpoint_api.models import Player
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import PlayerCreate, PlayerRead, PlayerUpdate
 
@@ -25,12 +25,12 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-def owned_player(player_id: uuid.UUID, db: Session, coach: Coach) -> Player:
+def owned_player(db: Session, player_id: uuid.UUID, coach_id: uuid.UUID) -> Player:
     """The coach's player, or the 404 that keeps ids unenumerable across coaches."""
     player = db.get(Player, player_id)
     # Another coach's player gets the 404 an unknown id gets, not a 403: a 403 would
     # confirm the id exists.
-    if player is None or player.coach_id != coach.id:
+    if player is None or player.coach_id != coach_id:
         raise HTTPException(status_code=404, detail="Player not found")
     return player
 
@@ -61,12 +61,12 @@ def list_players(
 
 @router.get("/{player_id}", response_model=PlayerRead)
 def get_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    return owned_player(player_id, db, coach)
+    return owned_player(db, player_id, coach.id)
 
 
 @router.post("/{player_id}/archive", response_model=PlayerRead)
 def archive_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    player = owned_player(player_id, db, coach)
+    player = owned_player(db, player_id, coach.id)
     # A second archive keeps the first timestamp: the offline client retries queued
     # requests, and a retry is not a second departure from the roster.
     if player.archived_at is None:
@@ -80,7 +80,7 @@ def archive_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
 
 @router.post("/{player_id}/restore", response_model=PlayerRead)
 def restore_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    player = owned_player(player_id, db, coach)
+    player = owned_player(db, player_id, coach.id)
     # Restoring an active player is a no-op rather than a 409, for the reason archiving
     # twice is: a retried request must neither error nor move the row.
     if player.archived_at is not None:
