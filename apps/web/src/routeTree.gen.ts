@@ -18,6 +18,7 @@ import { Route as ProfileRouteImport } from "./routes/profile"
 import { Route as SettingsRouteImport } from "./routes/settings"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 import { Route as StatsRouteImport } from "./routes/stats"
+import { Route as PlayersPlayerIdRouteImport } from "./routes/players.$playerId"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -64,28 +65,35 @@ const StatsRoute = StatsRouteImport.update({
   path: "/stats",
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayersPlayerIdRoute = PlayersPlayerIdRouteImport.update({
+  id: "/$playerId",
+  path: "/$playerId",
+  getParentRoute: () => PlayersRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRoute
+  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
+  "/players/$playerId": typeof PlayersPlayerIdRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRoute
+  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
+  "/players/$playerId": typeof PlayersPlayerIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -93,11 +101,12 @@ export interface FileRoutesById {
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRoute
+  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
+  "/players/$playerId": typeof PlayersPlayerIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/sign-up"
     | "/stats"
+    | "/players/$playerId"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/sign-up"
     | "/stats"
+    | "/players/$playerId"
   id:
     | "__root__"
     | "/"
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | "/settings"
     | "/sign-up"
     | "/stats"
+    | "/players/$playerId"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -140,7 +152,7 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
   MatchesRoute: typeof MatchesRoute
-  PlayersRoute: typeof PlayersRoute
+  PlayersRoute: typeof PlayersRouteWithChildren
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
   SignUpRoute: typeof SignUpRoute
@@ -212,15 +224,33 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/players/$playerId": {
+      id: "/players/$playerId"
+      path: "/$playerId"
+      fullPath: "/players/$playerId"
+      preLoaderRoute: typeof PlayersPlayerIdRouteImport
+      parentRoute: typeof PlayersRoute
+    }
   }
 }
+
+interface PlayersRouteChildren {
+  PlayersPlayerIdRoute: typeof PlayersPlayerIdRoute
+}
+
+const PlayersRouteChildren: PlayersRouteChildren = {
+  PlayersPlayerIdRoute: PlayersPlayerIdRoute,
+}
+
+const PlayersRouteWithChildren =
+  PlayersRoute._addFileChildren(PlayersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
   MatchesRoute: MatchesRoute,
-  PlayersRoute: PlayersRoute,
+  PlayersRoute: PlayersRouteWithChildren,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
   SignUpRoute: SignUpRoute,
