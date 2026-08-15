@@ -5,10 +5,18 @@ import { createMatch, Match, maxSetsFor } from "./match";
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
 const PLAYED_ON = "2026-08-15";
+const ROSTERED_OPPONENT = { opponentId: OPPONENT_ID };
 
 describe("createMatch", () => {
   test("builds a Match from the given fields", () => {
-    const match = createMatch(PLAYED_ON, TRACKED_ID, OPPONENT_ID, "traditional", "hard", "player");
+    const match = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      "traditional",
+      "hard",
+      "player",
+    );
 
     expect(match.playedOn).toBe(PLAYED_ON);
     expect(match.trackedPlayerId).toBe(TRACKED_ID);
@@ -19,20 +27,48 @@ describe("createMatch", () => {
   });
 
   test("starts sets empty — a new match hasn't played any yet", () => {
-    const match = createMatch(PLAYED_ON, TRACKED_ID, OPPONENT_ID, "traditional", "hard", "player");
+    const match = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      "traditional",
+      "hard",
+      "player",
+    );
     expect(match.sets).toEqual([]);
   });
 
   test("generates a fresh matchId on every call", () => {
-    const first = createMatch(PLAYED_ON, TRACKED_ID, OPPONENT_ID, "traditional", "hard", "player");
-    const second = createMatch(PLAYED_ON, TRACKED_ID, OPPONENT_ID, "traditional", "hard", "player");
+    const first = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      "traditional",
+      "hard",
+      "player",
+    );
+    const second = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      "traditional",
+      "hard",
+      "player",
+    );
 
     expect(first.matchId).not.toBe(second.matchId);
   });
 
   test("still runs Match.create's validation, e.g. rejects opponentId equal to trackedPlayerId", () => {
     expect(() =>
-      createMatch(PLAYED_ON, TRACKED_ID, TRACKED_ID, "traditional", "hard", "player"),
+      createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        { opponentId: TRACKED_ID },
+        "traditional",
+        "hard",
+        "player",
+      ),
     ).toThrow("trackedPlayerId and opponentId must be different");
   });
 
@@ -41,7 +77,7 @@ describe("createMatch", () => {
       createMatch(
         PLAYED_ON,
         TRACKED_ID,
-        OPPONENT_ID,
+        ROSTERED_OPPONENT,
         "traditional",
         // @ts-expect-error deliberately passing an invalid SurfaceType to test runtime validation
         "grass court",
@@ -55,7 +91,7 @@ describe("createMatch", () => {
       createMatch(
         "2026-08-15T10:00:00.000Z",
         TRACKED_ID,
-        OPPONENT_ID,
+        ROSTERED_OPPONENT,
         "traditional",
         "hard",
         "player",
@@ -68,13 +104,81 @@ describe("createMatch", () => {
       createMatch(
         PLAYED_ON,
         TRACKED_ID,
-        OPPONENT_ID,
+        ROSTERED_OPPONENT,
         // @ts-expect-error deliberately passing an invalid ScoringSystem to test runtime validation
         "club_rules",
         "hard",
         "player",
       ),
     ).toThrow(/scoringSystem/);
+  });
+
+  describe("un-rostered opponent", () => {
+    test("given an opponentId, opponentName is null — the name lives on that Player row", () => {
+      const match = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        ROSTERED_OPPONENT,
+        "traditional",
+        "hard",
+        "player",
+      );
+      expect(match.opponentName).toBeNull();
+    });
+
+    test("given an opponentName instead, generates a stand-in opponentId", () => {
+      const match = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        { opponentName: "Jane Rival" },
+        "traditional",
+        "hard",
+        "player",
+      );
+
+      expect(match.opponentName).toBe("Jane Rival");
+      expect(match.opponentId).not.toBe("");
+      expect(match.opponentId).not.toBe(TRACKED_ID);
+    });
+
+    test("generates a fresh stand-in opponentId on every call", () => {
+      const first = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        { opponentName: "Jane Rival" },
+        "traditional",
+        "hard",
+        "player",
+      );
+      const second = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        { opponentName: "Jane Rival" },
+        "traditional",
+        "hard",
+        "player",
+      );
+
+      expect(first.opponentId).not.toBe(second.opponentId);
+    });
+  });
+});
+
+describe("Match.create opponentName validation", () => {
+  test("rejects an empty opponentName", () => {
+    expect(() =>
+      Match.create({
+        matchId: "match-1",
+        playedOn: PLAYED_ON,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        opponentName: "",
+        scoringSystem: "traditional",
+        firstServer: "player",
+        surfaceType: "hard",
+        sets: [],
+      }),
+    ).toThrow(/opponentName/);
   });
 });
 
@@ -98,7 +202,7 @@ describe("Match.fromJSON / toJSON", () => {
     const original = createMatch(
       PLAYED_ON,
       TRACKED_ID,
-      OPPONENT_ID,
+      ROSTERED_OPPONENT,
       "traditional",
       "hard",
       "player",
@@ -113,7 +217,7 @@ describe("Match.fromJSON / toJSON", () => {
     const original = createMatch(
       PLAYED_ON,
       TRACKED_ID,
-      OPPONENT_ID,
+      ROSTERED_OPPONENT,
       "traditional",
       "hard",
       "player",
@@ -129,7 +233,14 @@ describe("Match.fromJSON / toJSON", () => {
 
 describe("immutability", () => {
   test("mutating toJSON()'s output does not affect the Match", () => {
-    const match = createMatch(PLAYED_ON, TRACKED_ID, OPPONENT_ID, "traditional", "hard", "player");
+    const match = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      "traditional",
+      "hard",
+      "player",
+    );
 
     const snapshot = match.toJSON();
     snapshot.sets.push({});
