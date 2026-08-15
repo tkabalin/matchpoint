@@ -35,4 +35,19 @@ paths:
 - The Playwright config starts the dev server itself (`webServer`); don't add server bootstrapping
   to specs.
 
+## API Contract Checks
+
+Every function that builds a request body for the API needs two checks, both generated from the
+OpenAPI spec so they cannot drift (see `docs/testing.md § Contract checks against the API`):
+
+1. **Typed return.** Annotate the builder with the generated type from `@matchpoint/api-client`. A
+   renamed or removed field then fails `tsc`, not a live request.
+2. **Zod parse in the test.** Import the matching schema from `@matchpoint/api-client/zod` and
+   `safeParse` the built body. This catches what the compiler cannot: wrong date formats, invalid
+   UUIDs, over-length strings.
+
+Inline bodies passed directly to a generated client function (e.g.
+`login({ body: { email, password } })`) already get check 1 from the function's signature. They
+still need check 2 in their test. Never hand-write a mock of the API shape.
+
 See `docs/testing.md` for the unit/integration/e2e split and framework rationale.
