@@ -66,6 +66,26 @@
             "title": "Created At",
             "type": "string"
           },
+          "default_sets_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetsFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_surface": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Surface"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "display_name": {
             "title": "Display Name",
             "type": "string"
@@ -89,6 +109,8 @@
           "id",
           "email",
           "display_name",
+          "default_surface",
+          "default_sets_format",
           "created_at",
           "updated_at"
         ],
@@ -98,6 +120,26 @@
       "CoachUpdate": {
         "additionalProperties": false,
         "properties": {
+          "default_sets_format": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetsFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "default_surface": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Surface"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "display_name": {
             "maxLength": 100,
             "minLength": 1,

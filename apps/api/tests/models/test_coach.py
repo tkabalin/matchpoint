@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach
+from matchpoint_api.models import Coach, SetsFormat, Surface
 from tests.factories import make_coach
 
 EMAIL_LIMIT = 254
@@ -71,18 +71,23 @@ def _insert_raw_coach(session: Session, **columns: object) -> None:
     """Insert a coach through raw SQL, bypassing Pydantic and the ORM.
 
     The constraints below are the database's job precisely because they are what stands
-    between a bad write and an account nobody can sign in to.
+    between a bad write and an account nobody can sign in to. Nullable columns the
+    caller doesn't name are written as NULL.
     """
     session.execute(
         text(
-            "INSERT INTO coaches (id, email, display_name, password_hash) "
-            "VALUES (:id, :email, :display_name, :password_hash)"
+            "INSERT INTO coaches "
+            "(id, email, display_name, password_hash, default_surface, default_sets_format) "
+            "VALUES (:id, :email, :display_name, :password_hash, "
+            ":default_surface, :default_sets_format)"
         ),
         {
             "id": uuid.uuid4(),
             "email": "mike@example.com",
             "display_name": "Coach Mike",
             "password_hash": "not-a-real-hash",
+            "default_surface": None,
+            "default_sets_format": None,
             **columns,
         },
     )
@@ -139,6 +144,44 @@ def test_database_rejects_a_display_name_over_the_column_width(db_session: Sessi
     display_name is ShortText, and why narrowing this column would break that pairing."""
     with pytest.raises(DataError):
         _insert_raw_coach(db_session, display_name="x" * (DISPLAY_NAME_LIMIT + 1))
+
+
+def test_database_rejects_default_surface_outside_the_enum(db_session: Session) -> None:
+    """Four characters on purpose, as on the matches table's surface column: VARCHAR(6),
+    sized to "carpet", so a longer bogus value would fail on length before the CHECK."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_coach(db_session, default_surface="sand")
+
+
+def test_database_rejects_default_sets_format_outside_the_enum(db_session: Session) -> None:
+    """A "best_of_2" is exactly the column's VARCHAR(9), so it reaches the CHECK."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_coach(db_session, default_sets_format="best_of_2")
+
+
+@pytest.mark.parametrize(
+    ("column", "member"),
+    [("default_surface", m.value) for m in Surface]
+    + [("default_sets_format", m.value) for m in SetsFormat],
+)
+def test_database_accepts_every_member_of_the_reused_enums(
+    db_session: Session, column: str, member: str
+) -> None:
+    """The mirror of the two tests above, and the only guard on the reuse: these enums
+    back a CHECK on matches as well, and Alembic compares a CHECK by name and never by
+    condition, so a member migrated on one table alone fails nothing but this."""
+    _insert_raw_coach(db_session, **{column: member})
+
+
+def test_database_accepts_a_coach_with_no_preferences(db_session: Session) -> None:
+    """Both preference columns are nullable on purpose — null is "no preference held",
+    the state every pre-existing coach row is in after the migration."""
+    _insert_raw_coach(db_session)
+
+    stored = db_session.execute(
+        text("SELECT default_surface, default_sets_format FROM coaches")
+    ).one()
+    assert stored == (None, None)
 
 
 def test_database_accepts_a_password_hash_of_any_length(db_session: Session) -> None:

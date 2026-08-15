@@ -1,4 +1,4 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -16,10 +16,12 @@ import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-
 
 import { Home } from "./home";
 
-const coach = {
+const coach: CoachRead = {
   id: "3f1c2b4e-0000-4000-8000-0000000000c1",
   email: "coach@example.com",
   display_name: "Danny",
+  default_surface: null,
+  default_sets_format: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };

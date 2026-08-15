@@ -40,6 +40,8 @@ export type CoachRead = {
      * Created At
      */
     created_at: string;
+    default_sets_format: SetsFormat | null;
+    default_surface: Surface | null;
     /**
      * Display Name
      */
@@ -62,6 +64,8 @@ export type CoachRead = {
  * CoachUpdate
  */
 export type CoachUpdate = {
+    default_sets_format?: SetsFormat | null;
+    default_surface?: Surface | null;
     /**
      * Display Name
      */

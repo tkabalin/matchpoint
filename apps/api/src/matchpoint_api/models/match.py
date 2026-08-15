@@ -9,6 +9,9 @@ from matchpoint_api.db import Base
 from matchpoint_api.models.types import str_enum
 
 
+# Surface and SetsFormat back a preference column on coaches too, so a member added or
+# removed here needs the CHECK constraint on both tables migrated. Alembic compares a
+# CHECK by name and never by condition, so nothing reports the one left behind.
 class Surface(enum.StrEnum):
     HARD = "hard"
     CLAY = "clay"

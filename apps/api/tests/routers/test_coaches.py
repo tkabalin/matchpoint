@@ -583,6 +583,78 @@ def test_updating_the_display_name_stores_the_new_one(
     assert stored == "Coach Mike"
 
 
+def test_updating_the_preferences_stores_them(client: TestClient, db_session: Session) -> None:
+    """The storage half of #97: the match-setup defaults live on the coach row, and this
+    PATCH is the one write path they have. Read back with a query, as above."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+
+    response = client.patch(
+        "/coaches/me", json={"default_surface": "clay", "default_sets_format": "best_of_3"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["default_surface"] == "clay"
+    assert body["default_sets_format"] == "best_of_3"
+    stored = db_session.execute(
+        select(Coach.default_surface, Coach.default_sets_format).where(Coach.id == coach.id)
+    ).one()
+    assert stored == ("clay", "best_of_3")
+
+
+def test_updating_a_preference_to_null_clears_it(client: TestClient, db_session: Session) -> None:
+    """Null clears where absent leaves alone — the nullable-column half of the PATCH
+    semantics, and the sent field must not drag the unsent one with it."""
+    coach = make_coach(db_session, default_surface="clay", default_sets_format="best_of_3")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={"default_surface": None})
+
+    assert response.status_code == 200
+    assert response.json()["default_surface"] is None
+    stored = db_session.execute(
+        select(Coach.default_surface, Coach.default_sets_format).where(Coach.id == coach.id)
+    ).one()
+    assert stored == (None, "best_of_3")
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("default_surface", "sand"), ("default_sets_format", "best_of_2")],
+)
+def test_updating_to_a_preference_outside_its_enum_is_rejected(
+    client: TestClient, db_session: Session, field: str, value: str
+) -> None:
+    """The enum members, pinned as wired into this route; a rejected update leaves the
+    stored preference alone."""
+    coach = make_coach(db_session, default_surface="hard")
+    sign_in(client, db_session, coach)
+
+    response = client.patch("/coaches/me", json={field: value})
+
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", field]
+    stored = db_session.scalar(select(Coach.default_surface).where(Coach.id == coach.id))
+    assert stored == "hard"
+
+
+def test_me_returns_null_preferences_until_they_are_set(
+    client: TestClient, db_session: Session
+) -> None:
+    """No preference is a state, not an error: a fresh coach reads back explicit nulls,
+    which is what tells the setup form there is nothing to prefill."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+
+    response = client.get("/coaches/me")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["default_surface"] is None
+    assert body["default_sets_format"] is None
+
+
 def test_an_update_sending_no_fields_changes_nothing(
     client: TestClient, db_session: Session
 ) -> None:

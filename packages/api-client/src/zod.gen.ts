@@ -19,24 +19,6 @@ export const zCoachCreate = z.object({
 });
 
 /**
- * CoachRead
- */
-export const zCoachRead = z.object({
-    created_at: z.iso.datetime(),
-    display_name: z.string(),
-    email: z.string(),
-    id: z.uuid(),
-    updated_at: z.iso.datetime()
-});
-
-/**
- * CoachUpdate
- */
-export const zCoachUpdate = z.object({
-    display_name: z.string().min(1).max(100).optional()
-});
-
-/**
  * DominantHand
  */
 export const zDominantHand = z.enum(['right', 'left']);
@@ -153,6 +135,28 @@ export const zSurface = z.enum([
     'grass',
     'carpet'
 ]);
+
+/**
+ * CoachRead
+ */
+export const zCoachRead = z.object({
+    created_at: z.iso.datetime(),
+    default_sets_format: zSetsFormat.nullable(),
+    default_surface: zSurface.nullable(),
+    display_name: z.string(),
+    email: z.string(),
+    id: z.uuid(),
+    updated_at: z.iso.datetime()
+});
+
+/**
+ * CoachUpdate
+ */
+export const zCoachUpdate = z.object({
+    default_sets_format: zSetsFormat.nullish(),
+    default_surface: zSurface.nullish(),
+    display_name: z.string().min(1).max(100).optional()
+});
 
 /**
  * MatchCreate

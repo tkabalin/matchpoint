@@ -21,6 +21,8 @@ erDiagram
         varchar(254) email UK "the sign-in identity, stored lowercased"
         varchar(100) display_name "full name, or whatever they go by"
         text password_hash "argon2id hash"
+        varchar(6) default_surface "nullable: match-setup default, same members as matches.surface"
+        varchar(9) default_sets_format "nullable: match-setup default, same members as matches.sets_format"
         timestamptz created_at
         timestamptz updated_at
     }

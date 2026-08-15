@@ -5,13 +5,16 @@ from sqlalchemy import CheckConstraint, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from matchpoint_api.db import Base
+from matchpoint_api.models.match import SetsFormat, Surface
+from matchpoint_api.models.types import str_enum
 
 
 class Coach(Base):
     """The account a coach signs in with, and the owner of the players they track.
 
-    Every column is NOT NULL: all three are collected by the sign-up form, so a coach
-    row that is missing any of them is not an account anyone could sign in to.
+    Every sign-up column is NOT NULL: all three are collected by the sign-up form, so a
+    coach row that is missing any of them is not an account anyone could sign in to. The
+    two `default_*` preference columns are nullable, null meaning no preference held.
 
     No `archived_at`, unlike Player, because there is no deletion path to offer an
     alternative to: no route deletes a coach, and the foreign key from players refuses a
@@ -49,6 +52,13 @@ class Coach(Base):
     # width bound guards nothing and would need widening on any change of algorithm.
     # Deliberately absent from CoachRead — nothing reads it back out over the API.
     password_hash: Mapped[str] = mapped_column(Text)
+    # Match-setup defaults, reusing the Match enums so a preference is always a value a
+    # match can store. #97's client half prefills its setup form from these; the server
+    # never writes them into a match, so MatchCreate keeps absent distinct from null.
+    default_surface: Mapped[Surface | None] = mapped_column(str_enum(Surface, "default_surface"))
+    default_sets_format: Mapped[SetsFormat | None] = mapped_column(
+        str_enum(SetsFormat, "default_sets_format")
+    )
     # clock_timestamp() rather than now() for the reason given on Player.created_at: it
     # is the convention across the schema, so a row's stamps mean the same thing here.
     created_at: Mapped[datetime] = mapped_column(
