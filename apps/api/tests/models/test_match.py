@@ -6,7 +6,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match, Player, SetsFormat, Surface
+from matchpoint_api.models import Match, MatchResult, Player, SetsFormat, Surface
 from tests.factories import make_match, make_player
 
 
@@ -20,6 +20,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
         surface=Surface.CLAY,
         event="Roland-Garros",
         sets_format=SetsFormat.BEST_OF_3,
+        result=MatchResult.WIN,
     )
     db_session.commit()
 
@@ -31,6 +32,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
     assert saved.surface is Surface.CLAY
     assert saved.event == "Roland-Garros"
     assert saved.sets_format is SetsFormat.BEST_OF_3
+    assert saved.result is MatchResult.WIN
     assert isinstance(saved.id, uuid.UUID)
     assert saved.created_at is not None
     assert saved.updated_at is not None
@@ -48,6 +50,7 @@ def test_only_the_player_and_date_are_required(db_session: Session) -> None:
     assert saved.surface is None
     assert saved.event is None
     assert saved.sets_format is None
+    assert saved.result is None
 
 
 def test_match_requires_a_played_on_date(db_session: Session) -> None:
@@ -94,8 +97,8 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
     session.execute(
         text(
             "INSERT INTO matches "
-            "(id, player_id, played_on, opponent_name, surface, sets_format) "
-            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, :sets_format)"
+            "(id, player_id, played_on, opponent_name, surface, sets_format, result) "
+            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, :sets_format, :result)"
         ),
         {
             "id": uuid.uuid4(),
@@ -104,6 +107,7 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
             "opponent_name": None,
             "surface": None,
             "sets_format": None,
+            "result": None,
             **columns,
         },
     )
@@ -122,6 +126,14 @@ def test_database_rejects_sets_format_outside_the_enum(db_session: Session) -> N
     and it is the shape of mistake a hand-written sync payload would actually make."""
     with pytest.raises(IntegrityError):
         _insert_raw_match(db_session, sets_format="best_of_2")
+
+
+def test_database_rejects_result_outside_the_enum(db_session: Session) -> None:
+    """A "draw" is exactly the column's VARCHAR(4), sized to "loss", so it reaches the
+    CHECK rather than the width limit. It is also the value tennis makes impossible, so
+    the one a bad payload would most plausibly carry."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_match(db_session, result="draw")
 
 
 def test_database_rejects_free_text_over_the_column_width(db_session: Session) -> None:

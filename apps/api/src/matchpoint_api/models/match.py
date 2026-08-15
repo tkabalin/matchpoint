@@ -29,6 +29,14 @@ class SetsFormat(enum.StrEnum):
     BEST_OF_5 = "best_of_5"
 
 
+# Docstring kept to one line for the reason given on SetsFormat.
+class MatchResult(enum.StrEnum):
+    """Whether the tracked player won, from their side and never the opponent's."""
+
+    WIN = "win"
+    LOSS = "loss"
+
+
 class Match(Base):
     """Match metadata only — score/set/point structure belongs to the scoring engine work."""
 
@@ -44,6 +52,10 @@ class Match(Base):
     surface: Mapped[Surface | None] = mapped_column(str_enum(Surface, "surface"))
     event: Mapped[str | None] = mapped_column(String(100))
     sets_format: Mapped[SetsFormat | None] = mapped_column(str_enum(SetsFormat, "sets_format"))
+    # Stored rather than derived from point data (#94): capture is optional, so
+    # many matches will only ever have a result. Null until recorded; the scoring
+    # engine can set it at match end once point capture exists.
+    result: Mapped[MatchResult | None] = mapped_column(str_enum(MatchResult, "result"))
     # clock_timestamp(), not now(): now() is the transaction timestamp, so a batch of
     # matches synced in one transaction would all claim the same creation time and the
     # created_at tiebreaker in list_matches would order them arbitrarily.

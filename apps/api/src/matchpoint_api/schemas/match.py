@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from matchpoint_api.models import SetsFormat, Surface
+from matchpoint_api.models import MatchResult, SetsFormat, Surface
 from matchpoint_api.schemas.types import UNSET, ShortText
 
 # Room to back-fill a season or two of matches, while still bracketing a wrong
@@ -45,6 +45,8 @@ class MatchCreate(BaseModel):
     surface: Surface | None = None
     event: ShortText | None = None
     sets_format: SetsFormat | None = None
+    # Settable at creation because back-filled matches arrive with the result known.
+    result: MatchResult | None = None
 
 
 # player_id is absent on purpose: a match reaches its owner through its player, so a
@@ -56,6 +58,7 @@ class MatchUpdate(BaseModel):
     surface: Surface | None = None
     event: ShortText | None = None
     sets_format: SetsFormat | None = None
+    result: MatchResult | None = None
 
 
 class MatchRead(BaseModel):
@@ -68,5 +71,6 @@ class MatchRead(BaseModel):
     surface: Surface | None
     event: str | None
     sets_format: SetsFormat | None
+    result: MatchResult | None
     created_at: datetime
     updated_at: datetime

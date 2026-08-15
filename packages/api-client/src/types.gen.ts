@@ -138,6 +138,7 @@ export type MatchCreate = {
      * Player Id
      */
     player_id: string;
+    result?: MatchResult | null;
     sets_format?: SetsFormat | null;
     surface?: Surface | null;
 };
@@ -170,6 +171,7 @@ export type MatchRead = {
      * Player Id
      */
     player_id: string;
+    result: MatchResult | null;
     sets_format: SetsFormat | null;
     surface: Surface | null;
     /**
@@ -177,6 +179,13 @@ export type MatchRead = {
      */
     updated_at: string;
 };
+
+/**
+ * MatchResult
+ *
+ * Whether the tracked player won, from their side and never the opponent's.
+ */
+export type MatchResult = 'win' | 'loss';
 
 /**
  * MatchUpdate
@@ -194,6 +203,7 @@ export type MatchUpdate = {
      * Played On
      */
     played_on?: string;
+    result?: MatchResult | null;
     sets_format?: SetsFormat | null;
     surface?: Surface | null;
 };

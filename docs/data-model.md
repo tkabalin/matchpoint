@@ -77,13 +77,16 @@ erDiagram
         varchar(6) surface "nullable: hard, clay, grass, carpet"
         varchar(100) event "nullable: tournament or fixture"
         varchar(9) sets_format "nullable: best_of_1, best_of_3, best_of_5"
+        varchar(4) result "nullable: win, loss"
         timestamptz created_at
         timestamptz updated_at
     }
 ```
 
 A match carries metadata only. Point-level data — serves, rally outcomes, rally length — is captured
-against a match rather than stored on it, and is modelled separately.
+against a match rather than stored on it, and is modelled separately. `result` is the exception, a
+win or loss held on the row rather than derived from points: capture is optional, so a match can
+carry an outcome with no point data to compute it from.
 
 `email_verifications` stands alone by design: it holds addresses proving themselves at sign-up,
 before any coach row exists to reference. A row is either an unanswered code or a proven

@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from matchpoint_api.models import SetsFormat, Surface
+from matchpoint_api.models import MatchResult, SetsFormat, Surface
 from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate, MatchUpdate
 
 PLAYER_ID = "3f8c1a2e-0b4d-4c7e-9a51-2d6f8b0e4c13"
@@ -35,6 +35,7 @@ def test_only_the_player_and_date_are_required() -> None:
     assert match.surface is None
     assert match.event is None
     assert match.sets_format is None
+    assert match.result is None
 
 
 # --- player_id --------------------------------------------------------------
@@ -101,7 +102,7 @@ def test_rejects_a_played_on_just_outside_the_age_limit() -> None:
         _match(played_on=just_outside)
 
 
-# --- surface and sets_format -----------------------------------------------------
+# --- surface, sets_format and result ----------------------------------------------
 
 
 def test_coerces_a_surface_string_to_the_enum() -> None:
@@ -120,6 +121,15 @@ def test_coerces_a_sets_format_string_to_the_enum() -> None:
 def test_rejects_a_sets_format_outside_the_enum() -> None:
     with pytest.raises(ValidationError):
         _match(sets_format="best_of_2")
+
+
+def test_coerces_a_result_string_to_the_enum() -> None:
+    assert _match(result="win").result is MatchResult.WIN
+
+
+def test_rejects_a_result_outside_the_enum() -> None:
+    with pytest.raises(ValidationError):
+        _match(result="draw")
 
 
 # --- opponent_name and event (ShortText) ------------------------------------
@@ -199,7 +209,7 @@ def test_an_update_rejects_a_null_played_on() -> None:
         MatchUpdate.model_validate({"played_on": None})
 
 
-@pytest.mark.parametrize("field", ["opponent_name", "surface", "event", "sets_format"])
+@pytest.mark.parametrize("field", ["opponent_name", "surface", "event", "sets_format", "result"])
 def test_an_update_accepts_a_null_for_every_nullable_field(field: str) -> None:
     """The mirror of the test above, so a field cannot quietly move between the two
     groups: everything over a nullable column takes null as "clear it"."""

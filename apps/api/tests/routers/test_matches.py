@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, Match, Surface
+from matchpoint_api.models import Coach, Match, MatchResult, Surface
 from tests.factories import make_coach, make_match, make_player, sign_in
 
 
@@ -36,6 +36,7 @@ def test_create_match_persists_and_returns_row(
             "surface": "clay",
             "event": "Roland-Garros",
             "sets_format": "best_of_3",
+            "result": "win",
         },
     )
 
@@ -47,6 +48,7 @@ def test_create_match_persists_and_returns_row(
     assert body["surface"] == "clay"
     assert body["event"] == "Roland-Garros"
     assert body["sets_format"] == "best_of_3"
+    assert body["result"] == "win"
 
     saved = db_session.get(Match, uuid.UUID(body["id"]))
     assert saved is not None
@@ -68,6 +70,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["surface"] is None
     assert body["event"] is None
     assert body["sets_format"] is None
+    assert body["result"] is None
 
 
 @pytest.mark.usefixtures("coach")
@@ -248,6 +251,21 @@ def test_create_match_rejects_an_invalid_sets_format(
             "player_id": str(make_player(db_session, coach_id=coach.id).id),
             "played_on": "2026-08-01",
             "sets_format": "best_of_2",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_match_rejects_an_invalid_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    response = client.post(
+        "/matches",
+        json={
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
+            "played_on": "2026-08-01",
+            "result": "draw",
         },
     )
 
@@ -475,6 +493,7 @@ def test_get_match_returns_one(client: TestClient, db_session: Session, coach: C
         db_session,
         player_id=make_player(db_session, coach_id=coach.id).id,
         opponent_name="Aryna",
+        result=MatchResult.LOSS,
     )
     db_session.commit()
 
@@ -482,6 +501,7 @@ def test_get_match_returns_one(client: TestClient, db_session: Session, coach: C
 
     assert response.status_code == 200
     assert response.json()["opponent_name"] == "Aryna"
+    assert response.json()["result"] == "loss"
 
 
 def test_get_match_of_another_coach_is_404(
@@ -562,6 +582,24 @@ def test_update_match_clears_a_nullable_field_with_an_explicit_null(
     saved = db_session.get(Match, match.id)
     assert saved is not None
     assert saved.opponent_name is None
+
+
+def test_update_match_records_a_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The flow the field exists for: a match created before its outcome is known gets
+    the result patched on afterwards."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"result": "win"})
+
+    assert response.status_code == 200
+    assert response.json()["result"] == "win"
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.result is MatchResult.WIN
 
 
 def test_update_match_rejects_a_null_played_on(

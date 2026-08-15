@@ -15,6 +15,7 @@ const match: MatchRead = {
   surface: "hard",
   event: null,
   sets_format: "best_of_3",
+  result: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };

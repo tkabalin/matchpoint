@@ -224,6 +224,16 @@
             "title": "Player Id",
             "type": "string"
           },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sets_format": {
             "anyOf": [
               {
@@ -296,6 +306,16 @@
             "title": "Player Id",
             "type": "string"
           },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "sets_format": {
             "anyOf": [
               {
@@ -330,11 +350,21 @@
           "surface",
           "event",
           "sets_format",
+          "result",
           "created_at",
           "updated_at"
         ],
         "title": "MatchRead",
         "type": "object"
+      },
+      "MatchResult": {
+        "description": "Whether the tracked player won, from their side and never the opponent's.",
+        "enum": [
+          "win",
+          "loss"
+        ],
+        "title": "MatchResult",
+        "type": "string"
       },
       "MatchUpdate": {
         "properties": {
@@ -368,6 +398,16 @@
             "format": "date",
             "title": "Played On",
             "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "sets_format": {
             "anyOf": [
