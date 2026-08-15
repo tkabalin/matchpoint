@@ -79,6 +79,10 @@ paths:
   `{"model": ErrorDetail, "description": ...}`, using `schemas/errors.py`.
 - So a status is declared with a model or not declared at all. Declaring one exists to let the
   client branch on it, which is exactly what the missing model takes away.
+- Which is also the test for whether to declare at all: a status the caller can act on gets
+  declared, one it cannot does not. Sign-up's 409 and an archived player's are branches a form
+  takes; the ownership 404 is the same dead end whatever caused it, and stays undeclared. Take the
+  test from what the status is for, not from what a neighbouring route in the file happens to do.
 - Nothing catches this: the spec test only checks that the committed `openapi.json` matches the
   routes, and it does — `unknown` is what the routes asked for.
 
