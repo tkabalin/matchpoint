@@ -137,7 +137,24 @@ async function renderHome() {
     path: "/players",
     component: () => <h1>Players</h1>,
   });
-  const routeTree = rootRoute.addChildren([homeRoute, profileRoute, settingsRoute, playersRoute]);
+  const matchesRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/matches",
+    component: () => <h1>Matches</h1>,
+  });
+  const statsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/stats",
+    component: () => <h1>Stats</h1>,
+  });
+  const routeTree = rootRoute.addChildren([
+    homeRoute,
+    profileRoute,
+    settingsRoute,
+    playersRoute,
+    matchesRoute,
+    statsRoute,
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/home"] }),
@@ -290,4 +307,13 @@ test("shows the squad's player count and matches played in the last 7 days", asy
   const section = within(heading.closest("div")!);
   expect(section.getByText("Players: 2")).toBeInTheDocument();
   expect(section.getByText("Matches this week: 1")).toBeInTheDocument();
+});
+
+test("renders the bottom nav with Home active", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 });

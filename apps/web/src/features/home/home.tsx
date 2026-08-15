@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { BottomNav } from "@/components/bottom-nav";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
 
@@ -112,6 +113,7 @@ export function Home() {
           {`Matches this week: ${(allMatches ?? []).filter((match) => isWithinTheLastWeek(match.played_on)).length}`}
         </p>
       </div>
+      <BottomNav />
     </div>
   );
 }
