@@ -71,6 +71,7 @@ function stubAuthenticatedHome() {
   stubFetch({
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json(players),
+    "/api/matches": () => Response.json([]),
   });
 }
 
@@ -78,7 +79,14 @@ function stubUnauthenticatedHome() {
   stubFetch({
     "/api/coaches/me": () => new Response(null, { status: 401 }),
     "/api/players": () => Response.json([]),
+    "/api/matches": () => Response.json([]),
   });
+}
+
+function daysAgoDateString(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
 }
 
 const lastViewedMatches = [
@@ -264,4 +272,22 @@ test("shows the last-viewed player once one has been viewed", async () => {
   expect(section.getByText("AN")).toBeInTheDocument();
   expect(section.getByText("Matches: 1")).toBeInTheDocument();
   expect(section.getByRole("button", { name: "View full profile" })).toBeInTheDocument();
+});
+
+test("shows the squad's player count and matches played in the last 7 days", async () => {
+  stubFetch({
+    "/api/coaches/me": () => new Response(null, { status: 401 }),
+    "/api/players": () => Response.json(players),
+    "/api/matches": () =>
+      Response.json([
+        { ...lastViewedMatches[0], id: "match-recent", played_on: daysAgoDateString(2) },
+        { ...lastViewedMatches[0], id: "match-old", played_on: daysAgoDateString(14) },
+      ]),
+  });
+  await renderHome();
+
+  const heading = await screen.findByRole("heading", { name: "Squad snapshot" });
+  const section = within(heading.closest("div")!);
+  expect(section.getByText("Players: 2")).toBeInTheDocument();
+  expect(section.getByText("Matches this week: 1")).toBeInTheDocument();
 });

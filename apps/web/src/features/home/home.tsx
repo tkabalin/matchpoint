@@ -11,9 +11,17 @@ import { useState } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
 
+const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
+
+function isWithinTheLastWeek(dateStr: string): boolean {
+  const daysAgo = (Date.now() - new Date(dateStr).getTime()) / MILLISECONDS_PER_DAY;
+  return daysAgo >= 0 && daysAgo <= 7;
+}
+
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
+  const { data: allMatches } = useQuery(listMatchesOptions());
   const [search, setSearch] = useState("");
 
   const lastViewedPlayerId = getLastViewedPlayerId();
@@ -96,6 +104,13 @@ export function Home() {
             <span>Add</span>
           </Link>
         </div>
+      </div>
+      <div>
+        <h2>Squad snapshot</h2>
+        <p>{`Players: ${(players ?? []).length}`}</p>
+        <p>
+          {`Matches this week: ${(allMatches ?? []).filter((match) => isWithinTheLastWeek(match.played_on)).length}`}
+        </p>
       </div>
     </div>
   );
