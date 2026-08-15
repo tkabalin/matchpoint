@@ -122,6 +122,16 @@ locked out indefinitely. By charging only wrong guesses, a correct password is n
 before any is charged. If any refuses, nothing is spent. The refusal uses the tier furthest from a
 token, so the client's `Retry-After` is honest across tiers.
 
+## Request size limits
+
+Request bodies are capped at 1 MB, enforced twice: by Caddy on the public path and by
+`body_limit.py` inside the app (covering local dev and the direct-container path). Bodies without a
+`Content-Length` are counted as they stream, so the header cannot be omitted to bypass the limit.
+
+Without a cap, a single request could claim enough memory to crash the container (out-of-memory
+kill). 1 MB is roughly ten times the largest legitimate payload (a full match's batch of points),
+leaving room for future fields without silently breaking.
+
 ## OTP codes
 
 Six-digit numeric codes, SHA-256-stored, with a per-row attempt cap and a ten-minute expiry.
