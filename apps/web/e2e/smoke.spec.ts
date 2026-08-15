@@ -10,6 +10,16 @@ test("loads the player roster at /players", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Players" })).toBeVisible();
 });
 
+// No API is running behind these, so the profile can only get as far as its error
+// state — enough to prove the route resolves to the profile and not to the roster.
+// The wait covers the query client's three retries before it gives up.
+test("loads a player profile at /players/:playerId", async ({ page }) => {
+  await page.goto("/players/3f1c2b4e-0000-4000-8000-000000000001");
+  await expect(page.getByRole("alert")).toHaveText("Could not load that player.", {
+    timeout: 20_000,
+  });
+});
+
 test("loads the sign-up form at /sign-up", async ({ page }) => {
   await page.goto("/sign-up");
   await expect(page.getByRole("heading", { name: "Sign Up" })).toBeVisible();

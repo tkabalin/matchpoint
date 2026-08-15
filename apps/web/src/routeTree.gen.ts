@@ -13,11 +13,11 @@ import { Route as IndexRouteImport } from "./routes/index"
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
 import { Route as HomeRouteImport } from "./routes/home"
 import { Route as MatchesRouteImport } from "./routes/matches"
-import { Route as PlayersRouteImport } from "./routes/players"
 import { Route as ProfileRouteImport } from "./routes/profile"
 import { Route as SettingsRouteImport } from "./routes/settings"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 import { Route as StatsRouteImport } from "./routes/stats"
+import { Route as PlayersIndexRouteImport } from "./routes/players.index"
 import { Route as PlayersPlayerIdRouteImport } from "./routes/players.$playerId"
 
 const IndexRoute = IndexRouteImport.update({
@@ -40,11 +40,6 @@ const MatchesRoute = MatchesRouteImport.update({
   path: "/matches",
   getParentRoute: () => rootRouteImport,
 } as any)
-const PlayersRoute = PlayersRouteImport.update({
-  id: "/players",
-  path: "/players",
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ProfileRoute = ProfileRouteImport.update({
   id: "/profile",
   path: "/profile",
@@ -65,10 +60,15 @@ const StatsRoute = StatsRouteImport.update({
   path: "/stats",
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlayersIndexRoute = PlayersIndexRouteImport.update({
+  id: "/players/",
+  path: "/players/",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PlayersPlayerIdRoute = PlayersPlayerIdRouteImport.update({
-  id: "/$playerId",
-  path: "/$playerId",
-  getParentRoute: () => PlayersRoute,
+  id: "/players/$playerId",
+  path: "/players/$playerId",
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -76,24 +76,24 @@ export interface FileRoutesByFullPath {
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
   "/players/$playerId": typeof PlayersPlayerIdRoute
+  "/players/": typeof PlayersIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
   "/players/$playerId": typeof PlayersPlayerIdRoute
+  "/players": typeof PlayersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -101,12 +101,12 @@ export interface FileRoutesById {
   "/forgot-password": typeof ForgotPasswordRoute
   "/home": typeof HomeRoute
   "/matches": typeof MatchesRoute
-  "/players": typeof PlayersRouteWithChildren
   "/profile": typeof ProfileRoute
   "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
   "/stats": typeof StatsRoute
   "/players/$playerId": typeof PlayersPlayerIdRoute
+  "/players/": typeof PlayersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -115,36 +115,36 @@ export interface FileRouteTypes {
     | "/forgot-password"
     | "/home"
     | "/matches"
-    | "/players"
     | "/profile"
     | "/settings"
     | "/sign-up"
     | "/stats"
     | "/players/$playerId"
+    | "/players/"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
     | "/forgot-password"
     | "/home"
     | "/matches"
-    | "/players"
     | "/profile"
     | "/settings"
     | "/sign-up"
     | "/stats"
     | "/players/$playerId"
+    | "/players"
   id:
     | "__root__"
     | "/"
     | "/forgot-password"
     | "/home"
     | "/matches"
-    | "/players"
     | "/profile"
     | "/settings"
     | "/sign-up"
     | "/stats"
     | "/players/$playerId"
+    | "/players/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -152,11 +152,12 @@ export interface RootRouteChildren {
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   HomeRoute: typeof HomeRoute
   MatchesRoute: typeof MatchesRoute
-  PlayersRoute: typeof PlayersRouteWithChildren
   ProfileRoute: typeof ProfileRoute
   SettingsRoute: typeof SettingsRoute
   SignUpRoute: typeof SignUpRoute
   StatsRoute: typeof StatsRoute
+  PlayersPlayerIdRoute: typeof PlayersPlayerIdRoute
+  PlayersIndexRoute: typeof PlayersIndexRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -189,13 +190,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof MatchesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/players": {
-      id: "/players"
-      path: "/players"
-      fullPath: "/players"
-      preLoaderRoute: typeof PlayersRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     "/profile": {
       id: "/profile"
       path: "/profile"
@@ -224,37 +218,34 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof StatsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/players/": {
+      id: "/players/"
+      path: "/players"
+      fullPath: "/players/"
+      preLoaderRoute: typeof PlayersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/players/$playerId": {
       id: "/players/$playerId"
-      path: "/$playerId"
+      path: "/players/$playerId"
       fullPath: "/players/$playerId"
       preLoaderRoute: typeof PlayersPlayerIdRouteImport
-      parentRoute: typeof PlayersRoute
+      parentRoute: typeof rootRouteImport
     }
   }
 }
-
-interface PlayersRouteChildren {
-  PlayersPlayerIdRoute: typeof PlayersPlayerIdRoute
-}
-
-const PlayersRouteChildren: PlayersRouteChildren = {
-  PlayersPlayerIdRoute: PlayersPlayerIdRoute,
-}
-
-const PlayersRouteWithChildren =
-  PlayersRoute._addFileChildren(PlayersRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   HomeRoute: HomeRoute,
   MatchesRoute: MatchesRoute,
-  PlayersRoute: PlayersRouteWithChildren,
   ProfileRoute: ProfileRoute,
   SettingsRoute: SettingsRoute,
   SignUpRoute: SignUpRoute,
   StatsRoute: StatsRoute,
+  PlayersPlayerIdRoute: PlayersPlayerIdRoute,
+  PlayersIndexRoute: PlayersIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
