@@ -100,7 +100,8 @@ guarding a record.
 **Timestamps default to `clock_timestamp()`, not `now()`.** In Postgres `now()` is the _transaction_
 timestamp, so a batch of rows synced in one transaction would share a creation time — voiding any
 ordering that uses `created_at` to break a tie. Every table carries `created_at` and `updated_at`,
-both `timestamptz`.
+both `timestamptz`. That is a column default; a timestamp a route computes for itself, a session
+expiry or an `archived_at`, comes from Python's clock.
 
 **Enums are VARCHAR with a named CHECK constraint**, not native Postgres enums (`str_enum` in
 `models/types.py`). Postgres cannot remove a value from a native enum, so a migration adding one
@@ -118,7 +119,8 @@ and a row missing any of them is not an account.
 
 **Deletion is soft where history depends on it.** A player with matches recorded against them cannot
 be removed without taking that history along, so `archived_at` takes them off the active roster
-while leaving them readable by id.
+while leaving them readable by id. Archiving stops at the roster: the matches recorded against a
+player stay listed and resolvable, since that history is what the soft delete exists to keep.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every
