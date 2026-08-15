@@ -201,6 +201,31 @@ readable regardless, and remapping port 80 couples three files for no gain at th
 database password lives only on the VPS, since CI builds images and hands the VPS a tag but never
 talks to Postgres. `deploy.sh` writes `.env` to a temp file with mode 0600 before an atomic rename.
 
+## Security headers
+
+**Split.** Caddy sets the app shell's headers (`infra/prod/Caddyfile`); API responses carry their
+own from middleware (`headers.py`). A header set only at the proxy is absent whenever the proxy is
+not in front of the API, and the middleware's set is assertable in tests.
+
+**Content-Security-Policy.** The shell's policy is same-origin (`default-src 'self'`), which holds
+because the built app loads nothing external: no CDN scripts, no fonts, no analytics, and no inline
+script or style tags. API responses get `default-src 'none'`, since JSON should never execute,
+render, or be framed. The exception is Swagger UI, kept available in production and served a relaxed
+policy of its own admitting its CDN assets and inline bootstrap; the relaxation is scoped to that
+one HTML page, so no data response ever inherits it. ReDoc is disabled rather than granted a second,
+larger exemption.
+
+**HSTS.** `max-age=31536000; includeSubDomains`, set at the origin and passed through by Cloudflare.
+A year immediately, not a ramp: the domain sits behind Cloudflare with TLS permanently on, so there
+is no plain-HTTP future to be locked out of. No preload, which commits the registrable domain, and
+the app lives on a subdomain of one the project does not control.
+
+**The rest.** `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer` everywhere (a
+private coaching tool has no reason to advertise its URLs off-site), and framing forbidden via both
+`frame-ancestors 'none'` and the legacy `X-Frame-Options: DENY`. No `Permissions-Policy` is set: the
+defaults already gate powerful APIs to same-origin, and the capture screen's Screen Wake Lock must
+stay available.
+
 ## Supply chain
 
 pnpm's `minimumReleaseAge` rejects packages published in the last day, blunting the window for
