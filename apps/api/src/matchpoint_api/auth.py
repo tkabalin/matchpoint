@@ -253,6 +253,10 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
     if secrets.randbelow(SESSION_GC_DENOMINATOR) == 0:
         db.execute(delete(CoachSession).where(CoachSession.expires_at <= now))
         db.commit()
+    # For the request line's coach_id (logs.py). Via request.state, not a contextvar
+    # bind: this runs in a worker thread whose context is a copy, so a bind here would
+    # never reach the middleware; the shared scope does.
+    request.state.log_coach_id = coach.id
     return coach
 
 

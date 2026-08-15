@@ -10,6 +10,7 @@ from matchpoint_api.config import settings
 from matchpoint_api.csrf import OriginCheckMiddleware
 from matchpoint_api.errors import validation_error_response
 from matchpoint_api.headers import SecurityHeadersMiddleware
+from matchpoint_api.logs import RequestLogMiddleware, configure_logging
 from matchpoint_api.mail import create_email_sender
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers import auth, coaches, matches, players
@@ -28,6 +29,7 @@ def operation_id(route: APIRoute) -> str:
 
 
 def create_app() -> FastAPI:
+    configure_logging()
     # Swagger at /docs stays up in production; it earns a relaxed CSP of its own in
     # headers.py. ReDoc and Swagger's OAuth2 redirect are off: HTML pages nobody uses,
     # and ReDoc's Google Fonts and blob: workers would roughly double that exemption.
@@ -58,14 +60,19 @@ def create_app() -> FastAPI:
     # that raises never returns the object one could be written to.
     app.add_middleware(SessionRenewalMiddleware)
 
-    # Outside the renewal middleware and the routers, since add_middleware inserts at the
-    # front of the stack: a write from a foreign origin is refused before anything reads
-    # the session it carried or spends a rate-limit token on it.
+    # Ahead of the session and rate-limit work, since add_middleware inserts at the front
+    # of the stack: a write from a foreign origin is refused before anything reads the
+    # session it carried or spends a rate-limit token on it.
     app.add_middleware(OriginCheckMiddleware)
 
-    # Added last and therefore outermost: the origin check answers its own 403 without
-    # calling through, so headers added inside it would miss that response.
+    # Outside the origin check: it answers its own 403 without calling through, so
+    # headers added inside it would miss that response.
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Added last, so it wraps everything above: the request id must exist before any
+    # other code can log, and the logged status is the one the wire actually saw. The
+    # 403 above is the clearest case, being a response no route ever sees.
+    app.add_middleware(RequestLogMiddleware)
 
     # Sign-up: sized for security.py's two Argon2 slots (see routers/coaches.py).
     app.state.sign_up_per_ip_limit = RateLimiter(per_minute=10, burst=10)

@@ -16,6 +16,7 @@ dependencies = [
     # Already in the tree as a fastapi[standard] extra, declared here because mail.py
     # imports it directly — a dependency we call is not one to inherit by accident.
     "httpx>=0.28",
+    "structlog>=26.1.0",
 ]
 
 [dependency-groups]
