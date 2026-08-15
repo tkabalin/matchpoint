@@ -30,6 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, CoachSession
+from matchpoint_api.rate_limit import RateLimiter
 
 # The `__Host-` prefix binds the cookie to one host: a browser refuses it unless it is
 # Secure, Path=/ and carries no Domain, and thereafter no other host can set or shadow
@@ -236,6 +237,12 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
         db.execute(delete(CoachSession).where(CoachSession.token_hash == token_hash))
         db.commit()
         raise _unauthenticated()
+    # One budget over every authenticated route, charged here so no router can forget
+    # it; sized in create_app. Only after the cookie has proven live, so nothing an
+    # outsider sends can drain a coach's bucket, and before the renewal write below,
+    # so a refused request pays no write.
+    limiter: RateLimiter = request.app.state.authenticated_per_coach_limit
+    limiter.take(str(coach.id))
     if session.expires_at - now < SESSION_LIFETIME / 2:
         # Renewal on use, from the halfway mark: a coach who opens the app at all
         # keeps their login alive, so only abandoned sessions ever reach expiry —

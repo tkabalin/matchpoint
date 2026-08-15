@@ -138,7 +138,10 @@ def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
 @router.get(
     "/me",
     response_model=CoachRead,
-    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
 )
 def get_current_coach(coach: CurrentCoach) -> Coach:
     return coach
@@ -149,7 +152,10 @@ def get_current_coach(coach: CurrentCoach) -> Coach:
 @router.patch(
     "/me",
     response_model=CoachRead,
-    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
 )
 def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) -> Coach:
     # exclude_unset is what makes the PATCH partial: an omitted field never reaches the

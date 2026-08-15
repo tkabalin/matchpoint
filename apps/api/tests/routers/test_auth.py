@@ -24,6 +24,7 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
+from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
 from tests.conftest import ORIGIN_HEADERS
@@ -1721,3 +1722,83 @@ def test_a_rejected_change_echoes_neither_password(client: TestClient, db_sessio
     assert response.status_code == 422
     assert SIGN_UP["password"] not in response.text
     assert "tiny" not in response.text
+
+
+# --- The per-coach ceiling on authenticated traffic ---
+
+
+def test_a_coach_beyond_the_per_coach_burst_is_refused(
+    client: TestClient, db_session: Session
+) -> None:
+    """One budget spans every authenticated route, so requests to one spend it on all.
+    Swapped for a tighter bucket because the real burst is 600 requests, and one that
+    refills every ten seconds so a stalled runner can't hand a refusal a token back."""
+    cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
+        per_minute=6, burst=2
+    )
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    assert client.get("/players").status_code == 200
+    assert client.get("/coaches/me").status_code == 200
+
+    refused = client.get("/players")
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+    assert int(refused.headers["Retry-After"]) >= 1
+
+
+def test_one_coach_s_spending_does_not_charge_another(
+    client: TestClient, db_session: Session
+) -> None:
+    """The bucket keys on the coach, so a runaway client refuses only its own coach."""
+    cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
+        per_minute=6, burst=1
+    )
+    spender = make_coach(db_session)
+    sign_in(client, db_session, spender)
+    assert client.get("/players").status_code == 200
+    assert client.get("/players").status_code == 429
+
+    client.cookies.clear()
+    bystander = make_coach(db_session)
+    sign_in(client, db_session, bystander)
+
+    assert client.get("/players").status_code == 200
+
+
+def test_a_dead_cookie_s_401_does_not_charge_the_coach(
+    client: TestClient, db_session: Session
+) -> None:
+    """The charge lands only once the cookie has proven live: an outsider replaying an
+    expired token must not be able to drain the coach's own budget."""
+    cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
+        per_minute=6, burst=1
+    )
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(days=1))
+    assert client.get("/players").status_code == 401
+
+    client.cookies.clear()
+    sign_in(client, db_session, coach)
+
+    assert client.get("/players").status_code == 200
+
+
+def test_the_ceiling_reaches_change_password_too(client: TestClient, db_session: Session) -> None:
+    """A route on a router that mixes authenticated and unauthenticated ones, so its 429
+    is declared per-route. The refusal comes from current_coach, ahead of both this
+    route's own tiers and the pair of Argon2 runs behind them."""
+    cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
+        per_minute=6, burst=1
+    )
+    sign_in(client, db_session, make_coach(db_session))
+    assert client.get("/coaches/me").status_code == 200
+
+    refused = client.post(
+        "/auth/change-password",
+        json={"password": SIGN_UP["password"], "new_password": NEW_PASSWORD},
+    )
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}

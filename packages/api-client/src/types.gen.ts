@@ -455,7 +455,7 @@ export type ChangePasswordErrors = {
      */
     422: HttpValidationError;
     /**
-     * Too many attempts
+     * Too many requests
      */
     429: ErrorDetail;
 };
@@ -631,6 +631,10 @@ export type RevokeOtherSessionsErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type RevokeOtherSessionsError = RevokeOtherSessionsErrors[keyof RevokeOtherSessionsErrors];
@@ -724,6 +728,10 @@ export type GetCurrentCoachErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type GetCurrentCoachError = GetCurrentCoachErrors[keyof GetCurrentCoachErrors];
@@ -753,6 +761,10 @@ export type UpdateCurrentCoachErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type UpdateCurrentCoachError = UpdateCurrentCoachErrors[keyof UpdateCurrentCoachErrors];
@@ -807,6 +819,10 @@ export type ListMatchesErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type ListMatchesError = ListMatchesErrors[keyof ListMatchesErrors];
@@ -842,6 +858,10 @@ export type CreateMatchErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type CreateMatchError = CreateMatchErrors[keyof CreateMatchErrors];
@@ -876,6 +896,10 @@ export type DeleteMatchErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type DeleteMatchError = DeleteMatchErrors[keyof DeleteMatchErrors];
@@ -910,6 +934,10 @@ export type GetMatchErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type GetMatchError = GetMatchErrors[keyof GetMatchErrors];
@@ -944,6 +972,10 @@ export type UpdateMatchErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type UpdateMatchError = UpdateMatchErrors[keyof UpdateMatchErrors];
@@ -978,6 +1010,10 @@ export type ListPlayersErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type ListPlayersError = ListPlayersErrors[keyof ListPlayersErrors];
@@ -1009,6 +1045,10 @@ export type CreatePlayerErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type CreatePlayerError = CreatePlayerErrors[keyof CreatePlayerErrors];
@@ -1043,6 +1083,10 @@ export type GetPlayerErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type GetPlayerError = GetPlayerErrors[keyof GetPlayerErrors];
@@ -1077,6 +1121,10 @@ export type UpdatePlayerErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type UpdatePlayerError = UpdatePlayerErrors[keyof UpdatePlayerErrors];
@@ -1111,6 +1159,10 @@ export type ArchivePlayerErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type ArchivePlayerError = ArchivePlayerErrors[keyof ArchivePlayerErrors];
@@ -1145,6 +1197,10 @@ export type RestorePlayerErrors = {
      * Validation Error
      */
     422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
 };
 
 export type RestorePlayerError = RestorePlayerErrors[keyof RestorePlayerErrors];

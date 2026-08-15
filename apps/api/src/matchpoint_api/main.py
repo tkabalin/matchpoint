@@ -116,6 +116,12 @@ def create_app() -> FastAPI:
     app.state.change_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.change_password_total_limit = RateLimiter(per_minute=30, burst=10)
 
+    # Every authenticated route: one budget per coach, charged in auth.current_coach.
+    # The burst clears an outbox flushing two three-set matches of individually-posted
+    # points (~250 each); the sustained rate is far above human use. An estimate until
+    # point ingestion exists to measure (#56).
+    app.state.authenticated_per_coach_limit = RateLimiter(per_minute=120, burst=600)
+
     # Outbound email, on app state for the buckets' reason — every create_app() gets
     # a sender of its own, so no test can send real mail and any test can read what
     # was sent by swapping in a recorder. Which sender is settings' call (mail.py).

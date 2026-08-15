@@ -170,11 +170,15 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
 
 # 204 whether or not this coach had other sessions, for logout's reason: the request
 # asks for a state, and a coach signed in nowhere else is already in it. The 401 is
-# declared per-route, with a model for ErrorDetail's reason.
+# declared per-route, with a model for ErrorDetail's reason; the 429 is the per-coach
+# budget current_coach charges.
 @router.delete(
     "/sessions",
     status_code=204,
-    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
 )
 def revoke_other_sessions(coach: CurrentCoach, request: Request, db: DbSession) -> None:
     """Sign out every other client holding a session for this coach.
@@ -620,7 +624,10 @@ INCORRECT_PASSWORD = "Incorrect password"
     responses={
         401: {"model": ErrorDetail, "description": "Not signed in"},
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
-        429: {"model": ErrorDetail, "description": "Too many attempts"},
+        # Two things now answer 429 here, this route's wrong-guess and arrival tiers and
+        # the per-coach budget current_coach charges, so the description is the wider one
+        # the body already carries.
+        429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
 def change_password(

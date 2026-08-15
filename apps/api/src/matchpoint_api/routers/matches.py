@@ -14,7 +14,8 @@ from matchpoint_api.schemas.match import MatchCreate, MatchRead, MatchUpdate
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
 # Cookie() parameter, so no route's spec would carry it otherwise. Declared with a
-# model so the client can route it to a login screen, per ErrorDetail's note.
+# model so the client can route it to a login screen, per ErrorDetail's note. The 429
+# is the per-coach budget current_coach charges, so it rides along for the same reason.
 #
 # A match belongs to a coach only through its player — Match deliberately carries no
 # coach_id of its own, which would be a second copy of a fact the player already
@@ -22,7 +23,10 @@ from matchpoint_api.schemas.match import MatchCreate, MatchRead, MatchUpdate
 router = APIRouter(
     prefix="/matches",
     tags=["matches"],
-    responses={401: {"model": ErrorDetail, "description": "Not signed in"}},
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
 )
 
 DbSession = Annotated[Session, Depends(get_db)]
