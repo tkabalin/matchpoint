@@ -8,9 +8,11 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
+
+import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 import { Home } from "./home";
 
@@ -79,6 +81,29 @@ function stubUnauthenticatedHome() {
   });
 }
 
+const lastViewedMatches = [
+  {
+    id: "3f1c2b4e-0000-4000-8000-00000000ma01",
+    player_id: players[0]!.id,
+    opponent_name: "T. Naidoo",
+    played_on: "2026-08-10",
+    surface: "hard" as const,
+    event: null,
+    sets_format: "best_of_3" as const,
+    created_at: "2026-08-11T09:00:00Z",
+    updated_at: "2026-08-11T09:00:00Z",
+  },
+];
+
+function stubAuthenticatedHomeWithLastViewedPlayer() {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json(players),
+    [`/api/players/${players[0]!.id}`]: () => Response.json(players[0]),
+    "/api/matches": () => Response.json(lastViewedMatches),
+  });
+}
+
 /** Renders Home inside a real (in-memory) router — its Profile/Settings links need
  * router context, same reasoning as sign-in.test.tsx's renderSignIn(). */
 async function renderHome() {
@@ -119,6 +144,7 @@ async function renderHome() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 test("renders the welcome heading", async () => {
@@ -218,4 +244,24 @@ test("'Add' links to the players roster for now", async () => {
   await user.click(screen.getByRole("link", { name: "Add" }));
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
+
+test("shows no last-viewed-player box when nothing has been viewed yet", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(screen.queryByRole("heading", { name: "Last viewed player" })).not.toBeInTheDocument();
+});
+
+test("shows the last-viewed player once one has been viewed", async () => {
+  setLastViewedPlayerId(players[0]!.id);
+  stubAuthenticatedHomeWithLastViewedPlayer();
+  await renderHome();
+
+  const heading = await screen.findByRole("heading", { name: "Last viewed player" });
+  const section = within(heading.closest("div")!);
+  expect(section.getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect(section.getByText("AN")).toBeInTheDocument();
+  expect(section.getByText("Matches: 1")).toBeInTheDocument();
+  expect(section.getByRole("button", { name: "View full profile" })).toBeInTheDocument();
 });

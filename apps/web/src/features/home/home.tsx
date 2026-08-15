@@ -1,14 +1,30 @@
-import { getCurrentCoachOptions, listPlayersOptions } from "@matchpoint/api-client/react-query";
+import {
+  getCurrentCoachOptions,
+  getPlayerOptions,
+  listMatchesOptions,
+  listPlayersOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { PlayerAvatar } from "@/components/player-avatar";
+import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
   const [search, setSearch] = useState("");
+
+  const lastViewedPlayerId = getLastViewedPlayerId();
+  const { data: lastViewedPlayer } = useQuery({
+    ...getPlayerOptions({ path: { player_id: lastViewedPlayerId ?? "" } }),
+    enabled: lastViewedPlayerId !== null,
+  });
+  const { data: lastViewedMatches } = useQuery({
+    ...listMatchesOptions({ query: { player_id: lastViewedPlayerId ?? "" } }),
+    enabled: lastViewedPlayerId !== null,
+  });
 
   const searchResults = (players ?? []).filter((player) =>
     `${player.first_name} ${player.last_name}`.toLowerCase().includes(search.toLowerCase()),
@@ -27,6 +43,20 @@ export function Home() {
         </div>
       )}
       <h1>Welcome to Home</h1>
+      {lastViewedPlayer && lastViewedMatches && (
+        <div>
+          <h2>Last viewed player</h2>
+          <div className="flex items-center gap-2">
+            <PlayerAvatar player={lastViewedPlayer} />
+            <span>
+              {lastViewedPlayer.first_name} {lastViewedPlayer.last_name}
+            </span>
+          </div>
+          <p>{`Matches: ${lastViewedMatches.length}`}</p>
+          {/* Not a real link yet — the player profile route lands in a later issue. */}
+          <button type="button">View full profile</button>
+        </div>
+      )}
       <label htmlFor="player-search">Search players</label>
       <input
         id="player-search"
