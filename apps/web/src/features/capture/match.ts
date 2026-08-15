@@ -82,6 +82,7 @@ export function maxSetsFor(scoringSystem: ScoringSystem): number {
 // TODO: not built yet — fields TBD (set score, games, tiebreak, ...). Named
 // `MatchSet` rather than `Set` because `Set` is already the built-in JS/TS
 // collection type; reusing that name here would shadow it for this whole module.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- placeholder, see TODO above
 export interface MatchSet {}
 
 /**
