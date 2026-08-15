@@ -93,10 +93,7 @@ def restore_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
 def update_player(
     player_id: uuid.UUID, data: PlayerUpdate, db: DbSession, coach: CurrentCoach
 ) -> Player:
-    player = db.get(Player, player_id)
-    # Scoped as get_player is, and 404 for the same reason.
-    if player is None or player.coach_id != coach.id:
-        raise HTTPException(status_code=404, detail="Player not found")
+    player = owned_player(db, player_id, coach.id)
     # exclude_unset, so an absent field is left as it is and a null clears the column.
     # Every field PlayerUpdate carries is one a client may set, which is what makes the
     # loop safe. updated_at is the column's onupdate, never set here.
