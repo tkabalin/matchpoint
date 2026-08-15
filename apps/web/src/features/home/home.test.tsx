@@ -175,6 +175,8 @@ async function renderHome() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
   localStorage.clear();
 });
 
@@ -337,6 +339,25 @@ test("shows the squad's player count and matches played in the last 7 days", asy
   const section = within(heading.closest("div")!);
   expect(section.getByText("Players: 2")).toBeInTheDocument();
   expect(section.getByText("Matches this week: 1")).toBeInTheDocument();
+});
+
+test("counts a match played today from a timezone ahead of UTC", async () => {
+  // 01:30 SAST is still the previous day in UTC, so reading `played_on` as UTC midnight
+  // would date today's match in the future and leave it out of the count. Only Date is
+  // faked: faking setTimeout as well would stall the query client and the DOM polling.
+  vi.stubEnv("TZ", "Africa/Johannesburg");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-08-15T23:30:00Z"));
+  stubFetch({
+    "/api/coaches/me": () => new Response(null, { status: 401 }),
+    "/api/players": () => Response.json(players),
+    "/api/matches": () =>
+      Response.json([{ ...lastViewedMatches[0], id: "match-today", played_on: "2026-08-16" }]),
+  });
+  await renderHome();
+
+  const heading = await screen.findByRole("heading", { name: "Squad snapshot" });
+  expect(within(heading.closest("div")!).getByText("Matches this week: 1")).toBeInTheDocument();
 });
 
 test("renders the bottom nav with Home active", async () => {

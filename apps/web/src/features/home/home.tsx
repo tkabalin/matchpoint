@@ -14,8 +14,15 @@ import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
 
+// `played_on` is a plain calendar date, which `new Date(str)` reads as UTC midnight:
+// east of UTC that puts a match played today in the future, dropping it from the count
+// until local mid-morning. Both dates are built locally and compared as whole days.
 function isWithinTheLastWeek(dateStr: string): boolean {
-  const daysAgo = (Date.now() - new Date(dateStr).getTime()) / MILLISECONDS_PER_DAY;
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const playedOn = new Date(year!, month! - 1, day!);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysAgo = Math.round((today.getTime() - playedOn.getTime()) / MILLISECONDS_PER_DAY);
   return daysAgo >= 0 && daysAgo <= 7;
 }
 
