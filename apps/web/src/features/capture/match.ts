@@ -13,9 +13,6 @@
 // Same convention as point.ts: plain string-literal unions, each paired with a
 // runtime array of its members for validating untrusted input.
 
-export type FirstServer = "player" | "opponent";
-export const FIRST_SERVERS: readonly FirstServer[] = ["player", "opponent"];
-
 // TODO: provisional — revisit once we know which surfaces coaches actually track.
 // "unspecified" is a real, stored value here (not the absence of one — see
 // `createMatch`'s default) for a coach who doesn't know or doesn't care.
@@ -118,7 +115,15 @@ export class Match {
   // the backend's free-text opponent_name (see the class doc comment above).
   readonly opponentName: string | null;
   readonly scoringSystem: ScoringSystem;
-  readonly firstServer: FirstServer;
+  // Must equal trackedPlayerId or opponentId — checked in Match.create, same
+  // as Point.server (see point.ts). Not a "player" | "opponent" role label:
+  // one representation for "which of the two people" throughout the model.
+  // Its *purpose* still differs from Point.server, though — this is a seed
+  // for the match's serve-alternation pattern (who serves game N follows
+  // from this plus standard tennis rules), not a recorded fact about one
+  // already-played point. Reading this alone tells you who started the
+  // pattern, not who's serving right now.
+  readonly firstServer: string;
   readonly surfaceType: SurfaceType;
   readonly sets: readonly MatchSet[];
 
@@ -133,7 +138,7 @@ export class Match {
     opponentId: string;
     opponentName: string | null;
     scoringSystem: ScoringSystem;
-    firstServer: FirstServer;
+    firstServer: string;
     surfaceType: SurfaceType;
     sets: readonly MatchSet[];
   }) {
@@ -193,8 +198,13 @@ export class Match {
     if (!SCORING_SYSTEMS.includes(data.scoringSystem as ScoringSystem)) {
       throw new Error(`invalid scoringSystem: ${String(data.scoringSystem)}`);
     }
-    if (!FIRST_SERVERS.includes(data.firstServer as FirstServer)) {
-      throw new Error(`invalid firstServer: ${String(data.firstServer)}`);
+    // Same check as Point.create runs on server: must be trackedPlayerId or
+    // opponentId, not a "player" | "opponent" role label — see the field
+    // comment above.
+    if (![data.trackedPlayerId, data.opponentId].includes(data.firstServer as string)) {
+      throw new Error(
+        `firstServer must be trackedPlayerId or opponentId, got: ${String(data.firstServer)}`,
+      );
     }
     if (!SURFACE_TYPES.includes(data.surfaceType as SurfaceType)) {
       throw new Error(`invalid surfaceType: ${String(data.surfaceType)}`);
@@ -213,7 +223,7 @@ export class Match {
       opponentId: data.opponentId,
       opponentName: data.opponentName as string | null,
       scoringSystem: data.scoringSystem as ScoringSystem,
-      firstServer: data.firstServer as FirstServer,
+      firstServer: data.firstServer as string,
       surfaceType: data.surfaceType as SurfaceType,
       sets,
     });
@@ -270,7 +280,7 @@ export function createMatch(
   playedOn: string,
   trackedPlayerId: string,
   opponent: { opponentId: string } | { opponentName: string },
-  firstServer: FirstServer,
+  firstServer: string,
   scoringSystem: ScoringSystem = "traditional",
   surfaceType: SurfaceType = "unspecified",
 ): Match {
