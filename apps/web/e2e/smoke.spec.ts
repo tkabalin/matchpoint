@@ -29,3 +29,8 @@ test("loads the matches list at /matches", async ({ page }) => {
   await page.goto("/matches");
   await expect(page.getByRole("heading", { name: "Matches" })).toBeVisible();
 });
+
+test("loads the stats placeholder at /stats", async ({ page }) => {
+  await page.goto("/stats");
+  await expect(page.getByRole("heading", { name: "Stats — coming soon" })).toBeVisible();
+});
