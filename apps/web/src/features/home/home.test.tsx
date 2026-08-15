@@ -99,7 +99,12 @@ async function renderHome() {
     path: "/settings",
     component: () => <h1>Settings</h1>,
   });
-  const routeTree = rootRoute.addChildren([homeRoute, profileRoute, settingsRoute]);
+  const playersRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players",
+    component: () => <h1>Players</h1>,
+  });
+  const routeTree = rootRoute.addChildren([homeRoute, profileRoute, settingsRoute, playersRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/home"] }),
@@ -183,4 +188,34 @@ test("shows an empty state when no player matches", async () => {
   await user.type(screen.getByLabelText("Search players"), "nobody");
 
   expect(await screen.findByText("No players found.")).toBeInTheDocument();
+});
+
+test("renders a bubble with initials for each player", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(await screen.findByText("AN")).toBeInTheDocument();
+  expect(screen.getByText("SD")).toBeInTheDocument();
+  expect(screen.getByText("Amahle")).toBeInTheDocument();
+  expect(screen.getByText("Sipho")).toBeInTheDocument();
+});
+
+test("'See all' links to the players roster", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup();
+  await renderHome();
+
+  await user.click(screen.getByRole("link", { name: "See all" }));
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
+
+test("'Add' links to the players roster for now", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup();
+  await renderHome();
+
+  await user.click(screen.getByRole("link", { name: "Add" }));
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });

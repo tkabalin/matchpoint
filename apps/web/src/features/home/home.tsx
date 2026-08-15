@@ -3,6 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { PlayerAvatar } from "@/components/player-avatar";
+
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
@@ -42,6 +44,29 @@ export function Home() {
           ))}
         </ul>
       )}
+      <div>
+        <div className="flex justify-between">
+          <h2>My Players</h2>
+          <Link to="/players">See all</Link>
+        </div>
+        <div className="flex gap-4 overflow-x-auto">
+          {(players ?? []).map((player) => (
+            <div key={player.id} className="flex flex-col items-center gap-1">
+              <PlayerAvatar player={player} />
+              <span>{player.first_name}</span>
+            </div>
+          ))}
+          <Link to="/players" className="flex flex-col items-center gap-1">
+            <div
+              aria-hidden="true"
+              className="flex h-11 w-11 items-center justify-center rounded-lg border border-dashed"
+            >
+              +
+            </div>
+            <span>Add</span>
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
