@@ -28,7 +28,15 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 
 
-@router.post("", status_code=201, response_model=MatchRead)
+# The 409 is declared because the roster screen branches on it: an archived player is a
+# state the coach can undo, so the client says restore them first rather than reporting
+# a failure. The 404 below stays undeclared, being nothing a caller can act on.
+@router.post(
+    "",
+    status_code=201,
+    response_model=MatchRead,
+    responses={409: {"model": ErrorDetail, "description": "Player is archived"}},
+)
 def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match:
     # Checked here rather than left to the FK constraint so the client gets an error
     # naming the problem instead of a 500 from an IntegrityError. Not 422: FastAPI
@@ -39,6 +47,11 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
     player = db.get(Player, data.player_id)
     if player is None or player.coach_id != coach.id:
         raise HTTPException(status_code=404, detail="Unknown player_id")
+    # 409 and not the 404 above: the coach can still read this player by id, so
+    # answering as though it did not exist would misname the problem. Archiving stops
+    # new matches; the ones already recorded stay listed and readable.
+    if player.archived_at is not None:
+        raise HTTPException(status_code=409, detail="Player is archived")
     match = Match(**data.model_dump())
     db.add(match)
     db.commit()

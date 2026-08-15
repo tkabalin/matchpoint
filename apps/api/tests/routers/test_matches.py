@@ -101,6 +101,44 @@ def test_create_match_against_another_coachs_player_is_404(
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
 
 
+def test_create_match_against_an_archived_player_is_409(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """409 and not the 404 an unowned player gets: this one is the caller's own and
+    still readable by id, so the conflict is with its state, not its existence."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    assert client.post(f"/players/{player.id}/archive").status_code == 200
+
+    response = client.post(
+        "/matches",
+        json={"player_id": str(player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 409
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_create_match_is_allowed_again_once_a_player_is_restored(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The refusal tracks the player's current state rather than latching on the first
+    archive, so restoring puts them back on the roster in full."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    assert client.post(f"/players/{player.id}/archive").status_code == 200
+    assert client.post(f"/players/{player.id}/restore").status_code == 200
+
+    response = client.post(
+        "/matches",
+        json={"player_id": str(player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 201
+
+
 @pytest.mark.usefixtures("coach")
 def test_create_match_rejects_missing_player_id(client: TestClient) -> None:
     response = client.post("/matches", json={"played_on": "2026-08-01"})

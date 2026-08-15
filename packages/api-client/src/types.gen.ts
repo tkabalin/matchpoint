@@ -774,6 +774,10 @@ export type CreateMatchErrors = {
      */
     401: ErrorDetail;
     /**
+     * Player is archived
+     */
+    409: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
