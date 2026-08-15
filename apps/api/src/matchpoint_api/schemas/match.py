@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from matchpoint_api.models import MatchResult, SetsFormat, Surface
-from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText
+from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText, UpdateModel
 
 # Room to back-fill a season or two of matches, while still bracketing a wrong
 # century or a transposed year digit.
@@ -52,7 +52,7 @@ class MatchCreate(RequestModel):
 # player_id is absent on purpose: a match reaches its owner through its player, so a
 # writable one would let a match walk across that boundary. played_on defaults to UNSET,
 # its column being NOT NULL.
-class MatchUpdate(RequestModel):
+class MatchUpdate(UpdateModel):
     opponent_name: ShortText | None = None
     played_on: PlayedOn = UNSET
     surface: Surface | None = None

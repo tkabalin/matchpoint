@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, StringConstraints
 
-from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText
+from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText, UpdateModel
 
 # The longest address SMTP will carry (RFC 5321), and the width of the column.
 EMAIL_MAX_LENGTH = 254
@@ -59,7 +59,7 @@ class CoachCreate(RequestModel):
 # The display name is the only field here, so it is the only one the route can reach.
 # The email stays out deliberately: it is the sign-in identity, and moving it needs the
 # OTP machinery sign-up goes through rather than a field on a PATCH body.
-class CoachUpdate(RequestModel):
+class CoachUpdate(UpdateModel):
     # Absent leaves the name alone, and an explicit null is a 422: the column is NOT
     # NULL, so the annotation stays non-optional. See UNSET in types.py.
     display_name: ShortText = UNSET

@@ -5,7 +5,7 @@ from typing import Annotated
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
 from matchpoint_api.models import DominantHand, Gender
-from matchpoint_api.schemas.types import UNSET, LongText, RequestModel, ShortText
+from matchpoint_api.schemas.types import UNSET, LongText, RequestModel, ShortText, UpdateModel
 
 # Past any real player by decades, and a shade inside the oldest verified human
 # lifespan (122) — a gap this guard has no use for, since it exists to reject a
@@ -55,7 +55,7 @@ class PlayerCreate(RequestModel):
 # Every field optional, so a PATCH carries only what changed. The name parts default to
 # UNSET rather than None because their columns are NOT NULL: an explicit null is then a
 # 422 from pydantic instead of an IntegrityError from the flush.
-class PlayerUpdate(RequestModel):
+class PlayerUpdate(UpdateModel):
     first_name: ShortText = UNSET
     last_name: ShortText = UNSET
     date_of_birth: DateOfBirth | None = None

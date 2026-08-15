@@ -158,10 +158,7 @@ def get_current_coach(coach: CurrentCoach) -> Coach:
     },
 )
 def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) -> Coach:
-    # exclude_unset is what makes the PATCH partial: an omitted field never reaches the
-    # dump, so it is never assigned. The loop is the shape every Update route shares,
-    # one field or many. updated_at moves on its own, from the column's onupdate.
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(coach, field, value)
+    # updated_at moves on its own, from the column's onupdate.
+    data.apply_to(coach)
     db.commit()
     return coach

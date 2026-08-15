@@ -98,10 +98,8 @@ def update_player(
     player_id: uuid.UUID, data: PlayerUpdate, db: DbSession, coach: CurrentCoach
 ) -> Player:
     player = owned_player(db, player_id, coach.id)
-    # exclude_unset, so an absent field is left as it is and a null clears the column.
-    # Every field PlayerUpdate carries is one a client may set, which is what makes the
-    # loop safe. updated_at is the column's onupdate, never set here.
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(player, field, value)
+    # Every field PlayerUpdate carries is one a client may set, which is what makes
+    # apply_to safe. updated_at is the column's onupdate, never set here.
+    data.apply_to(player)
     db.commit()
     return player

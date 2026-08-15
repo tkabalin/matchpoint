@@ -10,6 +10,16 @@ class RequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+# Base for the XUpdate schemas. Routes apply a PATCH with apply_to rather than reading
+# fields off the model, which is what keeps UNSET's typing fiction (below) harmless.
+class UpdateModel(RequestModel):
+    def apply_to(self, obj: object) -> None:
+        # exclude_unset is what makes a PATCH partial: an omitted field never reaches
+        # the dump, so it is never assigned.
+        for field, value in self.model_dump(exclude_unset=True).items():
+            setattr(obj, field, value)
+
+
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 """A free-text field, bounded to match the String(100) columns on the models.
 

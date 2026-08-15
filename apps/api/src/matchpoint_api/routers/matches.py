@@ -117,11 +117,9 @@ def update_match(
     )
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
-    # exclude_unset, so an absent field is left as it is and a null clears the column.
-    # player_id is not on MatchUpdate, so the loop cannot move a match to another
+    # player_id is not on MatchUpdate, so apply_to cannot move a match to another
     # player. updated_at is the column's onupdate, never set here.
-    for field, value in data.model_dump(exclude_unset=True).items():
-        setattr(match, field, value)
+    data.apply_to(match)
     db.commit()
     return match
 
