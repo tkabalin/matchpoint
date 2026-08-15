@@ -7,7 +7,7 @@ test("loads the app shell", async ({ page }) => {
 
 test("loads the player roster at /players", async ({ page }) => {
   await page.goto("/players");
-  await expect(page.getByRole("heading", { name: "MatchPoint" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Players" })).toBeVisible();
 });
 
 test("loads the sign-up form at /sign-up", async ({ page }) => {
