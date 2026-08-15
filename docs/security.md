@@ -240,11 +240,14 @@ not in front of the API, and the middleware's set is assertable in tests.
 
 **Content-Security-Policy.** The shell's policy is same-origin (`default-src 'self'`), which holds
 because the built app loads nothing external: no CDN scripts, no fonts, no analytics, and no inline
-script or style tags. API responses get `default-src 'none'`, since JSON should never execute,
-render, or be framed. The exception is Swagger UI, kept available in production and served a relaxed
-policy of its own admitting its CDN assets and inline bootstrap; the relaxation is scoped to that
-one HTML page, so no data response ever inherits it. ReDoc is disabled rather than granted a second,
-larger exemption.
+script tags. The one carve-out is `style-src 'unsafe-inline'`: Base UI's overlay components inject
+scroll-lock `<style>` elements at runtime, and a nonce cannot authorise them because the app shell
+is a static file the service worker precaches, so a per-response nonce would go stale in the cache.
+Inline styles alone are a small concession; script execution, where XSS lives, stays same-origin.
+API responses get `default-src 'none'`, since JSON should never execute, render, or be framed. The
+exception is Swagger UI, kept available in production and served a relaxed policy of its own
+admitting its CDN assets and inline bootstrap; the relaxation is scoped to that one HTML page, so no
+data response ever inherits it. ReDoc is disabled rather than granted a second, larger exemption.
 
 **HSTS.** `max-age=31536000; includeSubDomains`, set at the origin and passed through by Cloudflare.
 A year immediately, not a ramp: the domain sits behind Cloudflare with TLS permanently on, so there
