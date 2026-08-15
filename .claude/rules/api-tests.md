@@ -24,7 +24,9 @@ paths:
 - Use the `db_session` fixture. Each test runs inside a savepoint rolled back on teardown — don't
   create or drop tables in tests, and don't clean up rows manually; the rollback handles it.
 - `client` uses the same session via dependency override, so data arranged through `db_session` is
-  visible to requests in the same test.
+  visible to requests in the same test. The converse is the trap: a route's uncommitted writes are
+  visible to the test too, so asserting database state after a request does not prove the route
+  committed.
 - Tests must not depend on execution order or leak state. If a test only passes after another has
   run, it is broken.
 - Build rows with the factories in `tests/factories.py` rather than constructing models inline, and

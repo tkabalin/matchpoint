@@ -84,6 +84,14 @@ paths:
   carry them and the generated client will happily send a value the server rejects. Note it on the
   validator, and the form gets its own check.
 
+## The Route Owns the Commit
+
+- A helper that mutates rows leaves the `commit()` to its caller, so the write lands together with
+  whatever else the request changed, or not at all. Dependencies are the exception, since no route
+  wraps them: `current_coach` commits its own session housekeeping.
+- Nothing catches a forgotten commit. `get_db` closes the session at the end of the request, which
+  discards the work, and the shared-session fixture hides the omission from route tests.
+
 ## No `db.refresh()` After `commit()`
 
 - The session is built with `expire_on_commit=False`, so attributes are still loaded after a commit.
