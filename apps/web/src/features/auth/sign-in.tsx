@@ -4,8 +4,13 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
+
+import { AuthShell } from "./auth-shell";
 
 export function SignIn() {
   const navigate = useNavigate();
@@ -47,33 +52,51 @@ export function SignIn() {
   }
 
   return (
-    <div>
+    <AuthShell>
       <form onSubmit={handleSubmit}>
-        <h1>Sign In</h1>
-        <label htmlFor="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <label htmlFor="password">Password</label>
-        <PasswordInput
-          id="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {errorText && <p role="alert">{errorText}</p>}
-        <button type="submit" disabled={!canSubmit}>
+        <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Sign In</h1>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <PasswordInput
+              id="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        {errorText && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {errorText}
+          </p>
+        )}
+        <Button type="submit" disabled={!canSubmit} className="mt-5 w-full uppercase tracking-wide">
           Sign In
-        </button>
+        </Button>
       </form>
-      <p>
-        If you don't have an account, <Link to="/sign-up">sign up here</Link>.
+      <p className="mt-4 text-center text-sm text-muted-foreground">
+        If you don't have an account,{" "}
+        <Link to="/sign-up" className="text-primary underline underline-offset-4">
+          sign up here
+        </Link>
+        .
       </p>
-      <p>
-        Forgot your password? <Link to="/forgot-password">Reset it here</Link>.
+      <p className="mt-2 text-center text-sm text-muted-foreground">
+        Forgot your password?{" "}
+        <Link to="/forgot-password" className="text-primary underline underline-offset-4">
+          Reset it here
+        </Link>
+        .
       </p>
-    </div>
+    </AuthShell>
   );
 }
