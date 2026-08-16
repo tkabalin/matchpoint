@@ -25,8 +25,14 @@ export function SignIn() {
     }
 
     // The backend deliberately returns the same message whether the email or the
-    // password was wrong — shown verbatim, never re-worded per field.
-    setError(parseErrorMessage(loginError, "Could not sign in."));
+    // password was wrong — shown verbatim, never re-worded per field. This fallback
+    // only fires when that detail isn't present (e.g. a network failure).
+    setError(
+      parseErrorMessage(
+        loginError,
+        "We couldn't sign you in. Check your email and password and try again.",
+      ),
+    );
   }
 
   return (

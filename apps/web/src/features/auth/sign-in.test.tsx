@@ -146,6 +146,18 @@ test("shows the server's error message on a failed sign-in", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect email or password");
 });
 
+test("falls back to an explicit message when the response has no detail to show", async () => {
+  stubFetch(() => new Response(JSON.stringify({}), { status: 500 }));
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await fillAndSubmit(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "We couldn't sign you in. Check your email and password and try again.",
+  );
+});
+
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();
