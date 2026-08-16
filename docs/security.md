@@ -64,10 +64,11 @@ end. Those are the first guesses any credential-stuffing run makes, so a passwor
 bounds and nothing else is close to no password at all.
 
 **The policy.** Every newly chosen password, at sign-up, at a reset and at a change, is checked
-against the kind of list NIST SP 800-63B asks for, and refused with a 400 naming the reason.
-Composition rules (a digit, a symbol, mixed case) are deliberately not part of it: the same standard
-advises against them, since they push people towards predictable substitutions rather than longer
-passwords.
+against the kind of list NIST SP 800-63B asks for, and refused with a 400 naming the reason. The
+only bound on length is 8-128 characters, applied to `CoachCreate.password`,
+`ResetPasswordRequest.new_password` and `ChangePasswordRequest.new_password`. Composition rules (a
+digit, a symbol, mixed case) are deliberately not part of it: the same standard advises against
+them, since they push people towards predictable substitutions rather than longer passwords.
 
 What the list covers. The first four are arithmetic over the submitted string
 (`password_policy.py`), and run first, so an obvious refusal costs no request:
@@ -114,14 +115,22 @@ a deployment that had quietly stopped checking.
 route calls it before the request has cost anything: before the Argon2 hash, and before the email
 verification is consumed, so a refused password can be replaced rather than costing the coach a
 fresh code. The reason comes back in plain language, because it is advice the coach has to act on.
-The same screens run a strength meter (zxcvbn) in the browser, which overlaps these rules without
-mirroring them: it scores guessability, so a password it passes can still be refused here, and a
-caller that never loaded the form is held to the rules regardless.
+The same screens run a strength meter (`@zxcvbn-ts/core`, the maintained TypeScript fork of
+Dropbox's zxcvbn) in the browser, blocking submission below a score of 2; it overlaps these rules
+without mirroring them, since it scores guessability rather than checking the rules above, so a
+password it passes can still be refused here, and a caller that never loaded the form is held to the
+rules regardless.
 
 **Limits.** The local thresholds are loose by design: a false rejection lands on a coach mid-sign-up
 with no way around it, where a miss now falls through to the corpus rather than to nothing. What
 remains uncovered is a compromised password no public corpus has yet recorded, and the window in
 which the corpus is unreachable and every password it would have refused is accepted.
+
+**MFA is deferred, not missing.** Phishing-resistant MFA (TOTP, hardware keys) is the strongest
+remaining guardrail NIST's guidance recommends, but enrollment, provisioning and a login-time
+challenge are more authentication hardening than this brief's club-scale coaching tool needs on top
+of the live-capture workflow. The six-digit OTP above answers a different question, proving control
+of a mailbox at sign-up and reset, not a factor checked at every login.
 
 ## Session management
 
