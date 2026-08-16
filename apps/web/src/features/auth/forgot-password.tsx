@@ -5,9 +5,14 @@ import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
+
+import { AuthShell } from "./auth-shell";
 
 type Step = "email" | "reset" | "done";
 
@@ -126,77 +131,143 @@ export function ForgotPassword() {
 
   if (step === "done") {
     return (
-      <div>
-        <h1>Reset Password</h1>
-        <p>Your password has been updated.</p>
-        <p>
-          <Link to="/">Sign in</Link> with your new password.
+      <AuthShell>
+        <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Reset Password</h1>
+        <p className="text-center text-sm text-muted-foreground">Your password has been updated.</p>
+        <p className="mt-4 text-center text-sm">
+          <Link to="/" className="text-primary underline underline-offset-4">
+            Sign in
+          </Link>{" "}
+          with your new password.
         </p>
-      </div>
+      </AuthShell>
     );
   }
 
   if (step === "reset") {
     return (
-      <form onSubmit={handleResetSubmit}>
-        <h1>Reset Password</h1>
-        {/* forgot-password answers every address alike (202 whether or not it's
-            registered), unlike sign-up's request-otp, so this can't claim the
-            account exists the way sign-up's OTP step does. */}
-        <p>If an account exists for {email}, we've sent it a code.</p>
-        <label htmlFor="otp">Code</label>
-        <input id="otp" type="text" value={otp} onChange={(event) => setOtp(event.target.value)} />
-        {otpWrongLength && <p role="alert">Enter the 6-digit code.</p>}
-        <label htmlFor="password">New password</label>
-        <PasswordInput
-          id="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
-        <label htmlFor="confirm-password">Confirm password</label>
-        <PasswordInput
-          id="confirm-password"
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-        />
-        {passwordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
-        {passwordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
-        {passwordTooWeak && (
-          <p role="alert">This password is too easy to guess. Try something less predictable.</p>
-        )}
-        {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
-        {errorText && <p role="alert">{errorText}</p>}
-        <button type="submit" disabled={!canSubmitReset || submitting}>
-          Reset Password
-        </button>
-        <p>
-          Didn't get a code, or has it expired?{" "}
-          <button type="button" onClick={handleStartOver}>
-            Request a new one
-          </button>
-        </p>
-      </form>
+      <AuthShell>
+        <form onSubmit={handleResetSubmit}>
+          <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Reset Password</h1>
+          {/* forgot-password answers every address alike (202 whether or not it's
+              registered), unlike sign-up's request-otp, so this can't claim the
+              account exists the way sign-up's OTP step does. */}
+          <p className="mb-5 text-center text-sm text-muted-foreground">
+            If an account exists for {email}, we've sent it a code.
+          </p>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="otp">Code</FieldLabel>
+              <Input
+                id="otp"
+                type="text"
+                value={otp}
+                onChange={(event) => setOtp(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="password">New password</FieldLabel>
+              <PasswordInput
+                id="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+              <PasswordInput
+                id="confirm-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          {otpWrongLength && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Enter the 6-digit code.
+            </p>
+          )}
+          {passwordTooShort && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Password must be at least 8 characters.
+            </p>
+          )}
+          {passwordTooLong && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Password must be at most 128 characters.
+            </p>
+          )}
+          {passwordTooWeak && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              This password is too easy to guess. Try something less predictable.
+            </p>
+          )}
+          {passwordsMismatch && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Passwords don't match.
+            </p>
+          )}
+          {errorText && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {errorText}
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!canSubmitReset || submitting}
+            className="mt-5 w-full uppercase tracking-wide"
+          >
+            Reset Password
+          </Button>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Didn't get a code, or has it expired?{" "}
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-primary underline underline-offset-4"
+            >
+              Request a new one
+            </button>
+          </p>
+        </form>
+      </AuthShell>
     );
   }
 
   return (
-    <form onSubmit={handleEmailSubmit}>
-      <h1>Reset Password</h1>
-      <label htmlFor="email">Email</label>
-      <input
-        id="email"
-        type="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-      />
-      {errorText && <p role="alert">{errorText}</p>}
-      <button type="submit" disabled={!canSubmitEmail || submitting}>
-        Continue
-      </button>
-      <p>
-        <Link to="/">Back to sign in</Link>
-      </p>
-    </form>
+    <AuthShell>
+      <form onSubmit={handleEmailSubmit}>
+        <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Reset Password</h1>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        {errorText && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {errorText}
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={!canSubmitEmail || submitting}
+          className="mt-5 w-full uppercase tracking-wide"
+        >
+          Continue
+        </Button>
+        <p className="mt-4 text-center text-sm">
+          <Link to="/" className="text-primary underline underline-offset-4">
+            Back to sign in
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
   );
 }
