@@ -3,9 +3,8 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
-
-import { getRetryAfterSeconds, parseErrorMessage } from "./parse-error";
 
 type Step = "email" | "otp" | "password";
 

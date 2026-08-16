@@ -1,3 +1,4 @@
+import { zChangePasswordBody } from "@matchpoint/api-client/zod";
 import {
   Outlet,
   RouterProvider,
@@ -18,6 +19,15 @@ function stubFetch(response: () => Response) {
     "fetch",
     vi.fn().mockImplementation(() => Promise.resolve(response())),
   );
+}
+
+async function fillChangePasswordForm(
+  user: ReturnType<typeof userEvent.setup>,
+  { current = "old-password", next = "new-password-123" } = {},
+) {
+  await user.type(screen.getByLabelText("Current password"), current);
+  await user.type(screen.getByLabelText("New password"), next);
+  await user.type(screen.getByLabelText("Confirm new password"), next);
 }
 
 /** Renders Settings inside a real (in-memory) router and its own QueryClient, seeded
@@ -107,4 +117,76 @@ test("acknowledging the success dialog navigates to sign in", async () => {
   await user.click(screen.getByRole("button", { name: "OK" }));
 
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("changing the password shows a success message and clears the form", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await fillChangePasswordForm(user);
+  await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+  expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Current password")).toHaveValue("");
+  expect(screen.getByLabelText("New password")).toHaveValue("");
+});
+
+test("submits a body the API's own schema accepts", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await fillChangePasswordForm(user, { current: "old-password", next: "new-password-123" });
+  await user.click(screen.getByRole("button", { name: "Change Password" }));
+  await screen.findByText("Your password has been changed.");
+
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  const body: unknown = await (request as Request).json();
+  expect(zChangePasswordBody.safeParse(body).success).toBe(true);
+});
+
+test("shows an inline error on the current-password field when it's wrong", async () => {
+  stubFetch(() => Response.json({ detail: "Incorrect password" }, { status: 403 }));
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await fillChangePasswordForm(user);
+  await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+  expect(await screen.findByText("Incorrect password.")).toBeInTheDocument();
+});
+
+test("shows a session-expired fallback with a sign-in link on a 401", async () => {
+  stubFetch(() => Response.json({ detail: "Not signed in" }, { status: 401 }));
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await fillChangePasswordForm(user);
+  await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Your session has expired.");
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/");
+});
+
+test("flags mismatched new passwords before submitting", async () => {
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.type(screen.getByLabelText("Current password"), "old-password");
+  await user.type(screen.getByLabelText("New password"), "new-password-123");
+  await user.type(screen.getByLabelText("Confirm new password"), "something-else");
+
+  expect(await screen.findByText("Passwords don't match.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change Password" })).toBeDisabled();
+});
+
+test("flags a new password shorter than the API's minimum", async () => {
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.type(screen.getByLabelText("New password"), "short");
+
+  expect(await screen.findByText("Password must be at least 8 characters.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Change Password" })).toBeDisabled();
 });
