@@ -5,9 +5,14 @@ import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
+import { Button } from "@/components/ui/button";
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
+
+import { AuthShell } from "./auth-shell";
 
 type Step = "email" | "otp" | "password";
 
@@ -171,86 +176,167 @@ export function SignUp() {
 
   if (step === "password") {
     return (
-      <form onSubmit={handlePasswordSubmit}>
-        <h1>Sign Up</h1>
-        <label htmlFor="display-name">Display name</label>
-        <input
-          id="display-name"
-          type="text"
-          value={displayName}
-          onChange={(event) => setDisplayName(event.target.value)}
-        />
-        <label htmlFor="password">Password</label>
-        <PasswordInput
-          id="password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-        {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
-        <label htmlFor="confirm-password">Confirm password</label>
-        <PasswordInput
-          id="confirm-password"
-          value={confirmPassword}
-          onChange={(event) => setConfirmPassword(event.target.value)}
-        />
-        {passwordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
-        {passwordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
-        {passwordTooWeak && (
-          <p role="alert">This password is too easy to guess. Try something less predictable.</p>
-        )}
-        {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
-        {errorText && <p role="alert">{errorText}</p>}
-        <button type="submit" disabled={!canSubmitPassword || submitting}>
-          Sign Up
-        </button>
-        <p>
-          <button type="button" onClick={handleStartOver}>
-            Start over
-          </button>
-        </p>
-      </form>
+      <AuthShell>
+        <form onSubmit={handlePasswordSubmit}>
+          <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Sign Up</h1>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+              <Input
+                id="display-name"
+                type="text"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <PasswordInput
+                id="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+              <PasswordInput
+                id="confirm-password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          {passwordTooShort && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Password must be at least 8 characters.
+            </p>
+          )}
+          {passwordTooLong && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Password must be at most 128 characters.
+            </p>
+          )}
+          {passwordTooWeak && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              This password is too easy to guess. Try something less predictable.
+            </p>
+          )}
+          {passwordsMismatch && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Passwords don't match.
+            </p>
+          )}
+          {errorText && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {errorText}
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!canSubmitPassword || submitting}
+            className="mt-5 w-full uppercase tracking-wide"
+          >
+            Sign Up
+          </Button>
+          <p className="mt-4 text-center text-sm">
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-primary underline underline-offset-4"
+            >
+              Start over
+            </button>
+          </p>
+        </form>
+      </AuthShell>
     );
   }
 
   if (step === "otp") {
     return (
-      <form onSubmit={handleOtpSubmit}>
-        <h1>Sign Up</h1>
-        <p>We sent a code to {email}.</p>
-        <label htmlFor="otp">Code</label>
-        <input id="otp" type="text" value={otp} onChange={(event) => setOtp(event.target.value)} />
-        {otpWrongLength && <p role="alert">Enter the 6-digit code.</p>}
-        {errorText && <p role="alert">{errorText}</p>}
-        <button type="submit" disabled={!canSubmitOtp || submitting}>
-          Verify
-        </button>
-        <p>
-          Didn't get a code, or has it expired?{" "}
-          <button type="button" onClick={handleStartOver}>
-            Request a new one
-          </button>
-        </p>
-      </form>
+      <AuthShell>
+        <form onSubmit={handleOtpSubmit}>
+          <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Sign Up</h1>
+          <p className="mb-5 text-center text-sm text-muted-foreground">
+            We sent a code to {email}.
+          </p>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="otp">Code</FieldLabel>
+              <Input
+                id="otp"
+                type="text"
+                value={otp}
+                onChange={(event) => setOtp(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          {otpWrongLength && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              Enter the 6-digit code.
+            </p>
+          )}
+          {errorText && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {errorText}
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!canSubmitOtp || submitting}
+            className="mt-5 w-full uppercase tracking-wide"
+          >
+            Verify
+          </Button>
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Didn't get a code, or has it expired?{" "}
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-primary underline underline-offset-4"
+            >
+              Request a new one
+            </button>
+          </p>
+        </form>
+      </AuthShell>
     );
   }
 
   return (
-    <form onSubmit={handleEmailSubmit}>
-      <h1>Sign Up</h1>
-      <label htmlFor="email">Email</label>
-      <input
-        id="email"
-        type="email"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-      />
-      {errorText && <p role="alert">{errorText}</p>}
-      <button type="submit" disabled={!canSubmitEmail || submitting}>
-        Continue
-      </button>
-      <p>
-        <Link to="/">Back to sign in</Link>
-      </p>
-    </form>
+    <AuthShell>
+      <form onSubmit={handleEmailSubmit}>
+        <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Sign Up</h1>
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="email">Email</FieldLabel>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
+        </FieldGroup>
+        {errorText && (
+          <p role="alert" className="mt-3 text-sm text-destructive">
+            {errorText}
+          </p>
+        )}
+        <Button
+          type="submit"
+          disabled={!canSubmitEmail || submitting}
+          className="mt-5 w-full uppercase tracking-wide"
+        >
+          Continue
+        </Button>
+        <p className="mt-4 text-center text-sm">
+          <Link to="/" className="text-primary underline underline-offset-4">
+            Back to sign in
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
   );
 }
