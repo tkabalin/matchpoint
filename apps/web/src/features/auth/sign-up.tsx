@@ -53,8 +53,14 @@ export function SignUp() {
         return;
       }
 
-      // 409 (email already registered) — inline error, stay on the email step.
-      setError(parseErrorMessage(requestOtpError, "Could not request a code."));
+      // 409 (email already registered) — inline error, stay on the email step. This
+      // fallback only fires when that detail isn't present (e.g. a network failure).
+      setError(
+        parseErrorMessage(
+          requestOtpError,
+          "We couldn't send you a verification code. Please try again.",
+        ),
+      );
     } finally {
       setSubmitting(false);
     }

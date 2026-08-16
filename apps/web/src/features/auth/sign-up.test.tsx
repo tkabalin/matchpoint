@@ -149,6 +149,18 @@ test("shows an inline error and stays on the email step on a 409 response", asyn
   expect(screen.getByLabelText("Email")).toBeInTheDocument();
 });
 
+test("falls back to an explicit message when the response has no detail to show", async () => {
+  stubFetch(() => new Response(JSON.stringify({}), { status: 500 }));
+  const user = userEvent.setup();
+  await renderSignUp();
+
+  await fillAndSubmitEmail(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "We couldn't send you a verification code. Please try again.",
+  );
+});
+
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();
