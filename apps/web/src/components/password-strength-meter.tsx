@@ -10,7 +10,7 @@ export function PasswordStrengthMeter({ score }: { score: number }) {
     <div>
       <div className="h-1 w-full max-w-64 rounded-full bg-muted">
         <div
-          className="h-1 rounded-full bg-foreground transition-all"
+          className="h-1 rounded-full bg-primary transition-all"
           style={{ width: `${((score + 1) / LABELS.length) * 100}%` }}
         />
       </div>

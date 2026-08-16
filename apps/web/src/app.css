@@ -61,7 +61,9 @@
   --card-foreground: oklch(0.148 0.004 228.8);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.148 0.004 228.8);
-  --primary: oklch(0.52 0.105 223.128);
+  /* #045C8C exactly — the brand/nav blue pinned in .claude/rules/web-color.md. The
+     shadcn default was a nearby but different blue (lighter, hue-shifted). */
+  --primary: oklch(0.455 0.106 241.939);
   --primary-foreground: oklch(0.984 0.019 200.873);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
@@ -96,7 +98,10 @@
   --card-foreground: oklch(0.987 0.002 197.1);
   --popover: oklch(0.218 0.008 223.9);
   --popover-foreground: oklch(0.987 0.002 197.1);
-  --primary: oklch(0.45 0.085 224.283);
+  /* Same brand hue as light mode's #045C8C, darkened/desaturated by the same ratio
+     the previous dark-mode primary already used relative to its own light value —
+     a fully-saturated light-mode blue reads as glare on a dark background. */
+  --primary: oklch(0.394 0.086 241.939);
   --primary-foreground: oklch(0.984 0.019 200.873);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);

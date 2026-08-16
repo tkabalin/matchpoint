@@ -2,7 +2,12 @@ import { Eye, EyeOff } from "lucide-react";
 import { useState } from "react";
 import type { ChangeEvent } from "react";
 
-import { Button } from "@/components/ui/button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 
 type PasswordInputProps = {
   id: string;
@@ -16,17 +21,22 @@ export function PasswordInput({ id, value, onChange }: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
 
   return (
-    <span className="inline-flex items-center gap-1">
-      <input id={id} type={visible ? "text" : "password"} value={value} onChange={onChange} />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label={visible ? "Hide password" : "Show password"}
-        onClick={() => setVisible((current) => !current)}
-      >
-        {visible ? <EyeOff /> : <Eye />}
-      </Button>
-    </span>
+    <InputGroup>
+      <InputGroupInput
+        id={id}
+        type={visible ? "text" : "password"}
+        value={value}
+        onChange={onChange}
+      />
+      <InputGroupAddon align="inline-end">
+        <InputGroupButton
+          size="icon-sm"
+          aria-label={visible ? "Hide password" : "Show password"}
+          onClick={() => setVisible((current) => !current)}
+        >
+          {visible ? <EyeOff /> : <Eye />}
+        </InputGroupButton>
+      </InputGroupAddon>
+    </InputGroup>
   );
 }
