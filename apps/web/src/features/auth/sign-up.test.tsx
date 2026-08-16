@@ -332,6 +332,17 @@ test("sends one verify-otp however impatiently Verify is clicked", async () => {
   expect(await screen.findByLabelText("Password")).toBeInTheDocument();
 });
 
+test("requesting a new code from the OTP step returns to the email step with the email preserved", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+
+  expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
+  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
 async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
   await goToOtpStep(user);
   stubFetch(() => new Response(null, { status: 200 }));
@@ -533,4 +544,15 @@ test("shows a generic error when the complete-sign-up request fails outright", a
 
   expect(await screen.findByRole("alert")).toBeInTheDocument();
   expect(screen.getByLabelText("Password")).toBeInTheDocument();
+});
+
+test("starting over from the password step returns to the email step with the email preserved", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  await user.type(screen.getByLabelText("Password"), "newpassword1");
+  await user.click(screen.getByRole("button", { name: "Start over" }));
+
+  expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
+  expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 });

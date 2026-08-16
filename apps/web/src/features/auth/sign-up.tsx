@@ -137,6 +137,19 @@ export function SignUp() {
     }
   }
 
+  // Shared by the OTP step's "request a new one" and the password step's "start
+  // over": both send the coach back to the email step, email preserved, without
+  // auto-firing a new request-otp call — every request stays a deliberate click.
+  function handleStartOver() {
+    setStep("email");
+    setOtp("");
+    setDisplayName("");
+    setPassword("");
+    setConfirmPassword("");
+    setError(null);
+    setRetryAfterSeconds(null);
+  }
+
   if (step === "password") {
     return (
       <form onSubmit={handlePasswordSubmit}>
@@ -168,6 +181,11 @@ export function SignUp() {
         <button type="submit" disabled={!canSubmitPassword || submitting}>
           Sign Up
         </button>
+        <p>
+          <button type="button" onClick={handleStartOver}>
+            Start over
+          </button>
+        </p>
       </form>
     );
   }
@@ -184,6 +202,12 @@ export function SignUp() {
         <button type="submit" disabled={!canSubmitOtp || submitting}>
           Verify
         </button>
+        <p>
+          Didn't get a code, or has it expired?{" "}
+          <button type="button" onClick={handleStartOver}>
+            Request a new one
+          </button>
+        </p>
       </form>
     );
   }
