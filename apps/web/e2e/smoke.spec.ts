@@ -50,7 +50,8 @@ test("loads the profile placeholder at /profile", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
 });
 
-test("loads the settings placeholder at /settings", async ({ page }) => {
+test("loads settings at /settings", async ({ page }) => {
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign Out" })).toBeVisible();
 });
