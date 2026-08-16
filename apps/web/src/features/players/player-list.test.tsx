@@ -104,6 +104,15 @@ test("reports a failed load instead of rendering an empty roster", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not load players.");
 });
 
+test("prompts to sign in again on a 401, instead of the generic error", async () => {
+  stubFetch(() => new Response(JSON.stringify({ detail: "Not signed in" }), { status: 401 }));
+
+  await renderPlayerList();
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Your session has expired.");
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/");
+});
+
 test("clicking a player opens their profile and records them as last-viewed", async () => {
   stubFetch(() => Response.json([player]));
   const user = userEvent.setup();

@@ -2,6 +2,7 @@ import { listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
+import { getErrorStatus } from "@/lib/error-status";
 import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 /**
@@ -12,10 +13,25 @@ import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
  * straight to `useQuery`, with the response type coming from the API's own schema.
  */
 export function PlayerList() {
-  const { data, isPending, isError } = useQuery(listPlayersOptions());
+  const { data, isPending, isError, error } = useQuery(listPlayersOptions());
 
   if (isPending) return <p>Loading players…</p>;
-  if (isError) return <p role="alert">Could not load players.</p>;
+
+  if (isError) {
+    // A session that died mid-visit (background refetch hits a 401) looks nothing
+    // like a real failure to load — send the coach back to sign in instead of the
+    // generic message, which would read as a bug rather than an expired session.
+    if (getErrorStatus(error) === 401) {
+      return (
+        <p role="alert">
+          Your session has expired. <Link to="/">Sign in</Link> to see your players.
+        </p>
+      );
+    }
+
+    return <p role="alert">Could not load players.</p>;
+  }
+
   if (data.length === 0) return <p>No players yet.</p>;
 
   return (
