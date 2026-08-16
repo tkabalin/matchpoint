@@ -27,3 +27,16 @@ export function parseErrorMessage(
 
   return fallback;
 }
+
+/**
+ * A 429's `Retry-After` header is a delta in seconds, not a timestamp — these are
+ * token buckets, not fixed windows, so the wait shortens as tokens refill. Read fresh
+ * off each response rather than cached and counted down from a stale figure.
+ */
+export function getRetryAfterSeconds(response: Response | undefined): number | null {
+  const header = response?.headers.get("Retry-After");
+  if (!header) return null;
+
+  const seconds = Number(header);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}

@@ -158,6 +158,25 @@ test("falls back to an explicit message when the response has no detail to show"
   );
 });
 
+test("shows the retry wait and disables submit on a 429 response", async () => {
+  // The countdown's tick-by-tick behavior is covered by use-countdown.test.ts's own
+  // unit tests — this only needs to prove a 429 wires the header into the UI at all.
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many attempts" }), {
+        status: 429,
+        headers: { "Retry-After": "3" },
+      }),
+  );
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await fillAndSubmit(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts Try again in 3s.");
+  expect(screen.getByRole("button", { name: "Sign In" })).toBeDisabled();
+});
+
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();

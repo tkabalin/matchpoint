@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { parseErrorMessage } from "./parse-error";
+import { getRetryAfterSeconds, parseErrorMessage } from "./parse-error";
 
 test("returns a string detail as-is", () => {
   expect(parseErrorMessage({ detail: "Incorrect email or password" }, "fallback")).toBe(
@@ -45,4 +45,27 @@ test("reports a network failure distinctly from an API error", () => {
   expect(parseErrorMessage(new TypeError("Failed to fetch"), "fallback")).toBe(
     "Could not reach the server. Try again.",
   );
+});
+
+test("reads Retry-After off a 429 response", () => {
+  const response = new Response(null, { status: 429, headers: { "Retry-After": "45" } });
+
+  expect(getRetryAfterSeconds(response)).toBe(45);
+});
+
+test("returns null when there is no Retry-After header", () => {
+  const response = new Response(null, { status: 429 });
+
+  expect(getRetryAfterSeconds(response)).toBeNull();
+});
+
+test("returns null when the response itself is undefined", () => {
+  expect(getRetryAfterSeconds(undefined)).toBeNull();
+});
+
+test("returns null for a non-numeric or non-positive Retry-After", () => {
+  expect(
+    getRetryAfterSeconds(new Response(null, { headers: { "Retry-After": "soon" } })),
+  ).toBeNull();
+  expect(getRetryAfterSeconds(new Response(null, { headers: { "Retry-After": "0" } }))).toBeNull();
 });

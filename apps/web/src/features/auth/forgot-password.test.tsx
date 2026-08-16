@@ -134,17 +134,24 @@ test("moves to the reset step on a 202 response", async () => {
   expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
 });
 
-test("shows an inline error and stays on the email step on a 429 response", async () => {
+test("shows an inline error, the retry wait, and stays on the email step on a 429 response", async () => {
   stubFetch(
-    () => new Response(JSON.stringify({ detail: "Too many codes requested" }), { status: 429 }),
+    () =>
+      new Response(JSON.stringify({ detail: "Too many codes requested" }), {
+        status: 429,
+        headers: { "Retry-After": "5" },
+      }),
   );
   const user = userEvent.setup();
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Too many codes requested");
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Too many codes requested Try again in 5s.",
+  );
   expect(screen.getByLabelText("Email")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
 });
 
 test("shows an inline error and stays on the email step on a 502 response", async () => {
@@ -297,15 +304,22 @@ test("shows the server's error and stays on the reset step on a 400 response", a
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
 });
 
-test("shows the server's error and stays on the reset step on a 429 response", async () => {
+test("shows the server's error, the retry wait, and stays on the reset step on a 429 response", async () => {
   const user = userEvent.setup();
   await goToResetStep(user);
-  stubFetch(() => new Response(JSON.stringify({ detail: "Too many attempts" }), { status: 429 }));
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many attempts" }), {
+        status: 429,
+        headers: { "Retry-After": "8" },
+      }),
+  );
 
   await fillAndSubmitReset(user);
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts");
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts Try again in 8s.");
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
 });
 
 test("shows a generic error when the reset-password request fails outright", async () => {

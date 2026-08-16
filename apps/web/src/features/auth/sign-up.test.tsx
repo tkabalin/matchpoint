@@ -161,6 +161,27 @@ test("falls back to an explicit message when the response has no detail to show"
   );
 });
 
+test("shows the retry wait and disables submit on a 429 response", async () => {
+  // The countdown's tick-by-tick behavior is covered by use-countdown.test.ts's own
+  // unit tests — this only needs to prove a 429 wires the header into the UI at all.
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many codes requested" }), {
+        status: 429,
+        headers: { "Retry-After": "5" },
+      }),
+  );
+  const user = userEvent.setup();
+  await renderSignUp();
+
+  await fillAndSubmitEmail(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Too many codes requested Try again in 5s.",
+  );
+  expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+});
+
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();
@@ -265,6 +286,23 @@ test("shows the server's error and stays on the OTP step on a 400 response", asy
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("shows the retry wait and disables submit on a verify-otp 429 response", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many attempts" }), {
+        status: 429,
+        headers: { "Retry-After": "7" },
+      }),
+  );
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts Try again in 7s.");
+  expect(screen.getByRole("button", { name: "Verify" })).toBeDisabled();
 });
 
 test("shows a generic error when the verify-otp request fails outright", async () => {
@@ -445,6 +483,25 @@ test("shows the server's error and stays on the password step when verification 
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Email verification required");
   expect(screen.getByLabelText("Password")).toBeInTheDocument();
+});
+
+test("shows the retry wait and disables submit on a sign-up 429 response", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many sign-up attempts" }), {
+        status: 429,
+        headers: { "Retry-After": "10" },
+      }),
+  );
+
+  await fillAndSubmitPassword(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Too many sign-up attempts Try again in 10s.",
+  );
+  expect(screen.getByRole("button", { name: "Sign Up" })).toBeDisabled();
 });
 
 test("sends one POST /coaches however impatiently Sign Up is clicked", async () => {
