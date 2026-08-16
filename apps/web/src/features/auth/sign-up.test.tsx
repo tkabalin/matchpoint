@@ -394,8 +394,12 @@ test("blocks submit while the password is too long, with a visible error", async
   const tooLong = "a".repeat(129);
 
   await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
-  await user.type(screen.getByLabelText("Password"), tooLong);
-  await user.type(screen.getByLabelText("Confirm password"), tooLong);
+  // Pasted, not typed: realistic (nobody types 129 characters), and typing it would
+  // recompute the zxcvbn strength score on every one of 129 keystrokes.
+  await user.click(screen.getByLabelText("Password"));
+  await user.paste(tooLong);
+  await user.click(screen.getByLabelText("Confirm password"));
+  await user.paste(tooLong);
 
   expect(screen.getByRole("button", { name: "Sign Up" })).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent(
