@@ -1,3 +1,4 @@
+import { registerErrorStatusInterceptor } from "@matchpoint/api-client/error-interceptor";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,6 +15,11 @@ if (import.meta.env.DEV) {
     console.error("Failed to load react-grab", error);
   });
 }
+
+// Lets any thrown query error report its HTTP status (see error-interceptor.ts) —
+// needed here, once, rather than per-call site, since it must run after the
+// generated client singleton exists.
+registerErrorStatusInterceptor();
 
 const router = createRouter({ routeTree });
 

@@ -6,7 +6,9 @@
   "exports": {
     ".": "./src/index.ts",
     "./react-query": "./src/@tanstack/react-query.gen.ts",
-    "./zod": "./src/zod.gen.ts"
+    "./zod": "./src/zod.gen.ts",
+    "./runtime-config": "./runtime-config.ts",
+    "./error-interceptor": "./error-interceptor.ts"
   },
   "scripts": {
     "generate": "openapi-ts",
