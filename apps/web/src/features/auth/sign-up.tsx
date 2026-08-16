@@ -15,6 +15,7 @@ type Step = "email" | "otp" | "password";
 // bounds — @hey-api emits no runtime validator, so this pair still needs to be kept in
 // sync by hand if the spec's ever change.
 const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 128;
 const OTP_LENGTH = 6;
 
 export function SignUp() {
@@ -42,9 +43,11 @@ export function SignUp() {
   const otpWrongLength = otp !== "" && otp.length !== OTP_LENGTH;
   const passwordsMismatch = confirmPassword !== "" && password !== confirmPassword;
   const passwordTooShort = password !== "" && password.length < PASSWORD_MIN_LENGTH;
+  const passwordTooLong = password.length > PASSWORD_MAX_LENGTH;
   const canSubmitPassword =
     displayName !== "" &&
     password.length >= PASSWORD_MIN_LENGTH &&
+    password.length <= PASSWORD_MAX_LENGTH &&
     password === confirmPassword &&
     !waiting;
 
@@ -175,6 +178,7 @@ export function SignUp() {
           onChange={(event) => setConfirmPassword(event.target.value)}
         />
         {passwordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
+        {passwordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
         {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
         {errorText && <p role="alert">{errorText}</p>}
         <button type="submit" disabled={!canSubmitPassword || submitting}>

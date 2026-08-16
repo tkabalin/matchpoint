@@ -388,6 +388,21 @@ test("blocks submit while the password is too short, with a visible error", asyn
   );
 });
 
+test("blocks submit while the password is too long, with a visible error", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+  const tooLong = "a".repeat(129);
+
+  await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
+  await user.type(screen.getByLabelText("Password"), tooLong);
+  await user.type(screen.getByLabelText("Confirm password"), tooLong);
+
+  expect(screen.getByRole("button", { name: "Sign Up" })).toBeDisabled();
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Password must be at most 128 characters.",
+  );
+});
+
 test("blocks submit while the passwords differ, with a visible error", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
