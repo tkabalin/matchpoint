@@ -3,6 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { PasswordInput } from "@/components/password-input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
 
@@ -57,9 +58,8 @@ export function SignIn() {
           onChange={(event) => setEmail(event.target.value)}
         />
         <label htmlFor="password">Password</label>
-        <input
+        <PasswordInput
           id="password"
-          type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />

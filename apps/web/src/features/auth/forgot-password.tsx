@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import { PasswordInput } from "@/components/password-input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
 
@@ -132,16 +133,14 @@ export function ForgotPassword() {
         <input id="otp" type="text" value={otp} onChange={(event) => setOtp(event.target.value)} />
         {otpWrongLength && <p role="alert">Enter the 6-digit code.</p>}
         <label htmlFor="password">New password</label>
-        <input
+        <PasswordInput
           id="password"
-          type="password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
         <label htmlFor="confirm-password">Confirm password</label>
-        <input
+        <PasswordInput
           id="confirm-password"
-          type="password"
           value={confirmPassword}
           onChange={(event) => setConfirmPassword(event.target.value)}
         />

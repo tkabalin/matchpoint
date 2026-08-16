@@ -14,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { PasswordInput } from "@/components/password-input";
 import { Button } from "@/components/ui/button";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
@@ -161,24 +162,21 @@ export function Settings() {
         ) : (
           <form onSubmit={handleChangePassword}>
             <label htmlFor="current-password">Current password</label>
-            <input
+            <PasswordInput
               id="current-password"
-              type="password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
             />
             {incorrectPassword && <p role="alert">Incorrect password.</p>}
             <label htmlFor="new-password">New password</label>
-            <input
+            <PasswordInput
               id="new-password"
-              type="password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
             />
             <label htmlFor="confirm-new-password">Confirm new password</label>
-            <input
+            <PasswordInput
               id="confirm-new-password"
-              type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
             />
