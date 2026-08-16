@@ -1,10 +1,11 @@
-import { forgotPassword } from "@matchpoint/api-client";
+import { forgotPassword, resetPassword } from "@matchpoint/api-client";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { parseErrorMessage } from "./parse-error";
 
-type Step = "email" | "reset";
+type Step = "email" | "reset" | "done";
 
 // Mirror the bounds the OpenAPI spec already publishes (ResetPasswordRequest.otp,
 // ResetPasswordRequest.new_password) so an ordinary typo is blocked client-side
@@ -58,9 +59,48 @@ export function ForgotPassword() {
     }
   }
 
-  function handleResetSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleResetSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // No request yet — wired to POST /auth/reset-password in a later issue (#67).
+    setError(null);
+    setSubmitting(true);
+
+    try {
+      const { error: resetPasswordError, response } = await resetPassword({
+        body: { email, otp, new_password: password },
+      });
+
+      if (response?.status === 204) {
+        setStep("done");
+        return;
+      }
+
+      // 400 covers wrong code, expired code, unknown email, and attempt-budget-
+      // exhausted alike — one message for all four, shown verbatim. 429 is "Too
+      // many attempts".
+      setError(parseErrorMessage(resetPasswordError, "Could not reset your password."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function handleStartOver() {
+    setStep("email");
+    setOtp("");
+    setPassword("");
+    setConfirmPassword("");
+    setError(null);
+  }
+
+  if (step === "done") {
+    return (
+      <div>
+        <h1>Reset Password</h1>
+        <p>Your password has been updated.</p>
+        <p>
+          <Link to="/">Sign in</Link> with your new password.
+        </p>
+      </div>
+    );
   }
 
   if (step === "reset") {
@@ -95,6 +135,12 @@ export function ForgotPassword() {
         <button type="submit" disabled={!canSubmitReset || submitting}>
           Reset Password
         </button>
+        <p>
+          Didn't get a code, or has it expired?{" "}
+          <button type="button" onClick={handleStartOver}>
+            Request a new one
+          </button>
+        </p>
       </form>
     );
   }

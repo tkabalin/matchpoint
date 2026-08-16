@@ -1,4 +1,12 @@
-import { zForgotPasswordBody } from "@matchpoint/api-client/zod";
+import { zForgotPasswordBody, zResetPasswordBody } from "@matchpoint/api-client/zod";
+import {
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -23,6 +31,30 @@ function stubPendingFetch() {
   });
   vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
   return respond;
+}
+
+/** Renders ForgotPassword inside a real (in-memory) router — only needed once the
+ * component reaches its "done" step, which renders a <Link>. Same pattern as
+ * sign-up.test.tsx's renderSignUp(). */
+async function renderForgotPassword() {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const forgotPasswordRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/forgot-password",
+    component: ForgotPassword,
+  });
+  const signInRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    component: () => <h1>Sign In</h1>,
+  });
+  const routeTree = rootRoute.addChildren([forgotPasswordRoute, signInRoute]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: ["/forgot-password"] }),
+  });
+  render(<RouterProvider router={router} />);
+  await screen.findByRole("heading", { name: "Reset Password" });
 }
 
 afterEach(() => {
@@ -152,7 +184,10 @@ test("sends one forgot-password request however impatiently Continue is clicked"
 
 async function goToResetStep(user: ReturnType<typeof userEvent.setup>) {
   stubFetch(() => new Response(null, { status: 202 }));
-  render(<ForgotPassword />);
+  // Router-wrapped, not a plain render: the reset step's own submit can reach the
+  // "done" step, which renders a <Link> that needs router context regardless of
+  // whether a given test actually gets that far.
+  await renderForgotPassword();
   await fillAndSubmitEmail(user);
   await screen.findByLabelText("Code");
   vi.unstubAllGlobals();
@@ -211,4 +246,110 @@ test("blocks submit while the passwords don't match, with a visible hint", async
 
   expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
+});
+
+async function fillAndSubmitReset(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.type(screen.getByLabelText("New password"), "newpassword1");
+  await user.type(screen.getByLabelText("Confirm password"), "newpassword1");
+  await user.click(screen.getByRole("button", { name: "Reset Password" }));
+}
+
+test("sends the email, code, and new password to /api/auth/reset-password", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  stubFetch(() => new Response(null, { status: 204 }));
+
+  await fillAndSubmitReset(user);
+  await screen.findByText("Your password has been updated.");
+
+  // Guards the new_password/password naming trap: the request body's key must be
+  // new_password, matching ResetPasswordRequestWritable, not password.
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/reset-password");
+  const body = await realRequest.json();
+  expect(zResetPasswordBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({
+    email: "coach@example.com",
+    otp: "123456",
+    new_password: "newpassword1",
+  });
+});
+
+test("shows the server's error and stays on the reset step on a 400 response", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  stubFetch(
+    () => new Response(JSON.stringify({ detail: "Incorrect or expired code" }), { status: 400 }),
+  );
+
+  await fillAndSubmitReset(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("shows the server's error and stays on the reset step on a 429 response", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  stubFetch(() => new Response(JSON.stringify({ detail: "Too many attempts" }), { status: 429 }));
+
+  await fillAndSubmitReset(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts");
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("shows a generic error when the reset-password request fails outright", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+  await fillAndSubmitReset(user);
+
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("sends one reset-password request however impatiently Reset Password is clicked", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  const respond = stubPendingFetch();
+
+  await fillAndSubmitReset(user);
+  const submit = screen.getByRole("button", { name: "Reset Password" });
+  expect(submit).toBeDisabled();
+  await user.click(submit);
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  respond(new Response(null, { status: 204 }));
+  expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
+});
+
+test("reaches the confirmation view on a 204 response, and its link signs back in", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  stubFetch(() => new Response(null, { status: 204 }));
+
+  await fillAndSubmitReset(user);
+
+  expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
+  await user.click(screen.getByRole("link", { name: "Sign in" }));
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("starting over returns to the email step with the email preserved", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.type(screen.getByLabelText("New password"), "newpassword1");
+  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+
+  expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
+  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
 });
