@@ -1,10 +1,12 @@
 import { createCoach, requestOtp, verifyOtp } from "@matchpoint/api-client";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
+import { PasswordStrengthMeter } from "@/components/password-strength-meter";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
+import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
 
 type Step = "email" | "otp" | "password";
@@ -45,11 +47,25 @@ export function SignUp() {
   const passwordsMismatch = confirmPassword !== "" && password !== confirmPassword;
   const passwordTooShort = password !== "" && password.length < PASSWORD_MIN_LENGTH;
   const passwordTooLong = password.length > PASSWORD_MAX_LENGTH;
+  // email/displayName as zxcvbn's userInputs: it penalizes a password for containing
+  // them, ahead of the backend's authoritative context-specific rejection.
+  const passwordStrengthScore = useMemo(
+    () => getPasswordStrengthScore(password, [email, displayName]),
+    [password, email, displayName],
+  );
+  // Only checked once length already passes — no point telling someone a too-short or
+  // too-long password is also guessable, and showing both at once collides on
+  // `role="alert"`.
+  const passwordTooWeak =
+    password.length >= PASSWORD_MIN_LENGTH &&
+    password.length <= PASSWORD_MAX_LENGTH &&
+    passwordStrengthScore < PASSWORD_STRENGTH_MIN_SCORE;
   const canSubmitPassword =
     displayName !== "" &&
     password.length >= PASSWORD_MIN_LENGTH &&
     password.length <= PASSWORD_MAX_LENGTH &&
     password === confirmPassword &&
+    passwordStrengthScore >= PASSWORD_STRENGTH_MIN_SCORE &&
     !waiting;
 
   async function handleEmailSubmit(event: FormEvent<HTMLFormElement>) {
@@ -170,6 +186,7 @@ export function SignUp() {
           value={password}
           onChange={(event) => setPassword(event.target.value)}
         />
+        {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
         <label htmlFor="confirm-password">Confirm password</label>
         <PasswordInput
           id="confirm-password"
@@ -178,6 +195,9 @@ export function SignUp() {
         />
         {passwordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
         {passwordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
+        {passwordTooWeak && (
+          <p role="alert">This password is too easy to guess. Try something less predictable.</p>
+        )}
         {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
         {errorText && <p role="alert">{errorText}</p>}
         <button type="submit" disabled={!canSubmitPassword || submitting}>

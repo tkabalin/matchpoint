@@ -223,8 +223,8 @@ test("blocks the reset submit until the code and matching passwords are entered"
   expect(submit).toBeDisabled();
 
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.type(screen.getByLabelText("New password"), "newpassword1");
-  await user.type(screen.getByLabelText("Confirm password"), "newpassword1");
+  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   expect(submit).toBeEnabled();
 });
 
@@ -254,8 +254,8 @@ test("blocks submit while the passwords don't match, with a visible hint", async
   const user = userEvent.setup();
   await goToResetStep(user);
 
-  await user.type(screen.getByLabelText("New password"), "newpassword1");
-  await user.type(screen.getByLabelText("Confirm password"), "newpassword2");
+  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "zebra-canyon-1984-lark");
 
   expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
@@ -263,8 +263,8 @@ test("blocks submit while the passwords don't match, with a visible hint", async
 
 async function fillAndSubmitReset(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.type(screen.getByLabelText("New password"), "newpassword1");
-  await user.type(screen.getByLabelText("Confirm password"), "newpassword1");
+  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   await user.click(screen.getByRole("button", { name: "Reset Password" }));
 }
 
@@ -287,7 +287,7 @@ test("sends the email, code, and new password to /api/auth/reset-password", asyn
   expect(body).toEqual({
     email: "coach@example.com",
     otp: "123456",
-    new_password: "newpassword1",
+    new_password: "granite-otter-42-quiz",
   });
 });
 
@@ -366,7 +366,7 @@ test("starting over returns to the email step with the email preserved", async (
   await goToResetStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.type(screen.getByLabelText("New password"), "newpassword1");
+  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
   await user.click(screen.getByRole("button", { name: "Request a new one" }));
 
   expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");

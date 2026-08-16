@@ -1,3 +1,5 @@
+import type { CoachRead } from "@matchpoint/api-client";
+import { getCurrentCoachQueryKey } from "@matchpoint/api-client/react-query";
 import { zChangePasswordBody } from "@matchpoint/api-client/zod";
 import {
   Outlet,
@@ -14,6 +16,16 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { Settings } from "./settings";
 
+const coach: CoachRead = {
+  id: "3f1c2b4e-0000-4000-8000-0000000000c1",
+  email: "coach@example.com",
+  display_name: "Amahle Nkosi",
+  default_surface: null,
+  default_sets_format: null,
+  created_at: "2026-08-11T09:00:00Z",
+  updated_at: "2026-08-11T09:00:00Z",
+};
+
 function stubFetch(response: () => Response) {
   vi.stubGlobal(
     "fetch",
@@ -23,7 +35,7 @@ function stubFetch(response: () => Response) {
 
 async function fillChangePasswordForm(
   user: ReturnType<typeof userEvent.setup>,
-  { current = "old-password", next = "new-password-123" } = {},
+  { current = "old-password", next = "granite-otter-42-quiz" } = {},
 ) {
   await user.type(screen.getByLabelText("Current password"), current);
   await user.type(screen.getByLabelText("New password"), next);
@@ -34,8 +46,15 @@ async function fillChangePasswordForm(
  * with a dummy cached query so a test can prove sign-out actually clears it — the
  * next coach on this device would otherwise see the previous coach's roster. */
 async function renderSettings() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // staleTime: Infinity so seeding the coach query below actually prevents a fetch —
+  // useQuery still background-refetches stale data on mount by default (staleTime: 0),
+  // unlike ensureQueryData's cache-first check. This test file's single-handler
+  // stubFetch (or no stub at all) shouldn't also have to answer /api/coaches/me.
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+  });
   queryClient.setQueryData(["players"], [{ id: "1", first_name: "Amahle" }]);
+  queryClient.setQueryData(getCurrentCoachQueryKey(), coach);
 
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const settingsRoute = createRoute({

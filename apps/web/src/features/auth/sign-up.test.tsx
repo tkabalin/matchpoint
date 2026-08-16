@@ -365,8 +365,8 @@ test("blocks submit until a display name is entered", async () => {
   const user = userEvent.setup();
   await goToPasswordStep(user);
 
-  await user.type(screen.getByLabelText("Password"), "hunter2000");
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
+  await user.type(screen.getByLabelText("Password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   const submit = screen.getByRole("button", { name: "Sign Up" });
   expect(submit).toBeDisabled();
 
@@ -411,10 +411,10 @@ test("blocks submit while the passwords differ, with a visible error", async () 
   expect(submit).toBeDisabled();
 
   await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
-  await user.type(screen.getByLabelText("Password"), "hunter2000");
+  await user.type(screen.getByLabelText("Password"), "granite-otter-42-quiz");
   expect(submit).toBeDisabled();
 
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2001");
+  await user.type(screen.getByLabelText("Confirm password"), "zebra-canyon-1984-lark");
   expect(submit).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
 });
@@ -424,8 +424,8 @@ test("allows submit once the display name is set and the passwords match", async
   await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
-  await user.type(screen.getByLabelText("Password"), "hunter2000");
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
+  await user.type(screen.getByLabelText("Password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
 
   expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
@@ -433,8 +433,8 @@ test("allows submit once the display name is set and the passwords match", async
 
 async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("Display name"), "Amahle Nkosi");
-  await user.type(screen.getByLabelText("Password"), "hunter2000");
-  await user.type(screen.getByLabelText("Confirm password"), "hunter2000");
+  await user.type(screen.getByLabelText("Password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   await user.click(screen.getByRole("button", { name: "Sign Up" }));
 }
 
@@ -459,7 +459,7 @@ test("sends the email, password and display name to POST /coaches, no token fiel
   expect(zCreateCoachBody.safeParse(body).error).toBeUndefined();
   expect(body).toEqual({
     email: "coach@example.com",
-    password: "hunter2000",
+    password: "granite-otter-42-quiz",
     display_name: "Amahle Nkosi",
   });
 });

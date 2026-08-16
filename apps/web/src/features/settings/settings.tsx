@@ -1,7 +1,8 @@
 import { changePassword, logout } from "@matchpoint/api-client";
-import { useQueryClient } from "@tanstack/react-query";
+import { getCurrentCoachOptions } from "@matchpoint/api-client/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
 import {
@@ -15,8 +16,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { PasswordInput } from "@/components/password-input";
+import { PasswordStrengthMeter } from "@/components/password-strength-meter";
 import { Button } from "@/components/ui/button";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
+import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
 
 type DialogStep = "closed" | "confirm" | "success";
@@ -31,6 +34,16 @@ export function Settings() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [dialogStep, setDialogStep] = useState<DialogStep>("closed");
+  // Already warm in the cache — #98's route guard fetches this before any protected
+  // route renders — so this costs no extra round trip, just the email/display name
+  // for zxcvbn's userInputs below. Disabled once signed out: handleConfirmSignOut's
+  // queryClient.clear() wipes this from the cache while the change-password form (and
+  // this query) is still mounted underneath the success dialog, which would otherwise
+  // trigger a pointless refetch against a session that no longer exists.
+  const { data: coach } = useQuery({
+    ...getCurrentCoachOptions(),
+    enabled: dialogStep !== "success",
+  });
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -49,11 +62,23 @@ export function Settings() {
   const newPasswordTooShort = newPassword !== "" && newPassword.length < PASSWORD_MIN_LENGTH;
   const newPasswordTooLong = newPassword.length > PASSWORD_MAX_LENGTH;
   const passwordsMismatch = confirmPassword !== "" && newPassword !== confirmPassword;
+  const passwordStrengthScore = useMemo(
+    () => getPasswordStrengthScore(newPassword, [coach?.email ?? "", coach?.display_name ?? ""]),
+    [newPassword, coach?.email, coach?.display_name],
+  );
+  // Only checked once length already passes — no point telling someone a too-short or
+  // too-long password is also guessable, and showing both at once collides on
+  // `role="alert"`.
+  const newPasswordTooWeak =
+    newPassword.length >= PASSWORD_MIN_LENGTH &&
+    newPassword.length <= PASSWORD_MAX_LENGTH &&
+    passwordStrengthScore < PASSWORD_STRENGTH_MIN_SCORE;
   const canSubmitChange =
     currentPassword !== "" &&
     newPassword.length >= PASSWORD_MIN_LENGTH &&
     newPassword.length <= PASSWORD_MAX_LENGTH &&
     newPassword === confirmPassword &&
+    passwordStrengthScore >= PASSWORD_STRENGTH_MIN_SCORE &&
     !waiting;
 
   async function handleChangePassword(event: FormEvent<HTMLFormElement>) {
@@ -174,6 +199,7 @@ export function Settings() {
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
             />
+            {newPassword !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
             <label htmlFor="confirm-new-password">Confirm new password</label>
             <PasswordInput
               id="confirm-new-password"
@@ -182,6 +208,11 @@ export function Settings() {
             />
             {newPasswordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
             {newPasswordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
+            {newPasswordTooWeak && (
+              <p role="alert">
+                This password is too easy to guess. Try something less predictable.
+              </p>
+            )}
             {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
             {changeErrorText && <p role="alert">{changeErrorText}</p>}
             {changeSuccess && <p>Your password has been changed.</p>}
