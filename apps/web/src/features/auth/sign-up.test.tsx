@@ -95,6 +95,15 @@ test("blocks submit until the email is filled", async () => {
   expect(submit).toBeEnabled();
 });
 
+test("links back to sign in", async () => {
+  const user = userEvent.setup();
+  await renderSignUp();
+
+  await user.click(screen.getByRole("link", { name: "Back to sign in" }));
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
 test("sends the email to /api/auth/request-otp", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();

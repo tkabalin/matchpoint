@@ -1,5 +1,5 @@
 import { createCoach, requestOtp, verifyOtp } from "@matchpoint/api-client";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
@@ -171,6 +171,9 @@ export function SignUp() {
       <button type="submit" disabled={!canSubmitEmail || submitting}>
         Continue
       </button>
+      <p>
+        <Link to="/">Back to sign in</Link>
+      </p>
     </form>
   );
 }

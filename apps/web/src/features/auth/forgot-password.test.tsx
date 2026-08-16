@@ -61,15 +61,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the email field", () => {
-  render(<ForgotPassword />);
+test("renders the email field", async () => {
+  await renderForgotPassword();
 
   expect(screen.getByLabelText("Email")).toBeInTheDocument();
 });
 
 test("updates the field as the user types", async () => {
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
 
@@ -78,13 +78,22 @@ test("updates the field as the user types", async () => {
 
 test("blocks submit until the email is filled", async () => {
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   const submit = screen.getByRole("button", { name: "Continue" });
   expect(submit).toBeDisabled();
 
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
   expect(submit).toBeEnabled();
+});
+
+test("links back to sign in", async () => {
+  const user = userEvent.setup();
+  await renderForgotPassword();
+
+  await user.click(screen.getByRole("link", { name: "Back to sign in" }));
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
 async function fillAndSubmitEmail(user: ReturnType<typeof userEvent.setup>) {
@@ -95,7 +104,7 @@ async function fillAndSubmitEmail(user: ReturnType<typeof userEvent.setup>) {
 test("sends the email to /api/auth/forgot-password", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
@@ -114,7 +123,7 @@ test("sends the email to /api/auth/forgot-password", async () => {
 test("moves to the reset step on a 202 response", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
@@ -130,7 +139,7 @@ test("shows an inline error and stays on the email step on a 429 response", asyn
     () => new Response(JSON.stringify({ detail: "Too many codes requested" }), { status: 429 }),
   );
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
@@ -146,7 +155,7 @@ test("shows an inline error and stays on the email step on a 502 response", asyn
       }),
   );
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
@@ -159,7 +168,7 @@ test("shows an inline error and stays on the email step on a 502 response", asyn
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
 
@@ -169,7 +178,7 @@ test("shows a generic error when the request fails outright", async () => {
 test("sends one forgot-password request however impatiently Continue is clicked", async () => {
   const respond = stubPendingFetch();
   const user = userEvent.setup();
-  render(<ForgotPassword />);
+  await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
   const submit = screen.getByRole("button", { name: "Continue" });
@@ -184,9 +193,6 @@ test("sends one forgot-password request however impatiently Continue is clicked"
 
 async function goToResetStep(user: ReturnType<typeof userEvent.setup>) {
   stubFetch(() => new Response(null, { status: 202 }));
-  // Router-wrapped, not a plain render: the reset step's own submit can reach the
-  // "done" step, which renders a <Link> that needs router context regardless of
-  // whether a given test actually gets that far.
   await renderForgotPassword();
   await fillAndSubmitEmail(user);
   await screen.findByLabelText("Code");

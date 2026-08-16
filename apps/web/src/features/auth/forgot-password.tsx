@@ -159,6 +159,9 @@ export function ForgotPassword() {
       <button type="submit" disabled={!canSubmitEmail || submitting}>
         Continue
       </button>
+      <p>
+        <Link to="/">Back to sign in</Link>
+      </p>
     </form>
   );
 }
