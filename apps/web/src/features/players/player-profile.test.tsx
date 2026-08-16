@@ -44,17 +44,27 @@ function stubFetch(routes: Record<string, () => Response>) {
 async function renderPlayerProfile(playerId = player.id) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
-  const homeRoute = createRoute({
+  // Nested under a pathless `_authenticated` layout, matching the real route tree —
+  // PlayerProfile resolves its params via `getRouteApi("/_authenticated/players/$playerId")`,
+  // which needs an active match at that exact route id.
+  const authenticatedRoute = createRoute({
     getParentRoute: () => rootRoute,
+    id: "/_authenticated",
+    component: () => <Outlet />,
+  });
+  const homeRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
     path: "/home",
     component: () => <h1>Welcome to Home</h1>,
   });
   const profileRoute = createRoute({
-    getParentRoute: () => rootRoute,
+    getParentRoute: () => authenticatedRoute,
     path: "/players/$playerId",
     component: PlayerProfile,
   });
-  const routeTree = rootRoute.addChildren([homeRoute, profileRoute]);
+  const routeTree = rootRoute.addChildren([
+    authenticatedRoute.addChildren([homeRoute, profileRoute]),
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: [`/players/${playerId}`] }),

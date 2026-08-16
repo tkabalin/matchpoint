@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { QueryClient, useQuery } from "@tanstack/react-query";
 import {
   RouterProvider,
   createMemoryHistory,
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
@@ -36,11 +36,14 @@ test("supplies a QueryClient every route can use, with no provider of its own", 
     return <p>{isPending ? "loading" : "loaded"}</p>;
   }
 
-  const rootRoute = createRootRoute({ component: RootLayout });
+  const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+    component: RootLayout,
+  });
   const probeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", component: Probe });
   const routeTree = rootRoute.addChildren([probeRoute]);
   const router = createRouter({
     routeTree,
+    context: { queryClient: new QueryClient() },
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
 

@@ -1,11 +1,11 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet } from "@tanstack/react-router";
-import { useState } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Outlet, useRouteContext } from "@tanstack/react-router";
 
 export function RootLayout() {
-  // Held in state rather than at module scope so each mounted app gets its own cache —
-  // a module-level client would carry one test's fetched data into the next.
-  const [queryClient] = useState(() => new QueryClient());
+  // Read from router context rather than created here: the _authenticated guard's
+  // beforeLoad needs the same QueryClient before this component ever renders, so it's
+  // built once at createRouter() in main.tsx and threaded through as context instead.
+  const { queryClient } = useRouteContext({ from: "__root__" });
 
   return (
     <QueryClientProvider client={queryClient}>

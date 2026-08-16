@@ -6,7 +6,7 @@ import { PlayerAvatar } from "@/components/player-avatar";
 
 // Avoids a circular import between this component and its route file — the
 // standard TanStack Router way to read typed params from outside the route file.
-const routeApi = getRouteApi("/players/$playerId");
+const routeApi = getRouteApi("/_authenticated/players/$playerId");
 
 export function PlayerProfile() {
   const { playerId } = routeApi.useParams();

@@ -1,4 +1,5 @@
 import { registerErrorStatusInterceptor } from "@matchpoint/api-client/error-interceptor";
+import { QueryClient } from "@tanstack/react-query";
 import { createRouter, RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -21,7 +22,12 @@ if (import.meta.env.DEV) {
 // generated client singleton exists.
 registerErrorStatusInterceptor();
 
-const router = createRouter({ routeTree });
+// Built here rather than in RootLayout: the _authenticated guard's beforeLoad needs
+// the same client to call ensureQueryData before RootLayout (or anything else) has
+// rendered, and router context is the only thing both a beforeLoad and a component can
+// reach.
+const queryClient = new QueryClient();
+const router = createRouter({ routeTree, context: { queryClient } });
 
 declare module "@tanstack/react-router" {
   interface Register {

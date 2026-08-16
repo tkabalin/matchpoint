@@ -1,4 +1,5 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
+import { QueryClient } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
@@ -7,7 +8,8 @@ import { routeTree } from "./routeTree.gen";
 
 // Every other route test builds its own hand-written tree, so none of them see how the
 // router plugin actually parents the route files: `/players/$playerId` was generated as
-// a child of the roster and so never rendered. These mount the generated tree instead.
+// a child of the roster and so never rendered, and the `_authenticated` guard (#98)
+// never runs at all. These mount the generated tree instead.
 
 const player: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000001",
@@ -19,6 +21,16 @@ const player: PlayerRead = {
   notes: null,
   coach_id: "3f1c2b4e-0000-4000-8000-0000000000c1",
   archived_at: null,
+  created_at: "2026-08-11T09:00:00Z",
+  updated_at: "2026-08-11T09:00:00Z",
+};
+
+const coach: CoachRead = {
+  id: "3f1c2b4e-0000-4000-8000-0000000000c1",
+  email: "coach@example.com",
+  display_name: "Danny",
+  default_surface: null,
+  default_sets_format: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };
@@ -38,6 +50,7 @@ function stubFetch(routes: Record<string, () => Response>) {
 function renderRouteTreeAt(path: string) {
   const router = createRouter({
     routeTree,
+    context: { queryClient: new QueryClient() },
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   render(<RouterProvider router={router} />);
@@ -48,7 +61,10 @@ afterEach(() => {
 });
 
 test("/players renders the roster", async () => {
-  stubFetch({ "/api/players": () => Response.json([player]) });
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json([player]),
+  });
 
   renderRouteTreeAt("/players");
 
@@ -57,6 +73,7 @@ test("/players renders the roster", async () => {
 
 test("/players/$playerId renders that player's profile, not the roster", async () => {
   stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
@@ -65,4 +82,25 @@ test("/players/$playerId renders that player's profile, not the roster", async (
 
   expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Players" })).not.toBeInTheDocument();
+});
+
+test("redirects to sign-in on a confirmed 401, instead of rendering the protected route", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  renderRouteTreeAt("/players");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("renders the protected route through a non-401 session-check failure", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Server error" }, { status: 500 }),
+    "/api/players": () => Response.json([player]),
+  });
+
+  renderRouteTreeAt("/players");
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });

@@ -10,19 +10,24 @@
 
 import { Route as rootRouteImport } from "./routes/__root"
 import { Route as IndexRouteImport } from "./routes/index"
+import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
-import { Route as HomeRouteImport } from "./routes/home"
-import { Route as MatchesRouteImport } from "./routes/matches"
-import { Route as ProfileRouteImport } from "./routes/profile"
-import { Route as SettingsRouteImport } from "./routes/settings"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
-import { Route as StatsRouteImport } from "./routes/stats"
-import { Route as PlayersIndexRouteImport } from "./routes/players.index"
-import { Route as PlayersPlayerIdRouteImport } from "./routes/players.$playerId"
+import { Route as AuthenticatedHomeRouteImport } from "./routes/_authenticated.home"
+import { Route as AuthenticatedMatchesRouteImport } from "./routes/_authenticated.matches"
+import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated.profile"
+import { Route as AuthenticatedSettingsRouteImport } from "./routes/_authenticated.settings"
+import { Route as AuthenticatedStatsRouteImport } from "./routes/_authenticated.stats"
+import { Route as AuthenticatedPlayersIndexRouteImport } from "./routes/_authenticated.players.index"
+import { Route as AuthenticatedPlayersPlayerIdRouteImport } from "./routes/_authenticated.players.$playerId"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
   path: "/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: "/_authenticated",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
@@ -30,94 +35,97 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: "/forgot-password",
   getParentRoute: () => rootRouteImport,
 } as any)
-const HomeRoute = HomeRouteImport.update({
-  id: "/home",
-  path: "/home",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MatchesRoute = MatchesRouteImport.update({
-  id: "/matches",
-  path: "/matches",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ProfileRoute = ProfileRouteImport.update({
-  id: "/profile",
-  path: "/profile",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const SettingsRoute = SettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: "/sign-up",
   path: "/sign-up",
   getParentRoute: () => rootRouteImport,
 } as any)
-const StatsRoute = StatsRouteImport.update({
+const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
+  id: "/home",
+  path: "/home",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedMatchesRoute = AuthenticatedMatchesRouteImport.update({
+  id: "/matches",
+  path: "/matches",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: "/profile",
+  path: "/profile",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: "/settings",
+  path: "/settings",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   id: "/stats",
   path: "/stats",
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
-const PlayersIndexRoute = PlayersIndexRouteImport.update({
-  id: "/players/",
-  path: "/players/",
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PlayersPlayerIdRoute = PlayersPlayerIdRouteImport.update({
-  id: "/players/$playerId",
-  path: "/players/$playerId",
-  getParentRoute: () => rootRouteImport,
-} as any)
+const AuthenticatedPlayersIndexRoute =
+  AuthenticatedPlayersIndexRouteImport.update({
+    id: "/players/",
+    path: "/players/",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedPlayersPlayerIdRoute =
+  AuthenticatedPlayersPlayerIdRouteImport.update({
+    id: "/players/$playerId",
+    path: "/players/$playerId",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
-  "/home": typeof HomeRoute
-  "/matches": typeof MatchesRoute
-  "/profile": typeof ProfileRoute
-  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
-  "/stats": typeof StatsRoute
-  "/players/$playerId": typeof PlayersPlayerIdRoute
-  "/players/": typeof PlayersIndexRoute
+  "/home": typeof AuthenticatedHomeRoute
+  "/matches": typeof AuthenticatedMatchesRoute
+  "/profile": typeof AuthenticatedProfileRoute
+  "/settings": typeof AuthenticatedSettingsRoute
+  "/stats": typeof AuthenticatedStatsRoute
+  "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
+  "/players/": typeof AuthenticatedPlayersIndexRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
-  "/home": typeof HomeRoute
-  "/matches": typeof MatchesRoute
-  "/profile": typeof ProfileRoute
-  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
-  "/stats": typeof StatsRoute
-  "/players/$playerId": typeof PlayersPlayerIdRoute
-  "/players": typeof PlayersIndexRoute
+  "/home": typeof AuthenticatedHomeRoute
+  "/matches": typeof AuthenticatedMatchesRoute
+  "/profile": typeof AuthenticatedProfileRoute
+  "/settings": typeof AuthenticatedSettingsRoute
+  "/stats": typeof AuthenticatedStatsRoute
+  "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
+  "/players": typeof AuthenticatedPlayersIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   "/": typeof IndexRoute
+  "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/forgot-password": typeof ForgotPasswordRoute
-  "/home": typeof HomeRoute
-  "/matches": typeof MatchesRoute
-  "/profile": typeof ProfileRoute
-  "/settings": typeof SettingsRoute
   "/sign-up": typeof SignUpRoute
-  "/stats": typeof StatsRoute
-  "/players/$playerId": typeof PlayersPlayerIdRoute
-  "/players/": typeof PlayersIndexRoute
+  "/_authenticated/home": typeof AuthenticatedHomeRoute
+  "/_authenticated/matches": typeof AuthenticatedMatchesRoute
+  "/_authenticated/profile": typeof AuthenticatedProfileRoute
+  "/_authenticated/settings": typeof AuthenticatedSettingsRoute
+  "/_authenticated/stats": typeof AuthenticatedStatsRoute
+  "/_authenticated/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
+  "/_authenticated/players/": typeof AuthenticatedPlayersIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | "/"
     | "/forgot-password"
+    | "/sign-up"
     | "/home"
     | "/matches"
     | "/profile"
     | "/settings"
-    | "/sign-up"
     | "/stats"
     | "/players/$playerId"
     | "/players/"
@@ -125,39 +133,34 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/forgot-password"
+    | "/sign-up"
     | "/home"
     | "/matches"
     | "/profile"
     | "/settings"
-    | "/sign-up"
     | "/stats"
     | "/players/$playerId"
     | "/players"
   id:
     | "__root__"
     | "/"
+    | "/_authenticated"
     | "/forgot-password"
-    | "/home"
-    | "/matches"
-    | "/profile"
-    | "/settings"
     | "/sign-up"
-    | "/stats"
-    | "/players/$playerId"
-    | "/players/"
+    | "/_authenticated/home"
+    | "/_authenticated/matches"
+    | "/_authenticated/profile"
+    | "/_authenticated/settings"
+    | "/_authenticated/stats"
+    | "/_authenticated/players/$playerId"
+    | "/_authenticated/players/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
-  HomeRoute: typeof HomeRoute
-  MatchesRoute: typeof MatchesRoute
-  ProfileRoute: typeof ProfileRoute
-  SettingsRoute: typeof SettingsRoute
   SignUpRoute: typeof SignUpRoute
-  StatsRoute: typeof StatsRoute
-  PlayersPlayerIdRoute: typeof PlayersPlayerIdRoute
-  PlayersIndexRoute: typeof PlayersIndexRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -169,39 +172,18 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/_authenticated": {
+      id: "/_authenticated"
+      path: ""
+      fullPath: "/"
+      preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/forgot-password": {
       id: "/forgot-password"
       path: "/forgot-password"
       fullPath: "/forgot-password"
       preLoaderRoute: typeof ForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/home": {
-      id: "/home"
-      path: "/home"
-      fullPath: "/home"
-      preLoaderRoute: typeof HomeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/matches": {
-      id: "/matches"
-      path: "/matches"
-      fullPath: "/matches"
-      preLoaderRoute: typeof MatchesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/profile": {
-      id: "/profile"
-      path: "/profile"
-      fullPath: "/profile"
-      preLoaderRoute: typeof ProfileRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    "/settings": {
-      id: "/settings"
-      path: "/settings"
-      fullPath: "/settings"
-      preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/sign-up": {
@@ -211,41 +193,87 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SignUpRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/stats": {
-      id: "/stats"
+    "/_authenticated/home": {
+      id: "/_authenticated/home"
+      path: "/home"
+      fullPath: "/home"
+      preLoaderRoute: typeof AuthenticatedHomeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/matches": {
+      id: "/_authenticated/matches"
+      path: "/matches"
+      fullPath: "/matches"
+      preLoaderRoute: typeof AuthenticatedMatchesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/profile": {
+      id: "/_authenticated/profile"
+      path: "/profile"
+      fullPath: "/profile"
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/settings": {
+      id: "/_authenticated/settings"
+      path: "/settings"
+      fullPath: "/settings"
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/stats": {
+      id: "/_authenticated/stats"
       path: "/stats"
       fullPath: "/stats"
-      preLoaderRoute: typeof StatsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedStatsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/players/": {
-      id: "/players/"
+    "/_authenticated/players/": {
+      id: "/_authenticated/players/"
       path: "/players"
       fullPath: "/players/"
-      preLoaderRoute: typeof PlayersIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedPlayersIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    "/players/$playerId": {
-      id: "/players/$playerId"
+    "/_authenticated/players/$playerId": {
+      id: "/_authenticated/players/$playerId"
       path: "/players/$playerId"
       fullPath: "/players/$playerId"
-      preLoaderRoute: typeof PlayersPlayerIdRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedPlayersPlayerIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
+  AuthenticatedMatchesRoute: typeof AuthenticatedMatchesRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
+  AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
+  AuthenticatedPlayersIndexRoute: typeof AuthenticatedPlayersIndexRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedHomeRoute: AuthenticatedHomeRoute,
+  AuthenticatedMatchesRoute: AuthenticatedMatchesRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedStatsRoute: AuthenticatedStatsRoute,
+  AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
+  AuthenticatedPlayersIndexRoute: AuthenticatedPlayersIndexRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
-  HomeRoute: HomeRoute,
-  MatchesRoute: MatchesRoute,
-  ProfileRoute: ProfileRoute,
-  SettingsRoute: SettingsRoute,
   SignUpRoute: SignUpRoute,
-  StatsRoute: StatsRoute,
-  PlayersPlayerIdRoute: PlayersPlayerIdRoute,
-  PlayersIndexRoute: PlayersIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
