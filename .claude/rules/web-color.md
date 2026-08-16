@@ -7,7 +7,8 @@ paths:
 
 This is an always-on constraint, not a workflow to invoke. Apply it to every screen, component, or
 chart without being asked. Never use a color from this file for anything other than its assigned
-role.
+role. For the reasoning behind these specific choices, see
+[docs/color-palette.md](../../docs/color-palette.md).
 
 ## Navigation / brand color
 
