@@ -1,4 +1,4 @@
-import { forgotPassword, resetPassword } from "@matchpoint/api-client";
+import { forgotPassword, resetPassword, verifyResetCode } from "@matchpoint/api-client";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
@@ -24,7 +24,7 @@ import { AuthShell } from "./auth-shell";
 
 type Step = "email" | "reset" | "done";
 
-// Mirror the bounds the OpenAPI spec already publishes (ResetPasswordRequest.otp,
+// Mirror the bounds the OpenAPI spec already publishes (VerifyResetCodeRequest.otp,
 // ResetPasswordRequest.new_password) so an ordinary typo is blocked client-side
 // instead of reaching the API as a 422 — the generated client types the request
 // body itself, but not these numeric bounds, since @hey-api emits no runtime
@@ -40,10 +40,14 @@ export function ForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // Neither request is safely repeatable: a second forgot-password call replaces
-  // the code the first one emailed, and a second reset-password call burns
-  // another attempt against the same budget.
+  // Neither submit is safely repeatable: a second forgot-password call replaces
+  // the code the first one emailed, and a second run at the reset step burns
+  // another attempt against the code's budget.
   const [submitting, setSubmitting] = useState(false);
+  // verify-reset-code spends the code as it answers it, so a retry after the password
+  // call failed must not send that code again: it would be refused as expired and cost
+  // the coach a reset they typed correctly. The cookie it set is the proof from here on.
+  const [codeVerified, setCodeVerified] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const retryCountdown = useCountdown(retryAfterSeconds);
   const waiting = retryCountdown !== null && retryCountdown > 0;
@@ -106,8 +110,30 @@ export function ForgotPassword() {
     setSubmitting(true);
 
     try {
+      // Two calls behind the one button: the code is answered first, which is what
+      // mints the cookie reset-password reads. Splitting them across two screens is
+      // the point of the API change, and its own issue.
+      if (!codeVerified) {
+        const { error: verifyError, response: verifyResponse } = await verifyResetCode({
+          body: { email, otp },
+        });
+
+        if (verifyResponse?.status !== 200) {
+          if (verifyResponse?.status === 429) {
+            setRetryAfterSeconds(getRetryAfterSeconds(verifyResponse));
+          }
+          // 400 covers wrong code, expired code, unknown email, and attempt-budget-
+          // exhausted alike: one message for all four, shown verbatim. 429 is "Too
+          // many attempts".
+          setError(parseErrorMessage(verifyError, "Could not verify that code."));
+          return;
+        }
+
+        setCodeVerified(true);
+      }
+
       const { error: resetPasswordError, response } = await resetPassword({
-        body: { email, otp, new_password: password },
+        body: { email, new_password: password },
       });
 
       if (response?.status === 204) {
@@ -119,9 +145,9 @@ export function ForgotPassword() {
         setRetryAfterSeconds(getRetryAfterSeconds(response));
       }
 
-      // 400 covers wrong code, expired code, unknown email, and attempt-budget-
-      // exhausted alike — one message for all four, shown verbatim. 429 is "Too
-      // many attempts".
+      // A 429 or an unreachable server leaves the verified code standing, so the button
+      // simply retries. A 401 means the cookie is gone, and the code with it, so the only
+      // way on is "Request a new one" below: re-answering a spent code cannot help.
       setError(parseErrorMessage(resetPasswordError, "Could not reset your password."));
     } finally {
       setSubmitting(false);
@@ -135,6 +161,7 @@ export function ForgotPassword() {
     setConfirmPassword("");
     setError(null);
     setRetryAfterSeconds(null);
+    setCodeVerified(false);
   }
 
   if (step === "done") {
@@ -177,10 +204,15 @@ export function ForgotPassword() {
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="otp">Code</FieldLabel>
+                {/* Settled once the server has accepted it, because from then on the cookie
+                    is the proof and this field no longer decides anything. Left editable, a
+                    retry after a failed password call would silently ignore the new value
+                    and reset the password on the old code's proof. */}
                 <Input
                   id="otp"
                   type="text"
                   value={otp}
+                  disabled={codeVerified}
                   onChange={(event) => setOtp(event.target.value)}
                 />
               </Field>

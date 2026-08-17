@@ -1,4 +1,8 @@
-import { zForgotPasswordBody, zResetPasswordBody } from "@matchpoint/api-client/zod";
+import {
+  zForgotPasswordBody,
+  zResetPasswordBody,
+  zVerifyResetCodeBody,
+} from "@matchpoint/api-client/zod";
 import {
   Outlet,
   RouterProvider,
@@ -19,6 +23,18 @@ function stubFetch(response: () => Response) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation(() => Promise.resolve(response())),
+  );
+}
+
+/** Stubs the reset step's two calls: 200 for the verification, 204 for the reset. One
+ * status cannot serve both, so the stub answers on the URL it was called with. */
+function stubResetFlow() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((request: Request) => {
+      const status = request.url.includes("verify-reset-code") ? 200 : 204;
+      return Promise.resolve(new Response(null, { status }));
+    }),
   );
 }
 
@@ -268,25 +284,32 @@ async function fillAndSubmitReset(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Reset Password" }));
 }
 
-test("sends the email, code, and new password to /api/auth/reset-password", async () => {
+test("answers the code, then sends the new password to /api/auth/reset-password", async () => {
   const user = userEvent.setup();
   await goToResetStep(user);
-  stubFetch(() => new Response(null, { status: 204 }));
+  stubResetFlow();
 
   await fillAndSubmitReset(user);
   await screen.findByText("Your password has been updated.");
 
+  // The generated client calls fetch with a single Request object, not (url, init).
+  const requests = vi.mocked(fetch).mock.calls.map(([call]) => call as Request);
+  expect(requests).toHaveLength(2);
+  const [verifyRequest, resetRequest] = requests as [Request, Request];
+  expect(verifyRequest.url).toContain("/api/auth/verify-reset-code");
+  const verifyBody = await verifyRequest.json();
+  // The schema comes from the API's spec, the literal below from this test. Only the
+  // first can tell us the API would accept this body (see docs/testing.md).
+  expect(zVerifyResetCodeBody.safeParse(verifyBody).error).toBeUndefined();
+  expect(verifyBody).toEqual({ email: "coach@example.com", otp: "123456" });
   // Guards the new_password/password naming trap: the request body's key must be
-  // new_password, matching ResetPasswordRequestWritable, not password.
-  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
-  expect(request).toBeInstanceOf(Request);
-  const realRequest = request as Request;
-  expect(realRequest.url).toContain("/api/auth/reset-password");
-  const body = await realRequest.json();
-  expect(zResetPasswordBody.safeParse(body).error).toBeUndefined();
-  expect(body).toEqual({
+  // new_password, matching ResetPasswordRequestWritable, not password. The code is not
+  // in it at all: the cookie the call above set is what carries that proof now.
+  expect(resetRequest.url).toContain("/api/auth/reset-password");
+  const resetBody = await resetRequest.json();
+  expect(zResetPasswordBody.safeParse(resetBody).error).toBeUndefined();
+  expect(resetBody).toEqual({
     email: "coach@example.com",
-    otp: "123456",
     new_password: "granite-otter-42-quiz",
   });
 });
@@ -301,6 +324,32 @@ test("shows the server's error and stays on the reset step on a 400 response", a
   await fillAndSubmitReset(user);
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+  // A refused code never reaches the password call: there is no cookie for it to use.
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("shows the server's error and stays on the reset step on a 401 response", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  // The code verifies, and the reset then meets a 401: the proof it minted is missing or
+  // already spent, which from here means starting the flow over.
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockImplementation((request: Request) =>
+        Promise.resolve(
+          request.url.includes("verify-reset-code")
+            ? new Response(null, { status: 200 })
+            : new Response(JSON.stringify({ detail: "Reset code not verified" }), { status: 401 }),
+        ),
+      ),
+  );
+
+  await fillAndSubmitReset(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Reset code not verified");
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
 });
 
@@ -322,6 +371,45 @@ test("shows the server's error, the retry wait, and stays on the reset step on a
   expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
 });
 
+test("retries the password call alone, so a failure does not spend the code twice", async () => {
+  const user = userEvent.setup();
+  await goToResetStep(user);
+  // verify-reset-code spends the code as it answers it, so the retry has to go straight
+  // to the password call. Answering the code a second time would meet the 400 a spent one
+  // gets, losing a reset the coach typed correctly.
+  let resetCalls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((request: Request) => {
+      if (request.url.includes("verify-reset-code")) {
+        return Promise.resolve(new Response(null, { status: 200 }));
+      }
+      resetCalls += 1;
+      // No Retry-After, so nothing keeps the button disabled and the retry is a click away.
+      return Promise.resolve(
+        resetCalls === 1
+          ? new Response(JSON.stringify({ detail: "Too many requests" }), { status: 429 })
+          : new Response(null, { status: 204 }),
+      );
+    }),
+  );
+
+  await fillAndSubmitReset(user);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests");
+  // And the code is settled, so the retry cannot be a different code than the one the
+  // proof was minted for.
+  expect(screen.getByLabelText("Code")).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "Reset Password" }));
+
+  expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
+  const verifications = vi
+    .mocked(fetch)
+    .mock.calls.filter(([request]) => (request as Request).url.includes("verify-reset-code"));
+  expect(verifications).toHaveLength(1);
+  expect(resetCalls).toBe(2);
+});
+
 test("shows a generic error when the reset-password request fails outright", async () => {
   const user = userEvent.setup();
   await goToResetStep(user);
@@ -333,10 +421,22 @@ test("shows a generic error when the reset-password request fails outright", asy
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
 });
 
-test("sends one reset-password request however impatiently Reset Password is clicked", async () => {
+test("sends one reset request however impatiently Reset Password is clicked", async () => {
   const user = userEvent.setup();
   await goToResetStep(user);
-  const respond = stubPendingFetch();
+  // Only the verification is left hanging; the reset behind it answers at once, so what
+  // the click count proves is that the flow itself ran only once.
+  let respond!: (response: Response) => void;
+  const pending = new Promise<Response>((resolve) => {
+    respond = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockImplementationOnce(() => pending)
+      .mockImplementation(() => Promise.resolve(new Response(null, { status: 204 }))),
+  );
 
   await fillAndSubmitReset(user);
   const submit = screen.getByRole("button", { name: "Reset Password" });
@@ -345,14 +445,14 @@ test("sends one reset-password request however impatiently Reset Password is cli
 
   expect(fetch).toHaveBeenCalledTimes(1);
 
-  respond(new Response(null, { status: 204 }));
+  respond(new Response(null, { status: 200 }));
   expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
 });
 
-test("reaches the confirmation view on a 204 response, and its link signs back in", async () => {
+test("reaches the confirmation view once both calls succeed, and its link signs back in", async () => {
   const user = userEvent.setup();
   await goToResetStep(user);
-  stubFetch(() => new Response(null, { status: 204 }));
+  stubResetFlow();
 
   await fillAndSubmitReset(user);
 
