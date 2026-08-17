@@ -56,9 +56,16 @@ class ForgotPasswordRequest(RequestModel):
     email: _Email
 
 
-class ResetPasswordRequest(RequestModel):
+class VerifyResetCodeRequest(RequestModel):
     email: _Email
     otp: _Otp
+
+
+class ResetPasswordRequest(RequestModel):
+    # No otp: verify-reset-code has already answered the code, and the cookie it minted
+    # is what this request presents instead. The email stays because that cookie is
+    # checked against it, exactly as the verification cookie is at sign-up.
+    email: _Email
     new_password: _NewPassword
 
 

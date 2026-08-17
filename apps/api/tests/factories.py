@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import (
+    RESET_COOKIE,
     SESSION_COOKIE,
     VERIFICATION_COOKIE,
     hash_token,
@@ -151,6 +152,22 @@ def make_password_reset(session: Session, **overrides: Any) -> PasswordReset:
     )
     session.add(reset)
     session.flush()
+    return reset
+
+
+def verify_reset_code(
+    client: TestClient, session: Session, coach: Coach, **overrides: Any
+) -> PasswordReset:
+    # Gives the client the reset cookie POST /auth/reset-password demands, arranged
+    # rather than earned through forgot-password and verify-reset-code, for
+    # verify_email's reasons, and committed for the same one: the row stands in for one
+    # verify-reset-code committed, so a route that rolls back must still find it.
+    token = new_session_token()
+    reset = make_password_reset(
+        session, coach_id=coach.id, otp_hash=None, token_hash=hash_token(token), **overrides
+    )
+    session.commit()
+    client.cookies.set(RESET_COOKIE, token)
     return reset
 
 

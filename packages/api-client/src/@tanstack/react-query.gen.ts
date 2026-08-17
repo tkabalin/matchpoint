@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp } from '../sdk.gen';
-import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError } from '../types.gen';
+import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -98,6 +98,11 @@ export const requestOtpMutation = (options?: Partial<Options<RequestOtpData>>): 
 
 /**
  * Reset Password
+ *
+ * Set the new password, given the cookie verify-reset-code minted.
+ *
+ * A 401 means that cookie is missing, spent, expired, or was earned for a different
+ * address, so the coach has to answer a code again; every live session ends here.
  */
 export const resetPasswordMutation = (options?: Partial<Options<ResetPasswordData>>): UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> => {
     const mutationOptions: UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> = {
@@ -144,6 +149,28 @@ export const verifyOtpMutation = (options?: Partial<Options<VerifyOtpData>>): Us
     const mutationOptions: UseMutationOptions<unknown, VerifyOtpError, Options<VerifyOtpData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await verifyOtp({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Verify Reset Code
+ *
+ * Answer a reset code without spending it, for the cookie reset-password demands.
+ *
+ * A code that is wrong, expired, already answered, or asked for an address holding no
+ * account all answer the same 400, so nothing here says whether an account exists.
+ */
+export const verifyResetCodeMutation = (options?: Partial<Options<VerifyResetCodeData>>): UseMutationOptions<unknown, VerifyResetCodeError, Options<VerifyResetCodeData>> => {
+    const mutationOptions: UseMutationOptions<unknown, VerifyResetCodeError, Options<VerifyResetCodeData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await verifyResetCode({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

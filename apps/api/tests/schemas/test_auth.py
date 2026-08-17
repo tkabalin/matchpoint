@@ -8,11 +8,13 @@ from matchpoint_api.schemas.auth import (
     OtpRequest,
     ResetPasswordRequest,
     VerifyOtpRequest,
+    VerifyResetCodeRequest,
 )
 
 LOGIN = {"email": "mike@example.com", "password": "a-good-password"}
 VERIFY = {"email": "mike@example.com", "otp": "123456"}
-RESET = {"email": "mike@example.com", "otp": "123456", "new_password": "a-new-password"}
+VERIFY_RESET = {"email": "mike@example.com", "otp": "123456"}
+RESET = {"email": "mike@example.com", "new_password": "a-new-password"}
 CHANGE = {"password": "a-good-password", "new_password": "a-new-password"}
 
 
@@ -108,18 +110,35 @@ def test_the_forgot_password_email_is_stripped_and_validated() -> None:
         ForgotPasswordRequest.model_validate({"email": "not-an-address"})
 
 
-def test_a_valid_reset_parses() -> None:
-    request = ResetPasswordRequest.model_validate(RESET)
+def test_a_valid_reset_code_verification_parses() -> None:
+    request = VerifyResetCodeRequest.model_validate(VERIFY_RESET)
 
     assert request.email == "mike@example.com"
     assert request.otp.get_secret_value() == "123456"
-    assert request.new_password.get_secret_value() == "a-new-password"
 
 
 @pytest.mark.parametrize("otp", ["12345", "1234567"])
 def test_a_reset_code_of_the_wrong_length_is_rejected(otp: str) -> None:
     with pytest.raises(ValidationError):
-        ResetPasswordRequest.model_validate(RESET | {"otp": otp})
+        VerifyResetCodeRequest.model_validate(VERIFY_RESET | {"otp": otp})
+
+
+def test_the_reset_code_verification_repr_never_contains_the_code() -> None:
+    assert "123456" not in repr(VerifyResetCodeRequest.model_validate(VERIFY_RESET))
+
+
+def test_a_valid_reset_parses() -> None:
+    request = ResetPasswordRequest.model_validate(RESET)
+
+    assert request.email == "mike@example.com"
+    assert request.new_password.get_secret_value() == "a-new-password"
+
+
+def test_a_reset_carrying_a_code_is_rejected() -> None:
+    """The field moved to verify-reset-code (#149), and RequestModel forbids extras, so
+    a caller still sending it is told rather than having it silently ignored."""
+    with pytest.raises(ValidationError):
+        ResetPasswordRequest.model_validate(RESET | {"otp": "123456"})
 
 
 def test_a_new_password_below_the_floor_is_rejected() -> None:
@@ -144,11 +163,8 @@ def test_the_new_password_is_not_stripped() -> None:
     assert request.new_password.get_secret_value() == " padded password "
 
 
-def test_the_repr_never_contains_the_new_password_or_code() -> None:
-    request = ResetPasswordRequest.model_validate(RESET)
-
-    assert "a-new-password" not in repr(request)
-    assert "123456" not in repr(request)
+def test_the_repr_never_contains_the_new_password() -> None:
+    assert "a-new-password" not in repr(ResetPasswordRequest.model_validate(RESET))
 
 
 def test_a_valid_change_parses() -> None:

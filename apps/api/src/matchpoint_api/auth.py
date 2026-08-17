@@ -63,11 +63,21 @@ VERIFICATION_COOKIE = (
     else "matchpoint_email_verification"
 )
 
+# The password-reset cookie: the same conditional prefix and flags, a third distinct
+# name. It proves that this browser answered a code sent to a registered address, and
+# a flow that accepted either of the other two cookies here would be trading a lesser
+# proof for the account itself.
+RESET_COOKIE = (
+    "__Host-matchpoint_password_reset"
+    if settings.session_cookie_secure
+    else "matchpoint_password_reset"
+)
+
 # How long an emailed code is answerable, and then how long the answered proof holds.
 # Both short, and neither renews — unlike the session these are single-purpose
 # credentials, and sliding either on use would defeat the point of the deadline. The
-# proof gets a little longer than the code only because the sign-up form still has to
-# be filled in behind it.
+# proof gets a little longer than the code only because the form behind it still has to
+# be filled in: sign-up's details, or the reset's new password.
 OTP_LIFETIME = timedelta(minutes=10)
 VERIFICATION_LIFETIME = timedelta(minutes=15)
 
@@ -154,6 +164,23 @@ def set_verification_cookie(response: Response, token: str) -> None:
     """
     response.set_cookie(
         VERIFICATION_COOKIE,
+        token,
+        max_age=int(VERIFICATION_LIFETIME.total_seconds()),
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+
+
+def set_reset_cookie(response: Response, token: str) -> None:
+    """Hand the reset token to the browser, flagged exactly as the other two are.
+
+    Its own setter for set_verification_cookie's reason: the flags are shared but the
+    name is not, and the name is the whole difference between proving an address at
+    sign-up and proving one against an existing account.
+    """
+    response.set_cookie(
+        RESET_COOKIE,
         token,
         max_age=int(VERIFICATION_LIFETIME.total_seconds()),
         httponly=True,

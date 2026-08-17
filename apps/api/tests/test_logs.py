@@ -178,8 +178,14 @@ def test_no_secret_from_the_auth_flows_reaches_the_log(
     db_session.commit()
     assert (
         client.post(
+            "/auth/verify-reset-code", json={"email": coach.email, "otp": reset_otp}
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
             "/auth/reset-password",
-            json={"email": coach.email, "otp": reset_otp, "new_password": new_password},
+            json={"email": coach.email, "new_password": new_password},
         ).status_code
         == 204
     )

@@ -99,12 +99,16 @@ def create_app() -> FastAPI:
     app.state.verify_otp_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.verify_otp_total_limit = RateLimiter(per_minute=30, burst=10)
 
-    # forgot-password and reset-password: request-otp's and verify-otp's tiers over
-    # again — the same costs (outbound email, then code guesses) at the same sizes,
-    # in buckets of their own so a sign-up flood cannot starve password recovery.
+    # The reset flow: sign-up's three endpoints over again, stage for stage, at the
+    # same sizes and in buckets of their own so a sign-up flood cannot starve password
+    # recovery. forgot-password's cost is outbound email (request-otp's), then
+    # verify-reset-code's is code guesses (verify-otp's), then reset-password's is the
+    # one Argon2 hash behind the cookie (POST /coaches').
     app.state.forgot_password_per_email_limit = RateLimiter(per_minute=0.2, burst=3)
     app.state.forgot_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.forgot_password_total_limit = RateLimiter(per_minute=30, burst=10)
+    app.state.verify_reset_code_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.verify_reset_code_total_limit = RateLimiter(per_minute=30, burst=10)
     app.state.reset_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.reset_password_total_limit = RateLimiter(per_minute=30, burst=10)
 

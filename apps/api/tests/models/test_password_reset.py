@@ -10,7 +10,7 @@ from matchpoint_api.models import PasswordReset
 from tests.factories import make_coach, make_password_reset
 
 HASH_LIMIT = 64
-NOT_NULL_COLUMNS = ["coach_id", "otp_hash", "attempts", "expires_at"]
+NOT_NULL_COLUMNS = ["coach_id", "attempts", "expires_at"]
 
 
 def test_password_reset_round_trips(db_session: Session) -> None:
@@ -26,6 +26,7 @@ def test_password_reset_round_trips(db_session: Session) -> None:
     assert saved is not None
     assert saved.coach_id == coach.id
     assert saved.otp_hash == otp_hash
+    assert saved.token_hash is None
     assert saved.attempts == 0
     assert saved.expires_at == expires_at
     assert isinstance(saved.id, uuid.UUID)
@@ -42,13 +43,15 @@ def _insert_raw_reset(session: Session, **columns: object) -> None:
         "id": uuid.uuid4(),
         "coach_id": make_coach(session).id,
         "otp_hash": "b" * 64,
+        "token_hash": None,
         "attempts": 0,
         "expires_at": datetime.now(UTC) + timedelta(minutes=10),
     }
     session.execute(
         text(
-            "INSERT INTO password_resets (id, coach_id, otp_hash, attempts, expires_at) "
-            "VALUES (:id, :coach_id, :otp_hash, :attempts, :expires_at)"
+            "INSERT INTO password_resets "
+            "(id, coach_id, otp_hash, token_hash, attempts, expires_at) "
+            "VALUES (:id, :coach_id, :otp_hash, :token_hash, :attempts, :expires_at)"
         ),
         defaults | columns,
     )
@@ -87,8 +90,41 @@ def test_database_refuses_to_delete_a_coach_with_a_pending_reset(db_session: Ses
         db_session.execute(text("DELETE FROM coaches WHERE id = :id"), {"id": coach.id})
 
 
-def test_database_rejects_a_hash_over_the_column_width(db_session: Session) -> None:
+@pytest.mark.parametrize("column", ["otp_hash", "token_hash"])
+def test_database_rejects_a_hash_over_the_column_width(db_session: Session, column: str) -> None:
     """64 characters is exactly a SHA-256 in hex, so the width is a tripwire for a
-    writer that stored the plaintext code instead of its digest."""
+    writer that stored a plaintext secret instead of its digest."""
+    overrides: dict[str, object] = {"otp_hash": None, "token_hash": None}
+    overrides[column] = "c" * (HASH_LIMIT + 1)
     with pytest.raises(DataError):
-        _insert_raw_reset(db_session, otp_hash="c" * (HASH_LIMIT + 1))
+        _insert_raw_reset(db_session, **overrides)
+
+
+def test_database_rejects_a_duplicate_token_hash(db_session: Session) -> None:
+    """token_hash is the key the row is consumed by at reset-password; two rows sharing
+    one would make a presented proof ambiguous."""
+    _insert_raw_reset(db_session, otp_hash=None, token_hash="d" * 64)
+
+    with pytest.raises(IntegrityError):
+        _insert_raw_reset(db_session, otp_hash=None, token_hash="d" * 64)
+
+
+def test_database_permits_many_rows_at_the_code_stage(db_session: Session) -> None:
+    """The unique token_hash must not collapse the common case: most rows hold a code
+    and no token, and Postgres treats their NULLs as distinct."""
+    _insert_raw_reset(db_session)
+    _insert_raw_reset(db_session)
+
+
+def test_database_rejects_a_row_holding_both_secrets(db_session: Session) -> None:
+    """The CHECK's first half: a row holding a live code and an answered proof at once
+    would be two credentials for the price of one state."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_reset(db_session, otp_hash="e" * 64, token_hash="e" * 64)
+
+
+def test_database_rejects_a_row_holding_neither_secret(db_session: Session) -> None:
+    """And its second half: a row with nothing to answer can never be answered or
+    consumed, only replaced. It must not be writable."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_reset(db_session, otp_hash=None, token_hash=None)

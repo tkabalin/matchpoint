@@ -230,6 +230,13 @@ export const zVerifyOtpRequest = z.object({
 });
 
 /**
+ * VerifyResetCodeRequest
+ */
+export const zVerifyResetCodeRequest = z.object({
+    email: z.email().max(254)
+});
+
+/**
  * CoachCreate
  */
 export const zCoachCreateWritable = z.object({
@@ -251,14 +258,21 @@ export const zLoginRequestWritable = z.object({
  */
 export const zResetPasswordRequestWritable = z.object({
     email: z.email().max(254),
-    new_password: z.string().min(8).max(128),
-    otp: z.string().length(6)
+    new_password: z.string().min(8).max(128)
 });
 
 /**
  * VerifyOtpRequest
  */
 export const zVerifyOtpRequestWritable = z.object({
+    email: z.email().max(254),
+    otp: z.string().length(6)
+});
+
+/**
+ * VerifyResetCodeRequest
+ */
+export const zVerifyResetCodeRequestWritable = z.object({
     email: z.email().max(254),
     otp: z.string().length(6)
 });
@@ -299,6 +313,8 @@ export const zResetPasswordResponse = z.void();
 export const zRevokeOtherSessionsResponse = z.void();
 
 export const zVerifyOtpBody = zVerifyOtpRequestWritable;
+
+export const zVerifyResetCodeBody = zVerifyResetCodeRequestWritable;
 
 export const zCreateCoachBody = zCoachCreateWritable;
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import (
     OTP_ATTEMPT_LIMIT,
     OTP_LIFETIME,
+    RESET_COOKIE,
     SESSION_COOKIE,
     SESSION_LIFETIME,
     VERIFICATION_LIFETIME,
@@ -19,6 +20,7 @@ from matchpoint_api.auth import (
     new_otp,
     new_session_token,
     revoke_sessions,
+    set_reset_cookie,
     set_session_cookie,
     set_verification_cookie,
 )
@@ -34,6 +36,7 @@ from matchpoint_api.schemas.auth import (
     OtpRequest,
     ResetPasswordRequest,
     VerifyOtpRequest,
+    VerifyResetCodeRequest,
 )
 from matchpoint_api.schemas.coach import CoachRead
 from matchpoint_api.schemas.errors import ErrorDetail
@@ -452,8 +455,9 @@ def set_password(db: Session, coach: Coach, new_password: str) -> None:
     revoke_sessions(db, coach.id)
 
 
-# Forgot password (#50): forgot-password emails a code to a registered address,
-# reset-password trades code and address for a new password.
+# Forgot password (#50, #149): forgot-password emails a code to a registered address,
+# verify-reset-code trades the code for a cookie, and reset-password trades that cookie
+# for a new password. Sign-up's three stages, and the same reasons for each.
 
 
 # 202 whether or not the address holds an account (#47's policy for reset, built in
@@ -501,7 +505,16 @@ def forgot_password(data: ForgotPasswordRequest, request: Request, db: DbSession
         db.commit()
         return
     otp = new_otp()
-    fresh = {"otp_hash": hash_otp(otp), "attempts": 0, "expires_at": now + OTP_LIFETIME}
+    fresh = {
+        "otp_hash": hash_otp(otp),
+        # Not only a fresh code for a row still at the code stage: an account that has
+        # already answered its code is put back to the code stage too, so the reset
+        # cookie it earned stops working. request-otp's rule and its reasons, and the
+        # table's exactly-one-secret CHECK makes it mandatory rather than a choice.
+        "token_hash": None,
+        "attempts": 0,
+        "expires_at": now + OTP_LIFETIME,
+    }
     # An upsert on coach_id, exactly as request-otp upserts on email: concurrent
     # requests must land on the single row, and a resend must *replace* the old code —
     # one live code per account, always. Anyone can trigger the replacement, killing a
@@ -535,7 +548,7 @@ def forgot_password(data: ForgotPasswordRequest, request: Request, db: DbSession
         raise HTTPException(status_code=502, detail=SEND_FAILED) from None
 
 
-def limit_reset_password_rate(request: Request) -> None:
+def limit_verify_reset_code_rate(request: Request) -> None:
     """Bound guess arrivals — the second layer, not the bound itself.
 
     The real cap on guessing a code is its row's attempt budget, counted in the
@@ -552,6 +565,99 @@ def limit_reset_password_rate(request: Request) -> None:
 
     In the decorator's dependencies since no tier here needs the parsed body.
     """
+    per_ip: RateLimiter = request.app.state.verify_reset_code_per_ip_limit
+    total: RateLimiter = request.app.state.verify_reset_code_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+
+
+# verify-otp's endpoint against this table (#149), and the reason the flow has two steps
+# at all: a wrong code becomes a failure of its own screen, answered before the coach has
+# typed a new password. A comment rather than more of the docstring, because a docstring
+# is published API description and this is our own bookkeeping.
+@router.post(
+    "/verify-reset-code",
+    dependencies=[Depends(limit_verify_reset_code_rate)],
+    responses={
+        400: {"model": ErrorDetail, "description": INCORRECT_CODE},
+        429: {"model": ErrorDetail, "description": "Too many attempts"},
+    },
+)
+def verify_reset_code(data: VerifyResetCodeRequest, db: DbSession, response: Response) -> None:
+    """Answer a reset code without spending it, for the cookie reset-password demands.
+
+    A code that is wrong, expired, already answered, or asked for an address holding no
+    account all answer the same 400, so nothing here says whether an account exists.
+    """
+    email = data.email.lower()
+    now = datetime.now(UTC)
+    # An unknown address takes _incorrect_code's one 400 like every other failure
+    # here: nobody asked a code for it, so no code can be right. The extra query a
+    # known address then runs is timing-separable, verify-otp's kept oracle again.
+    coach_id = db.scalar(select(Coach.id).where(Coach.email == email))
+    if coach_id is None:
+        raise _incorrect_code()
+    # Find the row and charge the guess in one statement, before the code is
+    # compared — verify-otp's move, for verify-otp's reasons: charging after a read
+    # would cap the counter but not the guessing, and the row lock this takes is
+    # what leaves the success path below a single winner. A row already traded for a
+    # token has no code left to answer, so it matches nothing here.
+    charged = db.execute(
+        update(PasswordReset)
+        .where(
+            PasswordReset.coach_id == coach_id,
+            PasswordReset.otp_hash.is_not(None),
+            PasswordReset.expires_at > now,
+        )
+        .values(attempts=PasswordReset.attempts + 1)
+        .returning(PasswordReset.id, PasswordReset.otp_hash, PasswordReset.attempts)
+    ).one_or_none()
+    if charged is None:
+        raise _incorrect_code()
+    row_id, otp_hash, attempts = charged._tuple()
+    # The column is typed optional because it is nullable, but the WHERE above matched
+    # on it being present; "" stands for that impossible case and matches no digest.
+    if not secrets.compare_digest(otp_hash or "", hash_otp(data.otp.get_secret_value())):
+        if attempts >= OTP_ATTEMPT_LIMIT:
+            # Budget spent, row dies: back to "no reset outstanding", and a fresh
+            # forgot-password (its own limiter permitting) is the only way forward.
+            db.execute(delete(PasswordReset).where(PasswordReset.id == row_id))
+        db.commit()
+        raise _incorrect_code()
+    token = new_session_token()
+    # One UPDATE, so the code dies the instant it works: no window where code and token
+    # are both answerable, held by the table's exactly-one-secret CHECK. verify-otp's
+    # transition exactly, including the rewritten deadline: the proof gets its own
+    # window rather than inheriting whatever the code had left.
+    db.execute(
+        update(PasswordReset)
+        .where(PasswordReset.id == row_id)
+        .values(
+            otp_hash=None,
+            token_hash=hash_token(token),
+            attempts=0,
+            expires_at=now + VERIFICATION_LIFETIME,
+        )
+    )
+    db.commit()
+    set_reset_cookie(response, token)
+
+
+# One message for a missing cookie, an unknown token, an address the cookie does not
+# name, an expired proof and one already spent, as POST /coaches answers its own cookie
+# with: to the caller they are the same fact ("answer the code again"), and a 401 rather
+# than the code screen's 400 is what tells the form which screen to send them back to.
+CODE_NOT_VERIFIED = "Reset code not verified"
+
+
+def limit_reset_password_rate(request: Request) -> None:
+    """Bound the arrival rate on the one Argon2 hash a reset spends.
+
+    Guessing is verify-reset-code's problem now; what is left here is sign-up's, which
+    is why the sizes are sign-up's: a caller holding a live reset cookie still reaches a
+    password hash, and the cookie is not what bounds how fast they can ask for one. In
+    the decorator's dependencies for the same reason as there, so a refused request
+    costs no body validation, no database session and no hash.
+    """
     per_ip: RateLimiter = request.app.state.reset_password_per_ip_limit
     total: RateLimiter = request.app.state.reset_password_total_limit
     take_all((per_ip, client_key(request)), (total, "total"))
@@ -562,47 +668,48 @@ def limit_reset_password_rate(request: Request) -> None:
     status_code=204,
     dependencies=[Depends(limit_reset_password_rate)],
     responses={
-        400: {"model": ErrorDetail, "description": INCORRECT_CODE},
-        429: {"model": ErrorDetail, "description": "Too many attempts"},
+        401: {"model": ErrorDetail, "description": CODE_NOT_VERIFIED},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
-def reset_password(data: ResetPasswordRequest, db: DbSession) -> None:
+def reset_password(data: ResetPasswordRequest, request: Request, db: DbSession) -> None:
+    """Set the new password, given the cookie verify-reset-code minted.
+
+    A 401 means that cookie is missing, spent, expired, or was earned for a different
+    address, so the coach has to answer a code again; every live session ends here.
+    """
+    # From request.cookies rather than a Cookie() parameter, for current_coach's reason:
+    # a declared cookie parameter reaches the spec and the generated client's signature.
+    token = request.cookies.get(RESET_COOKIE)
+    if token is None:
+        raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
     email = data.email.lower()
-    now = datetime.now(UTC)
-    # An unknown address takes _incorrect_code's one 400 like every other failure
-    # here: nobody asked a code for it, so no code can be right. The extra query a
-    # known address then runs is timing-separable, verify-otp's kept oracle again.
+    # Looked up before the cookie is matched, so an unknown address answers exactly as a
+    # dead cookie does: the flow's non-disclosure, unchanged by the split.
     coach = db.scalar(select(Coach).where(Coach.email == email))
     if coach is None:
-        raise _incorrect_code()
-    # Find the row and charge the guess in one statement, before the code is
-    # compared — verify-otp's move, for verify-otp's reasons: charging after a read
-    # would cap the counter but not the guessing, and the row lock this takes is
-    # what leaves the success path below a single winner.
-    charged = db.execute(
-        update(PasswordReset)
-        .where(PasswordReset.coach_id == coach.id, PasswordReset.expires_at > now)
-        .values(attempts=PasswordReset.attempts + 1)
-        .returning(PasswordReset.id, PasswordReset.otp_hash, PasswordReset.attempts)
-    ).one_or_none()
-    if charged is None:
-        raise _incorrect_code()
-    row_id, otp_hash, attempts = charged._tuple()
-    if not secrets.compare_digest(otp_hash, hash_otp(data.otp.get_secret_value())):
-        if attempts >= OTP_ATTEMPT_LIMIT:
-            # Budget spent, row dies: back to "no reset outstanding", and a fresh
-            # forgot-password (its own limiter permitting) is the only way forward.
-            db.execute(delete(PasswordReset).where(PasswordReset.id == row_id))
-        db.commit()
-        raise _incorrect_code()
-    # The Argon2 run is gated behind a correct code, so this endpoint hands
-    # unauthenticated traffic no hashing work — failures never reach it.
+        raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
+    # One statement is the validity check, the coach match and the consumption, as at
+    # POST /coaches: single-use needs no lock and expiry has no read-then-act window.
+    # The coach is in the WHERE because a cookie proving mike@ must not reset sam@'s
+    # password, and because a cookie left over from an earlier address should send the
+    # coach back to the code screen rather than quietly resetting the other account.
     #
-    # The row set_password deletes is this one, which is what makes the code
-    # single-use: a concurrent request answering it blocked on the charge's lock, and
-    # re-evaluates its `expires_at > now` against a row that no longer exists. No
-    # session is spared, because the premise of a reset is that someone else may hold
-    # the old credential.
+    # Consumed before the Argon2 run below, so a request holding no live proof costs no
+    # hash, POST /coaches' ordering, for its reason.
+    consumed = db.execute(
+        delete(PasswordReset)
+        .where(
+            PasswordReset.coach_id == coach.id,
+            PasswordReset.token_hash == hash_token(token),
+            PasswordReset.expires_at > datetime.now(UTC),
+        )
+        .returning(PasswordReset.id)
+    ).one_or_none()
+    if consumed is None:
+        raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
+    # No session is spared, because the premise of a reset is that someone else may hold
+    # the old credential. The row this would delete is the one already consumed above.
     set_password(db, coach, data.new_password.get_secret_value())
     db.commit()
 

@@ -748,19 +748,10 @@
             "title": "New Password",
             "type": "string",
             "writeOnly": true
-          },
-          "otp": {
-            "format": "password",
-            "maxLength": 6,
-            "minLength": 6,
-            "title": "Otp",
-            "type": "string",
-            "writeOnly": true
           }
         },
         "required": [
           "email",
-          "otp",
           "new_password"
         ],
         "title": "ResetPasswordRequest",
@@ -854,6 +845,31 @@
           "otp"
         ],
         "title": "VerifyOtpRequest",
+        "type": "object"
+      },
+      "VerifyResetCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "email": {
+            "format": "email",
+            "maxLength": 254,
+            "title": "Email",
+            "type": "string"
+          },
+          "otp": {
+            "format": "password",
+            "maxLength": 6,
+            "minLength": 6,
+            "title": "Otp",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "email",
+          "otp"
+        ],
+        "title": "VerifyResetCodeRequest",
         "type": "object"
       }
     }
@@ -1134,6 +1150,7 @@
     },
     "/auth/reset-password": {
       "post": {
+        "description": "Set the new password, given the cookie verify-reset-code minted.\n\nA 401 means that cookie is missing, spent, expired, or was earned for a different\naddress, so the coach has to answer a code again; every live session ends here.",
         "operationId": "reset_password",
         "requestBody": {
           "content": {
@@ -1149,7 +1166,7 @@
           "204": {
             "description": "Successful Response"
           },
-          "400": {
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -1157,7 +1174,7 @@
                 }
               }
             },
-            "description": "Incorrect or expired code"
+            "description": "Reset code not verified"
           },
           "422": {
             "content": {
@@ -1177,7 +1194,7 @@
                 }
               }
             },
-            "description": "Too many attempts"
+            "description": "Too many requests"
           }
         },
         "summary": "Reset Password",
@@ -1275,6 +1292,66 @@
           }
         },
         "summary": "Verify Otp",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/verify-reset-code": {
+      "post": {
+        "description": "Answer a reset code without spending it, for the cookie reset-password demands.\n\nA code that is wrong, expired, already answered, or asked for an address holding no\naccount all answer the same 400, so nothing here says whether an account exists.",
+        "operationId": "verify_reset_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyResetCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Incorrect or expired code"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many attempts"
+          }
+        },
+        "summary": "Verify Reset Code",
         "tags": [
           "auth"
         ]

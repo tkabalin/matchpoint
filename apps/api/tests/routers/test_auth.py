@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import (
     OTP_ATTEMPT_LIMIT,
     OTP_LIFETIME,
+    RESET_COOKIE,
     SESSION_COOKIE,
     SESSION_LIFETIME,
     VERIFICATION_COOKIE,
@@ -35,6 +36,7 @@ from tests.factories import (
     make_password_reset,
     sign_in,
     verify_email,
+    verify_reset_code,
 )
 
 SIGN_UP = {
@@ -1086,7 +1088,7 @@ def test_the_flow_runs_on_the_default_logging_sender(
     assert response.status_code == 200
 
 
-# --- Forgot password: /auth/forgot-password and /auth/reset-password ---
+# --- Forgot password: /auth/forgot-password, /auth/verify-reset-code, /auth/reset-password ---
 
 RESET_PASSWORD = "a-brand-new-password"
 
@@ -1098,9 +1100,28 @@ def _forgot(client: TestClient, email: str = SIGN_UP["email"]) -> str:
     return _code_in(recorder.sent[-1][2])
 
 
-def _reset(client: TestClient, otp: str, **overrides: str) -> httpx2.Response:
-    body = {"email": SIGN_UP["email"], "otp": otp, "new_password": RESET_PASSWORD} | overrides
-    return client.post("/auth/reset-password", json=body)
+def _verify_reset(client: TestClient, otp: str, email: str = SIGN_UP["email"]) -> httpx2.Response:
+    return client.post("/auth/verify-reset-code", json={"email": email, "otp": otp})
+
+
+def _reset(
+    client: TestClient, email: str = SIGN_UP["email"], new_password: str = RESET_PASSWORD
+) -> httpx2.Response:
+    return client.post("/auth/reset-password", json={"email": email, "new_password": new_password})
+
+
+def _reset_with(
+    client: TestClient, otp: str, email: str = SIGN_UP["email"], new_password: str = RESET_PASSWORD
+) -> httpx2.Response:
+    """Run both steps of a reset and hand back whichever response ended it.
+
+    A reset is two calls since #149 (answer the code, then choose the password), and the
+    tests that only care about the outcome say so by taking the whole flow.
+    """
+    verified = _verify_reset(client, otp, email=email)
+    if verified.status_code != 200:
+        return verified
+    return _reset(client, email=email, new_password=new_password)
 
 
 def test_forgetting_a_password_emails_a_code(client: TestClient, db_session: Session) -> None:
@@ -1172,8 +1193,23 @@ def test_forgetting_again_replaces_the_code(client: TestClient, db_session: Sess
 
     assert db_session.scalars(select(PasswordReset)).one().otp_hash == hash_otp(second)
 
-    assert _reset(client, first).status_code == 400
-    assert _reset(client, second).status_code == 204
+    assert _reset_with(client, first).status_code == 400
+    assert _reset_with(client, second).status_code == 204
+
+
+def test_forgetting_undoes_a_finished_verification(client: TestClient, db_session: Session) -> None:
+    """Asking for a code puts the account back to the code stage, request-otp's rule:
+    the cookie an earlier code earned stops working, which is kinder than refusing the
+    request and stranding a coach who genuinely lost it. The table's exactly-one-secret
+    CHECK also means the upsert must clear the token, or the resend is a 500."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    first = _forgot(client)
+    assert _verify_reset(client, first).status_code == 200
+
+    assert client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]}).status_code == 202
+
+    assert db_session.scalars(select(PasswordReset)).one().token_hash is None
+    assert _reset(client).status_code == 401
 
 
 def test_forgetting_sweeps_expired_rows_and_leaves_live_ones(
@@ -1298,17 +1334,73 @@ def test_a_failed_reset_send_gives_the_address_its_code_budget_back(
     assert len(recorder.sent) == 1
 
 
+def test_answering_the_reset_code_sets_the_reset_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cookie is the endpoint's product: proof this browser answered a code sent to
+    that account, for reset-password to demand (verify-otp's shape, #149), and what lets
+    the form ask for the code and the new password on screens of their own."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    response = _verify_reset(client, code)
+
+    assert response.status_code == 200
+    assert client.cookies.get(RESET_COOKIE)
+
+
+def test_the_reset_cookie_is_locked_down(client: TestClient, db_session: Session) -> None:
+    """test_the_verification_cookie_is_locked_down's reasoning, for the third cookie:
+    the flags are the design, and the name must collide with neither of the others: this
+    one proves an inbox against an account that already exists."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    header = _verify_reset(client, code).headers["set-cookie"]
+
+    assert RESET_COOKIE == "__Host-matchpoint_password_reset"
+    assert RESET_COOKIE not in (SESSION_COOKIE, VERIFICATION_COOKIE)
+    assert header.startswith(f"{RESET_COOKIE}=")
+    assert "httponly" in header.lower()
+    assert "secure" in header.lower()
+    assert "path=/" in header.lower()
+    assert "domain=" not in header.lower()
+    assert "samesite=lax" in header.lower()
+    assert f"max-age={int(VERIFICATION_LIFETIME.total_seconds())}" in header.lower()
+
+
+def test_answering_the_reset_code_retires_it_for_the_token(
+    client: TestClient, db_session: Session
+) -> None:
+    """The row's one transition, in one UPDATE: the code dies the instant it works, the
+    stored value is the token's hash and never the token, and the deadline is rewritten
+    to the proof's own rather than inheriting whatever the code had left."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+
+    assert _verify_reset(client, code).status_code == 200
+
+    row = db_session.scalars(select(PasswordReset)).one()
+    token = client.cookies[RESET_COOKIE]
+    assert row.otp_hash is None
+    assert row.token_hash == hash_token(token)
+    assert token not in hash_token(token)
+    assert row.attempts == 0
+    assert timedelta() < row.expires_at - datetime.now(UTC) <= VERIFICATION_LIFETIME
+
+
 def test_a_correct_code_resets_the_password(client: TestClient, db_session: Session) -> None:
-    """The whole point, proved through login: the old password stops working and the
-    new one signs in. No cookie rides on the 204 — a reset proves an inbox, not a
-    login, so the coach signs in with what they just chose."""
+    """The whole point, proved through login across both steps: the old password stops
+    working and the new one signs in. No session cookie rides on the 204: a reset proves
+    an inbox, not a login, so the coach signs in with what they just chose."""
     _sign_up(client, db_session)
     code = _forgot(client)
 
-    response = _reset(client, code)
+    assert _verify_reset(client, code).status_code == 200
+    response = _reset(client)
 
     assert response.status_code == 204
-    assert "set-cookie" not in response.headers
+    assert SESSION_COOKIE not in response.headers.get("set-cookie", "")
     old = client.post("/auth/login", json=LOGIN)
     assert old.status_code == 401
     new = client.post("/auth/login", json=LOGIN | {"password": RESET_PASSWORD})
@@ -1326,7 +1418,7 @@ def test_a_reset_revokes_every_live_session(client: TestClient, db_session: Sess
     db_session.commit()
     code = _forgot(client, email=coach.email)
 
-    response = _reset(client, code, email=coach.email)
+    response = _reset_with(client, code, email=coach.email)
 
     assert response.status_code == 204
     remaining = db_session.scalars(select(CoachSession)).all()
@@ -1335,15 +1427,15 @@ def test_a_reset_revokes_every_live_session(client: TestClient, db_session: Sess
 
 
 def test_the_reset_row_is_consumed(client: TestClient, db_session: Session) -> None:
-    """Single-use: the code dies the instant it works, so a replay — the attacker's
-    move against a leaked inbox — wins nothing."""
+    """Single-use: the proof dies with the password write, so a replay of the same
+    cookie, the attacker's move against a borrowed browser, wins nothing."""
     make_coach(db_session, email=SIGN_UP["email"])
     code = _forgot(client)
-    assert _reset(client, code).status_code == 204
+    assert _reset_with(client, code).status_code == 204
 
-    replay = _reset(client, code)
+    replay = _reset(client)
 
-    assert replay.status_code == 400
+    assert replay.status_code == 401
     assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
 
 
@@ -1351,10 +1443,11 @@ def test_a_wrong_reset_code_is_refused_and_charged(client: TestClient, db_sessio
     _sign_up(client, db_session)
     code = _forgot(client)
 
-    response = _reset(client, _wrong_guess_for(code))
+    response = _verify_reset(client, _wrong_guess_for(code))
 
     assert response.status_code == 400
     assert response.json() == {"detail": "Incorrect or expired code"}
+    assert "set-cookie" not in response.headers
     # The charge outlives the refusal, and the password does not move.
     assert db_session.scalars(select(PasswordReset)).one().attempts == 1
     assert client.post("/auth/login", json=LOGIN).status_code == 200
@@ -1368,8 +1461,8 @@ def test_an_unknown_address_answers_exactly_like_a_wrong_reset_code(
     make_coach(db_session, email=SIGN_UP["email"])
     code = _forgot(client)
 
-    unknown = _reset(client, code, email="ghost@example.com")
-    wrong = _reset(client, _wrong_guess_for(code))
+    unknown = _verify_reset(client, code, email="ghost@example.com")
+    wrong = _verify_reset(client, _wrong_guess_for(code))
 
     assert unknown.status_code == wrong.status_code == 400
     assert unknown.json() == wrong.json()
@@ -1385,9 +1478,24 @@ def test_an_expired_reset_code_is_refused(client: TestClient, db_session: Sessio
     )
     db_session.commit()
 
-    response = _reset(client, "123456")
+    response = _verify_reset(client, "123456")
 
     assert response.status_code == 400
+    assert "set-cookie" not in response.headers
+
+
+def test_an_answered_reset_code_cannot_be_answered_again(
+    client: TestClient, db_session: Session
+) -> None:
+    """Single-use at the code stage too: once traded for the cookie, the code is gone,
+    so a replay of a leaked one wins nothing."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+    assert _verify_reset(client, code).status_code == 200
+
+    replay = _verify_reset(client, code)
+
+    assert replay.status_code == 400
 
 
 def test_the_attempt_budget_kills_the_reset(client: TestClient, db_session: Session) -> None:
@@ -1397,10 +1505,10 @@ def test_the_attempt_budget_kills_the_reset(client: TestClient, db_session: Sess
     _sign_up(client, db_session)
     code = _forgot(client)
     for _ in range(OTP_ATTEMPT_LIMIT):
-        assert _reset(client, _wrong_guess_for(code)).status_code == 400
+        assert _verify_reset(client, _wrong_guess_for(code)).status_code == 400
 
     assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
-    assert _reset(client, code).status_code == 400
+    assert _verify_reset(client, code).status_code == 400
     assert client.post("/auth/login", json=LOGIN).status_code == 200
 
 
@@ -1412,16 +1520,19 @@ def test_a_guess_short_of_the_budget_does_not_cost_the_reset(
     make_coach(db_session, email=SIGN_UP["email"])
     code = _forgot(client)
     for _ in range(OTP_ATTEMPT_LIMIT - 1):
-        _reset(client, _wrong_guess_for(code))
+        _verify_reset(client, _wrong_guess_for(code))
 
-    assert _reset(client, code).status_code == 204
+    assert _reset_with(client, code).status_code == 204
 
 
-def test_reset_folds_the_address_case(client: TestClient, db_session: Session) -> None:
+def test_the_reset_flow_folds_the_address_case(client: TestClient, db_session: Session) -> None:
+    """Both steps fold it, and they must agree: the cookie is matched against the
+    address this body carries, so a fold on one side only would refuse the coach who
+    typed MIKE@ at the second screen."""
     make_coach(db_session, email=SIGN_UP["email"])
     code = _forgot(client)
 
-    response = _reset(client, code, email="MIKE@Example.COM")
+    response = _reset_with(client, code, email="MIKE@Example.COM")
 
     assert response.status_code == 204
 
@@ -1430,26 +1541,110 @@ def test_reset_guess_arrivals_beyond_the_address_burst_are_refused(client: TestC
     """The second layer behind the attempt budget, verify-otp's shape: arrivals stay
     bounded whether or not the address holds an account."""
     for n in range(10):
-        response = _reset(client, "123456", email=f"ghost{n}@example.com")
+        response = _verify_reset(client, "123456", email=f"ghost{n}@example.com")
         assert response.status_code == 400
 
-    refused = _reset(client, "123456", email="ghost@example.com")
+    refused = _verify_reset(client, "123456", email="ghost@example.com")
 
     assert refused.status_code == 429
     assert refused.json() == {"detail": "Too many requests"}
 
 
-def test_a_rejected_reset_echoes_neither_secret(client: TestClient) -> None:
-    """The 422 redaction for both fields at once: a bad email error reports the whole
-    body as its input, new password and code included."""
+def test_a_rejected_reset_verification_does_not_echo_the_code(client: TestClient) -> None:
+    """The 422 redaction for the code this body carries: a code of the wrong length must
+    not come back in detail[].input."""
+    response = client.post(
+        "/auth/verify-reset-code", json={"email": SIGN_UP["email"], "otp": "1234567"}
+    )
+
+    assert response.status_code == 422
+    assert "1234567" not in response.text
+
+
+def test_a_reset_without_the_cookie_is_refused(client: TestClient, db_session: Session) -> None:
+    """The proof reset-password demands is the cookie, not the code: without one there
+    is nothing to consume, and the 401 tells the form to send the coach back a screen."""
+    _sign_up(client, db_session)
+    _forgot(client)
+
+    response = _reset(client)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Reset code not verified"}
+    # The password did not move: the old one still signs in, the chosen one does not.
+    assert client.post("/auth/login", json=LOGIN | {"password": RESET_PASSWORD}).status_code == 401
+    assert client.post("/auth/login", json=LOGIN).status_code == 200
+
+
+def test_a_reset_cookie_proving_one_address_cannot_reset_another(
+    client: TestClient, db_session: Session
+) -> None:
+    """The email is in the WHERE for POST /coaches' reason: a cookie earned against one
+    inbox must not reach an account whose inbox nobody proved."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    bystander = make_coach(db_session, password_hash=hash_password("bystander-password"))
+    db_session.commit()
+    code = _forgot(client)
+    assert _verify_reset(client, code).status_code == 200
+
+    response = _reset(client, email=bystander.email)
+
+    assert response.status_code == 401
+    assert verify_password("bystander-password", bystander.password_hash)
+
+
+def test_an_unknown_address_answers_exactly_like_a_dead_reset_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    """The flow's non-disclosure survives the split: an address with no account meets
+    the same 401 as a cookie nobody minted. The proof itself survives the attempt, so a
+    typo at the last screen does not cost the coach their code."""
+    make_coach(db_session, email=SIGN_UP["email"])
+    code = _forgot(client)
+    assert _verify_reset(client, code).status_code == 200
+
+    unknown = _reset(client, email="ghost@example.com")
+
+    assert unknown.status_code == 401
+    assert unknown.json() == {"detail": "Reset code not verified"}
+    assert _reset(client).status_code == 204
+
+
+def test_an_expired_reset_proof_is_refused(client: TestClient, db_session: Session) -> None:
+    """The proof carries its own deadline, and the consume re-checks it: a cookie the
+    browser still holds is not evidence the row behind it is live."""
+    coach = make_coach(db_session, email=SIGN_UP["email"])
+    verify_reset_code(
+        client, db_session, coach, expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+
+    response = _reset(client)
+
+    assert response.status_code == 401
+
+
+def test_reset_arrivals_beyond_the_address_burst_are_refused(client: TestClient) -> None:
+    """The bound on what reaches an Argon2 hash here, sign-up's tiers over again: a
+    caller holding a live proof is still not free to ask for hashes at any rate."""
+    for _ in range(10):
+        assert _reset(client).status_code == 401
+
+    refused = _reset(client)
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_a_rejected_reset_does_not_echo_the_new_password(client: TestClient) -> None:
+    """The 422 redaction: a bad email error reports the whole body as its input, the
+    chosen password included."""
     response = client.post(
         "/auth/reset-password",
-        json={"email": "not-an-address", "otp": "123456", "new_password": RESET_PASSWORD},
+        json={"email": "not-an-address", "new_password": RESET_PASSWORD},
     )
 
     assert response.status_code == 422
     assert RESET_PASSWORD not in response.text
-    assert "123456" not in response.text
 
 
 # --- Changing a password: POST /auth/change-password ---
@@ -1615,7 +1810,7 @@ def test_a_pending_reset_code_dies_with_a_deliberate_change(
     assert _change(client).status_code == 204
 
     assert db_session.scalar(select(func.count()).select_from(PasswordReset)) == 0
-    assert _reset(client, code).status_code == 400
+    assert _reset_with(client, code).status_code == 400
 
 
 def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(

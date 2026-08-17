@@ -50,7 +50,8 @@ erDiagram
     password_resets {
         uuid id PK
         uuid coach_id FK,UK "the account being reset; unique, so one live code each"
-        varchar(64) otp_hash "sha-256 of the emailed code"
+        varchar(64) otp_hash "nullable: sha-256 of the emailed code"
+        varchar(64) token_hash UK "nullable: sha-256 of the reset cookie token"
         int attempts "wrong guesses against the current code"
         timestamptz expires_at
         timestamptz created_at
@@ -98,6 +99,10 @@ the client that scores the match, so the database stores the label and never int
 before any coach row exists to reference. A row is either an unanswered code or a proven
 verification — `otp_hash` and `token_hash` are exactly-one-of, held by a named CHECK constraint —
 and one row per address means a re-requested code replaces the old one rather than accumulating.
+
+`password_resets` holds the same two states for an account that already exists, so it is keyed on
+the coach rather than an address: an unanswered code, then the proof that it was answered,
+exactly-one-of under a CHECK of its own, one row per coach.
 
 ## Conventions
 

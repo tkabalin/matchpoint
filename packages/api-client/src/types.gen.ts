@@ -375,6 +375,16 @@ export type VerifyOtpRequest = {
 };
 
 /**
+ * VerifyResetCodeRequest
+ */
+export type VerifyResetCodeRequest = {
+    /**
+     * Email
+     */
+    email: string;
+};
+
+/**
  * CoachCreate
  */
 export type CoachCreateWritable = {
@@ -418,6 +428,16 @@ export type ResetPasswordRequestWritable = {
      * New Password
      */
     new_password: string;
+};
+
+/**
+ * VerifyOtpRequest
+ */
+export type VerifyOtpRequestWritable = {
+    /**
+     * Email
+     */
+    email: string;
     /**
      * Otp
      */
@@ -425,9 +445,9 @@ export type ResetPasswordRequestWritable = {
 };
 
 /**
- * VerifyOtpRequest
+ * VerifyResetCodeRequest
  */
-export type VerifyOtpRequestWritable = {
+export type VerifyResetCodeRequestWritable = {
     /**
      * Email
      */
@@ -599,15 +619,15 @@ export type ResetPasswordData = {
 
 export type ResetPasswordErrors = {
     /**
-     * Incorrect or expired code
+     * Reset code not verified
      */
-    400: ErrorDetail;
+    401: ErrorDetail;
     /**
      * Validation Error
      */
     422: HttpValidationError;
     /**
-     * Too many attempts
+     * Too many requests
      */
     429: ErrorDetail;
 };
@@ -677,6 +697,37 @@ export type VerifyOtpErrors = {
 export type VerifyOtpError = VerifyOtpErrors[keyof VerifyOtpErrors];
 
 export type VerifyOtpResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type VerifyResetCodeData = {
+    body: VerifyResetCodeRequestWritable;
+    path?: never;
+    query?: never;
+    url: '/auth/verify-reset-code';
+};
+
+export type VerifyResetCodeErrors = {
+    /**
+     * Incorrect or expired code
+     */
+    400: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many attempts
+     */
+    429: ErrorDetail;
+};
+
+export type VerifyResetCodeError = VerifyResetCodeErrors[keyof VerifyResetCodeErrors];
+
+export type VerifyResetCodeResponses = {
     /**
      * Successful Response
      */
