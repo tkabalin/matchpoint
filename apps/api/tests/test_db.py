@@ -7,7 +7,15 @@ half that matters is the half after the yield, where the session is released.
 
 from sqlalchemy import func, select
 
-from matchpoint_api.db import get_db
+from matchpoint_api.db import engine, get_db
+
+
+def test_the_pool_validates_a_connection_before_handing_it_over() -> None:
+    """A dead connection out of the pool is an `OperationalError` on the first query, so a
+    500 for whoever arrives after an idle spell. Read off the pool because that is the only
+    place the setting exists once the engine is built, private attribute and all.
+    """
+    assert engine.pool._pre_ping is True  # pyright: ignore[reportPrivateUsage]
 
 
 def test_get_db_yields_a_usable_session_and_releases_it() -> None:
