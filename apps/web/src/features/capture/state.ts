@@ -398,9 +398,9 @@ export interface MatchState {
  * a winner who may not lead on sets at all — matchStateFor has no way to
  * represent any of them, and can't: it derives purely from MatchSet[],
  * and none of those three are visible there. Don't treat this function's
- * winner as final without checking for one of those overrides first — as
- * a match-record-level field that short-circuits this derivation
- * entirely, not something resolved here.
+ * winner as final without checking Match.outcomeOverride first (see
+ * match.ts) — when it's set, it short-circuits this derivation entirely,
+ * not something reconciled here.
  */
 export function matchStateFor(
   matchSets: readonly MatchSet[],

@@ -154,6 +154,62 @@ describe("Match.create surfaceType validation", () => {
   });
 });
 
+describe("outcomeOverride", () => {
+  test("defaults to null — a newly-started match hasn't ended", () => {
+    const match = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
+    expect(match.outcomeOverride).toBeNull();
+  });
+
+  test("createMatch accepts one — a back-filled match already known to have ended early", () => {
+    const outcomeOverride = { reason: "retirement" as const, winner: OPPONENT_ID };
+    const match = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      TRACKED_ID,
+      "traditional",
+      "unspecified",
+      outcomeOverride,
+    );
+    expect(match.outcomeOverride).toEqual(outcomeOverride);
+  });
+
+  test.each(["retirement", "walkover", "default"] as const)(
+    "Match.create accepts %s as a reason",
+    (reason) => {
+      const match = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        ROSTERED_OPPONENT,
+        TRACKED_ID,
+        "traditional",
+        "unspecified",
+        { reason, winner: TRACKED_ID },
+      );
+      expect(match.outcomeOverride).toEqual({ reason, winner: TRACKED_ID });
+    },
+  );
+
+  test("Match.create rejects an unknown reason", () => {
+    expect(() =>
+      createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID, "traditional", "hard", {
+        // @ts-expect-error deliberately passing an invalid MatchEndReason to test runtime validation
+        reason: "injury",
+        winner: TRACKED_ID,
+      }),
+    ).toThrow(/outcomeOverride.reason/);
+  });
+
+  test("Match.create rejects a winner that isn't a participant", () => {
+    expect(() =>
+      createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID, "traditional", "hard", {
+        reason: "walkover",
+        winner: "someone-else",
+      }),
+    ).toThrow(/outcomeOverride.winner/);
+  });
+});
+
 describe("Match.fromJSON / toJSON", () => {
   test("round-trips through JSON", () => {
     const original = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);

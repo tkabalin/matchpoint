@@ -54,6 +54,18 @@ export const SCORING_SYSTEMS: readonly ScoringSystem[] = [
   "legacy",
 ];
 
+// A match can end other than by winning enough sets. All three produce a
+// winner that matchStateFor's derivation (state.ts) can't — it works from
+// MatchSet[] alone, and none of these three are visible there.
+export type MatchEndReason = "retirement" | "walkover" | "default";
+export const MATCH_END_REASONS: readonly MatchEndReason[] = ["retirement", "walkover", "default"];
+
+export interface MatchOutcomeOverride {
+  reason: MatchEndReason;
+  // Must equal trackedPlayerId or opponentId — checked in Match.create.
+  winner: string;
+}
+
 /**
  * `id` and `trackedPlayerId`/`opponentId` follow Point's convention: `trackedPlayerId`
  * always comes from a real `Player` row, `opponentId` does too when the opponent is
@@ -87,6 +99,14 @@ export class Match {
   // pattern, not who's serving right now.
   readonly firstServer: string;
   readonly surfaceType: SurfaceType;
+  // Null for a normally-completed (or still in-progress) match. Set when
+  // the match ended other than by winning enough sets (see
+  // MatchOutcomeOverride above). Whoever determines a match's final
+  // outcome must check this first and only fall back to matchStateFor's
+  // set-count derivation when it's null — this isn't reconciled with that
+  // derivation automatically, since Match has no visibility into its own
+  // MatchSets to reconcile against (see match-set.ts).
+  readonly outcomeOverride: MatchOutcomeOverride | null;
 
   private constructor(fields: {
     matchId: string;
@@ -97,6 +117,7 @@ export class Match {
     scoringSystem: ScoringSystem;
     firstServer: string;
     surfaceType: SurfaceType;
+    outcomeOverride: MatchOutcomeOverride | null;
   }) {
     this.matchId = fields.matchId;
     this.playedOn = fields.playedOn;
@@ -106,6 +127,7 @@ export class Match {
     this.scoringSystem = fields.scoringSystem;
     this.firstServer = fields.firstServer;
     this.surfaceType = fields.surfaceType;
+    this.outcomeOverride = fields.outcomeOverride;
   }
 
   // TODO: rough first pass at structural checks, matching Point.create's approach —
@@ -165,6 +187,26 @@ export class Match {
       throw new Error(`invalid surfaceType: ${String(data.surfaceType)}`);
     }
 
+    let outcomeOverride: MatchOutcomeOverride | null = null;
+    if (data.outcomeOverride !== null) {
+      if (typeof data.outcomeOverride !== "object") {
+        throw new Error("outcomeOverride must be an object, or null");
+      }
+      const overrideData = data.outcomeOverride as Record<string, unknown>;
+      if (!MATCH_END_REASONS.includes(overrideData.reason as MatchEndReason)) {
+        throw new Error(`invalid outcomeOverride.reason: ${String(overrideData.reason)}`);
+      }
+      if (![data.trackedPlayerId, data.opponentId].includes(overrideData.winner as string)) {
+        throw new Error(
+          `outcomeOverride.winner must be trackedPlayerId or opponentId, got: ${String(overrideData.winner)}`,
+        );
+      }
+      outcomeOverride = {
+        reason: overrideData.reason as MatchEndReason,
+        winner: overrideData.winner as string,
+      };
+    }
+
     return new Match({
       matchId: data.matchId,
       playedOn: data.playedOn,
@@ -174,6 +216,7 @@ export class Match {
       scoringSystem: data.scoringSystem as ScoringSystem,
       firstServer: data.firstServer as string,
       surfaceType: data.surfaceType as SurfaceType,
+      outcomeOverride,
     });
   }
 
@@ -191,6 +234,7 @@ export class Match {
       scoringSystem: this.scoringSystem,
       firstServer: this.firstServer,
       surfaceType: this.surfaceType,
+      outcomeOverride: this.outcomeOverride,
     };
   }
 }
@@ -214,6 +258,13 @@ export class Match {
  * missing one (see its definition above). Once coach preferences exist,
  * that's the natural place to pass a saved default in instead of relying on
  * these — these defaults just mean setup works without that existing yet.
+ *
+ * `outcomeOverride` defaults to null — a newly-started match hasn't ended.
+ * It exists as a parameter here (rather than only settable later) for a
+ * back-filled match, entered after the fact already known to have ended
+ * in a retirement, walkover, or default — same reasoning as the backend's
+ * own `result` field being settable on create (see
+ * apps/api/src/matchpoint_api/models/match.py).
  */
 export function createMatch(
   playedOn: string,
@@ -222,6 +273,7 @@ export function createMatch(
   firstServer: string,
   scoringSystem: ScoringSystem = "traditional",
   surfaceType: SurfaceType = "unspecified",
+  outcomeOverride: MatchOutcomeOverride | null = null,
 ): Match {
   const opponentId = "opponentId" in opponent ? opponent.opponentId : crypto.randomUUID();
   const opponentName = "opponentId" in opponent ? null : opponent.opponentName;
@@ -235,5 +287,6 @@ export function createMatch(
     scoringSystem,
     firstServer,
     surfaceType,
+    outcomeOverride,
   });
 }
