@@ -21,7 +21,7 @@ const coach: CoachRead = {
   email: "coach@example.com",
   display_name: "Amahle Nkosi",
   default_surface: null,
-  default_sets_format: null,
+  default_scoring_system: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };

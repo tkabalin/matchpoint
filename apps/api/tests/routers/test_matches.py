@@ -35,7 +35,7 @@ def test_create_match_persists_and_returns_row(
             "played_on": "2026-08-01",
             "surface": "clay",
             "event": "Roland-Garros",
-            "sets_format": "best_of_3",
+            "scoring_system": "short_sets",
             "result": "win",
         },
     )
@@ -47,7 +47,7 @@ def test_create_match_persists_and_returns_row(
     assert body["played_on"] == "2026-08-01"
     assert body["surface"] == "clay"
     assert body["event"] == "Roland-Garros"
-    assert body["sets_format"] == "best_of_3"
+    assert body["scoring_system"] == "short_sets"
     assert body["result"] == "win"
 
     saved = db_session.get(Match, uuid.UUID(body["id"]))
@@ -69,7 +69,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["opponent_name"] is None
     assert body["surface"] is None
     assert body["event"] is None
-    assert body["sets_format"] is None
+    assert body["scoring_system"] is None
     assert body["result"] is None
 
 
@@ -242,7 +242,7 @@ def test_create_match_rejects_an_invalid_surface(
     assert response.status_code == 422
 
 
-def test_create_match_rejects_an_invalid_sets_format(
+def test_create_match_rejects_an_invalid_scoring_system(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     response = client.post(
@@ -250,7 +250,7 @@ def test_create_match_rejects_an_invalid_sets_format(
         json={
             "player_id": str(make_player(db_session, coach_id=coach.id).id),
             "played_on": "2026-08-01",
-            "sets_format": "best_of_2",
+            "scoring_system": "best_of_3",
         },
     )
 

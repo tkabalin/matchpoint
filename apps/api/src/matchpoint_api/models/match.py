@@ -9,8 +9,8 @@ from matchpoint_api.db import Base
 from matchpoint_api.models.types import str_enum
 
 
-# Surface and SetsFormat back a preference column on coaches too, so a member added or
-# removed here needs the CHECK constraint on both tables migrated. Alembic compares a
+# Surface and ScoringSystem back a preference column on coaches too, so a member added
+# or removed here needs the CHECK constraint on both tables migrated. Alembic compares a
 # CHECK by name and never by condition, so nothing reports the one left behind.
 class Surface(enum.StrEnum):
     HARD = "hard"
@@ -19,20 +19,27 @@ class Surface(enum.StrEnum):
     CARPET = "carpet"
 
 
-# Named for the one axis it models, not "format": real tennis also varies by game
-# scoring (ad vs no-ad), set length (first to 6 vs Fast4's 4) and tiebreak type
-# (7-point vs a 10-point match tiebreak). Those can arrive as their own fields if the
-# client asks for them, rather than multiplying combinations into this enum. Docstring
-# kept to one line because it ships to the generated TypeScript client.
-class SetsFormat(enum.StrEnum):
-    """How many sets the match is played over."""
+# The named systems from #154's table, replacing the sets-count-only SetsFormat. Each is
+# an opaque label here: what it implies about game scoring, set length and the decider is
+# the client's, and these values are exactly the web capture model's ScoringSystem union
+# so neither side needs a translation table. Docstring kept to one line because it ships
+# to the generated TypeScript client.
+class ScoringSystem(enum.StrEnum):
+    """The scoring system the match is played under."""
 
-    BEST_OF_1 = "best_of_1"
-    BEST_OF_3 = "best_of_3"
-    BEST_OF_5 = "best_of_5"
+    TRADITIONAL = "traditional"
+    MENS_GRAND_SLAM = "mens_grand_slam"
+    WOMENS_GRAND_SLAM = "womens_grand_slam"
+    NO_AD_SCORING = "no_ad_scoring"
+    MATCH_TIEBREAK_10_POINTS = "match_tiebreak_10_points"
+    SHORT_SETS = "short_sets"
+    PRO_SET = "pro_set"
+    # "Advantage set (no-tiebreak decider)" in #154's table, under the name the web
+    # capture model already ships for it.
+    LEGACY = "legacy"
 
 
-# Docstring kept to one line for the reason given on SetsFormat.
+# Docstring kept to one line for the reason given on ScoringSystem.
 class MatchResult(enum.StrEnum):
     """Whether the tracked player won, from their side and never the opponent's."""
 
@@ -54,7 +61,9 @@ class Match(Base):
     played_on: Mapped[date]
     surface: Mapped[Surface | None] = mapped_column(str_enum(Surface, "surface"))
     event: Mapped[str | None] = mapped_column(String(100))
-    sets_format: Mapped[SetsFormat | None] = mapped_column(str_enum(SetsFormat, "sets_format"))
+    scoring_system: Mapped[ScoringSystem | None] = mapped_column(
+        str_enum(ScoringSystem, "scoring_system")
+    )
     # Stored rather than derived from point data (#94): capture is optional, so
     # many matches will only ever have a result. Null until recorded; the scoring
     # engine can set it at match end once point capture exists.

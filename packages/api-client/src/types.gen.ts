@@ -40,7 +40,7 @@ export type CoachRead = {
      * Created At
      */
     created_at: string;
-    default_sets_format: SetsFormat | null;
+    default_scoring_system: ScoringSystem | null;
     default_surface: Surface | null;
     /**
      * Display Name
@@ -64,7 +64,7 @@ export type CoachRead = {
  * CoachUpdate
  */
 export type CoachUpdate = {
-    default_sets_format?: SetsFormat | null;
+    default_scoring_system?: ScoringSystem | null;
     default_surface?: Surface | null;
     /**
      * Display Name
@@ -143,7 +143,7 @@ export type MatchCreate = {
      */
     player_id: string;
     result?: MatchResult | null;
-    sets_format?: SetsFormat | null;
+    scoring_system?: ScoringSystem | null;
     surface?: Surface | null;
 };
 
@@ -176,7 +176,7 @@ export type MatchRead = {
      */
     player_id: string;
     result: MatchResult | null;
-    sets_format: SetsFormat | null;
+    scoring_system: ScoringSystem | null;
     surface: Surface | null;
     /**
      * Updated At
@@ -208,7 +208,7 @@ export type MatchUpdate = {
      */
     played_on?: string;
     result?: MatchResult | null;
-    sets_format?: SetsFormat | null;
+    scoring_system?: ScoringSystem | null;
     surface?: Surface | null;
 };
 
@@ -325,11 +325,11 @@ export type ResetPasswordRequest = {
 };
 
 /**
- * SetsFormat
+ * ScoringSystem
  *
- * How many sets the match is played over.
+ * The scoring system the match is played under.
  */
-export type SetsFormat = 'best_of_1' | 'best_of_3' | 'best_of_5';
+export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'womens_grand_slam' | 'no_ad_scoring' | 'match_tiebreak_10_points' | 'short_sets' | 'pro_set' | 'legacy';
 
 /**
  * Surface

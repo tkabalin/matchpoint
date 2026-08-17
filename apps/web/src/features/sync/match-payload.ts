@@ -12,25 +12,9 @@
  * with `Match.fromJSON` and maps the result.
  */
 
-import type { MatchCreate, SetsFormat } from "@matchpoint/api-client";
+import type { MatchCreate } from "@matchpoint/api-client";
 
-import { maxSetsFor, type Match, type ScoringSystem } from "@/features/capture/match";
-
-/**
- * Lossy, and only in this direction: several `ScoringSystem` members share a sets
- * count, so `best_of_3` does not name the one that produced it. Anything needing
- * the round trip has to carry `scoringSystem` itself, not recover it from here.
- */
-function toSetsFormat(scoringSystem: ScoringSystem): SetsFormat {
-  switch (maxSetsFor(scoringSystem)) {
-    case 1:
-      return "best_of_1";
-    case 5:
-      return "best_of_5";
-    default:
-      return "best_of_3";
-  }
-}
+import type { Match } from "@/features/capture/match";
 
 export function toMatchCreate(match: Match): MatchCreate {
   return {
@@ -39,7 +23,10 @@ export function toMatchCreate(match: Match): MatchCreate {
     // "unspecified" is a real SurfaceType member (see match.ts); the backend has no
     // equivalent, so it maps to the same absence a coach who skipped the field gets.
     surface: match.surfaceType === "unspecified" ? null : match.surfaceType,
-    sets_format: toSetsFormat(match.scoringSystem),
+    // The API's ScoringSystem enum holds exactly the members of the capture model's
+    // union (#154), so this passes through. A member added here that the API lacks
+    // stops compiling; one added only on the API side is nothing this file can see.
+    scoring_system: match.scoringSystem,
     opponent_name: match.opponentName,
     // No source to map from yet — Match has no event field.
     event: null,

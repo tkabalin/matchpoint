@@ -22,7 +22,7 @@ erDiagram
         varchar(100) display_name "full name, or whatever they go by"
         text password_hash "argon2id hash"
         varchar(6) default_surface "nullable: match-setup default, same members as matches.surface"
-        varchar(9) default_sets_format "nullable: match-setup default, same members as matches.sets_format"
+        varchar(24) default_scoring_system "nullable: match-setup default, same members as matches.scoring_system"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -78,7 +78,7 @@ erDiagram
         date played_on
         varchar(6) surface "nullable: hard, clay, grass, carpet"
         varchar(100) event "nullable: tournament or fixture"
-        varchar(9) sets_format "nullable: best_of_1, best_of_3, best_of_5"
+        varchar(24) scoring_system "nullable: traditional, mens_grand_slam, womens_grand_slam, no_ad_scoring, match_tiebreak_10_points, short_sets, pro_set, legacy"
         varchar(4) result "nullable: win, loss"
         timestamptz created_at
         timestamptz updated_at
@@ -89,6 +89,10 @@ A match carries metadata only. Point-level data — serves, rally outcomes, rall
 against a match rather than stored on it, and is modelled separately. `result` is the exception, a
 win or loss held on the row rather than derived from points: capture is optional, so a match can
 carry an outcome with no point data to compute it from.
+
+`scoring_system` names the system the match was played under and nothing more. What each name
+implies (deuce or sudden death at 40-40, how long a set runs, what settles the decider) belongs to
+the client that scores the match, so the database stores the label and never interprets it.
 
 `email_verifications` stands alone by design: it holds addresses proving themselves at sign-up,
 before any coach row exists to reference. A row is either an unanswered code or a proven

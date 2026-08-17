@@ -5,7 +5,7 @@ from sqlalchemy import CheckConstraint, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from matchpoint_api.db import Base
-from matchpoint_api.models.match import SetsFormat, Surface
+from matchpoint_api.models.match import ScoringSystem, Surface
 from matchpoint_api.models.types import str_enum
 
 
@@ -56,8 +56,8 @@ class Coach(Base):
     # match can store. #97's client half prefills its setup form from these; the server
     # never writes them into a match, so MatchCreate keeps absent distinct from null.
     default_surface: Mapped[Surface | None] = mapped_column(str_enum(Surface, "default_surface"))
-    default_sets_format: Mapped[SetsFormat | None] = mapped_column(
-        str_enum(SetsFormat, "default_sets_format")
+    default_scoring_system: Mapped[ScoringSystem | None] = mapped_column(
+        str_enum(ScoringSystem, "default_scoring_system")
     )
     # clock_timestamp() rather than now() for the reason given on Player.created_at: it
     # is the convention across the schema, so a row's stamps mean the same thing here.

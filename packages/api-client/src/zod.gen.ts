@@ -116,14 +116,19 @@ export const zResetPasswordRequest = z.object({
 });
 
 /**
- * SetsFormat
+ * ScoringSystem
  *
- * How many sets the match is played over.
+ * The scoring system the match is played under.
  */
-export const zSetsFormat = z.enum([
-    'best_of_1',
-    'best_of_3',
-    'best_of_5'
+export const zScoringSystem = z.enum([
+    'traditional',
+    'mens_grand_slam',
+    'womens_grand_slam',
+    'no_ad_scoring',
+    'match_tiebreak_10_points',
+    'short_sets',
+    'pro_set',
+    'legacy'
 ]);
 
 /**
@@ -141,7 +146,7 @@ export const zSurface = z.enum([
  */
 export const zCoachRead = z.object({
     created_at: z.iso.datetime(),
-    default_sets_format: zSetsFormat.nullable(),
+    default_scoring_system: zScoringSystem.nullable(),
     default_surface: zSurface.nullable(),
     display_name: z.string(),
     email: z.string(),
@@ -153,7 +158,7 @@ export const zCoachRead = z.object({
  * CoachUpdate
  */
 export const zCoachUpdate = z.object({
-    default_sets_format: zSetsFormat.nullish(),
+    default_scoring_system: zScoringSystem.nullish(),
     default_surface: zSurface.nullish(),
     display_name: z.string().min(1).max(100).optional()
 });
@@ -167,7 +172,7 @@ export const zMatchCreate = z.object({
     played_on: z.iso.date(),
     player_id: z.uuid(),
     result: zMatchResult.nullish(),
-    sets_format: zSetsFormat.nullish(),
+    scoring_system: zScoringSystem.nullish(),
     surface: zSurface.nullish()
 });
 
@@ -182,7 +187,7 @@ export const zMatchRead = z.object({
     played_on: z.iso.date(),
     player_id: z.uuid(),
     result: zMatchResult.nullable(),
-    sets_format: zSetsFormat.nullable(),
+    scoring_system: zScoringSystem.nullable(),
     surface: zSurface.nullable(),
     updated_at: z.iso.datetime()
 });
@@ -195,7 +200,7 @@ export const zMatchUpdate = z.object({
     opponent_name: z.string().min(1).max(100).nullish(),
     played_on: z.iso.date().optional(),
     result: zMatchResult.nullish(),
-    sets_format: zSetsFormat.nullish(),
+    scoring_system: zScoringSystem.nullish(),
     surface: zSurface.nullish()
 });
 

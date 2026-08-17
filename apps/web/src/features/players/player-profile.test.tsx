@@ -120,7 +120,7 @@ test("shows that player's match count", async () => {
           played_on: "2026-08-10",
           surface: "hard",
           event: null,
-          sets_format: "best_of_3",
+          scoring_system: "traditional",
           created_at: "2026-08-11T09:00:00Z",
           updated_at: "2026-08-11T09:00:00Z",
         },

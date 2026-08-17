@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from matchpoint_api.models import Coach, SetsFormat, Surface
+from matchpoint_api.models import Coach, ScoringSystem, Surface
 from matchpoint_api.schemas.coach import (
     EMAIL_MAX_LENGTH,
     PASSWORD_MAX_LENGTH,
@@ -151,22 +151,22 @@ def test_coach_update_carries_the_name_and_the_preferences_alone() -> None:
     assert set(CoachUpdate.model_fields) == {
         "display_name",
         "default_surface",
-        "default_sets_format",
+        "default_scoring_system",
     }
 
 
 def test_an_update_carrying_a_preference_dumps_it() -> None:
     data = CoachUpdate.model_validate(
-        {"default_surface": "clay", "default_sets_format": "best_of_3"}
+        {"default_surface": "clay", "default_scoring_system": "short_sets"}
     )
 
     assert data.model_dump(exclude_unset=True) == {
         "default_surface": Surface.CLAY,
-        "default_sets_format": SetsFormat.BEST_OF_3,
+        "default_scoring_system": ScoringSystem.SHORT_SETS,
     }
 
 
-@pytest.mark.parametrize("field", ["default_surface", "default_sets_format"])
+@pytest.mark.parametrize("field", ["default_surface", "default_scoring_system"])
 def test_an_update_may_clear_a_preference_with_null(field: str) -> None:
     """Unlike display_name above: the columns are nullable, so null is a valid value
     meaning "no preference", not a 422."""
@@ -177,7 +177,7 @@ def test_an_update_may_clear_a_preference_with_null(field: str) -> None:
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("default_surface", "sand"), ("default_sets_format", "best_of_2")],
+    [("default_surface", "sand"), ("default_scoring_system", "best_of_3")],
 )
 def test_a_preference_outside_its_enum_is_rejected(field: str, value: str) -> None:
     with pytest.raises(ValidationError):

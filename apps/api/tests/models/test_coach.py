@@ -5,7 +5,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, SetsFormat, Surface
+from matchpoint_api.models import Coach, ScoringSystem, Surface
 from tests.factories import make_coach
 
 EMAIL_LIMIT = 254
@@ -77,9 +77,9 @@ def _insert_raw_coach(session: Session, **columns: object) -> None:
     session.execute(
         text(
             "INSERT INTO coaches "
-            "(id, email, display_name, password_hash, default_surface, default_sets_format) "
+            "(id, email, display_name, password_hash, default_surface, default_scoring_system) "
             "VALUES (:id, :email, :display_name, :password_hash, "
-            ":default_surface, :default_sets_format)"
+            ":default_surface, :default_scoring_system)"
         ),
         {
             "id": uuid.uuid4(),
@@ -87,7 +87,7 @@ def _insert_raw_coach(session: Session, **columns: object) -> None:
             "display_name": "Coach Mike",
             "password_hash": "not-a-real-hash",
             "default_surface": None,
-            "default_sets_format": None,
+            "default_scoring_system": None,
             **columns,
         },
     )
@@ -153,16 +153,17 @@ def test_database_rejects_default_surface_outside_the_enum(db_session: Session) 
         _insert_raw_coach(db_session, default_surface="sand")
 
 
-def test_database_rejects_default_sets_format_outside_the_enum(db_session: Session) -> None:
-    """A "best_of_2" is exactly the column's VARCHAR(9), so it reaches the CHECK."""
+def test_database_rejects_default_scoring_system_outside_the_enum(db_session: Session) -> None:
+    """A "best_of_3" fits the column's VARCHAR(24), so it reaches the CHECK rather than
+    the width limit, as on the matches table's scoring_system column."""
     with pytest.raises(IntegrityError):
-        _insert_raw_coach(db_session, default_sets_format="best_of_2")
+        _insert_raw_coach(db_session, default_scoring_system="best_of_3")
 
 
 @pytest.mark.parametrize(
     ("column", "member"),
     [("default_surface", m.value) for m in Surface]
-    + [("default_sets_format", m.value) for m in SetsFormat],
+    + [("default_scoring_system", m.value) for m in ScoringSystem],
 )
 def test_database_accepts_every_member_of_the_reused_enums(
     db_session: Session, column: str, member: str
@@ -179,7 +180,7 @@ def test_database_accepts_a_coach_with_no_preferences(db_session: Session) -> No
     _insert_raw_coach(db_session)
 
     stored = db_session.execute(
-        text("SELECT default_surface, default_sets_format FROM coaches")
+        text("SELECT default_surface, default_scoring_system FROM coaches")
     ).one()
     assert stored == (None, None)
 

@@ -6,7 +6,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match, MatchResult, Player, SetsFormat, Surface
+from matchpoint_api.models import Match, MatchResult, Player, ScoringSystem, Surface
 from tests.factories import make_match, make_player
 
 
@@ -19,7 +19,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
         played_on=date(2026, 8, 1),
         surface=Surface.CLAY,
         event="Roland-Garros",
-        sets_format=SetsFormat.BEST_OF_3,
+        scoring_system=ScoringSystem.TRADITIONAL,
         result=MatchResult.WIN,
     )
     db_session.commit()
@@ -31,7 +31,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
     assert saved.played_on == date(2026, 8, 1)
     assert saved.surface is Surface.CLAY
     assert saved.event == "Roland-Garros"
-    assert saved.sets_format is SetsFormat.BEST_OF_3
+    assert saved.scoring_system is ScoringSystem.TRADITIONAL
     assert saved.result is MatchResult.WIN
     assert isinstance(saved.id, uuid.UUID)
     assert saved.created_at is not None
@@ -49,7 +49,7 @@ def test_only_the_player_and_date_are_required(db_session: Session) -> None:
     assert saved.opponent_name is None
     assert saved.surface is None
     assert saved.event is None
-    assert saved.sets_format is None
+    assert saved.scoring_system is None
     assert saved.result is None
 
 
@@ -97,8 +97,9 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
     session.execute(
         text(
             "INSERT INTO matches "
-            "(id, player_id, played_on, opponent_name, surface, sets_format, result) "
-            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, :sets_format, :result)"
+            "(id, player_id, played_on, opponent_name, surface, scoring_system, result) "
+            "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, "
+            ":scoring_system, :result)"
         ),
         {
             "id": uuid.uuid4(),
@@ -106,7 +107,7 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
             "played_on": date(2026, 8, 1),
             "opponent_name": None,
             "surface": None,
-            "sets_format": None,
+            "scoring_system": None,
             "result": None,
             **columns,
         },
@@ -121,11 +122,20 @@ def test_database_rejects_surface_outside_the_enum(db_session: Session) -> None:
         _insert_raw_match(db_session, surface="sand")
 
 
-def test_database_rejects_sets_format_outside_the_enum(db_session: Session) -> None:
-    """A "best_of_2" is exactly the column's VARCHAR(9), so it reaches the CHECK —
-    and it is the shape of mistake a hand-written sync payload would actually make."""
+def test_database_rejects_scoring_system_outside_the_enum(db_session: Session) -> None:
+    """A "best_of_3" fits the column's VARCHAR(24), so it reaches the CHECK rather than
+    the width limit, and a client still sending the set counts this column replaced is
+    exactly the payload it now has to refuse."""
     with pytest.raises(IntegrityError):
-        _insert_raw_match(db_session, sets_format="best_of_2")
+        _insert_raw_match(db_session, scoring_system="best_of_3")
+
+
+@pytest.mark.parametrize("member", [m.value for m in ScoringSystem])
+def test_database_accepts_every_scoring_system(db_session: Session, member: str) -> None:
+    """The migration spells the eight members out by hand, and nothing compares that
+    list to the enum: Alembic checks a CHECK constraint by name and never by condition,
+    so a value mistyped in the revision fails nothing but this."""
+    _insert_raw_match(db_session, scoring_system=member)
 
 
 def test_database_rejects_result_outside_the_enum(db_session: Session) -> None:

@@ -1,7 +1,7 @@
 import { zMatchCreate } from "@matchpoint/api-client/zod";
 import { describe, expect, test } from "vitest";
 
-import { createMatch } from "@/features/capture/match";
+import { createMatch, SCORING_SYSTEMS } from "@/features/capture/match";
 
 import { toMatchCreate } from "./match-payload";
 
@@ -50,11 +50,10 @@ describe("toMatchCreate", () => {
     expect(toMatchCreate(match()).opponent_name).toBeNull();
   });
 
-  test.each([
-    ["pro_set", "best_of_1"],
-    ["traditional", "best_of_3"],
-    ["mens_grand_slam", "best_of_5"],
-  ] as const)("maps %s to %s", (scoringSystem, expected) => {
+  // Every member, not a sample: the pass-through holds only while the two enums agree
+  // member for member, and zMatchCreate carries the API's list straight from the spec,
+  // so a member the backend never added fails here instead of on sync.
+  test.each(SCORING_SYSTEMS)("sends the %s scoring system through unchanged", (scoringSystem) => {
     const played = createMatch(
       PLAYED_ON,
       TRACKED_ID,
@@ -63,6 +62,9 @@ describe("toMatchCreate", () => {
       scoringSystem,
       "hard",
     );
-    expect(toMatchCreate(played).sets_format).toBe(expected);
+    const body = toMatchCreate(played);
+
+    expect(body.scoring_system).toBe(scoringSystem);
+    expect(() => zMatchCreate.parse(body)).not.toThrow();
   });
 });

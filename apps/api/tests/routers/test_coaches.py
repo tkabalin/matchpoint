@@ -592,23 +592,24 @@ def test_updating_the_preferences_stores_them(client: TestClient, db_session: Se
     sign_in(client, db_session, coach)
 
     response = client.patch(
-        "/coaches/me", json={"default_surface": "clay", "default_sets_format": "best_of_3"}
+        "/coaches/me",
+        json={"default_surface": "clay", "default_scoring_system": "short_sets"},
     )
 
     assert response.status_code == 200
     body = response.json()
     assert body["default_surface"] == "clay"
-    assert body["default_sets_format"] == "best_of_3"
+    assert body["default_scoring_system"] == "short_sets"
     stored = db_session.execute(
-        select(Coach.default_surface, Coach.default_sets_format).where(Coach.id == coach.id)
+        select(Coach.default_surface, Coach.default_scoring_system).where(Coach.id == coach.id)
     ).one()
-    assert stored == ("clay", "best_of_3")
+    assert stored == ("clay", "short_sets")
 
 
 def test_updating_a_preference_to_null_clears_it(client: TestClient, db_session: Session) -> None:
     """Null clears where absent leaves alone — the nullable-column half of the PATCH
     semantics, and the sent field must not drag the unsent one with it."""
-    coach = make_coach(db_session, default_surface="clay", default_sets_format="best_of_3")
+    coach = make_coach(db_session, default_surface="clay", default_scoring_system="short_sets")
     sign_in(client, db_session, coach)
 
     response = client.patch("/coaches/me", json={"default_surface": None})
@@ -616,14 +617,14 @@ def test_updating_a_preference_to_null_clears_it(client: TestClient, db_session:
     assert response.status_code == 200
     assert response.json()["default_surface"] is None
     stored = db_session.execute(
-        select(Coach.default_surface, Coach.default_sets_format).where(Coach.id == coach.id)
+        select(Coach.default_surface, Coach.default_scoring_system).where(Coach.id == coach.id)
     ).one()
-    assert stored == (None, "best_of_3")
+    assert stored == (None, "short_sets")
 
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    [("default_surface", "sand"), ("default_sets_format", "best_of_2")],
+    [("default_surface", "sand"), ("default_scoring_system", "best_of_3")],
 )
 def test_updating_to_a_preference_outside_its_enum_is_rejected(
     client: TestClient, db_session: Session, field: str, value: str
@@ -654,7 +655,7 @@ def test_me_returns_null_preferences_until_they_are_set(
     assert response.status_code == 200
     body = response.json()
     assert body["default_surface"] is None
-    assert body["default_sets_format"] is None
+    assert body["default_scoring_system"] is None
 
 
 def test_an_update_sending_no_fields_changes_nothing(

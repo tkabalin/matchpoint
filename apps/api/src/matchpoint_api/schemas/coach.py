@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, StringConstraints
 
-from matchpoint_api.models import SetsFormat, Surface
+from matchpoint_api.models import ScoringSystem, Surface
 from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText, UpdateModel
 
 # The longest address SMTP will carry (RFC 5321), and the width of the column.
@@ -66,7 +66,7 @@ class CoachUpdate(UpdateModel):
     # Nullable columns, so unlike display_name an explicit null is valid and clears the
     # preference; absent still leaves it alone.
     default_surface: Surface | None = None
-    default_sets_format: SetsFormat | None = None
+    default_scoring_system: ScoringSystem | None = None
 
 
 # password_hash is absent, and belongs nowhere else either. `response_model` filters a
@@ -79,6 +79,6 @@ class CoachRead(BaseModel):
     email: str
     display_name: str
     default_surface: Surface | None
-    default_sets_format: SetsFormat | None
+    default_scoring_system: ScoringSystem | None
     created_at: datetime
     updated_at: datetime
