@@ -46,6 +46,7 @@ function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {
     opponentId: OPPONENT_ID,
     serveNumber: "first",
     outcome: winner === TRACKED_ID ? "win" : "loss",
+    isTiebreakPoint: false,
     winner,
     server: TRACKED_ID,
     trackedPlayerShots: [],

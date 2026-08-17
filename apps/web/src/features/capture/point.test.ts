@@ -14,6 +14,7 @@ function pointData(overrides: Record<string, unknown> = {}) {
     opponentId: OPPONENT_ID,
     serveNumber: "first",
     outcome: "win",
+    isTiebreakPoint: false,
     winner: TRACKED_ID,
     server: TRACKED_ID,
     trackedPlayerShots: [],
@@ -48,6 +49,15 @@ describe("Point.create structural validation", () => {
 
   test("rejects an unknown serveNumber", () => {
     expect(() => Point.create(pointData({ serveNumber: "third" }))).toThrow(/serveNumber/);
+  });
+
+  test.each(["not a boolean", 1, null])("rejects a non-boolean isTiebreakPoint (%s)", (value) => {
+    expect(() => Point.create(pointData({ isTiebreakPoint: value }))).toThrow(/isTiebreakPoint/);
+  });
+
+  test("accepts isTiebreakPoint: true", () => {
+    const point = Point.create(pointData({ isTiebreakPoint: true }));
+    expect(point.isTiebreakPoint).toBe(true);
   });
 
   test("rejects an unknown outcome", () => {

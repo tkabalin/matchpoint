@@ -102,6 +102,12 @@ export class Point {
   readonly opponentId: string;
   readonly serveNumber: ServeNumber;
   readonly outcome: PointOutcome;
+  // A tiebreak's serve rotation (one opening point, then alternating every 2)
+  // and win condition are both different from a regular game's — anything
+  // deriving "who serves next" from game count, or applying a regular game's
+  // win condition (see gameStateFor), needs to know this, not infer it from
+  // gameId or a point count.
+  readonly isTiebreakPoint: boolean;
   // Must equal trackedPlayerId or opponentId — checked in Point.create.
   readonly winner: string;
   readonly server: string;
@@ -123,6 +129,7 @@ export class Point {
     opponentId: string;
     serveNumber: ServeNumber;
     outcome: PointOutcome;
+    isTiebreakPoint: boolean;
     winner: string;
     server: string;
     trackedPlayerShots: readonly ShotType[];
@@ -136,6 +143,7 @@ export class Point {
     this.opponentId = fields.opponentId;
     this.serveNumber = fields.serveNumber;
     this.outcome = fields.outcome;
+    this.isTiebreakPoint = fields.isTiebreakPoint;
     this.winner = fields.winner;
     this.server = fields.server;
     this.trackedPlayerShots = fields.trackedPlayerShots;
@@ -173,6 +181,9 @@ export class Point {
     if (!POINT_OUTCOMES.includes(data.outcome as PointOutcome)) {
       throw new Error(`invalid outcome: ${String(data.outcome)}`);
     }
+    if (typeof data.isTiebreakPoint !== "boolean") {
+      throw new Error("isTiebreakPoint must be a boolean");
+    }
     const participants = [data.trackedPlayerId, data.opponentId];
     if (!participants.includes(data.winner as string)) {
       throw new Error(`winner must be trackedPlayerId or opponentId, got: ${String(data.winner)}`);
@@ -209,6 +220,7 @@ export class Point {
       opponentId: data.opponentId,
       serveNumber: data.serveNumber as ServeNumber,
       outcome: data.outcome as PointOutcome,
+      isTiebreakPoint: data.isTiebreakPoint,
       winner: data.winner as string,
       server: data.server as string,
       trackedPlayerShots,
@@ -230,6 +242,7 @@ export class Point {
       opponentId: this.opponentId,
       serveNumber: this.serveNumber,
       outcome: this.outcome,
+      isTiebreakPoint: this.isTiebreakPoint,
       winner: this.winner,
       server: this.server,
       // Copied, not the live arrays: otherwise a caller mutating the returned
