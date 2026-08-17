@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     # SecretStr because a plain str reaches repr(), and this object is the kind of thing
     # that gets logged or dumped into a traceback whole.
     resend_api_key: SecretStr = SecretStr("")
+    # Which breach-corpus checker create_app builds (breach.py). "pwned" asks Have I Been
+    # Pwned, and is the default because there is no key whose absence would catch a box
+    # that never configured one — a deployment left on "allow_all" would just quietly
+    # stop checking. "allow_all" is the opt-out: what tests pin, and what a dev box that
+    # would rather stay off the network sets.
+    breach_checker: Literal["allow_all", "pwned"] = "pwned"
 
 
 settings = Settings()

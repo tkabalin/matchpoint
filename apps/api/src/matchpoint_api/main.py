@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 from matchpoint_api import __version__
 from matchpoint_api.auth import SessionRenewalMiddleware, send_renewed_session
 from matchpoint_api.body_limit import RequestBodyLimitMiddleware
+from matchpoint_api.breach import create_breach_checker
 from matchpoint_api.config import settings
 from matchpoint_api.csrf import OriginCheckMiddleware
 from matchpoint_api.errors import unhandled_exception_response, validation_error_response
@@ -146,6 +147,10 @@ def create_app() -> FastAPI:
     # a sender of its own, so no test can send real mail and any test can read what
     # was sent by swapping in a recorder. Which sender is settings' call (mail.py).
     app.state.email_sender = create_email_sender()
+
+    # The breach corpus, on app state for the sender's reason — a checker per app, so no
+    # test reaches a third party and any test can answer for the corpus itself.
+    app.state.breach_checker = create_breach_checker()
 
     app.include_router(auth.router)
     app.include_router(coaches.router)

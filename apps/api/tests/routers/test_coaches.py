@@ -22,9 +22,14 @@ from matchpoint_api.auth import (
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
-from matchpoint_api.password_policy import COMMON, CONTEXT, REPEATED, SEQUENTIAL
+from matchpoint_api.password_policy import BREACHED, COMMON, CONTEXT, REPEATED, SEQUENTIAL
 from matchpoint_api.security import verify_password
-from tests.conftest import ORIGIN_HEADERS, TEST_ORIGIN
+from tests.conftest import (
+    ORIGIN_HEADERS,
+    TEST_ORIGIN,
+    breach_every_password,
+    break_the_breach_check,
+)
 from tests.factories import make_coach, make_coach_session, sign_in, verify_email
 
 SIGN_UP = {
@@ -259,6 +264,45 @@ def test_a_refused_password_leaves_the_verification_to_try_again_with(
     assert client.post("/coaches", json=SIGN_UP | {"password": "aaaaaaaa"}).status_code == 400
 
     assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 1
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+
+
+def test_signing_up_with_a_breached_password_is_a_400(
+    client: TestClient, db_session: Session
+) -> None:
+    """#140 through the route, on the same 400 as the local rules: one status, and the
+    body says which reason. The corpus itself is `tests/test_breach.py`'s subject."""
+    verify_email(client, db_session, "mike@example.com")
+    breach_every_password(client)
+
+    response = client.post("/coaches", json=SIGN_UP)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": BREACHED}
+    assert db_session.scalar(select(func.count()).select_from(Coach)) == 0
+
+
+def test_a_breached_password_also_leaves_the_verification_standing(
+    client: TestClient, db_session: Session
+) -> None:
+    """The corpus lookup inherits the local rules' place ahead of the consume, which is
+    what it has to do: a coach correcting their password should not need a fresh code."""
+    verify_email(client, db_session, "mike@example.com")
+    breach_every_password(client)
+
+    assert client.post("/coaches", json=SIGN_UP).status_code == 400
+
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 1
+
+
+def test_signing_up_survives_a_corpus_that_cannot_answer(
+    client: TestClient, db_session: Session
+) -> None:
+    """Fail-open end to end. A third party being down must not be able to stop anyone
+    creating an account; `docs/security.md` records why that is the right way to fail."""
+    verify_email(client, db_session, "mike@example.com")
+    break_the_breach_check(client)
+
     assert client.post("/coaches", json=SIGN_UP).status_code == 201
 
 

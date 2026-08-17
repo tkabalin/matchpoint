@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
+from matchpoint_api.breach import BreachChecker
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, EmailVerification
 from matchpoint_api.password_policy import REJECTION, check_password
@@ -82,16 +83,23 @@ def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
     token = request.cookies.get(VERIFICATION_COOKIE)
     if token is None:
         raise _email_not_verified()
+    breach_checker: BreachChecker = request.app.state.breach_checker
     # Ahead of the consume below, not folded into it: a refused password leaves the
     # verification standing, so the coach picks another and carries on, where a check
     # after it would cost them a fresh code for a typo. Ahead of the Argon2 hash too,
     # for rate limiting's reason. Only the missing-cookie 401 precedes it, so a cookie the
     # consume would reject hears the policy reason first; the policy is published, so that
     # answers nothing `docs/security.md` does not.
+    #
+    # What that ordering now also costs: a made-up cookie value reaches the breach lookup
+    # before the consume rejects it, so it spends a worker thread and a request the corpus
+    # did not need to answer. Kept, because validating the row first would either duplicate
+    # the consume's WHERE or give up the property above, and limit_sign_up_rate bounds it.
     check_password(
         data.password.get_secret_value(),
         email=data.email,
         display_name=data.display_name,
+        breach_checker=breach_checker,
     )
     # One statement is the validity check, the email match and the consumption, so single-use
     # needs no lock and expiry has no read-then-act window. The email is in the WHERE because

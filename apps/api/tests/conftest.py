@@ -1,15 +1,18 @@
 import os
 from collections.abc import Iterator
 from pathlib import Path
+from typing import cast
 
 import pytest
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.orm import Session
 
 from matchpoint_api import rate_limit
+from matchpoint_api.breach import BreachCheckError
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
@@ -47,9 +50,33 @@ def crashing_client() -> TestClient:
     )
 
 
-# The email sender is pinned in `tests/__init__.py`, not here: this module imports
-# `matchpoint_api.main`, which builds an app at import time, so the pin has to be in
-# something that runs before any fixture — the package's own import.
+# The email sender and the breach checker are pinned in `tests/__init__.py`, not here:
+# this module imports `matchpoint_api.main`, which builds an app at import time, so the
+# pins have to be in something that runs before any fixture — the package's own import.
+
+
+def breach_every_password(client: TestClient) -> None:
+    """Swap in a corpus that holds every password, over the seam the routes read.
+
+    Here rather than in either router test module because sign-up, reset and change all
+    need it, and the point is that one policy site serves all three.
+    """
+    cast(FastAPI, client.app).state.breach_checker = _AlwaysBreached()
+
+
+def break_the_breach_check(client: TestClient) -> None:
+    """Swap in a corpus that cannot answer, which is what fail-open has to survive."""
+    cast(FastAPI, client.app).state.breach_checker = _Unavailable()
+
+
+class _AlwaysBreached:
+    def is_breached(self, password: str) -> bool:
+        return True
+
+
+class _Unavailable:
+    def is_breached(self, password: str) -> bool:
+        raise BreachCheckError("nobody home")
 
 
 class Clock:

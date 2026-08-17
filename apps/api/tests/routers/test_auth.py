@@ -25,11 +25,11 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
-from matchpoint_api.password_policy import CONTEXT, REPEATED
+from matchpoint_api.password_policy import BREACHED, CONTEXT, REPEATED
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
-from tests.conftest import ORIGIN_HEADERS
+from tests.conftest import ORIGIN_HEADERS, breach_every_password, break_the_breach_check
 from tests.factories import (
     make_coach,
     make_coach_session,
@@ -1427,6 +1427,34 @@ def test_a_reset_to_a_password_the_policy_refuses_is_a_400(
     assert _reset(client).status_code == 204
 
 
+def test_a_reset_to_a_breached_password_is_a_400(client: TestClient, db_session: Session) -> None:
+    """#140 at set_password, and the same promise as the local rules keep here: the code
+    survives the refusal, so a coach picks again rather than going back for fresh mail."""
+    _sign_up(client, db_session)
+    code = _forgot(client)
+    breach_every_password(client)
+
+    assert _verify_reset(client, code).status_code == 200
+    response = _reset(client)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": BREACHED}
+    assert client.post("/auth/login", json=LOGIN).status_code == 200
+
+
+def test_a_reset_survives_a_corpus_that_cannot_answer(
+    client: TestClient, db_session: Session
+) -> None:
+    """Fail-open where it matters most: a coach who has forgotten their password is
+    already locked out, and a third party being down must not keep them that way."""
+    _sign_up(client, db_session)
+    code = _forgot(client)
+    break_the_breach_check(client)
+
+    assert _verify_reset(client, code).status_code == 200
+    assert _reset(client).status_code == 204
+
+
 def test_a_reset_revokes_every_live_session(client: TestClient, db_session: Session) -> None:
     """Someone else holding the old credential may be signed in with it right now; a
     reset that left those sessions standing would change nothing. Another coach's
@@ -1802,6 +1830,21 @@ def test_a_change_to_a_password_the_policy_refuses_is_a_400(
 
     assert response.status_code == 400
     assert response.json() == {"detail": REPEATED}
+    assert coach.password_hash == stored
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_a_change_to_a_breached_password_is_a_400(client: TestClient, db_session: Session) -> None:
+    """The third of the three password writes, all reaching the corpus through the one
+    policy site, which is why #140 needed no wiring of its own per route."""
+    coach = _signed_in(client, db_session)
+    stored = coach.password_hash
+    breach_every_password(client)
+
+    response = _change(client)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": BREACHED}
     assert coach.password_hash == stored
     assert client.get("/coaches/me").status_code == 200
 

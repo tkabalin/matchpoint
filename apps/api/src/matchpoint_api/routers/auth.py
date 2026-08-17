@@ -24,6 +24,7 @@ from matchpoint_api.auth import (
     set_session_cookie,
     set_verification_cookie,
 )
+from matchpoint_api.breach import BreachChecker
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.mail import EmailSender, EmailSendError
@@ -443,7 +444,9 @@ def verify_otp(data: VerifyOtpRequest, db: DbSession, response: Response) -> Non
     set_verification_cookie(response, token)
 
 
-def set_password(db: Session, coach: Coach, new_password: str) -> None:
+def set_password(
+    db: Session, coach: Coach, new_password: str, *, breach_checker: BreachChecker
+) -> None:
     """Give this coach a new password, and retire what the old one left behind.
 
     The one password write, whichever proof got here: an emailed code, or the current
@@ -451,13 +454,18 @@ def set_password(db: Session, coach: Coach, new_password: str) -> None:
     credentials it left standing; that row is unique on coach_id, so there is at most
     one. No commit, for revoke_sessions' reason.
 
-    The policy check (#141) sits here rather than at each caller, so the one password
+    The policy check (#141, #140) sits here rather than at each caller, so the one password
     write is also the one place a password can fail policy. It raises before anything
     below runs and nothing here commits, so a refused password leaves the reset row and
     its attempt charge to roll back with the request: the code the coach was handed
     still works on the next try.
     """
-    check_password(new_password, email=coach.email, display_name=coach.display_name)
+    check_password(
+        new_password,
+        email=coach.email,
+        display_name=coach.display_name,
+        breach_checker=breach_checker,
+    )
     coach.password_hash = hash_password(new_password)
     db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
     revoke_sessions(db, coach.id)
@@ -715,9 +723,10 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: DbSession) 
     )
     if consumed is None:
         raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
+    breach_checker: BreachChecker = request.app.state.breach_checker
     # No session is spared, because the premise of a reset is that someone else may hold
     # the old credential. The row this retires is the one matched above.
-    set_password(db, coach, data.new_password.get_secret_value())
+    set_password(db, coach, data.new_password.get_secret_value(), breach_checker=breach_checker)
     db.commit()
 
 
@@ -768,10 +777,11 @@ def change_password(
         per_coach: RateLimiter = request.app.state.change_password_per_coach_limit
         per_coach.take(str(coach.id))
         raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    breach_checker: BreachChecker = request.app.state.breach_checker
     # The presented session goes with all the others, as at DELETE /auth/sessions: a
     # thief holding a copy of this cookie authenticates against the same row, so sparing
     # it would leave standing the very access this route exists to end.
-    set_password(db, coach, data.new_password.get_secret_value())
+    set_password(db, coach, data.new_password.get_secret_value(), breach_checker=breach_checker)
     # A fresh session for the device that just proved the password, so it stays signed in
     # holding a token no copy of the old one matches.
     token = new_session_token()

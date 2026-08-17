@@ -1,13 +1,13 @@
-"""Refusing a chosen password nothing else refuses, without leaving the process.
+"""Refusing a chosen password nothing else refuses.
 
 The schema's length bounds (`schemas/coach.py`) are bounds and not a policy, so
 `12345678`, `aaaaaaaa` and a coach called Mike choosing `mike-mike` all satisfy them.
 NIST SP 800-63B asks that a chosen password be compared against a list of values known
-to be commonly used or expected, and names repetitive characters, sequential characters,
-dictionary words and context-specific words (the service's name, the account's own name)
-as what belongs on that list. The compromised half of it is a breach-list lookup over
-the network (#140); everything here is arithmetic over the submitted string, so it costs
-no request and has no failure mode of its own.
+to be commonly used, expected or compromised, and names repetitive characters, sequential
+characters, dictionary words and context-specific words (the service's name, the account's
+own name) as what belongs on that list. `rejection_reason` is the arithmetic half of that
+list, costing no request; the compromised half is `breach.py`'s corpus lookup, which
+`check_password` reaches only once the arithmetic has passed.
 
 The same screens run zxcvbn in the browser (`apps/web/src/lib/password-strength.ts`),
 which overlaps these rules without mirroring them: it scores guessability where this
@@ -22,12 +22,16 @@ falls through to the breach list and to zxcvbn's own scoring: `aaaabbbb` and
 """
 
 import itertools
+import logging
 import re
 from collections import Counter
 
 from fastapi import HTTPException
 
+from matchpoint_api.breach import BreachChecker, BreachCheckError
 from matchpoint_api.security import normalise
+
+logger = logging.getLogger(__name__)
 
 # Five is an absolute run rather than a fraction of the password, unlike the repetition
 # rule below: a doubled letter is ordinary in a real word, while five consecutive code
@@ -39,15 +43,16 @@ SEQUENCE_LIMIT = 5
 # more than it protects.
 CONTEXT_MIN_LENGTH = 4
 
-# One reason per category, in the words the form shows: the four are distinguished here
-# rather than collapsed into "weak password" because a coach cannot act on the second.
+# One reason per category, in the words the form shows: they are distinguished here rather
+# than collapsed into "weak password" because a coach cannot act on the second.
 REPEATED = "Password is mostly one repeated character"
 SEQUENTIAL = "Password runs through consecutive characters"
 COMMON = "Password is too common"
 CONTEXT = "Password contains your name or email address"
+BREACHED = "Password has appeared in a known data breach"
 
 # The description the OpenAPI spec carries for the 400, shared by the routes that raise
-# it: one status covers all four reasons, and the body says which.
+# it: one status covers every reason, and the body says which.
 REJECTION = "Password rejected by policy"
 
 # Matched whole rather than as substrings, which is what lets `a-good-password` through:
@@ -130,10 +135,11 @@ def _context_words(email: str, display_name: str) -> set[str]:
 
 
 def rejection_reason(password: str, *, email: str, display_name: str) -> str | None:
-    """Why this password cannot be used, or None if it can.
+    """Why the local rules refuse this password, or None if they don't.
 
     The first matching rule is the one reported, since a password failing two of them
-    still only needs one thing said about it.
+    still only needs one thing said about it. The corpus is not consulted here: this stays
+    arithmetic over the submitted string, so it costs no request and cannot fail.
     """
     # Normalised first, so the string judged here is the string `security.py` will hash:
     # the fullwidth digits `１２３４５６７８` are `12345678` by the time they reach the
@@ -153,13 +159,49 @@ def rejection_reason(password: str, *, email: str, display_name: str) -> str | N
     return None
 
 
-def check_password(password: str, *, email: str, display_name: str) -> None:
+def _breach_reason(password: str, breach_checker: BreachChecker) -> str | None:
+    """Whether a breach corpus holds this password, or None when it could not be asked.
+
+    Fail open, and deliberately: a third party that cannot answer must not be able to
+    block a sign-up or shut a coach out of their own password recovery, and the rules
+    above still hold either way. `docs/security.md` records what that leaves uncovered.
+    """
+    try:
+        # The normalised form, because that is the string `security.py` hashes and so the
+        # one the corpus is being asked about. Not casefolded, unlike the local matching
+        # above: the corpus is case-sensitive, so folding would ask a different question.
+        breached = breach_checker.is_breached(normalise(password))
+    except BreachCheckError:
+        logger.warning("breach corpus unavailable, allowing the password")
+        return None
+    # Deliberately broad, and the one place in the API that is. Fail-open is only worth
+    # anything if nothing a checker does can close the door, and a bug in one would
+    # otherwise 500 the very three routes this promises not to block. Logged at exception
+    # level, unlike the expected case above, because reaching here is a defect.
+    except Exception:
+        logger.exception("breach check raised, allowing the password")
+        return None
+    return BREACHED if breached else None
+
+
+def check_password(
+    password: str, *, email: str, display_name: str, breach_checker: BreachChecker
+) -> None:
     """Raise the 400 that refuses a password this policy will not accept.
 
     A 400 rather than the 422 a rejected body usually answers, because FastAPI declares
     every route's 422 as a list of field errors and the generated client reads it as one
     (`errors.py`), so a sentence under `detail` there is a body the client cannot parse.
+
+    `breach_checker` has no default: a "skip the corpus" value would make the next
+    password write someone adds silently unchecked.
     """
+    # Local rules first, so an obvious refusal costs no request and hands the corpus no
+    # prefix for a password that was never going to be accepted. It also keeps the four
+    # local reasons deterministic: `aaaaaaaa` is in the corpus too, and a coach should
+    # hear REPEATED for it whatever the network did.
     reason = rejection_reason(password, email=email, display_name=display_name)
+    if reason is None:
+        reason = _breach_reason(password, breach_checker)
     if reason is not None:
         raise HTTPException(status_code=400, detail=reason)
