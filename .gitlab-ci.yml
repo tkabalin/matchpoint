@@ -20,6 +20,13 @@ workflow:
       when: never
     - if: $CI_COMMIT_BRANCH
 
+# Every `changes:` filter below is paired with the merge-request source, because a
+# branch pipeline has nothing to diff against: on a branch's first push
+# CI_COMMIT_BEFORE_SHA is all zeroes, so `changes:` counts every file as changed and
+# the whole pipeline runs whatever the commit touched. The window is narrow (the rule
+# above retires branch pipelines once the merge request exists) but it is exactly when
+# a batch of branches is pushed at once, and the runner has four slots.
+
 # --- Shared job setup -------------------------------------------------------
 # apps/api is a uv (Python) project; apps/web is a pnpm workspace member. The two
 # toolchains never touch each other, hence two independent job families.
@@ -45,7 +52,8 @@ workflow:
   # Root config files affect both families and so appear in both filters.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - changes:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
         - apps/api/**/*
         - .gitlab-ci.yml
 
@@ -56,7 +64,8 @@ workflow:
 # broad list, so repo-wide formatting stays enforced.
 .web-app-rules: &web-app-rules
   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-  - changes:
+  - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    changes:
       - apps/web/**/*
       - packages/**/*
       - package.json
@@ -84,7 +93,8 @@ workflow:
     # every file Prettier formats, not just web source — Markdown, YAML and JSON
     # anywhere in the repo included. A violation that skips web-lint merges
     # unchecked and then fails the next pipeline that does run one.
-    - changes:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
         - apps/web/**/*
         - packages/**/*
         - docs/**/*
@@ -153,7 +163,8 @@ web-api-client:
   # have outgrown.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - changes:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
         - apps/api/openapi.json
         - packages/api-client/**/*
         - pnpm-lock.yaml
@@ -336,7 +347,8 @@ build-api-image:
   # apps/api/.dockerignore, which apps/api/**/* already covers.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - changes:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
         - apps/api/**/*
         - .gitlab-ci.yml
       variables:
@@ -369,7 +381,8 @@ build-web-image:
   # .dockerignore are inputs too.
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - changes:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
         - apps/web/**/*
         - packages/**/*
         - package.json
