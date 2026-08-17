@@ -26,7 +26,8 @@ authentication endpoints are built to this policy.
 - **Login:** one message for an unknown email and a wrong password; a dummy Argon2 verification, so
   response time does not answer what the body refuses to; a wrong-guess budget keyed on the
   submitted address whether or not an account lives there.
-- **Password reset:** a uniform 202 whether or not the address holds an account.
+- **Password reset:** a uniform 202 whether or not the address holds an account, and one answer at
+  each later step whether or not the address behind it does.
 - **Code redemption** (sign-up verification and reset codes): every failure collapses into one
   response.
 
@@ -170,6 +171,22 @@ happens in Python. A non-constant-time comparison would leak the hash value char
 Consuming the verification token is atomic with the account INSERT (a single
 `DELETE ... WHERE ... RETURNING`), so single-use needs no lock and expiry has no TOCTOU window.
 Without this, anyone could create an account for any email address.
+
+## Answered codes become a cookie
+
+Answering a code does not spend it on the action it authorises. In both flows the row holding the
+code is rewritten to hold the hash of a fresh random token instead, exactly one of the two secrets
+present at any time under a database CHECK, and that token goes to the browser as a short-lived
+cookie of its own name. The action then presents the cookie: `POST /coaches` for sign-up,
+`POST /auth/reset-password` for a reset.
+
+Two properties come out of it. A wrong code is refused by the endpoint whose only job is the code,
+so the form can report it without a password in hand. And the credential that authorises the action
+is unguessable, where the code it replaces is six digits: the code's ten-minute window and attempt
+cap bound the guessing, and after that neither applies to what the caller holds.
+
+The cookie names are distinct per flow, and each action matches the cookie against the email in its
+own body, so a proof earned for one address cannot act on another.
 
 ## Secret redaction in validation errors
 
