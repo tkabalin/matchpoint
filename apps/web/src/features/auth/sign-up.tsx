@@ -6,6 +6,13 @@ import type { FormEvent } from "react";
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
 import { Button } from "@/components/ui/button";
+import {
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
@@ -177,69 +184,77 @@ export function SignUp() {
   if (step === "password") {
     return (
       <AuthShell>
-        <form onSubmit={handlePasswordSubmit}>
-          <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Sign Up</h1>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="display-name">Display name</FieldLabel>
-              <Input
-                id="display-name"
-                type="text"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
-              <PasswordInput
-                id="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
-              <PasswordInput
-                id="confirm-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </Field>
-          </FieldGroup>
-          {passwordTooShort && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Password must be at least 8 characters.
-            </p>
-          )}
-          {passwordTooLong && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Password must be at most 128 characters.
-            </p>
-          )}
-          {passwordTooWeak && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              This password is too easy to guess. Try something less predictable.
-            </p>
-          )}
-          {passwordsMismatch && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Passwords don't match.
-            </p>
-          )}
-          {errorText && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {errorText}
-            </p>
-          )}
-          <Button
-            type="submit"
-            disabled={!canSubmitPassword || submitting}
-            className="mt-5 w-full uppercase tracking-wide"
-          >
-            Sign Up
-          </Button>
-          <p className="mt-4 text-center text-sm">
+        <CardHeader>
+          <CardTitle>
+            <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handlePasswordSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="display-name">Display name</FieldLabel>
+                <Input
+                  id="display-name"
+                  type="text"
+                  value={displayName}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+                <PasswordInput
+                  id="confirm-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+            {passwordTooShort && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Password must be at least 8 characters.
+              </p>
+            )}
+            {passwordTooLong && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Password must be at most 128 characters.
+              </p>
+            )}
+            {passwordTooWeak && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                This password is too easy to guess. Try something less predictable.
+              </p>
+            )}
+            {passwordsMismatch && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Passwords don't match.
+              </p>
+            )}
+            {errorText && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {errorText}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={!canSubmitPassword || submitting}
+              className="mt-5 w-full uppercase tracking-wide"
+            >
+              Sign Up
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex-col">
+          <p className="text-center text-sm">
             <button
               type="button"
               onClick={handleStartOver}
@@ -248,7 +263,7 @@ export function SignUp() {
               Start over
             </button>
           </p>
-        </form>
+        </CardFooter>
       </AuthShell>
     );
   }
@@ -256,40 +271,46 @@ export function SignUp() {
   if (step === "otp") {
     return (
       <AuthShell>
-        <form onSubmit={handleOtpSubmit}>
-          <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Sign Up</h1>
-          <p className="mb-5 text-center text-sm text-muted-foreground">
-            We sent a code to {email}.
-          </p>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="otp">Code</FieldLabel>
-              <Input
-                id="otp"
-                type="text"
-                value={otp}
-                onChange={(event) => setOtp(event.target.value)}
-              />
-            </Field>
-          </FieldGroup>
-          {otpWrongLength && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Enter the 6-digit code.
-            </p>
-          )}
-          {errorText && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {errorText}
-            </p>
-          )}
-          <Button
-            type="submit"
-            disabled={!canSubmitOtp || submitting}
-            className="mt-5 w-full uppercase tracking-wide"
-          >
-            Verify
-          </Button>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
+        <CardHeader>
+          <CardTitle>
+            <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+          </CardTitle>
+          <CardDescription className="text-center">We sent a code to {email}.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleOtpSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="otp">Code</FieldLabel>
+                <Input
+                  id="otp"
+                  type="text"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+            {otpWrongLength && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Enter the 6-digit code.
+              </p>
+            )}
+            {errorText && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {errorText}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={!canSubmitOtp || submitting}
+              className="mt-5 w-full uppercase tracking-wide"
+            >
+              Verify
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex-col">
+          <p className="text-center text-sm text-muted-foreground">
             Didn't get a code, or has it expired?{" "}
             <button
               type="button"
@@ -299,44 +320,52 @@ export function SignUp() {
               Request a new one
             </button>
           </p>
-        </form>
+        </CardFooter>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell>
-      <form onSubmit={handleEmailSubmit}>
-        <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Sign Up</h1>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </Field>
-        </FieldGroup>
-        {errorText && (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {errorText}
-          </p>
-        )}
-        <Button
-          type="submit"
-          disabled={!canSubmitEmail || submitting}
-          className="mt-5 w-full uppercase tracking-wide"
-        >
-          Continue
-        </Button>
-        <p className="mt-4 text-center text-sm">
+      <CardHeader>
+        <CardTitle>
+          <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleEmailSubmit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          {errorText && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {errorText}
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!canSubmitEmail || submitting}
+            className="mt-5 w-full uppercase tracking-wide"
+          >
+            Continue
+          </Button>
+        </form>
+      </CardContent>
+      <CardFooter className="flex-col">
+        <p className="text-center text-sm">
           <Link to="/" className="text-primary underline underline-offset-4">
             Back to sign in
           </Link>
         </p>
-      </form>
+      </CardFooter>
     </AuthShell>
   );
 }

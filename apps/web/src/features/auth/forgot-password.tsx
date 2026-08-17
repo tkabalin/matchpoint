@@ -6,6 +6,13 @@ import type { FormEvent } from "react";
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
 import { Button } from "@/components/ui/button";
+import {
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
@@ -132,14 +139,20 @@ export function ForgotPassword() {
   if (step === "done") {
     return (
       <AuthShell>
-        <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Reset Password</h1>
-        <p className="text-center text-sm text-muted-foreground">Your password has been updated.</p>
-        <p className="mt-4 text-center text-sm">
-          <Link to="/" className="text-primary underline underline-offset-4">
-            Sign in
-          </Link>{" "}
-          with your new password.
-        </p>
+        <CardHeader>
+          <CardTitle>
+            <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+          </CardTitle>
+          <CardDescription className="text-center">Your password has been updated.</CardDescription>
+        </CardHeader>
+        <CardFooter className="flex-col">
+          <p className="text-center text-sm">
+            <Link to="/" className="text-primary underline underline-offset-4">
+              Sign in
+            </Link>{" "}
+            with your new password.
+          </p>
+        </CardFooter>
       </AuthShell>
     );
   }
@@ -147,80 +160,88 @@ export function ForgotPassword() {
   if (step === "reset") {
     return (
       <AuthShell>
-        <form onSubmit={handleResetSubmit}>
-          <h1 className="mb-2 text-center text-sm font-bold tracking-wide">Reset Password</h1>
+        <CardHeader>
+          <CardTitle>
+            <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+          </CardTitle>
           {/* forgot-password answers every address alike (202 whether or not it's
               registered), unlike sign-up's request-otp, so this can't claim the
               account exists the way sign-up's OTP step does. */}
-          <p className="mb-5 text-center text-sm text-muted-foreground">
+          <CardDescription className="text-center">
             If an account exists for {email}, we've sent it a code.
-          </p>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="otp">Code</FieldLabel>
-              <Input
-                id="otp"
-                type="text"
-                value={otp}
-                onChange={(event) => setOtp(event.target.value)}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="password">New password</FieldLabel>
-              <PasswordInput
-                id="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-              {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
-              <PasswordInput
-                id="confirm-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-              />
-            </Field>
-          </FieldGroup>
-          {otpWrongLength && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Enter the 6-digit code.
-            </p>
-          )}
-          {passwordTooShort && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Password must be at least 8 characters.
-            </p>
-          )}
-          {passwordTooLong && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Password must be at most 128 characters.
-            </p>
-          )}
-          {passwordTooWeak && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              This password is too easy to guess. Try something less predictable.
-            </p>
-          )}
-          {passwordsMismatch && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              Passwords don't match.
-            </p>
-          )}
-          {errorText && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {errorText}
-            </p>
-          )}
-          <Button
-            type="submit"
-            disabled={!canSubmitReset || submitting}
-            className="mt-5 w-full uppercase tracking-wide"
-          >
-            Reset Password
-          </Button>
-          <p className="mt-4 text-center text-sm text-muted-foreground">
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleResetSubmit}>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="otp">Code</FieldLabel>
+                <Input
+                  id="otp"
+                  type="text"
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="password">New password</FieldLabel>
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+                {password !== "" && <PasswordStrengthMeter score={passwordStrengthScore} />}
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
+                <PasswordInput
+                  id="confirm-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+            {otpWrongLength && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Enter the 6-digit code.
+              </p>
+            )}
+            {passwordTooShort && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Password must be at least 8 characters.
+              </p>
+            )}
+            {passwordTooLong && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Password must be at most 128 characters.
+              </p>
+            )}
+            {passwordTooWeak && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                This password is too easy to guess. Try something less predictable.
+              </p>
+            )}
+            {passwordsMismatch && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                Passwords don't match.
+              </p>
+            )}
+            {errorText && (
+              <p role="alert" className="mt-3 text-sm text-destructive">
+                {errorText}
+              </p>
+            )}
+            <Button
+              type="submit"
+              disabled={!canSubmitReset || submitting}
+              className="mt-5 w-full uppercase tracking-wide"
+            >
+              Reset Password
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex-col">
+          <p className="text-center text-sm text-muted-foreground">
             Didn't get a code, or has it expired?{" "}
             <button
               type="button"
@@ -230,44 +251,52 @@ export function ForgotPassword() {
               Request a new one
             </button>
           </p>
-        </form>
+        </CardFooter>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell>
-      <form onSubmit={handleEmailSubmit}>
-        <h1 className="mb-5 text-center text-sm font-bold tracking-wide">Reset Password</h1>
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </Field>
-        </FieldGroup>
-        {errorText && (
-          <p role="alert" className="mt-3 text-sm text-destructive">
-            {errorText}
-          </p>
-        )}
-        <Button
-          type="submit"
-          disabled={!canSubmitEmail || submitting}
-          className="mt-5 w-full uppercase tracking-wide"
-        >
-          Continue
-        </Button>
-        <p className="mt-4 text-center text-sm">
+      <CardHeader>
+        <CardTitle>
+          <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleEmailSubmit}>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </Field>
+          </FieldGroup>
+          {errorText && (
+            <p role="alert" className="mt-3 text-sm text-destructive">
+              {errorText}
+            </p>
+          )}
+          <Button
+            type="submit"
+            disabled={!canSubmitEmail || submitting}
+            className="mt-5 w-full uppercase tracking-wide"
+          >
+            Continue
+          </Button>
+        </form>
+      </CardContent>
+      <CardFooter className="flex-col">
+        <p className="text-center text-sm">
           <Link to="/" className="text-primary underline underline-offset-4">
             Back to sign in
           </Link>
         </p>
-      </form>
+      </CardFooter>
     </AuthShell>
   );
 }
