@@ -206,6 +206,7 @@ export function SignUp() {
                 <FieldLabel htmlFor="password">Password</FieldLabel>
                 <PasswordInput
                   id="password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
@@ -215,6 +216,7 @@ export function SignUp() {
                 <FieldLabel htmlFor="confirm-password">Confirm password</FieldLabel>
                 <PasswordInput
                   id="confirm-password"
+                  autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(event) => setConfirmPassword(event.target.value)}
                 />
@@ -343,6 +345,7 @@ export function SignUp() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />

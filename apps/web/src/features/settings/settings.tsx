@@ -192,6 +192,7 @@ export function Settings() {
             <label htmlFor="current-password">Current password</label>
             <PasswordInput
               id="current-password"
+              autoComplete="current-password"
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
             />
@@ -203,6 +204,7 @@ export function Settings() {
             <label htmlFor="new-password">New password</label>
             <PasswordInput
               id="new-password"
+              autoComplete="new-password"
               value={newPassword}
               onChange={(event) => setNewPassword(event.target.value)}
             />
@@ -210,6 +212,7 @@ export function Settings() {
             <label htmlFor="confirm-new-password">Confirm new password</label>
             <PasswordInput
               id="confirm-new-password"
+              autoComplete="new-password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
             />

@@ -103,6 +103,37 @@ one for data, is exactly the confusion this file exists to prevent. **Indigo** (
 no Okabe–Ito equivalent — it fills the seventh step left open once sky-blue was dropped, sitting at
 the dark end of the range specifically because nothing else in the palette occupies that lightness.
 
+## Sequential scale: why a strength meter gets its own third concept
+
+The rule originally had two concepts — brand/nav (blue, exclusive) and categorical (the seven-color
+rainbow, for unordered distinct values). Neither fit a password strength meter: strength is one
+ordinal quantity running from weak to strong, not a set of categories with no inherent order.
+Forcing it into the categorical palette would have been actively misleading — a distinct hue per
+strength step reads as "these are different kinds of thing," when the actual message is "this one
+thing is getting better or worse."
+
+The fix reuses three existing categorical hexes — Burnt vermillion, Orange, Jade green — as
+interpolation anchors rather than inventing a fourth palette concept from scratch. This mirrors the
+navigation color's precedent: `#045C8C` already carries two documented roles (nav/brand and a
+categorical swatch), so a color carrying a second role, clearly scoped to when each applies, was
+already an accepted pattern in this file rather than a new kind of exception. The alternative — a
+dedicated sequential-scale palette with its own hexes — would mean auditing a fourth set of colors
+against light/dark backgrounds and CVD simulation, for one meter, when the categorical palette's red
+and green already passed that audit and sit at the right ends of a weak→strong story.
+
+The fill is a continuous interpolation, not discrete steps, because a severity scale's whole value
+is showing _how far along_ the scale a value sits — five discrete swatches would visually
+reintroduce the categorical palette's "these are different things" reading, exactly what a
+sequential scale needs to avoid. Two linear segments (vermillion→orange, orange→green) rather than
+one direct vermillion→green blend, so the midpoint actually passes through orange rather than a
+muddy brown average of the two endpoints.
+
+The categorical palette leans on a pattern overlay so a swatch stays legible without color. A thin
+progress-bar fill has no width to carry a pattern mark. The meter already renders a text label
+("Weak", "Strong") below the bar for an unrelated reason — this scale treats that label as the
+non-color channel a pattern would otherwise provide, rather than adding a second, redundant
+mechanism for the same job.
+
 ## Why every color also needs a pattern
 
 A colorblind-safe, luminance-audited hue selection is necessary but not sufficient. It protects

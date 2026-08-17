@@ -25,3 +25,18 @@ test("toggling reveals the password, and toggling again re-masks it", async () =
   await user.click(screen.getByRole("button", { name: "Hide password" }));
   expect(document.getElementById("password")).toHaveAttribute("type", "password");
 });
+
+test("forwards autoComplete and name so password managers can recognize the field", () => {
+  render(
+    <PasswordInput
+      id="password"
+      autoComplete="current-password"
+      name="password"
+      value="hunter2000"
+      onChange={() => undefined}
+    />,
+  );
+
+  expect(document.getElementById("password")).toHaveAttribute("autocomplete", "current-password");
+  expect(document.getElementById("password")).toHaveAttribute("name", "password");
+});

@@ -68,6 +68,7 @@ export function SignIn() {
               <Input
                 id="email"
                 type="email"
+                autoComplete="username"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
@@ -76,6 +77,7 @@ export function SignIn() {
               <FieldLabel htmlFor="password">Password</FieldLabel>
               <PasswordInput
                 id="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />

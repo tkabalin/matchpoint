@@ -27,3 +27,14 @@ test("fills more of the bar for a higher score", () => {
 
   expect(strongWidth).toBeGreaterThan(weakWidth);
 });
+
+test("fill color progresses from vermillion to green as score increases", () => {
+  const { container: weak } = render(<PasswordStrengthMeter score={0} />);
+  const { container: strong } = render(<PasswordStrengthMeter score={4} />);
+
+  const weakFill = weak.querySelector("[style]");
+  const strongFill = strong.querySelector("[style]");
+
+  expect(weakFill).toHaveStyle({ backgroundColor: "#9c3d0a" });
+  expect(strongFill).toHaveStyle({ backgroundColor: "#1fbf8c" });
+});

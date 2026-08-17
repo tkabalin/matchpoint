@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
+// The base rounded-4xl (single-line case) is kept in sync with Input's and Button's own
+// radius by hand — see the matching comment on Input (#152).
 function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div

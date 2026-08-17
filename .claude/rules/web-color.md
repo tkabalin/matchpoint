@@ -76,6 +76,27 @@ Rules for any new or modified pattern:
   also share the same tile scale. Density is an independent channel from hue, lightness, and motif
   shape.
 
+## Sequential / severity scale
+
+Use this for one ordinal quantity that runs from worse to better (e.g. password strength) — never
+for a set of unordered categories, which is what the rainbow palette above is for.
+
+Interpolate linearly across three anchors, reused from the categorical palette rather than invented
+fresh: **Burnt vermillion `#9C3D0A`** (weakest) → **Orange `#E69F00`** (mid) → **Jade green
+`#1FBF8C`** (strongest). Two segments — vermillion→orange for the lower half of the scale,
+orange→green for the upper half — so the fill is a smooth continuum, not discrete hard-edged bands.
+A severity scale's whole point is the continuum; chopping it into swatches would make it read as
+categories again.
+
+These three hexes now carry a second, documented role alongside their categorical one — same
+principle as blue's dual nav/categorical role above: each hex is valid in whichever context applies,
+categorical swatch or severity anchor, never both meanings on the same screen at once.
+
+A sequential fill has no room for a pattern overlay (it's a thin continuous bar, not a discrete
+swatch), so it can't lean on the categorical palette's pattern-redundancy rule. Pair it with a text
+label instead (e.g. "Weak" / "Strong") as the non-color channel — same purpose as a pattern, a
+different mechanism to fit a different shape of UI.
+
 ## Light/dark mode background rule
 
 Every swatch or symbol must carry a **dual-ring halo**: a 1px white inner ring plus a 1px black
