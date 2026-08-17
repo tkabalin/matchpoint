@@ -109,12 +109,9 @@ work="$(mktemp -d)"
 api_pid=""
 interrupted=0
 
-# Ctrl+C is how a dev session normally ends, but pnpm prints "Command failed with signal
-# SIGINT" and "[ELIFECYCLE] Command failed." on the way out, which reads like a crash at the
-# moment you did something completely normal. Those lines cannot be suppressed, so the point
-# of this is to make the script's own last line unambiguous. It has to be a flag rather than
-# a check for status 130 in the trap below: when the foreground child is the one signalled,
-# bash does not leave 130 in $? — it re-raises the signal and the trap sees 0.
+# Ctrl+C is how a dev session normally ends, and bash does not leave 130 in $? when the
+# foreground child is the one signalled — it re-raises the signal and the trap below sees 0.
+# So this flag, not a status check, is what makes the script's own last line unambiguous.
 trap 'interrupted=1' INT
 
 # One EXIT trap for the whole script, installed before anything starts and owning both the
@@ -198,5 +195,10 @@ if ! kill -0 "$api_pid" 2>/dev/null; then
     '  cd apps/api && uv run fastapi dev src/matchpoint_api/main.py'
 fi
 
-cd "$repo_root"
-pnpm dev
+cd "$repo_root/apps/web"
+# Run vite directly rather than `pnpm dev`: pnpm's recursive-run wrapper (used even for a
+# single --filter) treats a child killed by Ctrl+C's SIGINT as a failure and prints
+# ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL plus an ELIFECYCLE line on the way out, on top of the
+# "dev servers stopped." below — noise on a normal exit. Running the binary already checked
+# for above puts vite directly in the foreground, so it takes SIGINT with no wrapper to report on.
+node_modules/.bin/vite
