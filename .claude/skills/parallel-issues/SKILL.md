@@ -33,10 +33,10 @@ prompt, and it is the most important rule in this skill.
    optional model name for the agents (`opus`, `sonnet`, `haiku`, or `fable`, given bare or as
    `--model <name>`). Default to `opus` when none is given; both implementers and reviewers use the
    same model.
-2. Fetch each with `glab issue view <n> --comments` (glab is authenticated for
-   gitlab.cs.uct.ac.za; it is a snap and cannot read `/tmp`, so never hand it a `/tmp` path). Read
-   the full description, every comment, and any linked issues — comments often carry scope
-   changes, clarifications, or client (BBD) feedback that the description alone won't show.
+2. Fetch each with `glab issue view <n> --comments` (glab is authenticated for gitlab.cs.uct.ac.za;
+   it is a snap and cannot read `/tmp`, so never hand it a `/tmp` path). Read the full description,
+   every comment, and any linked issues — comments often carry scope changes, clarifications, or
+   client (BBD) feedback that the description alone won't show.
 3. If an issue is blocked by an open issue outside the batch, skip it and say so in the final report
    rather than guessing at the missing dependency.
 4. Look for overlap between the issues before launching anything:
@@ -87,8 +87,8 @@ filled in:
   whether the choice deviates from the standard, idiomatic, or canonical way of doing this in the
   language, framework, or codebase, and why: a deviation can be made with full confidence, but the
   reviewer still needs to know it's there. These come back to the coordinator and become the MR's
-  "Decisions for review" bullets, which is how the user reviews your judgement, so record every
-  real choice.
+  "Decisions for review" bullets, which is how the user reviews your judgement, so record every real
+  choice.
 - Write every decision, and anything else destined for the MR description, for a reader with no
   prior experience of the frameworks, libraries, or techniques involved. Name an unfamiliar tool
   once and gloss what it does in a clause; don't assume the reader already knows it.
@@ -104,16 +104,16 @@ and branch name, the conventions block, and this return contract:
 - Implement the issue completely, tests included, on the branch. Surgical changes only: touch
   nothing the issue does not require.
 - Do not push. Commit only.
-- Return: branch name, a one-paragraph summary of the change, the decisions list (each entry:
-  what was chosen, why, any alternative seriously weighed and ruled out, a confidence rating
+- Return: branch name, a one-paragraph summary of the change, the decisions list (each entry: what
+  was chosen, why, any alternative seriously weighed and ruled out, a confidence rating
   High/Medium/Low, and — only when it applies — how the choice deviates from the standard or
   idiomatic approach and why), whether the change touches auth, sessions, migrations/schema,
   security headers/config, rate limiting, or any field holding personal data — name which, or say
   plainly that none apply, since silence reads as an oversight rather than a "no" — the result of
-  each of the eight checks (with test counts and coverage), anything noticed that will conflict
-  with sibling branches, and every step the change needs that only a human can do (copy files onto
-  the VPS, set a CI variable, mint a token, add a DNS record). Manual steps become a checklist in
-  the MR, so an unreported one is a deploy that breaks after merge.
+  each of the eight checks (with test counts and coverage), anything noticed that will conflict with
+  sibling branches, and every step the change needs that only a human can do (copy files onto the
+  VPS, set a CI variable, mint a token, add a DNS record). Manual steps become a checklist in the
+  MR, so an unreported one is a deploy that breaks after merge.
 
 ## 4. Review agents
 
@@ -140,10 +140,10 @@ the implementer's summary, the conventions block, and:
 - Push exactly once: `git push -u origin <branch>`. The branch has never been pushed, so a plain
   push must succeed; if it rejects, stop and report instead of forcing.
 - Return: the pushed tip SHA, what the review found (fixed, and rejected with reasons), any new
-  decisions made while fixing (same shape as the implementer's: what, why, alternatives ruled out
-  if any, confidence, convention deviation if any), whether a fold-in fix changed the answer to
-  the implementer's sensitive-area question (e.g. a fix that adds a migration), any manual steps
-  the implementer missed, and the final check results.
+  decisions made while fixing (same shape as the implementer's: what, why, alternatives ruled out if
+  any, confidence, convention deviation if any), whether a fold-in fix changed the answer to the
+  implementer's sensitive-area question (e.g. a fix that adds a migration), any manual steps the
+  implementer missed, and the final check results.
 
 ## 5. One MR per branch
 
@@ -157,9 +157,9 @@ glab mr create --source-branch thomas/<slug> --target-branch main --yes \
 ```
 
 The description follows the house shape. It must read cleanly for someone with no prior experience
-of the frameworks, libraries, or techniques the branch touches: gloss any tool by name on first
-use, and prefer bullets and arrows over prose wherever a fact needs to be scanned rather than read
-top to bottom.
+of the frameworks, libraries, or techniques the branch touches: gloss any tool by name on first use,
+and prefer bullets and arrows over prose wherever a fact needs to be scanned rather than read top to
+bottom.
 
 ```
 ## Summary
