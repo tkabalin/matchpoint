@@ -16,15 +16,11 @@ class Coach(Base):
     coach row that is missing any of them is not an account anyone could sign in to. The
     two `default_*` preference columns are nullable, null meaning no preference held.
 
-    No `archived_at`, unlike Player, because there is no deletion path to offer an
-    alternative to: no route deletes a coach, and the foreign key from players refuses a
-    hard delete while any of theirs remain. Archiving is what a table offers *instead*
-    of deletion, so here it would mean deactivating the account. The login work (#24)
-    weighed adding it and declined: nothing can set it — there is no admin surface and
-    no self-service closure — so the column would be written by nobody and the sign-in
-    check reading it would guard a state no code can produce. When a deactivation path
-    arrives, it brings three things as one piece of work: this column, the login check
-    that refuses the deactivated, and the revocation of their live coach_sessions rows.
+    No `archived_at`, unlike Player: closing an account is erasure rather than
+    deactivation (`DELETE /coaches/me` deletes the row and everything under it), so there
+    is no deactivated state for a column to hold, and a sign-in check reading one would
+    guard a state no code can produce. `docs/data-model.md` records why the soft-delete
+    convention stops at this one table.
     """
 
     __tablename__ = "coaches"

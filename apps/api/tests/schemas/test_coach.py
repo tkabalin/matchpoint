@@ -21,6 +21,7 @@ from matchpoint_api.schemas.coach import (
     PASSWORD_MAX_LENGTH,
     PASSWORD_MIN_LENGTH,
     CoachCreate,
+    CoachDelete,
     CoachRead,
     CoachUpdate,
 )
@@ -182,6 +183,32 @@ def test_an_update_may_clear_a_preference_with_null(field: str) -> None:
 def test_a_preference_outside_its_enum_is_rejected(field: str, value: str) -> None:
     with pytest.raises(ValidationError):
         CoachUpdate.model_validate({field: value})
+
+
+def test_a_closure_carries_the_password_alone() -> None:
+    """No email and no confirmation field: the session says whose account this is, and a
+    typed confirmation would prove the form was filled in rather than who filled it in."""
+    assert set(CoachDelete.model_fields) == {"password"}
+
+
+def test_a_closure_takes_the_ceiling_without_the_floor() -> None:
+    """`Password`, not `NewPassword`: the floor is sign-up policy for a password being
+    chosen, and applying it to one being checked would lock out any coach who enrolled
+    before a later raise of it — leaving them unable to close their own account."""
+    short = "x" * (PASSWORD_MIN_LENGTH - 1)
+
+    assert CoachDelete.model_validate({"password": short}).password.get_secret_value() == short
+
+    with pytest.raises(ValidationError):
+        CoachDelete.model_validate({"password": "x" * (PASSWORD_MAX_LENGTH + 1)})
+
+
+def test_a_closure_password_is_not_in_the_repr() -> None:
+    """SecretStr's reason for being on this body too — a plain str would put the password
+    into any traceback or structured log that rendered the model."""
+    data = CoachDelete.model_validate({"password": "a-good-password"})
+
+    assert "a-good-password" not in repr(data)
 
 
 def test_coach_read_has_no_password_hash_field() -> None:

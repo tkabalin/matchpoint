@@ -137,6 +137,15 @@ def create_app() -> FastAPI:
     app.state.change_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.change_password_total_limit = RateLimiter(per_minute=30, burst=10)
 
+    # Closing an account: change-password's tiers at change-password's sizes, in buckets
+    # of their own so guessing at one route cannot stand between a coach and the other.
+    # One Argon2 run a call rather than two, so the arrival sizes are if anything
+    # conservative; the per-coach budget is the one that matters here, bounding a stolen
+    # session's hunt for a password on the one route whose success is not undoable.
+    app.state.close_account_per_coach_limit = RateLimiter(per_minute=2, burst=5)
+    app.state.close_account_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.close_account_total_limit = RateLimiter(per_minute=30, burst=10)
+
     # Every authenticated route: one budget per coach, charged in auth.current_coach.
     # The burst clears an outbox flushing two three-set matches of individually-posted
     # points (~250 each); the sustained rate is far above human use. An estimate until

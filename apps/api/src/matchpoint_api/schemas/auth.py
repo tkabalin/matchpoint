@@ -3,11 +3,7 @@ from typing import Annotated
 from pydantic import EmailStr, Field, SecretStr, StringConstraints
 
 from matchpoint_api.auth import OTP_LENGTH
-from matchpoint_api.schemas.coach import (
-    EMAIL_MAX_LENGTH,
-    PASSWORD_MAX_LENGTH,
-    PASSWORD_MIN_LENGTH,
-)
+from matchpoint_api.schemas.coach import EMAIL_MAX_LENGTH, NewPassword, Password
 from matchpoint_api.schemas.types import RequestModel
 
 # Comments rather than docstrings, as in schemas/coach.py: a schema docstring becomes
@@ -26,21 +22,10 @@ _Email = Annotated[EmailStr, StringConstraints(strip_whitespace=True, max_length
 # is simply a wrong code (400), not a malformed request.
 _Otp = Annotated[SecretStr, Field(min_length=OTP_LENGTH, max_length=OTP_LENGTH)]
 
-# The two password bounds, one annotation each so bodies meaning the same thing cannot
-# drift apart in the generated client (_Otp's reason). _Password is a credential being
-# checked against a stored hash, so it takes only the ceiling: the floor is sign-up
-# policy for *new* passwords, and applying it here would lock out every coach who
-# enrolled before a later raise of it. _NewPassword is a password being chosen, so it
-# takes both of CoachCreate's bounds.
-_Password = Annotated[SecretStr, Field(max_length=PASSWORD_MAX_LENGTH)]
-_NewPassword = Annotated[
-    SecretStr, Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
-]
-
 
 class LoginRequest(RequestModel):
     email: _Email
-    password: _Password
+    password: Password
 
 
 class OtpRequest(RequestModel):
@@ -66,12 +51,12 @@ class ResetPasswordRequest(RequestModel):
     # is what this request presents instead. The email stays because that cookie is
     # checked against it, exactly as the verification cookie is at sign-up.
     email: _Email
-    new_password: _NewPassword
+    new_password: NewPassword
 
 
 class ChangePasswordRequest(RequestModel):
     # No email: the session says whose password this is. The current one is named
     # `password` as login names it, for the same meaning and the same annotation, and is
     # already kept out of a 422 body by errors.py under that name.
-    password: _Password
-    new_password: _NewPassword
+    password: Password
+    new_password: NewPassword

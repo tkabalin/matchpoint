@@ -19,6 +19,13 @@ export const zCoachCreate = z.object({
 });
 
 /**
+ * CoachDelete
+ */
+export const zCoachDelete = z.object({
+    password: z.string().max(128)
+});
+
+/**
  * DominantHand
  */
 export const zDominantHand = z.enum(['right', 'left']);
@@ -322,6 +329,13 @@ export const zCreateCoachBody = zCoachCreateWritable;
  * Successful Response
  */
 export const zCreateCoachResponse = zCoachRead;
+
+export const zDeleteCurrentCoachBody = zCoachDelete;
+
+/**
+ * Successful Response
+ */
+export const zDeleteCurrentCoachResponse = z.void();
 
 /**
  * Successful Response

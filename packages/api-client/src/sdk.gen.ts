@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -142,6 +142,24 @@ export const verifyResetCode = <ThrowOnError extends boolean = false>(options: O
  */
 export const createCoach = <ThrowOnError extends boolean = false>(options: Options<CreateCoachData, ThrowOnError>): RequestResult<CreateCoachResponses, CreateCoachErrors, ThrowOnError> => (options.client ?? client).post<CreateCoachResponses, CreateCoachErrors, ThrowOnError>({
     url: '/coaches',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Current Coach
+ *
+ * Erase this coach and everything recorded under them, given their password.
+ *
+ * The password is demanded for change-password's reason, with more at stake: the cookie
+ * proves this browser was signed in once, not that whoever holds it now is the coach, and
+ * there is nothing to recover to afterwards.
+ */
+export const deleteCurrentCoach = <ThrowOnError extends boolean = false>(options: Options<DeleteCurrentCoachData, ThrowOnError>): RequestResult<DeleteCurrentCoachResponses, DeleteCurrentCoachErrors, ThrowOnError> => (options.client ?? client).delete<DeleteCurrentCoachResponses, DeleteCurrentCoachErrors, ThrowOnError>({
+    url: '/coaches/me',
     ...options,
     headers: {
         'Content-Type': 'application/json',

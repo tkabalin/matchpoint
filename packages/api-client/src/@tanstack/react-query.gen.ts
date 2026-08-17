@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, deleteCurrentCoach, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -191,6 +191,29 @@ export const createCoachMutation = (options?: Partial<Options<CreateCoachData>>)
     const mutationOptions: UseMutationOptions<CreateCoachResponse, CreateCoachError, Options<CreateCoachData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await createCoach({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Delete Current Coach
+ *
+ * Erase this coach and everything recorded under them, given their password.
+ *
+ * The password is demanded for change-password's reason, with more at stake: the cookie
+ * proves this browser was signed in once, not that whoever holds it now is the coach, and
+ * there is nothing to recover to afterwards.
+ */
+export const deleteCurrentCoachMutation = (options?: Partial<Options<DeleteCurrentCoachData>>): UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> => {
+    const mutationOptions: UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await deleteCurrentCoach({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

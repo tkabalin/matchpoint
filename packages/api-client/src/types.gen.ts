@@ -33,6 +33,16 @@ export type CoachCreate = {
 };
 
 /**
+ * CoachDelete
+ */
+export type CoachDelete = {
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
  * CoachRead
  */
 export type CoachRead = {
@@ -782,6 +792,43 @@ export type CreateCoachResponses = {
 };
 
 export type CreateCoachResponse = CreateCoachResponses[keyof CreateCoachResponses];
+
+export type DeleteCurrentCoachData = {
+    body: CoachDelete;
+    path?: never;
+    query?: never;
+    url: '/coaches/me';
+};
+
+export type DeleteCurrentCoachErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Incorrect password
+     */
+    403: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeleteCurrentCoachError = DeleteCurrentCoachErrors[keyof DeleteCurrentCoachErrors];
+
+export type DeleteCurrentCoachResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteCurrentCoachResponse = DeleteCurrentCoachResponses[keyof DeleteCurrentCoachResponses];
 
 export type GetCurrentCoachData = {
     body?: never;

@@ -1,7 +1,8 @@
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
+import httpx2
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
@@ -21,16 +22,31 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
-from matchpoint_api.models import Coach, CoachSession, EmailVerification
+from matchpoint_api.models import (
+    Coach,
+    CoachSession,
+    EmailVerification,
+    Match,
+    PasswordReset,
+    Player,
+)
 from matchpoint_api.password_policy import BREACHED, COMMON, CONTEXT, REPEATED, SEQUENTIAL
-from matchpoint_api.security import verify_password
+from matchpoint_api.security import hash_password, verify_password
 from tests.conftest import (
     ORIGIN_HEADERS,
     TEST_ORIGIN,
     breach_every_password,
     break_the_breach_check,
 )
-from tests.factories import make_coach, make_coach_session, sign_in, verify_email
+from tests.factories import (
+    make_coach,
+    make_coach_session,
+    make_match,
+    make_password_reset,
+    make_player,
+    sign_in,
+    verify_email,
+)
 
 SIGN_UP = {
     "email": "mike@example.com",
@@ -868,6 +884,275 @@ def test_updating_without_a_cookie_is_a_401(client: TestClient) -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}
+
+
+# --- Closing an account: DELETE /coaches/me ---
+
+CLOSE_PASSWORD = "a-good-password"
+
+
+def _closable(client: TestClient, db_session: Session, **overrides: Any) -> Coach:
+    """A signed-in coach whose stored hash CLOSE_PASSWORD really verifies against.
+
+    One real hash rather than a sign-up and a login, as the change-password tests arrange
+    theirs: these are about the closure, not about how the session was earned.
+    """
+    coach = make_coach(db_session, password_hash=hash_password(CLOSE_PASSWORD), **overrides)
+    sign_in(client, db_session, coach)
+    return coach
+
+
+def _close(client: TestClient, **overrides: str) -> httpx2.Response:
+    """request() rather than delete(): httpx's delete() takes no body, and the password
+    has to be in one — a credential in a query string lands in access logs."""
+    return client.request("DELETE", "/coaches/me", json={"password": CLOSE_PASSWORD} | overrides)
+
+
+def _stub_out_verification(monkeypatch: pytest.MonkeyPatch, *, answer: bool) -> None:
+    """Answer every password the same way, for the tests that need volume rather than real
+    hashing: at ~165 ms an Argon2 run, ten closures would cost most of two seconds."""
+    monkeypatch.setattr("matchpoint_api.routers.coaches.verify_password", lambda *_: answer)
+
+
+def test_closing_an_account_erases_the_coach(client: TestClient, db_session: Session) -> None:
+    """The row itself goes, rather than gaining an archived_at: an archived coach would
+    keep the email, the display name and the password hash that closure exists to remove."""
+    coach = _closable(client, db_session)
+
+    response = _close(client)
+
+    assert response.status_code == 204
+    assert db_session.get(Coach, coach.id) is None
+
+
+def test_closing_an_account_takes_the_roster_and_its_matches(
+    client: TestClient, db_session: Session
+) -> None:
+    """Option 1 of #146, the cascade. The matches go through the players rather than
+    directly: a match reaches its owner only through the player it was recorded against."""
+    coach = _closable(client, db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+
+    assert _close(client).status_code == 204
+
+    assert db_session.get(Player, player.id) is None
+    assert db_session.get(Match, match.id) is None
+
+
+def test_closing_an_account_ends_every_session_and_clears_the_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    """Every session, not just the one that asked: the coach is gone, so no device of
+    theirs has anything left to be signed in to."""
+    coach = _closable(client, db_session)
+    make_coach_session(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _close(client)
+
+    assert response.status_code == 204
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(CoachSession).where(CoachSession.coach_id == coach.id)
+        )
+        == 0
+    )
+    assert response.cookies.get(SESSION_COOKIE) is None
+    assert client.get("/coaches/me").status_code == 401
+
+
+def test_a_closure_from_a_session_due_for_renewal_sends_no_renewed_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    """current_coach renews a session past its half-life through the middleware, which
+    writes after this response is built. Left alone it would re-set the cookie the closure
+    had just deleted, leaving the browser presenting a token for a coach who is gone."""
+    coach = _closable(client, db_session)
+    session_row = db_session.scalar(select(CoachSession).where(CoachSession.coach_id == coach.id))
+    assert session_row is not None
+    session_row.expires_at = datetime.now(UTC) + timedelta(days=1)
+    db_session.commit()
+
+    response = _close(client)
+
+    assert response.status_code == 204
+    assert len(response.headers.get_list("set-cookie")) == 1
+    assert response.cookies.get(SESSION_COOKIE) is None
+
+
+def test_closing_an_account_deletes_a_live_reset_code(
+    client: TestClient, db_session: Session
+) -> None:
+    """The foreign key from password_resets has no ondelete either, so an unclaimed code
+    left behind would refuse the delete outright."""
+    coach = _closable(client, db_session)
+    reset = make_password_reset(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    assert _close(client).status_code == 204
+
+    assert db_session.get(PasswordReset, reset.id) is None
+
+
+def test_the_email_can_sign_up_again_afterwards(client: TestClient, db_session: Session) -> None:
+    """The erasure claim that matters for a coach asking to be removed: nothing of theirs
+    is left holding the address, so the UNIQUE constraint no longer refuses it."""
+    _closable(client, db_session, email="mike@example.com")
+
+    assert _close(client).status_code == 204
+
+    client.cookies.clear()
+    verify_email(client, db_session, "mike@example.com")
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+
+
+def test_closing_an_account_leaves_every_other_coach_untouched(
+    client: TestClient, db_session: Session
+) -> None:
+    """The cascade is scoped by the session and nothing else. A bystander's player, match
+    and session are exactly what a coach_id-wide delete would take with it."""
+    _closable(client, db_session)
+    bystander = make_coach(db_session)
+    their_player = make_player(db_session, coach_id=bystander.id)
+    their_match = make_match(db_session, player_id=their_player.id)
+    their_session = make_coach_session(db_session, coach_id=bystander.id)
+    db_session.commit()
+
+    assert _close(client).status_code == 204
+
+    assert db_session.get(Coach, bystander.id) is not None
+    assert db_session.get(Player, their_player.id) is not None
+    assert db_session.get(Match, their_match.id) is not None
+    assert db_session.get(CoachSession, their_session.id) is not None
+
+
+def test_a_wrong_password_erases_nothing(client: TestClient, db_session: Session) -> None:
+    """The re-authentication itself: a session alone does not close an account. The body is
+    asserted exactly because the route declares the 403 as ErrorDetail and the generated
+    client is typed from that."""
+    coach = _closable(client, db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _close(client, password="not-the-password")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    assert db_session.get(Coach, coach.id) is not None
+    assert db_session.get(Player, player.id) is not None
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_closing_an_account_needs_a_session(client: TestClient) -> None:
+    """No session, no coach to re-authenticate: the 401 is current_coach's, which is
+    exactly why a wrong password answers 403 instead."""
+    response = _close(client)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_a_rejected_closure_echoes_no_password(client: TestClient, db_session: Session) -> None:
+    """errors.py redacts `password` wherever it appears, this body included. A session is
+    arranged because the dependency's 401 would otherwise answer before validation ran."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = _close(client, password="x" * 129)
+
+    assert response.status_code == 422
+    assert "x" * 129 not in response.text
+
+
+def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The wrong-guess budget, at the burst create_app sizes (5). What it bounds is a
+    stolen session hunting for the password, which is the only way this route can be
+    guessed against — and here the prize is a delete nothing undoes."""
+    _closable(client, db_session)
+    _stub_out_verification(monkeypatch, answer=False)
+    for _ in range(5):
+        assert _close(client).status_code == 403
+
+    response = _close(client)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    # The per-coach tier's quote (30 s a token). It is the only tier with nothing left,
+    # the arrival tiers being ten deep against six requests.
+    assert int(response.headers["Retry-After"]) > 6
+
+
+def test_a_correct_password_is_never_refused_by_the_coach_tier(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the budget counts failures and not arrivals: even while someone guesses against
+    a session they stole, the coach holding the real password can still close the account
+    out from under them."""
+    _closable(client, db_session)
+    for _ in range(5):
+        assert _close(client, password="wrong").status_code == 403
+    assert _close(client, password="wrong").status_code == 429
+
+    assert _close(client).status_code == 204
+
+
+def test_closure_arrivals_beyond_the_address_burst_are_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arrival tier the route's Argon2 run needs, at the burst create_app sizes (10).
+    Successes are what drain it, and successes are exactly what the wrong-guess tier
+    deliberately never charges, so nothing else here bounds the hashing."""
+    _stub_out_verification(monkeypatch, answer=True)
+    for _ in range(10):
+        _closable(client, db_session)
+        assert _close(client).status_code == 204
+
+    _closable(client, db_session)
+    refused = _close(client)
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_an_unauthenticated_flood_spends_none_of_the_closure_budget(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the tiers are taken in the handler and not the decorator's dependencies: ahead
+    of the session check, a stranger who can reach no hash at all would still drain the
+    shared bucket and stand between every coach and this route."""
+    for _ in range(20):
+        assert _close(client).status_code == 401
+
+    _closable(client, db_session)
+
+    assert _close(client).status_code == 204
+
+
+@pytest.mark.usefixtures("clock")
+def test_closing_an_account_has_a_total_bound_no_address_escapes(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sign-up's shared-tier reasoning: behind Cloudflare the per-address key is an edge
+    address an attacker can occupy many of. Two addresses drain the shared burst (10)
+    without exhausting their own; a third is refused on its first request."""
+    _stub_out_verification(monkeypatch, answer=True)
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = TestClient(
+            client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS, client=(address, 50000)
+        )
+        for _ in range(5):
+            _closable(from_address, db_session)
+            assert _close(from_address).status_code == 204
+
+    latecomer = TestClient(
+        client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS, client=("203.0.113.3", 50000)
+    )
+    _closable(latecomer, db_session)
+
+    assert _close(latecomer).status_code == 429
 
 
 def test_coaches_are_not_listable(client: TestClient) -> None:

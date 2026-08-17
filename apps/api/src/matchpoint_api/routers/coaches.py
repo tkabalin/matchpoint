@@ -1,21 +1,29 @@
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from psycopg.errors import UniqueViolation
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
+from matchpoint_api.auth import (
+    SESSION_COOKIE,
+    VERIFICATION_COOKIE,
+    CurrentCoach,
+    hash_token,
+    revoke_sessions,
+)
 from matchpoint_api.breach import BreachChecker
+from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach, EmailVerification
+from matchpoint_api.models import Coach, EmailVerification, Match, PasswordReset, Player
 from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
-from matchpoint_api.schemas.coach import CoachCreate, CoachRead, CoachUpdate
+from matchpoint_api.routers.auth import INCORRECT_PASSWORD
+from matchpoint_api.schemas.coach import CoachCreate, CoachDelete, CoachRead, CoachUpdate
 from matchpoint_api.schemas.errors import ErrorDetail
-from matchpoint_api.security import hash_password
+from matchpoint_api.security import hash_password, verify_password
 
 router = APIRouter(prefix="/coaches", tags=["coaches"])
 
@@ -183,3 +191,76 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
     data.apply_to(coach)
     db.commit()
     return coach
+
+
+# Closing an account is erasure, not the archiving every other table here does (#146):
+# an `archived_at` coach would leave the email, the name and the password hash on a row
+# nobody can reach, which is not what a coach asking to be removed has asked for. Why
+# the soft-delete convention stops at this one row, and what the cascade takes with it,
+# is in `docs/data-model.md`.
+#
+# The 403 is declared because the form branches on it, inline on the password field. The
+# message is change-password's, so a refused re-authentication reads the same wherever a
+# coach meets one.
+@router.delete(
+    "/me",
+    status_code=204,
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+def delete_current_coach(
+    data: CoachDelete,
+    coach: CurrentCoach,
+    request: Request,
+    db: DbSession,
+    response: Response,
+) -> None:
+    """Erase this coach and everything recorded under them, given their password.
+
+    The password is demanded for change-password's reason, with more at stake: the cookie
+    proves this browser was signed in once, not that whoever holds it now is the coach, and
+    there is nothing to recover to afterwards.
+    """
+    # In the handler rather than the decorator's dependencies, as change-password takes
+    # its tiers: metering after the session resolves stops a stranger who can reach no
+    # hash at all from draining the shared bucket.
+    per_ip: RateLimiter = request.app.state.close_account_per_ip_limit
+    total: RateLimiter = request.app.state.close_account_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+    if not verify_password(data.password.get_secret_value(), coach.password_hash):
+        # change-password's wrong-guess budget, charged only for a failure: what it bounds
+        # is a stolen session hunting for the password, and here that hunt ends in a delete
+        # nothing undoes.
+        per_coach: RateLimiter = request.app.state.close_account_per_coach_limit
+        per_coach.take(str(coach.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    # Children first, in one transaction, because every foreign key here declares no
+    # `ondelete` — so a table added below the coach and left out of this list stops the
+    # delete outright rather than being quietly missed. Nothing keys on the email
+    # (`email_verifications` cannot hold a registered address), so the address is free for
+    # a fresh sign-up the moment this commits.
+    db.execute(
+        delete(Match).where(
+            Match.player_id.in_(select(Player.id).where(Player.coach_id == coach.id))
+        )
+    )
+    db.execute(delete(Player).where(Player.coach_id == coach.id))
+    db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
+    revoke_sessions(db, coach.id)
+    db.delete(coach)
+    db.commit()
+    # The rows are gone, so clearing the cookie only stops the browser presenting a
+    # corpse — with the flags it was set with, or the browser keeps the original. The
+    # renewal channel is emptied in the same breath: `current_coach` may have left a token
+    # there, and the middleware writes after this response is built, so it would re-set
+    # the very cookie deleted here.
+    request.state.renewed_session_token = None
+    response.delete_cookie(
+        SESSION_COOKIE,
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )

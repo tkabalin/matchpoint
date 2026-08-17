@@ -59,6 +59,23 @@
         "title": "CoachCreate",
         "type": "object"
       },
+      "CoachDelete": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "CoachDelete",
+        "type": "object"
+      },
       "CoachRead": {
         "properties": {
           "created_at": {
@@ -1459,6 +1476,69 @@
       }
     },
     "/coaches/me": {
+      "delete": {
+        "description": "Erase this coach and everything recorded under them, given their password.\n\nThe password is demanded for change-password's reason, with more at stake: the cookie\nproves this browser was signed in once, not that whoever holds it now is the coach, and\nthere is nothing to recover to afterwards.",
+        "operationId": "delete_current_coach",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoachDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Incorrect password"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Current Coach",
+        "tags": [
+          "coaches"
+        ]
+      },
       "get": {
         "operationId": "get_current_coach",
         "responses": {

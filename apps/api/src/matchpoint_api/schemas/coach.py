@@ -25,6 +25,26 @@ EMAIL_MAX_LENGTH = 254
 PASSWORD_MIN_LENGTH = 8
 PASSWORD_MAX_LENGTH = 128
 
+# The two password shapes, one annotation each so bodies meaning the same thing cannot
+# drift apart in the generated client. `Password` is a credential being checked against a
+# stored hash, so it takes only the ceiling: the floor is sign-up policy for *new*
+# passwords, and applying it here would lock out every coach who enrolled before a later
+# raise of it. `NewPassword` is a password being chosen, so it takes both bounds.
+#
+# SecretStr keeps the value out of reprs, tracebacks and any structured log of the model,
+# and unlike the date-of-birth bounds its own bounds do reach the OpenAPI spec (format:
+# password, writeOnly, minLength, maxLength) — so a form enforces them without a
+# hand-written twin. What it cannot do is keep the value out of a 422 body, since FastAPI
+# echoes the submitted input back in detail[] and SecretStr never sees that error; the
+# field names are in `errors.py`'s SECRET_FIELDS, which redacts it there instead.
+#
+# Neither is stripped, unlike ShortText: a space is a legitimate password character, so
+# stripping would silently alter the credential a coach chose.
+Password = Annotated[SecretStr, Field(max_length=PASSWORD_MAX_LENGTH)]
+NewPassword = Annotated[
+    SecretStr, Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
+]
+
 
 # Comments rather than docstrings throughout: a schema's docstring becomes its description
 # in the OpenAPI spec and a TSDoc comment on the generated client type, and none of the
@@ -45,18 +65,8 @@ class CoachCreate(RequestModel):
         EmailStr, StringConstraints(strip_whitespace=True, max_length=EMAIL_MAX_LENGTH)
     ]
     display_name: ShortText
-    # SecretStr keeps the password out of reprs, tracebacks and any structured log of the
-    # model, and unlike the date-of-birth bounds its own bounds do reach the OpenAPI spec
-    # (format: password, writeOnly, minLength, maxLength) — so the sign-up form enforces
-    # them without a hand-written twin. What it cannot do is keep the password out of a
-    # 422 body, since FastAPI echoes the submitted value back in detail[].input and
-    # SecretStr never sees that error — so `errors.py` redacts it there instead.
-    #
-    # Not stripped, unlike ShortText above: a space is a legitimate password character, so
-    # stripping would silently alter the credential a coach chose.
-    password: Annotated[
-        SecretStr, Field(min_length=PASSWORD_MIN_LENGTH, max_length=PASSWORD_MAX_LENGTH)
-    ]
+    # A password being chosen, so both bounds apply — see NewPassword above.
+    password: NewPassword
 
 
 # The email stays out deliberately: it is the sign-in identity, and moving it needs the
@@ -69,6 +79,16 @@ class CoachUpdate(UpdateModel):
     # preference; absent still leaves it alone.
     default_surface: Surface | None = None
     default_scoring_system: ScoringSystem | None = None
+
+
+# A body on a DELETE, which is unusual but is where the credential has to go: a password
+# in a query string lands in access logs and browser history. No email — the session says
+# whose account this is — and no confirmation field, since a typed "DELETE" proves only
+# that the form was filled in, where the password proves who filled it in.
+class CoachDelete(RequestModel):
+    # Named `password` as LoginRequest names it, for the same meaning and the same
+    # annotation, and so already redacted from a 422 body under that name.
+    password: Password
 
 
 # password_hash is absent, and belongs nowhere else either. `response_model` filters a
