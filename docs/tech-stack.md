@@ -30,7 +30,7 @@ latest, since community support and documentation coverage peak there.
 | Schema validation | Zod 4 (generated from the spec)            |
 | Server state      | TanStack Query                             |
 | Charts            | Recharts 3 (via shadcn/ui `chart`)         |
-| Offline outbox    | _TBD -- TanStack Query mutations or Dexie_ |
+| Offline outbox    | Dexie 4 (IndexedDB)                        |
 | Package manager   | pnpm 11.18 workspace                       |
 | Lint / format     | ESLint 10 + Prettier 3                     |
 | Type checking     | tsc                                        |
@@ -79,6 +79,16 @@ written SVG (no dependency, but every chart re-derives axes, scales and responsi
 **TanStack Query.** Built-in `networkMode`/`onlineManager` for offline handling, cache persistence
 to IndexedDB via `persistQueryClient`, optimistic updates. Used for server-state reads and
 optimistic UI.
+
+**Dexie for the offline outbox.** Captured points go into their own IndexedDB database, drained by
+the sync layer, rather than riding TanStack Query's mutation queue paused by `networkMode`. A paused
+mutation queue is in memory until it is persisted next to the query cache, so evicting or clearing
+that cache could take unsynced points with it; a separate database means it cannot. The outbox also
+has to answer a query the mutation queue does not: every row for one match, in enqueue order, so a
+tab that dies mid-match can be replayed from what was written. Dexie is the standard typed wrapper
+over IndexedDB, and its `liveQuery` feeds the sync indicator's pending and failed counts without
+polling. Alternative considered: raw IndexedDB, which is the same schema plus the transaction
+boilerplate Dexie exists to remove.
 
 **@hey-api/openapi-ts.** FastAPI's auto-generated OpenAPI 3.1 spec feeds directly into typed
 TypeScript client generation with a TanStack Query plugin. This is now FastAPI's own recommended
