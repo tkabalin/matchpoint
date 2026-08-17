@@ -57,6 +57,45 @@ A successful login checks `needs_rehash()` and re-hashes when the stored hash us
 Login is the one moment where both the plaintext and a database session are available, so no offline
 migration script is needed.
 
+## Password validation
+
+**The risk.** Length bounds accept `12345678`, `aaaaaaaa` and a coach's own name with a digit on the
+end. Those are the first guesses any credential-stuffing run makes, so a password that meets the
+bounds and nothing else is close to no password at all.
+
+**The policy.** Every newly chosen password, at sign-up, at a reset and at a change, is checked
+against the kind of list NIST SP 800-63B asks for, and refused with a 400 naming the reason.
+Composition rules (a digit, a symbol, mixed case) are deliberately not part of it: the same standard
+advises against them, since they push people towards predictable substitutions rather than longer
+passwords.
+
+What the list covers (`password_policy.py`):
+
+- **Repetition:** one character making up more than half the password.
+- **Sequences:** five or more consecutive code points, ascending or descending, so `12345678` and
+  `abcdefgh` and their reverses.
+- **Common choices:** a small blocklist of the obvious ones, matched against the whole password, and
+  against it with trailing digits and punctuation removed so that `password!` is caught with
+  `password`. A passphrase merely containing a listed word is untouched.
+- **Context:** the coach's own display name or email local part appearing anywhere in it,
+  case-insensitively.
+
+The check is arithmetic over the submitted string, so it costs no network call and has no failure
+mode of its own. It reads the normalised form of the password, the same one that gets hashed, so an
+alternative encoding of a refused string is refused too.
+
+**Where it runs.** It gates the single password write that reset and change share, and the sign-up
+route calls it before the request has cost anything: before the Argon2 hash, and before the email
+verification is consumed, so a refused password can be replaced rather than costing the coach a
+fresh code. The reason comes back in plain language, because it is advice the coach has to act on.
+The same screens run a strength meter (zxcvbn) in the browser, which overlaps these rules without
+mirroring them: it scores guessability, so a password it passes can still be refused here, and a
+caller that never loaded the form is held to the rules regardless.
+
+**Limits.** The thresholds are loose by design: a false rejection lands on a coach mid-sign-up with
+no way around it, where a miss is a weak password rather than a compromised one. Passwords this list
+accepts and a breach list would not are the case for adding a breach-list check alongside it.
+
 ## Session management
 
 A login mints a 256-bit random token, stores only its SHA-256 in a `coach_sessions` row, and sets
