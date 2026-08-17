@@ -1,7 +1,14 @@
 import { describe, expect, test } from "vitest";
 
 import { Point } from "./point";
-import { gameStateFor, isAdScoringFor, maxSetsFor, setRulesFor, setStateFor } from "./state";
+import {
+  gameStateFor,
+  isAdScoringFor,
+  matchRulesFor,
+  maxSetsFor,
+  setRulesFor,
+  setStateFor,
+} from "./state";
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
@@ -19,6 +26,34 @@ describe("maxSetsFor", () => {
     ["legacy", 3],
   ] as const)("%s's max sets is %i", (scoringSystem, expected) => {
     expect(maxSetsFor(scoringSystem)).toBe(expected);
+  });
+});
+
+describe("matchRulesFor", () => {
+  test.each([
+    ["traditional", 2, 3],
+    ["mens_grand_slam", 3, 5],
+    ["womens_grand_slam", 2, 3],
+    ["no_ad_scoring", 2, 3],
+    ["match_tiebreak_10_points", 2, 3],
+    ["short_sets", 2, 3],
+    ["pro_set", 1, 1],
+    ["legacy", 2, 3],
+  ] as const)(
+    "%s needs %i sets to win, out of %i playable",
+    (scoringSystem, setsToWin, maxSets) => {
+      expect(matchRulesFor(scoringSystem)).toEqual({ setsToWin, maxSets });
+    },
+  );
+
+  test("mens_grand_slam and womens_grand_slam diverge on setsToWin — the entire reason they're separate systems", () => {
+    // A copy-paste bug giving both 2 would pass every other test in this
+    // suite, since nothing else distinguishes the two.
+    expect(matchRulesFor("mens_grand_slam").setsToWin).toBe(3);
+    expect(matchRulesFor("womens_grand_slam").setsToWin).toBe(2);
+    expect(matchRulesFor("mens_grand_slam").setsToWin).not.toBe(
+      matchRulesFor("womens_grand_slam").setsToWin,
+    );
   });
 });
 

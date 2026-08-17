@@ -354,3 +354,29 @@ export function setStateFor(
 
   return { trackedPlayerGames, opponentGames, tiebreak, winner };
 }
+
+// --- Match state ----------------------------------------------------------------
+
+export interface MatchRules {
+  setsToWin: number;
+  // Total sets playable (maxSetsFor's own value) — setRulesFor needs this
+  // exact number, not re-derived, to know which set is the decider.
+  maxSets: number;
+}
+
+/**
+ * A match's set-count rules: how many sets to win it outright, and the
+ * total sets playable.
+ *
+ * Both come from one resolver rather than leaving `setsToWin * 2 - 1`
+ * (or the reverse) inline at call sites — get that arithmetic wrong once
+ * and a caller silently mis-identifies the deciding set, the exact
+ * failure mode setRulesFor's own setNumber/maxSets check already guards
+ * against one level down. setsToWin is `(maxSets + 1) / 2`, exact integer
+ * division, not a rounding guess — a match can't end in a tie, so
+ * maxSetsFor's value is always odd.
+ */
+export function matchRulesFor(scoringSystem: ScoringSystem): MatchRules {
+  const maxSets = maxSetsFor(scoringSystem);
+  return { setsToWin: (maxSets + 1) / 2, maxSets };
+}
