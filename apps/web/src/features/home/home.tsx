@@ -10,6 +10,7 @@ import { useState } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -59,6 +60,19 @@ export function Home() {
         </div>
       )}
       <h1>Welcome to Home</h1>
+      {/* Match-in-progress / resume banner (wireframe 2c) goes here once there's a real
+          in-progress-match data source — capture has no route yet (#157). Deliberately
+          omitted rather than shown against invented state (#158). */}
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            <h2>Needs attention</h2>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">No flagged trends yet.</p>
+        </CardContent>
+      </Card>
       {lastViewedPlayer && lastViewedMatches && (
         <div>
           <h2>Last viewed player</h2>

@@ -62,8 +62,13 @@ async function renderPlayerProfile(playerId = player.id) {
     path: "/players/$playerId",
     component: PlayerProfile,
   });
+  const newMatchRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
+    path: "/new-match/$playerId",
+    component: () => <h1>New match</h1>,
+  });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([homeRoute, profileRoute]),
+    authenticatedRoute.addChildren([homeRoute, profileRoute, newMatchRoute]),
   ]);
   const router = createRouter({
     routeTree,
@@ -155,4 +160,81 @@ test("links back to home", async () => {
   await user.click(screen.getByRole("link", { name: "← Home" }));
 
   expect(await screen.findByRole("heading", { name: "Welcome to Home" })).toBeInTheDocument();
+});
+
+test("links to the match setup screen", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
+});
+
+test("switches to a tab's content when its trigger is clicked", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  expect(screen.queryByText(/Serve — Amahle Nkosi/)).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("tab", { name: "Serve" }));
+
+  expect(await screen.findByText(/Serve — Amahle Nkosi/)).toBeInTheDocument();
+});
+
+test("H2H tab lists opponents derived from match history, with meeting counts", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () =>
+      Response.json([
+        {
+          id: "3f1c2b4e-0000-4000-8000-00000000ma01",
+          player_id: player.id,
+          opponent_name: "T. Naidoo",
+          played_on: "2026-08-10",
+          surface: "hard",
+          event: null,
+          scoring_system: "traditional",
+          created_at: "2026-08-11T09:00:00Z",
+          updated_at: "2026-08-11T09:00:00Z",
+        },
+        {
+          id: "3f1c2b4e-0000-4000-8000-00000000ma02",
+          player_id: player.id,
+          opponent_name: "T. Naidoo",
+          played_on: "2026-08-03",
+          surface: "clay",
+          event: null,
+          scoring_system: "traditional",
+          created_at: "2026-08-04T09:00:00Z",
+          updated_at: "2026-08-04T09:00:00Z",
+        },
+      ]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("tab", { name: "H2H" }));
+
+  expect(await screen.findByText("T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("2 meetings")).toBeInTheDocument();
+
+  await user.click(screen.getByText("T. Naidoo"));
+
+  expect(await screen.findByText(/H2H detail vs T. Naidoo/)).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "← Back to opponents" }));
+
+  expect(await screen.findByText("T. Naidoo")).toBeInTheDocument();
 });

@@ -362,6 +362,14 @@ test("counts a match played today from a timezone ahead of UTC", async () => {
   expect(within(heading.closest("div")!).getByText("Matches this week: 1")).toBeInTheDocument();
 });
 
+test("shows an empty needs-attention state until trend flagging exists", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(await screen.findByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
+  expect(screen.getByText("No flagged trends yet.")).toBeInTheDocument();
+});
+
 test("renders the bottom nav with Home active", async () => {
   stubAuthenticatedHome();
   await renderHome();
