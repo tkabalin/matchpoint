@@ -497,6 +497,39 @@ def test_a_renewal_reaches_the_browser_even_on_an_error_response(db_session: Ses
     assert response.headers["set-cookie"].startswith(f"{SESSION_COOKIE}={token}")
 
 
+def test_a_renewal_reaches_the_browser_even_when_the_route_crashes(db_session: Session) -> None:
+    """The same promise on the one response no middleware writes. `current_coach` has
+    already committed the new deadline by the time a route raises, so a 500 that dropped
+    the cookie would sign the coach out on a deadline the server no longer holds.
+    """
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: db_session
+
+    @app.get("/boom")
+    def boom(_coach: CurrentCoach) -> None:
+        raise RuntimeError('relation "password_resets" does not exist')
+
+    coach = make_coach(db_session)
+    token = new_session_token()
+    session_row = make_coach_session(
+        db_session,
+        coach_id=coach.id,
+        token_hash=hash_token(token),
+        expires_at=datetime.now(UTC) + timedelta(days=5),
+    )
+    db_session.commit()
+
+    with TestClient(
+        app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS, raise_server_exceptions=False
+    ) as failing_client:
+        failing_client.cookies.set(SESSION_COOKIE, token)
+        response = failing_client.get("/boom")
+
+    assert response.status_code == 500
+    assert session_row.expires_at > datetime.now(UTC) + SESSION_LIFETIME - timedelta(minutes=1)
+    assert response.headers["set-cookie"].startswith(f"{SESSION_COOKIE}={token}")
+
+
 def test_me_leaves_a_session_in_its_first_half_alone(
     client: TestClient, db_session: Session
 ) -> None:

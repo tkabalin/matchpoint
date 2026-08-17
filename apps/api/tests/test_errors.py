@@ -1,7 +1,9 @@
-"""Unit tests for validation-error redaction — no fixtures, no database.
+"""What the client is told when a request fails: redaction, and the catch-all 500.
 
-The route-level proof that the handler is actually wired onto the app lives in
-`tests/routers/test_coaches.py`; these cover the shapes FastAPI can hand it.
+The redaction tests take no fixtures and no database, covering the shapes FastAPI can hand
+the handler; the route-level proof that it is wired onto the app lives in
+`tests/routers/test_coaches.py`. The catch-all has no router to prove it that way, so its
+tests build an app with a route that raises and read the response off the wire.
 """
 
 import importlib
@@ -9,10 +11,17 @@ import json
 import pkgutil
 
 from fastapi.exceptions import RequestValidationError
+from fastapi.testclient import TestClient
 from pydantic import BaseModel, SecretStr
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.requests import Request
+from starlette.responses import Response
 
 from matchpoint_api import schemas
-from matchpoint_api.errors import REDACTED, SECRET_FIELDS, validation_error_response
+from matchpoint_api.errors import REDACTED, SECRET_FIELDS, UNEXPECTED, validation_error_response
+from matchpoint_api.logs import REQUEST_ID_HEADER
+from matchpoint_api.main import create_app
+from tests.conftest import INTERNAL_MESSAGE, ORIGIN_HEADERS, TEST_ORIGIN, crashing_client
 
 
 def detail(*errors: dict[str, object]) -> list[dict[str, object]]:
@@ -127,3 +136,59 @@ def test_every_secret_field_in_the_schemas_is_named_in_secret_fields() -> None:
     """The tripwire. A new `SecretStr` field leaks silently — the response is a valid 422
     either way — so nothing but this test would report it."""
     assert secret_field_names() <= SECRET_FIELDS
+
+
+def test_an_unhandled_exception_answers_a_readable_json_body() -> None:
+    """Without this the body is Starlette's plain text, which the generated client throws
+    as a bare string: no `detail` to read, so every form falls back to its own guess at
+    what went wrong."""
+    response = crashing_client().get("/boom")
+
+    assert response.status_code == 500
+    assert response.headers["content-type"] == "application/json"
+    assert response.json() == {"detail": UNEXPECTED}
+
+
+def test_an_unhandled_exception_tells_the_client_nothing_about_itself() -> None:
+    """The security half. A generic body is only generic while nobody thinks to be helpful
+    with the exception they have in hand."""
+    body = crashing_client().get("/boom").text
+
+    assert INTERNAL_MESSAGE not in body
+    assert "RuntimeError" not in body
+    assert "Traceback" not in body
+
+
+def test_the_500_carries_the_request_id_that_logged_the_traceback() -> None:
+    """What makes the generic body actionable: the id the coach can quote is the id on the
+    log line holding the real exception. Set here rather than by the middleware, which
+    never gets its response back."""
+    response = crashing_client().get("/boom", headers={REQUEST_ID_HEADER: "crashcorrelation"})
+
+    assert response.headers[REQUEST_ID_HEADER] == "crashcorrelation"
+
+
+def test_a_failure_above_the_logging_middleware_is_answered_too() -> None:
+    """Why this is a handler and not another middleware: a middleware outside the one that
+    binds the request id can raise too, and that failure needs the same generic body. All
+    it costs is the header, since the id was never bound.
+    """
+
+    class Explodes(BaseHTTPMiddleware):
+        async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+            raise RuntimeError(INTERNAL_MESSAGE)
+
+    app = create_app()
+    # Added last, so outermost: nothing this app is asked for reaches the middleware that
+    # would have bound an id, let alone a route.
+    app.add_middleware(Explodes)
+
+    with TestClient(
+        app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS, raise_server_exceptions=False
+    ) as client:
+        response = client.get("/health")
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": UNEXPECTED}
+    assert INTERNAL_MESSAGE not in response.text
+    assert REQUEST_ID_HEADER not in response.headers

@@ -189,6 +189,19 @@ def set_reset_cookie(response: Response, token: str) -> None:
     )
 
 
+def send_renewed_session(request: Request, response: Response) -> None:
+    """Write the renewal this request left behind, if it left one.
+
+    `request.state` is backed by the ASGI scope, which the endpoint and everything
+    wrapping it share, so the dependency below can leave the token here for us. Called
+    from the middleware and from the unhandled-exception handler, the one response the
+    middleware never gets to see (`main.py`).
+    """
+    token = getattr(request.state, "renewed_session_token", None)
+    if token is not None:
+        set_session_cookie(response, token)
+
+
 class SessionRenewalMiddleware(BaseHTTPMiddleware):
     """Sends a renewed session cookie on whatever response the request produces.
 
@@ -203,11 +216,7 @@ class SessionRenewalMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
-        # `request.state` is backed by the ASGI scope, which the endpoint and this
-        # share, so the dependency below can leave the token here for us.
-        token = getattr(request.state, "renewed_session_token", None)
-        if token is not None:
-            set_session_cookie(response, token)
+        send_renewed_session(request, response)
         return response
 
 

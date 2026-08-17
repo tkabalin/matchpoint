@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from matchpoint_api.headers import DOCS_CSP, STRICT_CSP
 from matchpoint_api.main import create_app
+from tests.conftest import crashing_client
 
 # The full set a JSON response must carry (docs/security.md). Asserted verbatim so a
 # weakened value fails, not just a missing header.
@@ -36,6 +37,16 @@ def test_a_refused_origin_gets_them_too(client: TestClient) -> None:
     response = client.post("/auth/login", json={}, headers={"Origin": "https://elsewhere.test"})
 
     assert response.status_code == 403
+    for name, value in STRICT_HEADERS.items():
+        assert response.headers[name] == value
+
+
+def test_an_unhandled_exception_gets_them_too() -> None:
+    # Starlette writes this one above every middleware, so this middleware never sees it:
+    # errors.py stamps the set itself, and only this test would notice it stopping.
+    response = crashing_client().get("/boom")
+
+    assert response.status_code == 500
     for name, value in STRICT_HEADERS.items():
         assert response.headers[name] == value
 

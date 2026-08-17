@@ -3,8 +3,7 @@
 Caddy sets the static shell's headers, but a header set only at the proxy is absent
 whenever the proxy is not in front (dev, tests), so API responses carry their own.
 Middleware rather than per route for the 422 handler's reason: protection must not
-depend on each route remembering it. The exception is the 500 from an unhandled
-exception, which Starlette writes above every middleware. Policy: docs/security.md.
+depend on each route remembering it. Policy: docs/security.md.
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -28,6 +27,18 @@ DOCS_CSP = (
 )
 
 
+def apply_security_headers(response: Response, csp: str = STRICT_CSP) -> None:
+    """Stamp the set on one response.
+
+    A function as well as the middleware because the unhandled-exception 500 is written
+    above every middleware, so `errors.py` stamps that one itself.
+    """
+    response.headers["Content-Security-Policy"] = csp
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+
+
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Stamps the security header set on whatever response the request produces."""
 
@@ -38,8 +49,5 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # back off, as Starlette's router does before it matches a route.
         route_path = request.url.path.removeprefix(request.scope.get("root_path", ""))
         docs = route_path == "/docs"
-        response.headers["Content-Security-Policy"] = DOCS_CSP if docs else STRICT_CSP
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        apply_security_headers(response, DOCS_CSP if docs else STRICT_CSP)
         return response

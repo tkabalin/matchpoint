@@ -11,6 +11,9 @@ password has just published a live credential.
 Handled here rather than in the schema, because the leak belongs to FastAPI's error shape
 and not to anything the schema asked for. `SecretStr` already keeps the value out of
 reprs, tracebacks and logs, and can do nothing about an error it never sees.
+
+The catch-all 500 below is the same job at the other end: whatever went wrong, the client
+is told only that something did, and the traceback stays in the log.
 """
 
 from typing import Any
@@ -18,6 +21,10 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.requests import Request
+
+from matchpoint_api.headers import apply_security_headers
+from matchpoint_api.logs import REQUEST_ID_HEADER
 
 # The field names whose submitted value must never be echoed. `tests/test_errors.py`
 # fails if a schema grows a `SecretStr` field that is not named here — the failure
@@ -72,3 +79,24 @@ def validation_error_response(exc: RequestValidationError) -> JSONResponse:
         status_code=422,
         content={"detail": jsonable_encoder([_scrub(dict(error)) for error in exc.errors()])},
     )
+
+
+# Static, and the only thing an unhandled exception ever tells the client. What went wrong
+# is a message written for us, not for a coach: a stack frame, a table name, a provider's
+# refusal. `ErrorDetail`'s shape so the web app reads it like any other error.
+UNEXPECTED = "Something went wrong, please try again"
+
+
+async def unhandled_exception_response(request: Request, _exc: Exception) -> JSONResponse:
+    """The 500 body for an exception nothing else answered for.
+
+    Starlette runs this above every middleware, so the response has to carry the headers
+    they would have added: the id, which is what ties this answer to the logged traceback,
+    and the security set, which no response should be missing.
+    """
+    response = JSONResponse(status_code=500, content={"detail": UNEXPECTED})
+    request_id = getattr(request.state, "request_id", None)
+    if request_id is not None:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    apply_security_headers(response)
+    return response

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import SESSION_COOKIE, hash_otp
 from matchpoint_api.logs import REQUEST_ID_HEADER, REQUEST_ID_SHAPE, configure_logging
-from matchpoint_api.main import create_app
+from tests.conftest import crashing_client
 from tests.factories import (
     make_coach,
     make_email_verification,
@@ -107,14 +107,8 @@ def test_a_response_no_route_saw_is_logged_too(
 
 
 def test_a_crashed_handler_still_gets_its_line(capfd: pytest.CaptureFixture[str]) -> None:
-    app = create_app()
-
-    @app.get("/boom")
-    def boom() -> None:
-        raise RuntimeError("wired to fail")
-
-    client = TestClient(app, raise_server_exceptions=False)
-    assert client.get("/boom").status_code == 500
+    response = crashing_client().get("/boom")
+    assert response.status_code == 500
 
     [line] = _request_lines(capfd)
     assert line["status"] == 500
@@ -122,6 +116,9 @@ def test_a_crashed_handler_still_gets_its_line(capfd: pytest.CaptureFixture[str]
     # The traceback rides inside the same line, so compose's size-based log
     # rotation can never shear it in half.
     assert "RuntimeError" in line["exception"]
+    # The id on the generic body the client got is the id on this line, which is the whole
+    # of what makes a reported 500 findable: nothing else about it reaches the client.
+    assert line["request_id"] == response.headers[REQUEST_ID_HEADER]
 
 
 def test_a_line_logged_inside_a_route_inherits_the_request_id(

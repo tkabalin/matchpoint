@@ -23,6 +23,29 @@ ALLOW_NONLOCAL_ENV = "MATCHPOINT_TEST_ALLOW_NONLOCAL_DB"
 TEST_ORIGIN = "https://testserver"
 ORIGIN_HEADERS = {"Origin": TEST_ORIGIN}
 
+# What the crashing route below raises, shaped like the internals a leak would expose: a
+# DBAPI message names the table it failed on and brings its statement along.
+INTERNAL_MESSAGE = 'relation "password_resets" does not exist'
+
+
+def crashing_client() -> TestClient:
+    """A client over an app with one route that raises, reporting the 500 it produces.
+
+    Here rather than in one test module because three of them need it: the body, the
+    headers, and the log line are separate subjects over the same one failure.
+    `raise_server_exceptions=False` is what makes the response readable at all, since
+    Starlette hands the exception on after answering and the default re-raises it.
+    """
+    app = create_app()
+
+    @app.get("/boom")
+    def boom() -> None:
+        raise RuntimeError(INTERNAL_MESSAGE)
+
+    return TestClient(
+        app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS, raise_server_exceptions=False
+    )
+
 
 # The email sender is pinned in `tests/__init__.py`, not here: this module imports
 # `matchpoint_api.main`, which builds an app at import time, so the pin has to be in

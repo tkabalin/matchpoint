@@ -4,11 +4,11 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 
 from matchpoint_api import __version__
-from matchpoint_api.auth import SessionRenewalMiddleware
+from matchpoint_api.auth import SessionRenewalMiddleware, send_renewed_session
 from matchpoint_api.body_limit import RequestBodyLimitMiddleware
 from matchpoint_api.config import settings
 from matchpoint_api.csrf import OriginCheckMiddleware
-from matchpoint_api.errors import validation_error_response
+from matchpoint_api.errors import unhandled_exception_response, validation_error_response
 from matchpoint_api.headers import SecurityHeadersMiddleware
 from matchpoint_api.logs import RequestLogMiddleware, configure_logging
 from matchpoint_api.mail import create_email_sender
@@ -36,6 +36,9 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="MatchPoint API",
         version=__version__,
+        # Never set on a deployed box: Starlette checks debug *before* the handler below,
+        # so turning it on to chase a fault replaces the generic 500 with an HTML page
+        # carrying the traceback, its source lines and its frame locals.
         debug=settings.debug,
         generate_unique_id_function=operation_id,
         redoc_url=None,
@@ -49,6 +52,19 @@ def create_app() -> FastAPI:
         _request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         return validation_error_response(exc)
+
+    # Everything else, so that no failure answers with Starlette's plain-text default: a
+    # body with no `detail` is one the generated client cannot read, which leaves the web
+    # app showing a form's fallback text for a fault that has nothing to do with the form.
+    # Starlette runs this above the middleware stack, which is what lets it catch a
+    # middleware's own exception, and what makes this the one response the middleware
+    # never decorates. So the renewed session cookie is sent here, and errors.py stamps
+    # the headers: a renewal is already committed by the time a route raises.
+    @app.exception_handler(Exception)
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        response = await unhandled_exception_response(request, exc)
+        send_renewed_session(request, response)
+        return response
 
     # Added first, so innermost: a mid-stream refusal is an HTTPException raised from
     # `receive`, and it only reaches FastAPI's handler with no BaseHTTPMiddleware in

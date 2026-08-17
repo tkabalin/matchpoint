@@ -150,13 +150,17 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
             inbound if inbound and REQUEST_ID_SHAPE.fullmatch(inbound) else uuid.uuid4().hex
         )
         structlog.contextvars.bind_contextvars(request_id=request_id)
+        # On the scope as well, for the coach id's reason below: the handler that shapes
+        # the unhandled-exception 500 runs above this middleware, so the header it sets
+        # can only come from what the request itself carries.
+        request.state.request_id = request_id
         start = time.perf_counter()
         try:
             response = await call_next(request)
         except Exception:
-            # The 500 this becomes is built by Starlette's outermost handler, which
-            # this response never was: no header, but the line and its traceback
-            # still land, and the id inside them is what the report gets matched on.
+            # The 500 this becomes is built by Starlette's outermost handler, which this
+            # response never was, so the line here is the only record of the traceback,
+            # under the id that handler answers with.
             self._log_request(request, status=500, start=start, exc_info=True)
             raise
         response.headers[REQUEST_ID_HEADER] = request_id
