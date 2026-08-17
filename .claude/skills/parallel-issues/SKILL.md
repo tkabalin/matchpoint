@@ -33,9 +33,10 @@ prompt, and it is the most important rule in this skill.
    optional model name for the agents (`opus`, `sonnet`, `haiku`, or `fable`, given bare or as
    `--model <name>`). Default to `opus` when none is given; both implementers and reviewers use the
    same model.
-2. Fetch each with `glab issue view <n>` (glab is authenticated for gitlab.cs.uct.ac.za; it is a
-   snap and cannot read `/tmp`, so never hand it a `/tmp` path). Read the full description and any
-   linked issues.
+2. Fetch each with `glab issue view <n> --comments` (glab is authenticated for
+   gitlab.cs.uct.ac.za; it is a snap and cannot read `/tmp`, so never hand it a `/tmp` path). Read
+   the full description, every comment, and any linked issues — comments often carry scope
+   changes, clarifications, or client (BBD) feedback that the description alone won't show.
 3. If an issue is blocked by an open issue outside the batch, skip it and say so in the final report
    rather than guessing at the missing dependency.
 4. Look for overlap between the issues before launching anything:
@@ -79,9 +80,18 @@ filled in:
 - Prose bans, everywhere (code comments, docstrings, commits, docs): no em dashes, never the phrase
   "load-bearing".
 - Never ask the user anything. When a question comes up, weigh the options against the assignment
-  brief and the repo's conventions, pick the best one, and record it: one or two sentences on what
-  you chose and why. These come back to the coordinator and become the MR's "Decisions for review"
-  bullets, which is how the user reviews your judgement, so record every real choice.
+  brief and the repo's conventions, pick the best one, and record it: what you chose, why, and —
+  only when a real alternative was seriously weighed — what it was and why you ruled it out (don't
+  invent an alternative just to fill this in). Also record your confidence in the call (High,
+  Medium, or Low) so the reviewer knows where to spend attention, and — only when it applies —
+  whether the choice deviates from the standard, idiomatic, or canonical way of doing this in the
+  language, framework, or codebase, and why: a deviation can be made with full confidence, but the
+  reviewer still needs to know it's there. These come back to the coordinator and become the MR's
+  "Decisions for review" bullets, which is how the user reviews your judgement, so record every
+  real choice.
+- Write every decision, and anything else destined for the MR description, for a reader with no
+  prior experience of the frameworks, libraries, or techniques involved. Name an unfamiliar tool
+  once and gloss what it does in a clause; don't assume the reader already knows it.
 
 ## 3. Implementation agents
 
@@ -94,11 +104,16 @@ and branch name, the conventions block, and this return contract:
 - Implement the issue completely, tests included, on the branch. Surgical changes only: touch
   nothing the issue does not require.
 - Do not push. Commit only.
-- Return: branch name, a one-paragraph summary of the change, the decisions list, the result of each
-  of the eight checks (with test counts and coverage), anything noticed that will conflict with
-  sibling branches, and every step the change needs that only a human can do (copy files onto the
-  VPS, set a CI variable, mint a token, add a DNS record). Manual steps become a checklist in the
-  MR, so an unreported one is a deploy that breaks after merge.
+- Return: branch name, a one-paragraph summary of the change, the decisions list (each entry:
+  what was chosen, why, any alternative seriously weighed and ruled out, a confidence rating
+  High/Medium/Low, and — only when it applies — how the choice deviates from the standard or
+  idiomatic approach and why), whether the change touches auth, sessions, migrations/schema,
+  security headers/config, rate limiting, or any field holding personal data — name which, or say
+  plainly that none apply, since silence reads as an oversight rather than a "no" — the result of
+  each of the eight checks (with test counts and coverage), anything noticed that will conflict
+  with sibling branches, and every step the change needs that only a human can do (copy files onto
+  the VPS, set a CI variable, mint a token, add a DNS record). Manual steps become a checklist in
+  the MR, so an unreported one is a deploy that breaks after merge.
 
 ## 4. Review agents
 
@@ -125,7 +140,10 @@ the implementer's summary, the conventions block, and:
 - Push exactly once: `git push -u origin <branch>`. The branch has never been pushed, so a plain
   push must succeed; if it rejects, stop and report instead of forcing.
 - Return: the pushed tip SHA, what the review found (fixed, and rejected with reasons), any new
-  decisions made while fixing, any manual steps the implementer missed, and the final check results.
+  decisions made while fixing (same shape as the implementer's: what, why, alternatives ruled out
+  if any, confidence, convention deviation if any), whether a fold-in fix changed the answer to
+  the implementer's sensitive-area question (e.g. a fix that adds a migration), any manual steps
+  the implementer missed, and the final check results.
 
 ## 5. One MR per branch
 
@@ -138,30 +156,57 @@ glab mr create --source-branch thomas/<slug> --target-branch main --yes \
   --description "$(cat <description file>)"
 ```
 
-The description follows the house shape (see !38 for the canonical example):
+The description follows the house shape. It must read cleanly for someone with no prior experience
+of the frameworks, libraries, or techniques the branch touches: gloss any tool by name on first
+use, and prefer bullets and arrows over prose wherever a fact needs to be scanned rather than read
+top to bottom.
 
 ```
-<One paragraph: what the MR adds and how it fits the surrounding work, referencing
-sibling MRs by !number where relevant.>
+## Summary
+
+<A short plain-language paragraph: what the MR adds, and how it fits the surrounding
+work, referencing sibling MRs by !number where relevant.>
+
+**Touches:** <sensitive area(s) named plainly, e.g. "coach sessions, a new migration"
+— or "no security- or data-sensitive areas" when none apply. Always present, never
+omitted: "none" is itself useful information.>
 
 Closes #<n>
 
 ## Decisions for review
 
-- **<Short bold title.>** <The decision and the reasoning behind it, two to four
-  sentences. One bullet per question the agents chose not to ask.>
+- **<Short bold title.>**
+  - **Decision:** <what was chosen, in plain language>
+  - **Why:** <the reasoning>
+  - **Alternatives considered:** <option(s) seriously weighed and why each was ruled
+    out — omit this line entirely when there was really only one reasonable choice>
+  - **Confidence:** High | Medium | Low
+  - **Convention:** <how this deviates from the standard/idiomatic/canonical approach,
+    and why — omit this line entirely when the choice follows the standard approach>
 
-A `/code-review high` pass ran over the branch: <what it found and that the fixes were
-folded into the originating commits, or "no defects">.
+<One such bullet per question the agents chose not to ask.>
 
-Verification: <suites and counts, e.g. "full API suite (N passed, coverage 100%
-statement and branch), ruff, pyright, eslint, tsc, vitest, prettier all green.">
+## Review
 
-Merge notes: <expected conflicts with sibling MRs from this batch and how to resolve
-them: regenerate the client with scripts/gen-api-client.sh on rebase rather than
-hand-merging, the alembic re-parent if two branches added migrations, shared-file
-notes. If a specific landing order is required or clearly cleanest, open with it:
-"Land after !NN" or "Order among the batch does not matter", and why.>
+A `/code-review high` pass ran over the branch:
+
+- <One bullet per finding: what it was, and "fixed, folded into the originating
+  commit" or "rejected — <reason>". If nothing was found, a single "No defects
+  found." line replaces the bullets.>
+
+## Verification
+
+<Suites and counts, e.g. "full API suite (N passed, coverage 100% statement and
+branch), ruff, pyright, eslint, tsc, vitest, prettier all green.">
+
+## Merge notes
+
+- <One bullet per fact a reviewer needs to land this safely: expected conflicts with a
+  named sibling MR and how to resolve them (e.g. "regenerate the client with
+  scripts/gen-api-client.sh on rebase, don't hand-merge"), the alembic re-parent if two
+  branches added migrations, shared-file notes.>
+- Landing order: <an arrow chain when order matters, e.g. "!12 → !13 → !14", or "order
+  among the batch does not matter" — state it explicitly either way, and why.>
 
 ## Manual steps
 
