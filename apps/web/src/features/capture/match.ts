@@ -55,38 +55,6 @@ export const SCORING_SYSTEMS: readonly ScoringSystem[] = [
 ];
 
 /**
- * The most sets a match of this format can run to — a match can finish
- * earlier (e.g. a straight-sets win), so this is a ceiling, not a
- * prediction. The single place this gets derived from `ScoringSystem`, so
- * nothing else (whatever appends a new MatchSet, a set-by-set summary UI)
- * needs its own copy of this mapping.
- *
- * TODO: confirm against the brief/BBD once set/game rules are firmed up —
- * "traditional" and "legacy" are placeholder assumptions (best-of-3) for now.
- */
-export function maxSetsFor(scoringSystem: ScoringSystem): number {
-  switch (scoringSystem) {
-    case "mens_grand_slam":
-      return 5;
-    case "pro_set":
-      return 1;
-    case "traditional":
-    case "womens_grand_slam":
-    case "no_ad_scoring":
-    case "match_tiebreak_10_points":
-    case "short_sets":
-    case "legacy":
-      return 3;
-    default: {
-      // Exhaustiveness check: a new ScoringSystem member with no case above
-      // fails to compile here instead of silently falling through.
-      const unhandled: never = scoringSystem;
-      throw new Error(`unhandled scoringSystem: ${String(unhandled)}`);
-    }
-  }
-}
-
-/**
  * `id` and `trackedPlayerId`/`opponentId` follow Point's convention: `trackedPlayerId`
  * always comes from a real `Player` row, `opponentId` does too when the opponent is
  * identifiable — but the backend doesn't foreign-key the opponent at all (most

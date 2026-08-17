@@ -1,11 +1,41 @@
 import { describe, expect, test } from "vitest";
 
 import { Point } from "./point";
-import { gameStateFor } from "./state";
+import { gameStateFor, isAdScoringFor, maxSetsFor } from "./state";
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
 const GAME_ID = "game-1";
+
+describe("maxSetsFor", () => {
+  test.each([
+    ["traditional", 3],
+    ["mens_grand_slam", 5],
+    ["womens_grand_slam", 3],
+    ["no_ad_scoring", 3],
+    ["match_tiebreak_10_points", 3],
+    ["short_sets", 3],
+    ["pro_set", 1],
+    ["legacy", 3],
+  ] as const)("%s's max sets is %i", (scoringSystem, expected) => {
+    expect(maxSetsFor(scoringSystem)).toBe(expected);
+  });
+});
+
+describe("isAdScoringFor", () => {
+  test.each([
+    ["traditional", true],
+    ["mens_grand_slam", true],
+    ["womens_grand_slam", true],
+    ["no_ad_scoring", false],
+    ["match_tiebreak_10_points", true],
+    ["short_sets", false],
+    ["pro_set", true],
+    ["legacy", true],
+  ] as const)("%s is ad scoring: %s", (scoringSystem, expected) => {
+    expect(isAdScoringFor(scoringSystem)).toBe(expected);
+  });
+});
 
 /** A won point, minimal otherwise — override just the fields a test cares about. */
 function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { createMatch, Match, maxSetsFor } from "./match";
+import { createMatch, Match } from "./match";
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
@@ -151,21 +151,6 @@ describe("Match.create surfaceType validation", () => {
       "unspecified",
     );
     expect(match.surfaceType).toBe("unspecified");
-  });
-});
-
-describe("maxSetsFor", () => {
-  test.each([
-    ["traditional", 3],
-    ["mens_grand_slam", 5],
-    ["womens_grand_slam", 3],
-    ["no_ad_scoring", 3],
-    ["match_tiebreak_10_points", 3],
-    ["short_sets", 3],
-    ["pro_set", 1],
-    ["legacy", 3],
-  ] as const)("%s's max sets is %i", (scoringSystem, expected) => {
-    expect(maxSetsFor(scoringSystem)).toBe(expected);
   });
 });
 
