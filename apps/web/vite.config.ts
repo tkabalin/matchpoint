@@ -43,6 +43,11 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test-setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // Vitest's default is 5s, which is a laptop's figure: the runner gives four jobs
+    // four cores, and a `userEvent` flow that takes 440ms here has timed out there
+    // under that load. A timeout only bounds a failure, so the slack is free, and 15s
+    // still reports a genuinely hung test well inside the suite's own runtime.
+    testTimeout: 15_000,
     coverage: {
       // text-summary prints the one totals block CI's coverage regex reads; the
       // default text reporter only emits a per-file table.
