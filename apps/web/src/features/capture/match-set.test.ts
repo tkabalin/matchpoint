@@ -15,6 +15,7 @@ function matchSetData(overrides: Record<string, unknown> = {}) {
     opponentId: OPPONENT_ID,
     trackedPlayerGames: 6,
     opponentGames: 4,
+    tiebreak: null,
     winner: TRACKED_ID,
     ...overrides,
   };
@@ -63,6 +64,51 @@ describe("MatchSet.create structural validation", () => {
 
   test("rejects a winner that isn't a participant", () => {
     expect(() => MatchSet.create(matchSetData({ winner: "someone-else" }))).toThrow();
+  });
+});
+
+describe("MatchSet.create tiebreak validation", () => {
+  test("accepts a null tiebreak — the set wasn't decided by a breaker", () => {
+    const set = MatchSet.create(matchSetData({ tiebreak: null }));
+    expect(set.tiebreak).toBeNull();
+  });
+
+  test("accepts a valid tiebreak score", () => {
+    const tiebreak = { trackedPlayerPoints: 7, opponentPoints: 5, target: 7 };
+    const set = MatchSet.create(matchSetData({ tiebreak }));
+    expect(set.tiebreak).toEqual(tiebreak);
+  });
+
+  test("accepts the match_tiebreak_10_points degenerate case: 0/0 games, tiebreak decides it", () => {
+    const set = MatchSet.create(
+      matchSetData({
+        trackedPlayerGames: 0,
+        opponentGames: 0,
+        tiebreak: { trackedPlayerPoints: 10, opponentPoints: 7, target: 10 },
+      }),
+    );
+    expect(set.trackedPlayerGames).toBe(0);
+    expect(set.opponentGames).toBe(0);
+    expect(set.tiebreak).toEqual({ trackedPlayerPoints: 10, opponentPoints: 7, target: 10 });
+  });
+
+  test("rejects a non-object, non-null tiebreak", () => {
+    expect(() => MatchSet.create(matchSetData({ tiebreak: "not an object" }))).toThrow(
+      /tiebreak must be an object/,
+    );
+  });
+
+  test.each(["trackedPlayerPoints", "opponentPoints"])(
+    "rejects a negative tiebreak.%s",
+    (field) => {
+      const tiebreak = { trackedPlayerPoints: 7, opponentPoints: 5, target: 7, [field]: -1 };
+      expect(() => MatchSet.create(matchSetData({ tiebreak }))).toThrow(`tiebreak.${field}`);
+    },
+  );
+
+  test.each([0, -1, 1.5])("rejects a tiebreak.target of %s", (target) => {
+    const tiebreak = { trackedPlayerPoints: 7, opponentPoints: 5, target };
+    expect(() => MatchSet.create(matchSetData({ tiebreak }))).toThrow(/tiebreak\.target/);
   });
 });
 
