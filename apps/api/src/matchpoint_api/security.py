@@ -49,7 +49,7 @@ _slots = threading.Semaphore(2)
 DUMMY_HASH = _hasher.hash(secrets.token_urlsafe(32))
 
 
-def _normalise(password: str) -> str:
+def normalise(password: str) -> str:
     """Fold a password to one canonical encoding before it is hashed or checked.
 
     A composable character has more than one valid encoding — é is either one code point
@@ -57,8 +57,9 @@ def _normalise(password: str) -> str:
     not by what the coach typed. Hashing the bytes as submitted would lock out a coach who
     enrolled from a keyboard producing one form and signs in from one producing the other,
     with nothing to say why: the same silent-lockout failure `verify_password` is careful
-    to avoid below. NIST SP 800-63B calls for NFKC or NFKD; either serves, so long as both
-    functions here apply the same one.
+    to avoid below. NIST SP 800-63B calls for NFKC or NFKD; either serves, so long as
+    every caller applies the same one, which is why this is shared rather than private:
+    `password_policy.py` has to judge the string this returns, not the one submitted.
     """
     return unicodedata.normalize("NFKC", password)
 
@@ -69,7 +70,7 @@ def hash_password(password: str) -> str:
     Two calls on one password therefore differ, so a stored hash is not a lookup key.
     """
     with _slots:
-        return _hasher.hash(_normalise(password))
+        return _hasher.hash(normalise(password))
 
 
 def verify_password(password: str, password_hash: str) -> bool:
@@ -82,7 +83,7 @@ def verify_password(password: str, password_hash: str) -> bool:
     """
     with _slots:
         try:
-            return _hasher.verify(password_hash, _normalise(password))
+            return _hasher.verify(password_hash, normalise(password))
         except VerifyMismatchError:
             return False
 

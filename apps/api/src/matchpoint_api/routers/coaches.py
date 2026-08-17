@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import VERIFICATION_COOKIE, CurrentCoach, hash_token
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, EmailVerification
+from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.coach import CoachCreate, CoachRead, CoachUpdate
 from matchpoint_api.schemas.errors import ErrorDetail
@@ -66,6 +67,7 @@ def _email_not_verified() -> HTTPException:
     response_model=CoachRead,
     dependencies=[Depends(limit_sign_up_rate)],
     responses={
+        400: {"model": ErrorDetail, "description": REJECTION},
         401: {"model": ErrorDetail, "description": "Email not verified"},
         409: {"model": ErrorDetail, "description": "Email already registered"},
         429: {"model": ErrorDetail, "description": "Too many sign-up attempts"},
@@ -80,6 +82,17 @@ def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
     token = request.cookies.get(VERIFICATION_COOKIE)
     if token is None:
         raise _email_not_verified()
+    # Ahead of the consume below, not folded into it: a refused password leaves the
+    # verification standing, so the coach picks another and carries on, where a check
+    # after it would cost them a fresh code for a typo. Ahead of the Argon2 hash too,
+    # for rate limiting's reason. Only the missing-cookie 401 precedes it, so a cookie the
+    # consume would reject hears the policy reason first; the policy is published, so that
+    # answers nothing `docs/security.md` does not.
+    check_password(
+        data.password.get_secret_value(),
+        email=data.email,
+        display_name=data.display_name,
+    )
     # One statement is the validity check, the email match and the consumption, so single-use
     # needs no lock and expiry has no read-then-act window. The email is in the WHERE because
     # a cookie proving mike@ must not authorise an account for sam@ — lowercased to match what

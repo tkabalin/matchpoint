@@ -24,7 +24,9 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  * Replace this coach's password, given the current one, and end every session.
  *
  * The caller keeps working on a freshly issued session cookie. A wrong current password
- * answers 403, where a missing or dead session answers 401.
+ * answers 403, a missing or dead session 401, and a new password `set_password`'s policy
+ * refuses 400, that one after the 403, so a wrong current password is what a caller
+ * getting both wrong hears about first.
  */
 export const changePassword = <ThrowOnError extends boolean = false>(options: Options<ChangePasswordData, ThrowOnError>): RequestResult<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError> => (options.client ?? client).post<ChangePasswordResponses, ChangePasswordErrors, ThrowOnError>({
     url: '/auth/change-password',
@@ -82,7 +84,8 @@ export const requestOtp = <ThrowOnError extends boolean = false>(options: Option
  * Set the new password, given the cookie verify-reset-code minted.
  *
  * A 401 means that cookie is missing, spent, expired, or was earned for a different
- * address, so the coach has to answer a code again; every live session ends here.
+ * address, so the coach has to answer a code again. A 400 means the code was fine but
+ * `set_password`'s policy refused the new password. Every live session ends here.
  */
 export const resetPassword = <ThrowOnError extends boolean = false>(options: Options<ResetPasswordData, ThrowOnError>): RequestResult<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError> => (options.client ?? client).post<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError>({
     url: '/auth/reset-password',

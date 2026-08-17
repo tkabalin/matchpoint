@@ -28,6 +28,7 @@ from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.mail import EmailSender, EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
+from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.auth import (
     ChangePasswordRequest,
@@ -449,7 +450,14 @@ def set_password(db: Session, coach: Coach, new_password: str) -> None:
     password. Every session and any live reset row go with the old password, all being
     credentials it left standing; that row is unique on coach_id, so there is at most
     one. No commit, for revoke_sessions' reason.
+
+    The policy check (#141) sits here rather than at each caller, so the one password
+    write is also the one place a password can fail policy. It raises before anything
+    below runs and nothing here commits, so a refused password leaves the reset row and
+    its attempt charge to roll back with the request: the code the coach was handed
+    still works on the next try.
     """
+    check_password(new_password, email=coach.email, display_name=coach.display_name)
     coach.password_hash = hash_password(new_password)
     db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
     revoke_sessions(db, coach.id)
@@ -668,6 +676,7 @@ def limit_reset_password_rate(request: Request) -> None:
     status_code=204,
     dependencies=[Depends(limit_reset_password_rate)],
     responses={
+        400: {"model": ErrorDetail, "description": REJECTION},
         401: {"model": ErrorDetail, "description": CODE_NOT_VERIFIED},
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
@@ -676,7 +685,8 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: DbSession) 
     """Set the new password, given the cookie verify-reset-code minted.
 
     A 401 means that cookie is missing, spent, expired, or was earned for a different
-    address, so the coach has to answer a code again; every live session ends here.
+    address, so the coach has to answer a code again. A 400 means the code was fine but
+    `set_password`'s policy refused the new password. Every live session ends here.
     """
     # From request.cookies rather than a Cookie() parameter, for current_coach's reason:
     # a declared cookie parameter reaches the spec and the generated client's signature.
@@ -689,27 +699,24 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: DbSession) 
     coach = db.scalar(select(Coach).where(Coach.email == email))
     if coach is None:
         raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
-    # One statement is the validity check, the coach match and the consumption, as at
-    # POST /coaches: single-use needs no lock and expiry has no read-then-act window.
-    # The coach is in the WHERE because a cookie proving mike@ must not reset sam@'s
-    # password, and because a cookie left over from an earlier address should send the
-    # coach back to the code screen rather than quietly resetting the other account.
-    #
-    # Consumed before the Argon2 run below, so a request holding no live proof costs no
-    # hash, POST /coaches' ordering, for its reason.
-    consumed = db.execute(
-        delete(PasswordReset)
-        .where(
+    # A read rather than the delete POST /coaches matches this against: #141's policy
+    # check still has to run below, and a policy-refused password must leave this row
+    # standing so the code the coach was mailed still works on the next try. set_password
+    # retires it, along with any other row for this coach, once the new password clears
+    # that check. The coach is in the WHERE because a cookie proving mike@ must not reset
+    # sam@'s password, and because a cookie left over from an earlier address should send
+    # the coach back to the code screen rather than quietly resetting the other account.
+    consumed = db.scalar(
+        select(PasswordReset.id).where(
             PasswordReset.coach_id == coach.id,
             PasswordReset.token_hash == hash_token(token),
             PasswordReset.expires_at > datetime.now(UTC),
         )
-        .returning(PasswordReset.id)
-    ).one_or_none()
+    )
     if consumed is None:
         raise HTTPException(status_code=401, detail=CODE_NOT_VERIFIED)
     # No session is spared, because the premise of a reset is that someone else may hold
-    # the old credential. The row this would delete is the one already consumed above.
+    # the old credential. The row this retires is the one matched above.
     set_password(db, coach, data.new_password.get_secret_value())
     db.commit()
 
@@ -729,6 +736,7 @@ INCORRECT_PASSWORD = "Incorrect password"
     "/change-password",
     status_code=204,
     responses={
+        400: {"model": ErrorDetail, "description": REJECTION},
         401: {"model": ErrorDetail, "description": "Not signed in"},
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
         # Two things now answer 429 here, this route's wrong-guess and arrival tiers and
@@ -743,7 +751,9 @@ def change_password(
     """Replace this coach's password, given the current one, and end every session.
 
     The caller keeps working on a freshly issued session cookie. A wrong current password
-    answers 403, where a missing or dead session answers 401.
+    answers 403, a missing or dead session 401, and a new password `set_password`'s policy
+    refuses 400, that one after the 403, so a wrong current password is what a caller
+    getting both wrong hears about first.
     """
     # In the handler, not the decorator's dependencies where the other Argon2-spending
     # routes put theirs: metering after the session resolves stops a stranger draining

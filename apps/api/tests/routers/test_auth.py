@@ -25,6 +25,7 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.mail import EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
+from matchpoint_api.password_policy import CONTEXT, REPEATED
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
@@ -1407,6 +1408,25 @@ def test_a_correct_code_resets_the_password(client: TestClient, db_session: Sess
     assert new.status_code == 200
 
 
+def test_a_reset_to_a_password_the_policy_refuses_is_a_400(
+    client: TestClient, db_session: Session
+) -> None:
+    """#141 at set_password, seen through reset: the refusal writes nothing, and the code
+    is still there to finish the reset with an acceptable password. That is the point of
+    checking before the row is deleted: a refused choice must not cost the coach the code
+    they were mailed."""
+    _sign_up(client, db_session)
+    code = _forgot(client)
+
+    assert _verify_reset(client, code).status_code == 200
+    response = _reset(client, new_password="aaaaaaaa")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": REPEATED}
+    assert client.post("/auth/login", json=LOGIN).status_code == 200
+    assert _reset(client).status_code == 204
+
+
 def test_a_reset_revokes_every_live_session(client: TestClient, db_session: Session) -> None:
     """Someone else holding the old credential may be signed in with it right now; a
     reset that left those sessions standing would change nothing. Another coach's
@@ -1768,6 +1788,47 @@ def test_a_wrong_current_password_changes_nothing(client: TestClient, db_session
     assert response.json() == {"detail": "Incorrect password"}
     assert coach.password_hash == stored
     assert client.get("/coaches/me").status_code == 200
+
+
+def test_a_change_to_a_password_the_policy_refuses_is_a_400(
+    client: TestClient, db_session: Session
+) -> None:
+    """#141 at set_password again, from the other proof: nothing is written, and the
+    session the coach is asking from stays live for the retry."""
+    coach = _signed_in(client, db_session)
+    stored = coach.password_hash
+
+    response = _change(client, new_password="aaaaaaaa")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": REPEATED}
+    assert coach.password_hash == stored
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_the_policy_takes_the_coach_s_own_words_from_their_row(
+    client: TestClient, db_session: Session
+) -> None:
+    """The context rule has no body to read here, since this request carries neither email
+    nor display name, so the coach the session resolves to is what supplies them."""
+    _signed_in(client, db_session)
+
+    response = _change(client, new_password="mike-forever-2026")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": CONTEXT}
+
+
+def test_a_wrong_current_password_answers_before_the_policy_does(
+    client: TestClient, db_session: Session
+) -> None:
+    """Both wrong, and the 403 is what comes back: re-authentication is the gate, and the
+    new password is only judged once the current one has been proved."""
+    _signed_in(client, db_session)
+
+    response = _change(client, password="not-the-password", new_password="aaaaaaaa")
+
+    assert response.status_code == 403
 
 
 def test_changing_a_password_needs_a_session(client: TestClient) -> None:

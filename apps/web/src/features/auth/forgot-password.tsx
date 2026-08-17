@@ -147,7 +147,9 @@ export function ForgotPassword() {
 
       // A 429 or an unreachable server leaves the verified code standing, so the button
       // simply retries. A 401 means the cookie is gone, and the code with it, so the only
-      // way on is "Request a new one" below: re-answering a spent code cannot help.
+      // way on is "Request a new one" below: re-answering a spent code cannot help. A 400
+      // means the code was fine but the server's policy refused the new password, shown
+      // verbatim so the reason is legible.
       setError(parseErrorMessage(resetPasswordError, "Could not reset your password."));
     } finally {
       setSubmitting(false);

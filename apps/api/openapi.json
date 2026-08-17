@@ -882,7 +882,7 @@
   "paths": {
     "/auth/change-password": {
       "post": {
-        "description": "Replace this coach's password, given the current one, and end every session.\n\nThe caller keeps working on a freshly issued session cookie. A wrong current password\nanswers 403, where a missing or dead session answers 401.",
+        "description": "Replace this coach's password, given the current one, and end every session.\n\nThe caller keeps working on a freshly issued session cookie. A wrong current password\nanswers 403, a missing or dead session 401, and a new password `set_password`'s policy\nrefuses 400, that one after the 403, so a wrong current password is what a caller\ngetting both wrong hears about first.",
         "operationId": "change_password",
         "requestBody": {
           "content": {
@@ -897,6 +897,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Password rejected by policy"
           },
           "401": {
             "content": {
@@ -1150,7 +1160,7 @@
     },
     "/auth/reset-password": {
       "post": {
-        "description": "Set the new password, given the cookie verify-reset-code minted.\n\nA 401 means that cookie is missing, spent, expired, or was earned for a different\naddress, so the coach has to answer a code again; every live session ends here.",
+        "description": "Set the new password, given the cookie verify-reset-code minted.\n\nA 401 means that cookie is missing, spent, expired, or was earned for a different\naddress, so the coach has to answer a code again. A 400 means the code was fine but\n`set_password`'s policy refused the new password. Every live session ends here.",
         "operationId": "reset_password",
         "requestBody": {
           "content": {
@@ -1165,6 +1175,16 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Password rejected by policy"
           },
           "401": {
             "content": {
@@ -1380,6 +1400,16 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Password rejected by policy"
           },
           "401": {
             "content": {

@@ -14,8 +14,10 @@ EMAIL_MAX_LENGTH = 254
 # ceiling bounds the request body and nothing else: Argon2's cost comes from its memory
 # and time parameters rather than its input, so a megabyte hashes in the time fifteen
 # characters do, and the length of a password is not a denial-of-service surface. No
-# composition rules — NIST SP 800-63B advises against them — and no breach-list check,
-# which would need a service we do not run.
+# composition rules, which NIST SP 800-63B advises against. What that standard does ask
+# for, refusing the repeated, sequential, common and self-naming choices these bounds
+# accept, is `password_policy.py`, which the routes call: it needs the coach's own email
+# and name, and JSON Schema could not carry the rules anyway.
 #
 # Both bounds apply to the submitted form, before security.py normalises it, which can
 # change the length in either direction. Harmless at the ceiling, since hashing does not

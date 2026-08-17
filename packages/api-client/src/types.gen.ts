@@ -467,6 +467,10 @@ export type ChangePasswordData = {
 
 export type ChangePasswordErrors = {
     /**
+     * Password rejected by policy
+     */
+    400: ErrorDetail;
+    /**
      * Not signed in
      */
     401: ErrorDetail;
@@ -619,6 +623,10 @@ export type ResetPasswordData = {
 
 export type ResetPasswordErrors = {
     /**
+     * Password rejected by policy
+     */
+    400: ErrorDetail;
+    /**
      * Reset code not verified
      */
     401: ErrorDetail;
@@ -742,6 +750,10 @@ export type CreateCoachData = {
 };
 
 export type CreateCoachErrors = {
+    /**
+     * Password rejected by policy
+     */
+    400: ErrorDetail;
     /**
      * Email not verified
      */

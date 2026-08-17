@@ -22,6 +22,7 @@ from matchpoint_api.auth import (
 from matchpoint_api.db import get_db
 from matchpoint_api.main import create_app
 from matchpoint_api.models import Coach, CoachSession, EmailVerification
+from matchpoint_api.password_policy import COMMON, CONTEXT, REPEATED, SEQUENTIAL
 from matchpoint_api.security import verify_password
 from tests.conftest import ORIGIN_HEADERS, TEST_ORIGIN
 from tests.factories import make_coach, make_coach_session, sign_in, verify_email
@@ -221,6 +222,57 @@ def test_a_rejected_sign_up_does_not_echo_the_password(client: TestClient) -> No
     assert "hunter2" not in on_the_password.text
     assert on_the_email.status_code == 422
     assert "a-good-password" not in on_the_email.text
+
+
+@pytest.mark.parametrize(
+    ("password", "reason"),
+    [
+        ("aaaaaaaa", REPEATED),
+        ("abcdefgh", SEQUENTIAL),
+        ("password", COMMON),
+        # The context rule reading this very body: SIGN_UP is Coach Mike at mike@.
+        ("mike-and-more", CONTEXT),
+    ],
+)
+def test_signing_up_with_a_password_the_policy_refuses_is_a_400(
+    client: TestClient, db_session: Session, password: str, reason: str
+) -> None:
+    """#141's rejections through the route. A 400 rather than a 422 because the reason is a
+    sentence and FastAPI declares every 422 as a list of field errors; the exhaustive cases
+    live in tests/test_password_policy.py."""
+    verify_email(client, db_session, "mike@example.com")
+
+    response = client.post("/coaches", json=SIGN_UP | {"password": password})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": reason}
+    assert db_session.scalar(select(func.count()).select_from(Coach)) == 0
+
+
+def test_a_refused_password_leaves_the_verification_to_try_again_with(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the check runs before the consume: a password the policy refuses is a
+    correction, not a reason to send the coach back for a fresh code."""
+    verify_email(client, db_session, "mike@example.com")
+
+    assert client.post("/coaches", json=SIGN_UP | {"password": "aaaaaaaa"}).status_code == 400
+
+    assert db_session.scalar(select(func.count()).select_from(EmailVerification)) == 1
+    assert client.post("/coaches", json=SIGN_UP).status_code == 201
+
+
+def test_a_password_refused_by_policy_is_not_echoed(
+    client: TestClient, db_session: Session
+) -> None:
+    """The 400 carries our own sentence and never the submitted value, so the leak
+    errors.py closes on the 422 path has no way back in here."""
+    verify_email(client, db_session, "mike@example.com")
+
+    response = client.post("/coaches", json=SIGN_UP | {"password": "mike-and-more"})
+
+    assert response.status_code == 400
+    assert "mike-and-more" not in response.text
 
 
 def test_signing_up_without_a_verification_cookie_is_a_401(

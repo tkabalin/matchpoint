@@ -161,8 +161,9 @@ export function SignUp() {
         setRetryAfterSeconds(getRetryAfterSeconds(response));
       }
 
-      // 400/401 (missing or invalid OTP verification), 409 (duplicate email), or 429
-      // (too many sign-up attempts).
+      // 400 (a password the server's policy refuses, shown verbatim), 401 (missing or
+      // invalid OTP verification), 409 (duplicate email), or 429 (too many sign-up
+      // attempts).
       setError(parseErrorMessage(createCoachError, "Could not create the account."));
     } finally {
       setSubmitting(false);

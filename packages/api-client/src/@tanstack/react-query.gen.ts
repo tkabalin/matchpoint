@@ -12,7 +12,9 @@ import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, Chan
  * Replace this coach's password, given the current one, and end every session.
  *
  * The caller keeps working on a freshly issued session cookie. A wrong current password
- * answers 403, where a missing or dead session answers 401.
+ * answers 403, a missing or dead session 401, and a new password `set_password`'s policy
+ * refuses 400, that one after the 403, so a wrong current password is what a caller
+ * getting both wrong hears about first.
  */
 export const changePasswordMutation = (options?: Partial<Options<ChangePasswordData>>): UseMutationOptions<ChangePasswordResponse, ChangePasswordError, Options<ChangePasswordData>> => {
     const mutationOptions: UseMutationOptions<ChangePasswordResponse, ChangePasswordError, Options<ChangePasswordData>> = {
@@ -102,7 +104,8 @@ export const requestOtpMutation = (options?: Partial<Options<RequestOtpData>>): 
  * Set the new password, given the cookie verify-reset-code minted.
  *
  * A 401 means that cookie is missing, spent, expired, or was earned for a different
- * address, so the coach has to answer a code again; every live session ends here.
+ * address, so the coach has to answer a code again. A 400 means the code was fine but
+ * `set_password`'s policy refused the new password. Every live session ends here.
  */
 export const resetPasswordMutation = (options?: Partial<Options<ResetPasswordData>>): UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> => {
     const mutationOptions: UseMutationOptions<ResetPasswordResponse, ResetPasswordError, Options<ResetPasswordData>> = {
