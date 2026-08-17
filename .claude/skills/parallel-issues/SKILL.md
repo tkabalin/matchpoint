@@ -51,8 +51,9 @@ prompt, and it is the most important rule in this skill.
    - Overlap never serializes the work; it becomes dictated snippets and merge notes.
 5. `git fetch origin` once. Every branch bases on `origin/main`, not the local `main`.
 6. Create one worktree per issue from the main checkout, serially:
-   `git worktree add ~/matchpoint-wt/<slug> -b thomas/<slug> origin/main` with `<slug>` a short
-   kebab-case description of the change (CONTRIBUTING's branch convention).
+   `git worktree add .claude/worktrees/<slug> -b thomas/<slug> origin/main` with `<slug>` a short
+   kebab-case description of the change (CONTRIBUTING's branch convention). Worktrees always go
+   under `.claude/worktrees/` (already gitignored), never as sibling directories outside the repo.
 
 ## 2. The conventions block
 
@@ -92,11 +93,19 @@ filled in:
 - Write every decision, and anything else destined for the MR description, for a reader with no
   prior experience of the frameworks, libraries, or techniques involved. Name an unfamiliar tool
   once and gloss what it does in a clause; don't assume the reader already knows it.
+- Don't append to `docs/scratch/decisions.md` yourself, even though a repo rule says to log
+  decisions there: that file lives in the main checkout, and the coordinator writes the batch's
+  entries once at wrap-up, so an agent's append is a duplicate. Returning the decision is the log.
 
 ## 3. Implementation agents
 
 Launch all implementers in one message so they run concurrently: `subagent_type: general-purpose`,
 `model: <the chosen model>`, background (the default) so you can react as each finishes.
+
+An agent can also die of a stalled stream rather than a real failure (the notification names it,
+e.g. "no progress for 600s"). Nothing is lost: its worktree and commits are as it left them. Resume
+the same agent with a message saying where it stopped and repeating the return contract, instead of
+relaunching from scratch.
 
 Each prompt contains: the full issue text pasted in (title, number, description), the worktree path
 and branch name, the conventions block, and this return contract:
@@ -121,9 +130,12 @@ As each implementer finishes, immediately spawn a fresh review agent (same model
 do not wait for the whole batch. Its prompt contains the worktree path, branch name, issue number,
 the implementer's summary, the conventions block, and:
 
-- Invoke the `code-review` skill with args `high --fix` from inside the worktree, reviewing the
-  branch's committed diff against `origin/main`. Let it apply its findings to the working tree; drop
-  any finding you judge a false positive and say why in your return.
+- Run the `code-review` skill at `high` effort, review-only, never `--fix`. A subagent cannot move
+  its session into the worktree (`EnterWorktree` refuses both a repo-root cwd and a cwd override),
+  so a `--fix` pass forks with the shared main checkout as its cwd and writes fixes into the wrong
+  tree. Target the review explicitly at the branch (or the worktree path), reviewing the committed
+  diff against `origin/main`, then apply each accepted finding to the worktree by hand. Drop any
+  finding you judge a false positive and say why in your return.
 - Fold each applied fix into the commit that introduced the code, so the branch lands as if written
   correctly the first time. Never create `fixup!` or follow-up patch commits. Mechanism: save the
   fix as a patch, restore a clean tree, then
@@ -242,4 +254,4 @@ saved file rather than rebuilding it).
   in notes or memory is a pending action lost.
 - Append the substantive decisions to `docs/scratch/decisions.md` in the main checkout.
 - Leave the worktrees in place until their MRs merge; they are removed with
-  `git worktree remove ~/matchpoint-wt/<slug>` afterwards, not now.
+  `git worktree remove .claude/worktrees/<slug>` afterwards, not now.
