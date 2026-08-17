@@ -209,6 +209,18 @@ password-reset flows asserting no credential value reaches stderr.
 The one field that can hold arbitrary text is a rendered traceback. `hide_parameters=True` on the
 engine (`db.py`) keeps bound SQL parameters out of the DBAPI error messages that end up in one.
 
+## Unhandled exceptions
+
+The traceback above is for us, and a failure the code did not anticipate is the one place its
+internals could reach a client instead: an exception message names tables, files and providers, and
+Starlette's default 500 would carry whatever it says. A handler on `Exception` (`errors.py`) answers
+every one of them with the same static sentence, and attaches the request id that identifies the
+logged traceback, so a report is traceable by an id that discloses nothing.
+
+Declared error responses are unaffected: they are resolved before an exception reaches this handler.
+The one way past it is Starlette's debug mode, which is checked first and renders the traceback as a
+page, so `MATCHPOINT_DEBUG` belongs to development and stays unset wherever the app is deployed.
+
 ## Authorisation boundaries
 
 **404, not 403, for another coach's resources.** A request for a player or match belonging to
