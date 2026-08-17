@@ -69,7 +69,8 @@ Composition rules (a digit, a symbol, mixed case) are deliberately not part of i
 advises against them, since they push people towards predictable substitutions rather than longer
 passwords.
 
-What the list covers (`password_policy.py`):
+What the list covers. The first four are arithmetic over the submitted string
+(`password_policy.py`), and run first, so an obvious refusal costs no request:
 
 - **Repetition:** one character making up more than half the password.
 - **Sequences:** five or more consecutive code points, ascending or descending, so `12345678` and
@@ -79,10 +80,35 @@ What the list covers (`password_policy.py`):
   `password`. A passphrase merely containing a listed word is untouched.
 - **Context:** the coach's own display name or email local part appearing anywhere in it,
   case-insensitively.
+- **Breached:** the password appearing in a public breach corpus, which is the "compromised" half of
+  what the standard asks for and the only one of the five that leaves the process (`breach.py`).
 
-The check is arithmetic over the submitted string, so it costs no network call and has no failure
-mode of its own. It reads the normalised form of the password, the same one that gets hashed, so an
-alternative encoding of a refused string is refused too.
+Every rule reads the normalised form of the password, the same one that gets hashed, so an
+alternative encoding of a refused string is refused too. The corpus is asked about that form
+unfolded, since it is case-sensitive.
+
+**The corpus, and what is sent to it.** Have I Been Pwned's Pwned Passwords range endpoint, which is
+free, needs no key and imposes no rate limit. The password is not sent, and neither is its hash: the
+password is hashed with SHA-1, the first five hex characters of that hash are sent, and the endpoint
+answers with every hash in the bucket for the application to search itself. A bucket holds some 800
+hashes, so the question that leaves is "is one of these 800 the coach's?", which is not a question
+the answer resolves. SHA-1 is the corpus's format, not a security choice: the hash is a lookup key
+for a public list. Requests ask to be padded to a uniform number of rows, so response size says
+nothing about the bucket either, and the padding rows arrive with a sighting count of zero.
+
+Two limits on that promise, both accepted. The prefix does appear in the API's own logs, since the
+HTTP client logs the URL it fetched: HIBP's design already treats a prefix as safe to hand an
+untrusted third party, so it is not a disclosure our own logs make worse. And only newly chosen
+passwords are checked, never a login: checking at sign-in would put a network call and a prefix on
+every authentication for a requirement the standard does not make.
+
+**When the corpus cannot answer** the password is allowed through and a warning is logged. Failing
+the other way would let a third party's outage close sign-up and, worse, lock a coach out of the
+password recovery they are already locked out into. The four local rules still hold throughout, and
+the corpus is a second layer over them rather than the only one. The checker can be switched off
+entirely (`MATCHPOINT_BREACH_CHECKER=allow_all`), which is what the test suite and an offline dev
+box do; production runs it because that is the default, there being no key whose absence would catch
+a deployment that had quietly stopped checking.
 
 **Where it runs.** It gates the single password write that reset and change share, and the sign-up
 route calls it before the request has cost anything: before the Argon2 hash, and before the email
@@ -92,9 +118,10 @@ The same screens run a strength meter (zxcvbn) in the browser, which overlaps th
 mirroring them: it scores guessability, so a password it passes can still be refused here, and a
 caller that never loaded the form is held to the rules regardless.
 
-**Limits.** The thresholds are loose by design: a false rejection lands on a coach mid-sign-up with
-no way around it, where a miss is a weak password rather than a compromised one. Passwords this list
-accepts and a breach list would not are the case for adding a breach-list check alongside it.
+**Limits.** The local thresholds are loose by design: a false rejection lands on a coach mid-sign-up
+with no way around it, where a miss now falls through to the corpus rather than to nothing. What
+remains uncovered is a compromised password no public corpus has yet recorded, and the window in
+which the corpus is unreachable and every password it would have refused is accepted.
 
 ## Session management
 
@@ -273,18 +300,20 @@ returns 404.
 ## Server-side request forgery
 
 **No caller-named host is ever reached.** The API's only outbound connections are to Resend (URL
-fixed as a module constant in `mail.py`, pinned by a test) and Postgres (DSN from the environment).
-Neither takes a hostname or path from a request. Caddy's upstream is likewise fixed in the
-Caddyfile. `EmailStr` validates syntax only (`check_deliverability=False`), and OTP emails carry a
-code, not a link, so no submitted value becomes a network destination.
+fixed as a module constant in `mail.py`, pinned by a test), Have I Been Pwned (the same, in
+`breach.py`) and Postgres (DSN from the environment). None takes a hostname from a request, and the
+one path segment any of them builds from submitted data is five hex characters of a SHA-1 hexdigest,
+so it is `[0-9A-F]{5}` by construction and cannot traverse or redirect anywhere. Caddy's upstream is
+likewise fixed in the Caddyfile. `EmailStr` validates syntax only (`check_deliverability=False`),
+and OTP emails carry a code, not a link, so no submitted value becomes a network destination.
 
 **Starlette's trailing-slash redirect is proxy-contained.** `redirect_slashes` builds its 307
 `Location` from the `Host` header, but Caddy's site block matches one hostname, so a forged `Host`
 never reaches the API. Documented rather than disabled because turning it off would 404 every
 trailing-slash request.
 
-**httpx does not follow redirects by default.** `mail.py` inherits this default, so a provider
-answering 3xx fails the send rather than hopping to a new destination.
+**httpx does not follow redirects by default.** `mail.py` and `breach.py` inherit this default, so a
+third party answering 3xx fails the call rather than hopping to a new destination.
 
 ## Infrastructure
 

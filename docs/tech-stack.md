@@ -105,6 +105,7 @@ not bind on a validator used in tests and at one sync boundary).
 | Lint / format       | Ruff 0.16                      |
 | Type checking       | Pyright                        |
 | Password hashing    | Argon2id (argon2-cffi 25)      |
+| Breach screening    | Pwned Passwords (HTTP API)     |
 | Sessions            | Opaque tokens, HttpOnly cookie |
 | Rate limiting       | In-process token bucket        |
 | Transactional email | Resend (HTTP API via httpx)    |
@@ -142,6 +143,19 @@ redo. Alternatives considered: `pwdlib[argon2]` (a wrapper whose value is algori
 don't plan, and pre-1.0); `bcrypt` (silently truncates at 72 bytes, no memory-hardness);
 `hashlib.scrypt` (zero deps, but hand-rolled salt/encoding/comparison); `passlib` (unmaintained
 since 2020).
+
+**Pwned Passwords over its range API.** NIST SP 800-63B asks that a chosen password be compared
+against known-compromised ones, and Have I Been Pwned's range endpoint is the standard way to do it:
+free, no key, no rate limit, and it never receives the password or its hash, only the first five hex
+characters of a SHA-1 (`docs/security.md` has the mechanism). Checkers sit behind a Protocol chosen
+by configuration (`breach.py`), the shape `mail.py` already uses, so the suite runs against a fake.
+Alternatives considered: a local copy of the corpus (551M hashes, ~40 GB uncompressed and ~3 GB with
+Golomb coding, which the VPS and the built image should not carry for a check that runs a handful of
+times a day); a truncated top-N list shipped in the image (no network, but a bigger version of the
+blocklist `password_policy.py` already holds, missing the long tail that is the point); a Bloom
+filter over the full corpus (a false positive refuses a password that is genuinely fine, which is
+the expensive mistake here); commercial credential screening such as Enzoic (paid, for the same
+answer).
 
 **Opaque session tokens over JWTs.** A login mints a random 256-bit token, stores its SHA-256 in a
 `coach_sessions` row, and sets the token in an HttpOnly, SameSite=Lax, `__Host-`-prefixed cookie;
