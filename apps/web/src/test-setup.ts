@@ -1,6 +1,10 @@
 import { registerErrorStatusInterceptor } from "@matchpoint/api-client/error-interceptor";
 import { cleanup, configure } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
+// jsdom implements no IndexedDB, so the outbox has nothing to open without this.
+// Registered globally rather than per test file: Dexie reads the global at open
+// time, and a module that opens its database on import would miss a local shim.
+import "fake-indexeddb/auto";
 import { afterEach } from "vitest";
 
 // Testing Library only registers its own auto-cleanup when Vitest's globals are on,
