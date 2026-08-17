@@ -37,7 +37,9 @@ e2e runs on **Playwright**. The runners are kept apart by location and naming: V
   layout, imports stay short instead of climbing out to a separate test tree, and moving or deleting
   a module takes its tests with it automatically. A single fixed convention is also easier for
   contributors (human or AI) to apply consistently than a size-based threshold.
-- `src/test-setup.ts` (registered via `test.setupFiles`) wires the jest-dom matchers.
+- `src/test-setup.ts` (registered via `test.setupFiles`) wires the jest-dom matchers, and registers
+  `fake-indexeddb` because jsdom implements none: without it the offline outbox has no database to
+  open. It is global rather than per-file since Dexie reads the global at open time.
 - Interactions go through `@testing-library/user-event`; queries prefer accessible roles
   (`getByRole("button", { name: "Save" })`), so tests double as a basic accessibility check.
 
