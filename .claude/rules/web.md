@@ -18,6 +18,11 @@ paths:
 - **No cross-imports between feature slices.** If `features/matches` needs something from
   `features/players`, it belongs in `src/components/` or `src/lib/` — and only once there are two
   real call sites (see Code Style in `CLAUDE.md`).
+- **One named exception: `features/outbox/`.** Both `features/capture/` and `features/sync/` import
+  it by design: capture appends to the local queue, sync drains it, and the two may not import each
+  other (see `web-capture.md`). It stays a slice rather than moving to `src/lib/` because it owns a
+  database schema and its own durability rules, not a helper. This is not a precedent — anything
+  else two slices share still goes in `src/components/` or `src/lib/`.
 
 ## HTML Injection
 
