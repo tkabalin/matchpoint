@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -81,9 +82,9 @@ export function SignIn() {
             </Field>
           </FieldGroup>
           {errorText && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {errorText}
-            </p>
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{errorText}</AlertDescription>
+            </Alert>
           )}
           <Button
             type="submit"

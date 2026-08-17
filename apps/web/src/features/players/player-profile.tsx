@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
 
 import { PlayerAvatar } from "@/components/player-avatar";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Avoids a circular import between this component and its route file — the
 // standard TanStack Router way to read typed params from outside the route file.
@@ -18,7 +19,12 @@ export function PlayerProfile() {
   const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: playerId } }));
 
   if (isPending) return <p>Loading player…</p>;
-  if (isError) return <p role="alert">Could not load that player.</p>;
+  if (isError)
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Could not load that player.</AlertDescription>
+      </Alert>
+    );
 
   return (
     <div>

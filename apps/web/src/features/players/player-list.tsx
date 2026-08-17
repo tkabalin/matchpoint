@@ -2,6 +2,7 @@ import { listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { getErrorStatus } from "@/lib/error-status";
 import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
 
@@ -23,13 +24,19 @@ export function PlayerList() {
     // generic message, which would read as a bug rather than an expired session.
     if (getErrorStatus(error) === 401) {
       return (
-        <p role="alert">
-          Your session has expired. <Link to="/">Sign in</Link> to see your players.
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>
+            Your session has expired. <Link to="/">Sign in</Link> to see your players.
+          </AlertDescription>
+        </Alert>
       );
     }
 
-    return <p role="alert">Could not load players.</p>;
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Could not load players.</AlertDescription>
+      </Alert>
+    );
   }
 
   if (data.length === 0) return <p>No players yet.</p>;

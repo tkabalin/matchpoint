@@ -5,6 +5,7 @@ import type { FormEvent } from "react";
 
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   CardContent,
@@ -220,29 +221,31 @@ export function SignUp() {
               </Field>
             </FieldGroup>
             {passwordTooShort && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                Password must be at least 8 characters.
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>Password must be at least 8 characters.</AlertDescription>
+              </Alert>
             )}
             {passwordTooLong && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                Password must be at most 128 characters.
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>Password must be at most 128 characters.</AlertDescription>
+              </Alert>
             )}
             {passwordTooWeak && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                This password is too easy to guess. Try something less predictable.
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>
+                  This password is too easy to guess. Try something less predictable.
+                </AlertDescription>
+              </Alert>
             )}
             {passwordsMismatch && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                Passwords don't match.
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>Passwords don't match.</AlertDescription>
+              </Alert>
             )}
             {errorText && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                {errorText}
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{errorText}</AlertDescription>
+              </Alert>
             )}
             <Button
               type="submit"
@@ -291,14 +294,14 @@ export function SignUp() {
               </Field>
             </FieldGroup>
             {otpWrongLength && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                Enter the 6-digit code.
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>Enter the 6-digit code.</AlertDescription>
+              </Alert>
             )}
             {errorText && (
-              <p role="alert" className="mt-3 text-sm text-destructive">
-                {errorText}
-              </p>
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{errorText}</AlertDescription>
+              </Alert>
             )}
             <Button
               type="submit"
@@ -346,9 +349,9 @@ export function SignUp() {
             </Field>
           </FieldGroup>
           {errorText && (
-            <p role="alert" className="mt-3 text-sm text-destructive">
-              {errorText}
-            </p>
+            <Alert variant="destructive" className="mt-3">
+              <AlertDescription>{errorText}</AlertDescription>
+            </Alert>
           )}
           <Button
             type="submit"

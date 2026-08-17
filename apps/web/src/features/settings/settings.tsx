@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
@@ -181,9 +182,11 @@ export function Settings() {
       <div>
         <h2>Change Password</h2>
         {sessionExpired ? (
-          <p role="alert">
-            Your session has expired. <Link to="/">Sign in</Link> again.
-          </p>
+          <Alert variant="destructive">
+            <AlertDescription>
+              Your session has expired. <Link to="/">Sign in</Link> again.
+            </AlertDescription>
+          </Alert>
         ) : (
           <form onSubmit={handleChangePassword}>
             <label htmlFor="current-password">Current password</label>
@@ -192,7 +195,11 @@ export function Settings() {
               value={currentPassword}
               onChange={(event) => setCurrentPassword(event.target.value)}
             />
-            {incorrectPassword && <p role="alert">Incorrect password.</p>}
+            {incorrectPassword && (
+              <Alert variant="destructive">
+                <AlertDescription>Incorrect password.</AlertDescription>
+              </Alert>
+            )}
             <label htmlFor="new-password">New password</label>
             <PasswordInput
               id="new-password"
@@ -206,15 +213,33 @@ export function Settings() {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
             />
-            {newPasswordTooShort && <p role="alert">Password must be at least 8 characters.</p>}
-            {newPasswordTooLong && <p role="alert">Password must be at most 128 characters.</p>}
-            {newPasswordTooWeak && (
-              <p role="alert">
-                This password is too easy to guess. Try something less predictable.
-              </p>
+            {newPasswordTooShort && (
+              <Alert variant="destructive">
+                <AlertDescription>Password must be at least 8 characters.</AlertDescription>
+              </Alert>
             )}
-            {passwordsMismatch && <p role="alert">Passwords don't match.</p>}
-            {changeErrorText && <p role="alert">{changeErrorText}</p>}
+            {newPasswordTooLong && (
+              <Alert variant="destructive">
+                <AlertDescription>Password must be at most 128 characters.</AlertDescription>
+              </Alert>
+            )}
+            {newPasswordTooWeak && (
+              <Alert variant="destructive">
+                <AlertDescription>
+                  This password is too easy to guess. Try something less predictable.
+                </AlertDescription>
+              </Alert>
+            )}
+            {passwordsMismatch && (
+              <Alert variant="destructive">
+                <AlertDescription>Passwords don't match.</AlertDescription>
+              </Alert>
+            )}
+            {changeErrorText && (
+              <Alert variant="destructive">
+                <AlertDescription>{changeErrorText}</AlertDescription>
+              </Alert>
+            )}
             {changeSuccess && <p>Your password has been changed.</p>}
             <button type="submit" disabled={!canSubmitChange || submitting}>
               Change Password
