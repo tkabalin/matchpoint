@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 
+import { MatchSet } from "./match-set";
 import { Point } from "./point";
 import {
   gameStateFor,
   isAdScoringFor,
   matchRulesFor,
+  matchStateFor,
   maxSetsFor,
   setRulesFor,
   setStateFor,
@@ -13,6 +15,7 @@ import {
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
 const GAME_ID = "game-1";
+const MATCH_ID = "4f1c2b4e-0000-4000-8000-000000000003";
 
 describe("maxSetsFor", () => {
   test.each([
@@ -433,6 +436,153 @@ describe("setStateFor", () => {
         pointWonBy("someone-else", { trackedPlayerId: "someone-else", server: "someone-else" }),
       ];
       expect(() => setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES)).toThrow(
+        /match the given participants/,
+      );
+    });
+  });
+});
+
+/** A decided (or, with winner: null, in-progress) set, minimal otherwise. */
+function matchSetWonBy(winner: string | null, setNumber: number) {
+  return MatchSet.create({
+    matchId: MATCH_ID,
+    setNumber,
+    trackedPlayerId: TRACKED_ID,
+    opponentId: OPPONENT_ID,
+    trackedPlayerGames: winner === TRACKED_ID ? 6 : winner === OPPONENT_ID ? 3 : 2,
+    opponentGames: winner === OPPONENT_ID ? 6 : winner === TRACKED_ID ? 3 : 2,
+    tiebreak: null,
+    winner,
+  });
+}
+
+/** `trackedPlayerWins` sets won by the tracked player, then `opponentWins` by the opponent. */
+function matchSetsFor(trackedPlayerWins: number, opponentWins: number) {
+  const sets = [];
+  let setNumber = 1;
+  for (let index = 0; index < trackedPlayerWins; index += 1, setNumber += 1) {
+    sets.push(matchSetWonBy(TRACKED_ID, setNumber));
+  }
+  for (let index = 0; index < opponentWins; index += 1, setNumber += 1) {
+    sets.push(matchSetWonBy(OPPONENT_ID, setNumber));
+  }
+  return sets;
+}
+
+describe("matchStateFor", () => {
+  const TRADITIONAL_MATCH_RULES = { setsToWin: 2, maxSets: 3 };
+  const GRAND_SLAM_MATCH_RULES = { setsToWin: 3, maxSets: 5 };
+  const PRO_SET_MATCH_RULES = { setsToWin: 1, maxSets: 1 };
+
+  test("no sets is 0-0 with no winner", () => {
+    const state = matchStateFor([], TRACKED_ID, OPPONENT_ID, TRADITIONAL_MATCH_RULES);
+    expect(state).toEqual({ trackedPlayerSets: 0, opponentSets: 0, winner: null });
+  });
+
+  test("counts sets won by each side", () => {
+    const state = matchStateFor(
+      matchSetsFor(1, 1),
+      TRACKED_ID,
+      OPPONENT_ID,
+      TRADITIONAL_MATCH_RULES,
+    );
+    expect(state.trackedPlayerSets).toBe(1);
+    expect(state.opponentSets).toBe(1);
+    expect(state.winner).toBeNull();
+  });
+
+  test("an in-progress set doesn't count toward either side", () => {
+    const sets = [...matchSetsFor(1, 0), matchSetWonBy(null, 2)];
+    const state = matchStateFor(sets, TRACKED_ID, OPPONENT_ID, TRADITIONAL_MATCH_RULES);
+    expect(state.trackedPlayerSets).toBe(1);
+    expect(state.opponentSets).toBe(0);
+    expect(state.winner).toBeNull();
+  });
+
+  describe("traditional (best-of-3, setsToWin: 2)", () => {
+    test("2-0 is a win", () => {
+      const state = matchStateFor(
+        matchSetsFor(2, 0),
+        TRACKED_ID,
+        OPPONENT_ID,
+        TRADITIONAL_MATCH_RULES,
+      );
+      expect(state.winner).toBe(TRACKED_ID);
+    });
+
+    test("2-1 is a win", () => {
+      const state = matchStateFor(
+        matchSetsFor(2, 1),
+        TRACKED_ID,
+        OPPONENT_ID,
+        TRADITIONAL_MATCH_RULES,
+      );
+      expect(state.winner).toBe(TRACKED_ID);
+    });
+
+    test("1-1 is not decided yet", () => {
+      const state = matchStateFor(
+        matchSetsFor(1, 1),
+        TRACKED_ID,
+        OPPONENT_ID,
+        TRADITIONAL_MATCH_RULES,
+      );
+      expect(state.winner).toBeNull();
+    });
+
+    test("the opponent can win too", () => {
+      const state = matchStateFor(
+        matchSetsFor(0, 2),
+        TRACKED_ID,
+        OPPONENT_ID,
+        TRADITIONAL_MATCH_RULES,
+      );
+      expect(state.winner).toBe(OPPONENT_ID);
+    });
+  });
+
+  describe("mens_grand_slam (best-of-5, setsToWin: 3)", () => {
+    test("3-1 is a win", () => {
+      const state = matchStateFor(
+        matchSetsFor(3, 1),
+        TRACKED_ID,
+        OPPONENT_ID,
+        GRAND_SLAM_MATCH_RULES,
+      );
+      expect(state.winner).toBe(TRACKED_ID);
+    });
+
+    test("2-2 is not decided yet — traditional's setsToWin (2) would say otherwise", () => {
+      const state = matchStateFor(
+        matchSetsFor(2, 2),
+        TRACKED_ID,
+        OPPONENT_ID,
+        GRAND_SLAM_MATCH_RULES,
+      );
+      expect(state.winner).toBeNull();
+    });
+  });
+
+  test("pro_set (setsToWin: 1) is decided by a single set", () => {
+    const state = matchStateFor(matchSetsFor(1, 0), TRACKED_ID, OPPONENT_ID, PRO_SET_MATCH_RULES);
+    expect(state.winner).toBe(TRACKED_ID);
+  });
+
+  describe("consistency checks", () => {
+    test("rejects sets that don't match the given participants", () => {
+      const sets = [
+        MatchSet.create({
+          matchId: MATCH_ID,
+          setNumber: 1,
+          trackedPlayerId: "someone-else",
+          opponentId: "someone-else-2",
+          trackedPlayerGames: 6,
+          opponentGames: 4,
+          tiebreak: null,
+          winner: "someone-else",
+        }),
+      ];
+      expect(() => matchStateFor(sets, TRACKED_ID, OPPONENT_ID, TRADITIONAL_MATCH_RULES)).toThrow(
         /match the given participants/,
       );
     });

@@ -12,7 +12,7 @@
  */
 
 import type { ScoringSystem } from "./match";
-import type { TiebreakScore } from "./match-set";
+import type { MatchSet, TiebreakScore } from "./match-set";
 import type { Point } from "./point";
 
 // --- ScoringSystem-derived rules ---------------------------------------------
@@ -379,4 +379,50 @@ export interface MatchRules {
 export function matchRulesFor(scoringSystem: ScoringSystem): MatchRules {
   const maxSets = maxSetsFor(scoringSystem);
   return { setsToWin: (maxSets + 1) / 2, maxSets };
+}
+
+export interface MatchState {
+  trackedPlayerSets: number;
+  opponentSets: number;
+  // trackedPlayerId, opponentId, or null while the match is still
+  // undecided by set count alone — see the scope note below.
+  winner: string | null;
+}
+
+/**
+ * Derives a match's current set score and, once decided, its winner —
+ * from sets won alone, same relationship setStateFor has to games.
+ *
+ * Scope: this only ever answers "who's ahead on sets, and has someone won
+ * enough of them." Retirement, walkover, and default all end a match with
+ * a winner who may not lead on sets at all — matchStateFor has no way to
+ * represent any of them, and can't: it derives purely from MatchSet[],
+ * and none of those three are visible there. Don't treat this function's
+ * winner as final without checking for one of those overrides first — as
+ * a match-record-level field that short-circuits this derivation
+ * entirely, not something resolved here.
+ */
+export function matchStateFor(
+  matchSets: readonly MatchSet[],
+  trackedPlayerId: string,
+  opponentId: string,
+  rules: MatchRules,
+): MatchState {
+  for (const matchSet of matchSets) {
+    if (matchSet.trackedPlayerId !== trackedPlayerId || matchSet.opponentId !== opponentId) {
+      throw new Error("matchStateFor requires every set to match the given participants");
+    }
+  }
+
+  const trackedPlayerSets = matchSets.filter((set) => set.winner === trackedPlayerId).length;
+  const opponentSets = matchSets.filter((set) => set.winner === opponentId).length;
+
+  let winner: string | null = null;
+  if (trackedPlayerSets >= rules.setsToWin) {
+    winner = trackedPlayerId;
+  } else if (opponentSets >= rules.setsToWin) {
+    winner = opponentId;
+  }
+
+  return { trackedPlayerSets, opponentSets, winner };
 }
