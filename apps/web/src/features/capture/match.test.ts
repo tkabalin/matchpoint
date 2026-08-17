@@ -26,11 +26,6 @@ describe("createMatch", () => {
     expect(match.firstServer).toBe(TRACKED_ID);
   });
 
-  test("starts sets empty — a new match hasn't played any yet", () => {
-    const match = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
-    expect(match.sets).toEqual([]);
-  });
-
   test("generates a fresh matchId on every call", () => {
     const first = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
     const second = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
@@ -124,7 +119,6 @@ describe("Match.create opponentName validation", () => {
         scoringSystem: "traditional",
         firstServer: TRACKED_ID,
         surfaceType: "hard",
-        sets: [],
       }),
     ).toThrow(/opponentName/);
   });
@@ -182,26 +176,5 @@ describe("Match.fromJSON / toJSON", () => {
     const rehydrated = Match.fromJSON(JSON.parse(JSON.stringify(original.toJSON())));
 
     expect(rehydrated.toJSON()).toEqual(original.toJSON());
-  });
-
-  test("appending a set means building a new Match, not mutating the old one", () => {
-    const original = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
-    const newSet = {};
-
-    const withSet = Match.create({ ...original.toJSON(), sets: [...original.sets, newSet] });
-
-    expect(original.sets).toEqual([]);
-    expect(withSet.sets).toEqual([newSet]);
-  });
-});
-
-describe("immutability", () => {
-  test("mutating toJSON()'s output does not affect the Match", () => {
-    const match = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
-
-    const snapshot = match.toJSON();
-    snapshot.sets.push({});
-
-    expect(match.sets).toEqual([]);
   });
 });

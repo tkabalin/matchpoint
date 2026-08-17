@@ -58,7 +58,7 @@ export const SCORING_SYSTEMS: readonly ScoringSystem[] = [
  * The most sets a match of this format can run to — a match can finish
  * earlier (e.g. a straight-sets win), so this is a ceiling, not a
  * prediction. The single place this gets derived from `ScoringSystem`, so
- * nothing else (createMatch, a future MatchSet, a set-by-set summary UI)
+ * nothing else (whatever appends a new MatchSet, a set-by-set summary UI)
  * needs its own copy of this mapping.
  *
  * TODO: confirm against the brief/BBD once set/game rules are firmed up —
@@ -85,12 +85,6 @@ export function maxSetsFor(scoringSystem: ScoringSystem): number {
     }
   }
 }
-
-// TODO: not built yet — fields TBD (set score, games, tiebreak, ...). Named
-// `MatchSet` rather than `Set` because `Set` is already the built-in JS/TS
-// collection type; reusing that name here would shadow it for this whole module.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- placeholder, see TODO above
-export interface MatchSet {}
 
 /**
  * `id` and `trackedPlayerId`/`opponentId` follow Point's convention: `trackedPlayerId`
@@ -125,12 +119,7 @@ export class Match {
   // pattern, not who's serving right now.
   readonly firstServer: string;
   readonly surfaceType: SurfaceType;
-  readonly sets: readonly MatchSet[];
 
-  // Takes an already-validated, already-copied `sets` array — Match.create is the
-  // only caller, and it's the one responsible for defensively copying it, same as
-  // Point does for trackedPlayerShots/opponentShots (see point.ts). Without that,
-  // `readonly` here only stops reassignment, not `.push(...)` on the array itself.
   private constructor(fields: {
     matchId: string;
     playedOn: string;
@@ -140,7 +129,6 @@ export class Match {
     scoringSystem: ScoringSystem;
     firstServer: string;
     surfaceType: SurfaceType;
-    sets: readonly MatchSet[];
   }) {
     this.matchId = fields.matchId;
     this.playedOn = fields.playedOn;
@@ -150,7 +138,6 @@ export class Match {
     this.scoringSystem = fields.scoringSystem;
     this.firstServer = fields.firstServer;
     this.surfaceType = fields.surfaceType;
-    this.sets = fields.sets;
   }
 
   // TODO: rough first pass at structural checks, matching Point.create's approach —
@@ -209,12 +196,6 @@ export class Match {
     if (!SURFACE_TYPES.includes(data.surfaceType as SurfaceType)) {
       throw new Error(`invalid surfaceType: ${String(data.surfaceType)}`);
     }
-    if (!Array.isArray(data.sets)) {
-      throw new Error("sets must be an array");
-    }
-    // Copied, not the caller's array: otherwise mutating it after Match.create()
-    // returns would silently mutate this "already-validated" Match too.
-    const sets = [...(data.sets as MatchSet[])];
 
     return new Match({
       matchId: data.matchId,
@@ -225,7 +206,6 @@ export class Match {
       scoringSystem: data.scoringSystem as ScoringSystem,
       firstServer: data.firstServer as string,
       surfaceType: data.surfaceType as SurfaceType,
-      sets,
     });
   }
 
@@ -233,11 +213,6 @@ export class Match {
     return Match.create(json);
   }
 
-  /**
-   * Used to build the next Match snapshot when a set finishes — Match is
-   * immutable (same as Point), so appending a set means constructing a whole
-   * new Match: `Match.create({ ...match.toJSON(), sets: [...match.sets, newSet] })`.
-   */
   toJSON() {
     return {
       matchId: this.matchId,
@@ -248,18 +223,14 @@ export class Match {
       scoringSystem: this.scoringSystem,
       firstServer: this.firstServer,
       surfaceType: this.surfaceType,
-      // Copied, not the live array: otherwise a caller mutating the returned
-      // snapshot would mutate this Match too.
-      sets: [...this.sets],
     };
   }
 }
 
 /**
- * Creates a new Match, generating a fresh matchId. `sets` starts empty — a
- * new match hasn't played any yet; see `maxSetsFor` for the format's ceiling,
- * not a starting size. Field validation (non-empty ids, valid enum members,
- * etc.) happens in `Match.create`, same as for any other caller.
+ * Creates a new Match, generating a fresh matchId. Field validation
+ * (non-empty ids, valid enum members, etc.) happens in `Match.create`, same
+ * as for any other caller.
  *
  * `opponent` takes exactly one of two shapes — the opponent is a real,
  * rostered Player (`opponentId`), or they aren't (`opponentName`), the more
@@ -296,6 +267,5 @@ export function createMatch(
     scoringSystem,
     firstServer,
     surfaceType,
-    sets: [],
   });
 }
