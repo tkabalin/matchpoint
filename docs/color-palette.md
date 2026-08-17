@@ -32,46 +32,81 @@ different one for data) and risk them being mistaken for each other, the rule ac
 and instead forbids using blue as a category color on any screen where navigation chrome is visible
 in the same view — the one case where the collision could actually mislead someone.
 
-## Categorical palette: built on Okabe–Ito, not invented from scratch
+### Two tokens, not one: why dark mode gets its own blue
 
-The seven-color sequence is a deliberate adaptation of the
+Human vision has fewer cone receptors dedicated to blue than to red or green, so blue reads as
+perceptually darker than its luminance number alone suggests — a gap that widens specifically
+against a near-black background, where `#045C8C` loses more contrast than its numbers imply. Every
+other color in this file is a chart swatch, which is transient — on screen for as long as one chart
+is. The nav/brand color is not: it's present on every screen, permanently, so a contrast loss there
+is a standing cost rather than a one-off.
+
+Rather than compromise the light-mode value to make one hex survive both themes, dark mode gets its
+own token, `#1E88C7` — same semantic role, same restriction (chrome and interactive state only,
+never a category color), just lighter to hold its contrast where `#045C8C` would fade. This is the
+one place in the file where the rule deliberately keeps two hexes for one role instead of insisting
+on a single source of truth, because the alternative is a color that's correct in one theme and
+wrong in the other.
+
+## Categorical palette: built on Okabe–Ito, then corrected against how it's actually seen
+
+The seven-color sequence started as a deliberate adaptation of the
 [Okabe–Ito color-universal-design palette](https://jfly.uni-koeln.de/color/) (Okabe & Ito, 2008),
 the standard reference palette for charts that must stay distinguishable under protanopia and
-deuteranopia — the two most common forms of red-green color blindness. Three of its colors are used
-unchanged:
+deuteranopia — the two most common forms of red-green color blindness. Building on a tested palette
+rather than inventing hues from scratch, and leaning on lightness/saturation as a second channel
+alongside hue, was the starting discipline. But a formula or a simulation is only ever a proxy for
+how an actual colorblind viewer experiences the palette — the sequence went through two further
+rounds of correction once it was checked against that, and both left marks on the current hexes.
 
-| Okabe–Ito name | Hex       | Used as |
-| -------------- | --------- | ------- |
-| Vermillion     | `#D55E00` | Red     |
-| Orange         | `#E69F00` | Orange  |
-| Bluish green   | `#009E73` | Green   |
+**Round one: two confusions found in practice.** Hue-and-lightness tuning alone still left amber
+easy to mistake for mustard, and a paler, dustier violet easy to mistake for blue. Neither was fixed
+with a small nudge:
 
-Three more are deliberately adapted rather than copied verbatim:
+- **Amber vs. mustard** needed the lightness gap between orange and yellow widened substantially,
+  not incrementally — a small correction wasn't enough separation to survive real viewing conditions
+  (a legend chip, a thin chart line), only a deliberately large one was.
+- **Orchid vs. blue** turned out to be about which color channel was doing the separating work. A
+  pale, desaturated purple depends on its red component to read as distinct from blue — and red
+  contribution is exactly what red-green color vision deficiency compromises. The fix wasn't to
+  shift hue incrementally either: it was to push violet toward a more saturated magenta, restoring
+  enough red weight to stay a color, not a shade of blue, once that channel is degraded. That's why
+  the current violet (`#D9569E`) reads as a definite rose/magenta rather than a pastel purple — the
+  softer version was the one that failed.
 
-- **Yellow** — Okabe–Ito's yellow (`#F0E442`) is a pure, high-luminance yellow that reads well on a
-  chart background but is close to unreadable as text or as a thin pattern mark on white — there's
-  almost no lightness gap left to work with. The palette pales it to `#EDDD6E`, trading a little hue
-  purity for a shade that still passes as "yellow" while leaving room for the black cross-hatch
-  pattern to actually show up against it.
-- **Blue** — Okabe–Ito's blue (`#0072B2`) is a distinct color, but this app already has a brand
-  blue. Rather than run two similar blues that a coach would have to learn apart, the categorical
-  blue step _is_ the brand blue (`#045C8C`), deepened slightly from Okabe–Ito's version so it reads
-  as clearly a "brand" shade rather than a generic chart blue. Okabe–Ito's separate sky-blue swatch
-  is dropped entirely — once the brand blue anchors one end of the palette, a second, lighter blue
-  sitting right next to it would undercut the exact scannability goal the palette exists for.
-- **Reddish purple → Violet** — Okabe–Ito's reddish purple (`#CC79A7`) is intensified to a more
-  saturated magenta (`#C13584`) for stronger separation from the paled yellow and from indigo, both
-  of which sit near it in the sequence.
+**Round two: a grayscale audit caught what hue tuning couldn't see.** The working test adopted was
+blunt on purpose: does the palette still separate in black and white? Two colors can sit far apart
+in hue and still land close together in relative luminance (`0.299R + 0.587G + 0.114B`), and for
+more severe color vision deficiency, luminance — not hue — is what actually carries the separation.
+Auditing the palette this way found red and green only 13 points apart on a 0–255 scale, and blue
+and violet only 11 apart — both functionally the same shade once hue is discounted, despite reading
+as obviously different colors to typical vision.
 
-**Indigo** (`#2E1A47`) has no Okabe–Ito equivalent — it's an addition needed to fill out seven
-distinguishable steps once sky-blue was dropped in favor of the brand-blue substitution above. It
-sits at the dark end of the range specifically because nothing else in the palette occupies that
-lightness, which is what keeps it from being confused with violet or blue under any form of CVD.
+- **Red and green** were corrected together, not one at a time: red darkened to Burnt vermillion
+  (`#9C3D0A`), green lightened to Jade green (`#1FBF8C`), moved in opposite directions
+  simultaneously so that closing the gap between them didn't just push one of them into collision
+  with whichever color sits on its _other_ side in the sequence.
+- **Blue and violet** were corrected asymmetrically, deliberately. Blue was left at `#045C8C`
+  because it does double duty as the fixed nav/brand color (see above) — nudging it for luminance
+  reasons would ripple into every piece of UI chrome in the app, not just this one chart pairing.
+  Violet alone was lightened instead, to Rose violet (`#D9569E`), carrying the full weight of the
+  separation so blue didn't have to move at all.
+
+**What's unchanged from Okabe–Ito.** Orange (`#E69F00`) survived both rounds of correction untouched
+— it was never the color implicated in either confusion. Yellow (`#EDDD6E`) is still Okabe–Ito's
+yellow (`#F0E442`) paled for the same reason as always: the original is a pure, high-luminance
+yellow that's close to unreadable as text or a thin pattern mark on white, and paling it trades a
+little hue purity for a shade that leaves the cross-hatch pattern room to actually show up.
+Okabe–Ito's own blue (`#0072B2`) and its separate sky-blue swatch remain dropped in favor of the
+brand blue anchoring the sequence, for the reason given above: two similar blues, one for chrome and
+one for data, is exactly the confusion this file exists to prevent. **Indigo** (`#2E1A47`) still has
+no Okabe–Ito equivalent — it fills the seventh step left open once sky-blue was dropped, sitting at
+the dark end of the range specifically because nothing else in the palette occupies that lightness.
 
 ## Why every color also needs a pattern
 
-A colorblind-safe hue selection is necessary but not sufficient. It protects against confusing two
-_different_ hues, but it does nothing for:
+A colorblind-safe, luminance-audited hue selection is necessary but not sufficient. It protects
+against confusing two _different_ hues, but it does nothing for:
 
 - **Total color blindness (achromatopsia)** or a grayscale printout — the rarest case, but the one
   every other safeguard in this file still fails silently against unless something _other_ than hue
@@ -83,48 +118,60 @@ _different_ hues, but it does nothing for:
 
 Patterns are a second, fully independent channel — legible on shape alone, with no dependency on hue
 perception at all. That's why the rule is explicit that color alone never satisfies it: the pattern
-isn't decoration, it's the fallback that keeps the palette working when color itself fails.
+isn't decoration, it's the fallback that keeps the palette working when color itself fails. Marks
+are held to a bold, high-opacity range rather than a subtle texture on purpose: a faint texture only
+reads once the color underneath it has already been interpreted, which defeats the point of an
+independent channel — a genuinely independent signal has to be legible entirely on its own.
 
-## Why these specific patterns, sizes, and opacities
+## Why these specific patterns, sizes, and densities
 
-Three motifs cover all seven colors — diagonal bands, dots, and cross-hatch — rather than seven
-unique patterns, because a large pattern vocabulary is its own legibility problem: a coach shouldn't
-have to memorize seven arbitrary textures. Each motif is reused by exactly two colors, separated so
-the reuse never becomes ambiguity:
+Three motifs cover all seven colors — bands, dots, and cross-hatch — rather than seven unique
+patterns, because a large pattern vocabulary is its own legibility problem: a coach shouldn't have
+to memorize seven arbitrary textures. Within that constraint, each motif now separates its colors on
+three independent properties at once — direction/rotation, mark color, and tile scale/density —
+rather than one or two:
 
-- **Bands (red, blue)** — mirrored rotation, 45° vs. −45°. These two are the ones sharing a linear
-  motif, so the rotation is flipped specifically so red and blue stay visually distinct even under
-  total hue loss, where "diagonal band" alone wouldn't be enough.
-- **Dots (orange, indigo)** — identical geometry, separated instead by mark color (black marks on
-  orange, white marks on indigo) and by the large lightness gap between a light color and a very
-  dark one. Two separating channels rather than one, since dots have no rotation to differentiate
-  them the way bands do.
-- **Cross-hatch (yellow, violet)** — the same logic as dots: identical X geometry, separated by mark
-  color (black on yellow, white on violet) and by the two colors sitting far apart on the lightness
-  and saturation scale.
+- **Bands (red, blue, green)** — red and blue share the same diagonal-band sub-motif, mirrored in
+  rotation (45° vs. −45°) as before, but now also differ in scale: red's is a coarse 10×10px tile,
+  blue's a fine 6×6px tile. Green sits in the same broad family with a third variant, vertical
+  rather than diagonal bands, at an 8×8px tile. Three colors sharing one motif family stay
+  distinguishable through rotation, orientation, _and_ density stacked together, not any single one
+  of them carrying the whole load.
+- **Dots (orange, indigo)** — identical circular geometry, separated by mark color (black on orange,
+  white on indigo), a large lightness gap, and now also scale: orange's dots are large and sparse
+  (14×14px tile, 3px radius), indigo's small and dense (8×8px tile, 1.5px radius). A viewer who's
+  lost the color difference entirely can still tell them apart by how coarse or fine the dot field
+  reads.
+- **Cross-hatch (yellow, violet)** — the same logic again: identical X geometry, separated by mark
+  color (black on yellow, white on violet), a large lightness/saturation gap, and density — yellow's
+  hatching is coarse (12×12px tile, 2.5px stroke), violet's fine (6×6px tile, 1.5px stroke).
 
-The tile sizes follow directly from what each mark needs to stay legible: dots get a larger 10×10px
-tile (a circular mark needs more surrounding space to read as a distinct shape than a straight line
-does), while the linear motifs (bands, cross-hatch) use a tighter 8×8px tile. Band width is set to
-exactly half the tile — a 50% duty cycle — because that's the ratio least likely to either vanish
-(too thin) or read as a near-solid fill (too thick) at UI scale.
+Density earns its place as a third channel because it's genuinely independent of the other two: two
+colors can share a motif's shape and even its rotation and still read apart purely on how coarse or
+fine the repeating tile is, which is why the rule requires it to vary within every shared-motif
+pair, not just for the pairs that happen to need a tie-breaker.
 
-Per-swatch ink color (black vs. white) is chosen for contrast against that swatch's own base color,
-not applied uniformly — a fixed ink color would look strong on some swatches and disappear on
-others. Marks are also held to a real, visible opacity range (40–50%) rather than a subtle texture:
-a pattern that only shows up on close inspection defeats the point, which is a difference
-perceivable at a glance.
+Per-swatch ink color (black vs. white) is still chosen for contrast against that swatch's own base
+color, not applied uniformly — a fixed ink color would look strong on some swatches and disappear on
+others, especially now that several base hexes have shifted from the original palette.
 
-## Why every swatch also needs a border
+## Why every swatch also needs a dual-ring halo, not a single border
 
-A fill color's contrast against its background isn't fixed — it depends entirely on what's behind
-it, and this app supports both light and dark display modes. The palest color in the set (pale
-yellow) can nearly disappear on a light background; the darkest (indigo) can nearly disappear on a
-dark one. A pattern fill doesn't fully solve this either, since a mark drawn _inside_ a swatch is
-still bounded by that same low-contrast edge.
+The original approach used one fixed border tone, checked case by case against light and dark
+backgrounds. That check is exactly the weak point: a border tuned to survive a white page can still
+fail against a true dark-mode background, or the reverse, because a single tone only guarantees
+contrast against backgrounds on one side of the lightness spectrum. Getting it right meant either
+picking a border color conditionally per theme (more logic, another place to get the condition
+backwards) or accepting that some future addition would eventually land on the wrong side of the
+check.
 
-A mandatory 1px border is the cheapest fix that doesn't depend on the fill color at all: it
-guarantees a swatch's boundary is always perceivable, regardless of which of the seven colors is
-used or which mode the coach is in. This is also why the rule requires checking every _future_
-addition against both light and dark backgrounds specifically — a color's contrast behavior in one
-mode says nothing about the other, so a check done once, in one mode, is a false guarantee.
+The fix removes the condition instead of trying to satisfy it better: every swatch and every pattern
+mark now carries both a white inner ring and a black outer ring at once, always, rather than one
+theme-appropriate tone chosen at render time. This is structurally background-agnostic — one of the
+two rings will always contrast against whatever is behind it, because a background can't be both
+near-white and near-black at the same time. No theme detection, no per-color exception, and nothing
+that can be forgotten when the next color is added.
+
+Every new or edited color still needs checking against both a light and a dark background before it
+ships — the halo guarantees the boundary stays visible, not that the fill itself is legible in both
+modes, which is a separate property the rest of this document's reasoning already covers.
