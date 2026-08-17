@@ -124,7 +124,10 @@ the widths above look arbitrary.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** Postgres does not index a foreign
 key automatically. Leaving off `ondelete` means a delete that would orphan rows is refused outright
-rather than cascading through a roster and the match history hanging off it.
+rather than cascading through a roster and the match history hanging off it. The one route that does
+mean to take the children with it (closing an account, below) deletes each child table in turn
+itself, so the refusal stays in place as a backstop: a table added under `coaches` and left out of
+that list stops the delete loudly instead of being quietly missed.
 
 **Optional unless the value is genuinely required.** Player and match setup happens courtside and
 has to be fast, so beyond the fields that identify a row there is little a coach must fill in.
@@ -138,6 +141,16 @@ player stay listed and resolvable, since that history is what the soft delete ex
 match is deleted outright, because a match entered by mistake is cleared away before anything is
 recorded against it. A table that comes to reference matches declares no `ondelete` like every other
 foreign key here, so Postgres refuses to delete a match once point data hangs off it.
+
+**Closing a coach account is erasure, and takes their data with it.** `coaches` is the one table
+with no `archived_at`. Archiving exists so history a coach still depends on survives a row leaving
+the active roster, and when the coach themselves leaves there is nobody left whose analytics that
+history serves; a soft-deleted coach would just be their email, name and password hash sitting on a
+row nothing can reach, which is not what someone asking to be removed has asked for. So the closure
+deletes the coach and everything below them — their players, the matches recorded against those
+players, their sessions and any live reset code — in one transaction. Nothing keys on the address,
+so it is free for a fresh sign-up immediately, and no row survives to link the new account to the
+old one.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every

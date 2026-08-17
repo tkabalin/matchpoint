@@ -13,6 +13,11 @@ paths:
   outright. A points table's no-`ondelete` foreign key takes that away, and nothing catches the
   `IntegrityError` it raises, so adding that table includes choosing the status the API answers a
   refused delete with (`docs/data-model.md` records the policy).
+- `Coach` is the other exception, and deliberately has no `archived_at`: closing an account is
+  erasure, so `DELETE /coaches/me` deletes the coach and every row below them. A **new table hanging
+  off `coaches`, or off anything already below it, extends that route's delete list** — the foreign
+  keys declare no `ondelete`, so one left out makes closing an account fail rather than orphan rows.
+  Nothing else catches it; a route test that closes an account with the new table populated does.
 
 ## Ids Are Client-Assignable UUIDs
 

@@ -168,6 +168,14 @@ password left standing. The presented session is not spared: revocation matches 
 so a thief holding a copy of that cookie sits on the same row. The device that proved the password
 is handed a fresh session instead, so it stays signed in without keeping the old token.
 
+**Closing an account re-authenticates too.** `DELETE /coaches/me` demands the current password for
+the same reason, with more resting on it: the closure erases the coach and everything recorded under
+them (`docs/data-model.md`), and there is nothing to recover to afterwards, so a stolen cookie alone
+must not reach it. A wrong password answers 403 and is charged against a per-account budget of wrong
+guesses; a correct one is never refused by that tier, so a coach under attack from a session someone
+stole can still close the account out from under them. Every session goes with the rows, and the
+cookie the request arrived on is cleared.
+
 ## Cross-site request forgery
 
 `SameSite=Lax` stops cross-site writes from carrying the cookie, but treats every host under the
