@@ -46,7 +46,8 @@ test("renders the matches the API returns", async () => {
 
   renderMatchList();
 
-  expect(await screen.findByText("T. Naidoo — 2026-08-10 (hard)")).toBeInTheDocument();
+  expect(await screen.findByText("vs T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("Aug 10 · Hard")).toBeInTheDocument();
 });
 
 test("falls back to a placeholder for a match with no opponent name", async () => {
@@ -54,7 +55,15 @@ test("falls back to a placeholder for a match with no opponent name", async () =
 
   renderMatchList();
 
-  expect(await screen.findByText("Unknown opponent — 2026-08-10 (hard)")).toBeInTheDocument();
+  expect(await screen.findByText("vs Unknown opponent")).toBeInTheDocument();
+});
+
+test("marks a finished match with its result", async () => {
+  stubFetch(() => Response.json([{ ...match, result: "win" }]));
+
+  renderMatchList();
+
+  expect(await screen.findByText("W")).toBeInTheDocument();
 });
 
 test("shows an empty state when there are no matches", async () => {
@@ -62,7 +71,7 @@ test("shows an empty state when there are no matches", async () => {
 
   renderMatchList();
 
-  expect(await screen.findByText("No matches yet.")).toBeInTheDocument();
+  expect(await screen.findByText("No matches yet")).toBeInTheDocument();
 });
 
 test("reports a failed load instead of rendering an empty list", async () => {

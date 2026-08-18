@@ -1,3 +1,4 @@
+import type { PlayerRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -7,10 +8,28 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
+
 import { PlayersPage } from "./players-page";
+
+// Annotated rather than inferred so tsc holds the fixture to the generated contract.
+const player: PlayerRead = {
+  id: "3f1c2b4e-0000-4000-8000-000000000001",
+  first_name: "Amahle",
+  last_name: "Nkosi",
+  date_of_birth: null,
+  dominant_hand: null,
+  gender: null,
+  notes: null,
+  coach_id: "3f1c2b4e-0000-4000-8000-0000000000c1",
+  archived_at: null,
+  created_at: "2026-08-11T09:00:00Z",
+  updated_at: "2026-08-11T09:00:00Z",
+};
 
 function stubFetch(response: () => Response) {
   vi.stubGlobal(
@@ -44,7 +63,24 @@ async function renderPlayersPage() {
     path: "/stats",
     component: () => <h1>Stats</h1>,
   });
-  const routeTree = rootRoute.addChildren([playersRoute, homeRoute, matchesRoute, statsRoute]);
+  const profileRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players/$playerId",
+    component: () => <h1>Player Profile</h1>,
+  });
+  const newMatchRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/new-match/$playerId",
+    component: () => <h1>New Match</h1>,
+  });
+  const routeTree = rootRoute.addChildren([
+    playersRoute,
+    homeRoute,
+    matchesRoute,
+    statsRoute,
+    profileRoute,
+    newMatchRoute,
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/players"] }),
@@ -59,6 +95,7 @@ async function renderPlayersPage() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 test("renders the page heading and the roster", async () => {
@@ -66,7 +103,47 @@ test("renders the page heading and the roster", async () => {
 
   await renderPlayersPage();
 
-  expect(await screen.findByText("No players yet.")).toBeInTheDocument();
+  expect(await screen.findByText("No players yet")).toBeInTheDocument();
+});
+
+test("tapping a player offers viewing them or starting a match", async () => {
+  stubFetch(() => Response.json([player]));
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
+
+  expect(await screen.findByRole("link", { name: "View player" })).toHaveAttribute(
+    "href",
+    `/players/${player.id}`,
+  );
+  expect(screen.getByRole("link", { name: "Start match" })).toHaveAttribute(
+    "href",
+    `/new-match/${player.id}`,
+  );
+});
+
+test("choosing View player opens the profile and records them as last-viewed", async () => {
+  stubFetch(() => Response.json([player]));
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
+  await user.click(await screen.findByRole("link", { name: "View player" }));
+
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+  expect(getLastViewedPlayerId()).toBe(player.id);
+});
+
+test("filters the roster as the coach searches", async () => {
+  stubFetch(() => Response.json([player]));
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await screen.findByText("Amahle Nkosi");
+  await user.type(screen.getByRole("textbox", { name: "Search players" }), "zzz");
+
+  expect(await screen.findByText("No players found")).toBeInTheDocument();
 });
 
 test("renders the bottom nav with Players active", async () => {
@@ -78,4 +155,45 @@ test("renders the bottom nav with Players active", async () => {
   expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Players" })).toHaveAttribute("aria-current", "page");
+});
+
+test("the floating action adds a player rather than starting a match", async () => {
+  stubFetch(() => Response.json([player]));
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
+  // The floating action drops out of the tree while the sheet is open — Base UI
+  // marks the background inert — so this "Add player" is the form's submit.
+  expect(screen.getByRole("textbox", { name: "First name" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Add player" })).toHaveAttribute("type", "submit");
+});
+
+test("submitting the add-player form posts it to the API", async () => {
+  const posted: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      if (input.method === "POST") {
+        posted.push(input.url);
+        return input.text().then((body) => {
+          posted.push(body);
+          return Response.json({ ...player, first_name: "Nomsa", last_name: "Khumalo" });
+        });
+      }
+      return Promise.resolve(Response.json([player]));
+    }),
+  );
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+  await user.type(await screen.findByRole("textbox", { name: "First name" }), "Nomsa");
+  await user.type(screen.getByRole("textbox", { name: "Last name" }), "Khumalo");
+  await user.click(screen.getByRole("button", { name: /^Add player$/ }));
+
+  await waitFor(() => expect(posted.some((entry) => entry.includes("/api/players"))).toBe(true));
+  expect(posted.join(" ")).toContain('"first_name":"Nomsa"');
 });

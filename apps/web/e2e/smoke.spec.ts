@@ -7,7 +7,7 @@ test("loads the app shell", async ({ page }) => {
 
 test("loads the player roster at /players", async ({ page }) => {
   await page.goto("/players");
-  await expect(page.getByRole("heading", { name: "Players" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Players", level: 1 })).toBeVisible();
 });
 
 // No API is running behind these, so the profile can only get as far as its error
@@ -27,7 +27,7 @@ test("loads the sign-up form at /sign-up", async ({ page }) => {
 
 test("loads the home page at /home", async ({ page }) => {
   await page.goto("/home");
-  await expect(page.getByRole("heading", { name: "Welcome to Home" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Home", level: 1 })).toBeVisible();
 });
 
 test("loads the forgot-password form at /forgot-password", async ({ page }) => {
@@ -37,7 +37,12 @@ test("loads the forgot-password form at /forgot-password", async ({ page }) => {
 
 test("loads the matches list at /matches", async ({ page }) => {
   await page.goto("/matches");
-  await expect(page.getByRole("heading", { name: "Matches" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Matches", level: 1 })).toBeVisible();
+});
+
+test("loads the start-a-match player search at /new-match", async ({ page }) => {
+  await page.goto("/new-match");
+  await expect(page.getByRole("heading", { name: "Start a match" })).toBeVisible();
 });
 
 test("loads the stats placeholder at /stats", async ({ page }) => {

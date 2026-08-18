@@ -172,7 +172,7 @@ async function renderHome() {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  await screen.findByRole("heading", { name: "Welcome to Home" });
+  await screen.findByRole("heading", { name: "My players" });
 }
 
 afterEach(() => {
@@ -186,7 +186,14 @@ test("renders the welcome heading", async () => {
   stubUnauthenticatedHome();
   await renderHome();
 
-  expect(screen.getByRole("heading", { name: "Welcome to Home" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Home", level: 1 })).toBeInTheDocument();
+});
+
+test("greets the coach by name once loaded", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(await screen.findByRole("heading", { name: "Coach Danny", level: 1 })).toBeInTheDocument();
 });
 
 test("links to the profile page", async () => {
@@ -261,13 +268,26 @@ test("renders a bubble with initials for each player", async () => {
   expect(screen.getByText("Sipho")).toBeInTheDocument();
 });
 
-test("clicking a player bubble opens their profile and records them as last-viewed", async () => {
+test("clicking a player bubble offers viewing them or starting a match", async () => {
   stubAuthenticatedHome();
   const user = userEvent.setup();
   await renderHome();
   await screen.findByText("AN");
 
-  await user.click(screen.getByRole("link", { name: "AN Amahle" }));
+  await user.click(screen.getByRole("button", { name: "Amahle" }));
+
+  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Start match" })).toBeInTheDocument();
+});
+
+test("choosing View player opens the profile and records them as last-viewed", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup();
+  await renderHome();
+  await screen.findByText("AN");
+
+  await user.click(screen.getByRole("button", { name: "Amahle" }));
+  await user.click(await screen.findByRole("link", { name: "View player" }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
   expect(getLastViewedPlayerId()).toBe(players[0]!.id);
@@ -306,10 +326,10 @@ test("shows the last-viewed player once one has been viewed", async () => {
   await renderHome();
 
   const heading = await screen.findByRole("heading", { name: "Last viewed player" });
-  const section = within(heading.closest("div")!);
+  const section = within(heading.closest("section")!);
   expect(section.getByText("Amahle Nkosi")).toBeInTheDocument();
   expect(section.getByText("AN")).toBeInTheDocument();
-  expect(section.getByText("Matches: 1")).toBeInTheDocument();
+  expect(await section.findByText("Last match: vs T. Naidoo")).toBeInTheDocument();
   expect(section.getByRole("link", { name: "View full profile" })).toBeInTheDocument();
 });
 
@@ -337,10 +357,11 @@ test("shows the squad's player count and matches played in the last 7 days", asy
   });
   await renderHome();
 
-  const heading = await screen.findByRole("heading", { name: "Squad snapshot" });
-  const section = within(heading.closest("div")!);
-  expect(section.getByText("Players: 2")).toBeInTheDocument();
-  expect(section.getByText("Matches this week: 1")).toBeInTheDocument();
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  expect(snapshot.getByText("Players")).toBeInTheDocument();
+  expect(snapshot.getAllByRole("definition")[0]).toHaveTextContent("2");
+  expect(snapshot.getByText("Matches this week")).toBeInTheDocument();
+  expect(snapshot.getAllByRole("definition")[1]).toHaveTextContent("1");
 });
 
 test("counts a match played today from a timezone ahead of UTC", async () => {
@@ -358,8 +379,9 @@ test("counts a match played today from a timezone ahead of UTC", async () => {
   });
   await renderHome();
 
-  const heading = await screen.findByRole("heading", { name: "Squad snapshot" });
-  expect(within(heading.closest("div")!).getByText("Matches this week: 1")).toBeInTheDocument();
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  expect(snapshot.getByText("Matches this week")).toBeInTheDocument();
+  expect(snapshot.getAllByRole("definition")[1]).toHaveTextContent("1");
 });
 
 test("shows an empty needs-attention state until trend flagging exists", async () => {

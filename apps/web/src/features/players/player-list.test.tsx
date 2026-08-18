@@ -12,8 +12,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
-
 import { PlayerList } from "./player-list";
 
 // Annotated rather than inferred so tsc holds the fixture to the generated contract:
@@ -45,23 +43,23 @@ function stubFetch(response: () => Response) {
   );
 }
 
-/** Renders PlayerList inside a real (in-memory) router — its entries now link to the
- * player profile route. */
-async function renderPlayerList() {
+/** Renders PlayerList inside a real (in-memory) router — its 401 branch links back
+ * to sign-in, so router context is needed regardless of what the roster renders. */
+async function renderPlayerList({ search = "", onSelect = vi.fn() } = {}) {
   // retry off so the error path resolves in one attempt instead of on Query's backoff.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const playersRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/players",
-    component: PlayerList,
+    component: () => <PlayerList search={search} onSelect={onSelect} />,
   });
-  const profileRoute = createRoute({
+  const signInRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/players/$playerId",
-    component: () => <h1>Player Profile</h1>,
+    path: "/",
+    component: () => <h1>Sign in</h1>,
   });
-  const routeTree = rootRoute.addChildren([playersRoute, profileRoute]);
+  const routeTree = rootRoute.addChildren([playersRoute, signInRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/players"] }),
@@ -71,6 +69,7 @@ async function renderPlayerList() {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+  return { onSelect };
 }
 
 afterEach(() => {
@@ -91,9 +90,26 @@ test("requests the roster from the API's own origin", async () => {
 
   await renderPlayerList();
 
-  expect(await screen.findByText("No players yet.")).toBeInTheDocument();
+  expect(await screen.findByText("No players yet")).toBeInTheDocument();
   const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
   expect(String(request instanceof Request ? request.url : request)).toContain("/api/players");
+});
+
+test("groups players under their surname initial", async () => {
+  stubFetch(() => Response.json([player]));
+
+  await renderPlayerList();
+
+  expect(await screen.findByRole("heading", { name: "N" })).toBeInTheDocument();
+});
+
+test("filters the roster by the search term", async () => {
+  stubFetch(() => Response.json([player]));
+
+  await renderPlayerList({ search: "zzz" });
+
+  expect(await screen.findByText("No players found")).toBeInTheDocument();
+  expect(screen.queryByText("Amahle Nkosi")).not.toBeInTheDocument();
 });
 
 test("reports a failed load instead of rendering an empty roster", async () => {
@@ -113,13 +129,15 @@ test("prompts to sign in again on a 401, instead of the generic error", async ()
   expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/");
 });
 
-test("clicking a player opens their profile and records them as last-viewed", async () => {
+// Tapping a row raises the action sheet rather than navigating: choosing between
+// "view" and "start match" is the point. The sheet itself is covered in
+// players-page.test.tsx, where it's actually rendered.
+test("tapping a player hands it to the caller instead of navigating", async () => {
   stubFetch(() => Response.json([player]));
   const user = userEvent.setup();
-  await renderPlayerList();
+  const { onSelect } = await renderPlayerList();
 
-  await user.click(await screen.findByRole("link", { name: "Amahle Nkosi" }));
+  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
 
-  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
-  expect(getLastViewedPlayerId()).toBe(player.id);
+  expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: player.id }));
 });
