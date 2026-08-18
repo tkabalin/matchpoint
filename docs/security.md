@@ -172,9 +172,10 @@ is handed a fresh session instead, so it stays signed in without keeping the old
 the same reason, with more resting on it: the closure erases the coach and everything recorded under
 them (`docs/data-model.md`), and there is nothing to recover to afterwards, so a stolen cookie alone
 must not reach it. A wrong password answers 403 and is charged against a per-account budget of wrong
-guesses; a correct one is never refused by that tier, so a coach under attack from a session someone
-stole can still close the account out from under them. Every session goes with the rows, and the
-cookie the request arrived on is cleared.
+guesses; a correct one is never refused by that tier, so someone guessing from a session they stole
+cannot lock the coach out of closing the account. The arrival tiers are charged either way, as on
+every metered route here, so a flood delays a closure without preventing one. Every session goes
+with the rows, and the cookie the request arrived on is cleared.
 
 **The roster refusal is not one of these defences.** The closure also refuses while the coach still
 has an active player, and the request can waive that refusal. The gate exists so a player another
