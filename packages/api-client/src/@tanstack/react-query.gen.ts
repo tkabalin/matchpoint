@@ -206,9 +206,10 @@ export const createCoachMutation = (options?: Partial<Options<CreateCoachData>>)
  *
  * Erase this coach and everything recorded under them, given their password.
  *
- * The password is demanded for change-password's reason, with more at stake: the cookie
- * proves this browser was signed in once, not that whoever holds it now is the coach, and
- * there is nothing to recover to afterwards.
+ * Refused with a 409 while any player is still on the active roster, so that someone
+ * another coach is about to take over is not erased by an account closing: clear each
+ * one first, by transfer or by archiving. `delete_active_players` waives the refusal and
+ * takes the whole roster along, for the coach who means to leave nothing behind.
  */
 export const deleteCurrentCoachMutation = (options?: Partial<Options<DeleteCurrentCoachData>>): UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> => {
     const mutationOptions: UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> = {

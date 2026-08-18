@@ -22,7 +22,7 @@ export const zCoachCreate = z.object({
  * CoachDelete
  */
 export const zCoachDelete = z.object({
-    password: z.string().max(128)
+    delete_active_players: z.boolean().optional().default(false)
 });
 
 /**
@@ -253,6 +253,14 @@ export const zCoachCreateWritable = z.object({
 });
 
 /**
+ * CoachDelete
+ */
+export const zCoachDeleteWritable = z.object({
+    delete_active_players: z.boolean().optional().default(false),
+    password: z.string().max(128)
+});
+
+/**
  * LoginRequest
  */
 export const zLoginRequestWritable = z.object({
@@ -330,7 +338,7 @@ export const zCreateCoachBody = zCoachCreateWritable;
  */
 export const zCreateCoachResponse = zCoachRead;
 
-export const zDeleteCurrentCoachBody = zCoachDelete;
+export const zDeleteCurrentCoachBody = zCoachDeleteWritable;
 
 /**
  * Successful Response

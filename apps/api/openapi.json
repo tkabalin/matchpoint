@@ -62,6 +62,11 @@
       "CoachDelete": {
         "additionalProperties": false,
         "properties": {
+          "delete_active_players": {
+            "default": false,
+            "title": "Delete Active Players",
+            "type": "boolean"
+          },
           "password": {
             "format": "password",
             "maxLength": 128,
@@ -1477,7 +1482,7 @@
     },
     "/coaches/me": {
       "delete": {
-        "description": "Erase this coach and everything recorded under them, given their password.\n\nThe password is demanded for change-password's reason, with more at stake: the cookie\nproves this browser was signed in once, not that whoever holds it now is the coach, and\nthere is nothing to recover to afterwards.",
+        "description": "Erase this coach and everything recorded under them, given their password.\n\nRefused with a 409 while any player is still on the active roster, so that someone\nanother coach is about to take over is not erased by an account closing: clear each\none first, by transfer or by archiving. `delete_active_players` waives the refusal and\ntakes the whole roster along, for the coach who means to leave nothing behind.",
         "operationId": "delete_current_coach",
         "requestBody": {
           "content": {
@@ -1512,6 +1517,16 @@
               }
             },
             "description": "Incorrect password"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Active players must be transferred or archived first"
           },
           "422": {
             "content": {

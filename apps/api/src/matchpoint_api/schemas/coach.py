@@ -89,6 +89,12 @@ class CoachDelete(RequestModel):
     # Named `password` as LoginRequest names it, for the same meaning and the same
     # annotation, and so already redacted from a 422 body under that name.
     password: Password
+    # Waives the refusal a still-active roster earns, so the coach who wants out reaches
+    # it in one request rather than archiving each player first. False by default, so no
+    # roster is ever cleared by a request that did not ask for it. Named for what it does
+    # and not for the button above it: the closure hard-deletes players either way, and
+    # archiving rows the same transaction removes would write timestamps nothing can read.
+    delete_active_players: bool = False
 
 
 # password_hash is absent, and belongs nowhere else either. `response_model` filters a

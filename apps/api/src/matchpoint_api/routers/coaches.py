@@ -29,6 +29,11 @@ router = APIRouter(prefix="/coaches", tags=["coaches"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 
+# Names the two ways out and no more. Which players are in the way is not in the body:
+# `ErrorDetail` carries one string, and the form holds the roster already, so it can name
+# them where a count folded into this message could not.
+ACTIVE_PLAYERS_REMAIN = "Active players must be transferred or archived first"
+
 
 def limit_sign_up_rate(request: Request) -> None:
     """Refuse sign-ups beyond a bounded arrival rate, before anything is spent on one.
@@ -199,15 +204,21 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
 # the soft-delete convention stops at this one row, and what the cascade takes with it,
 # is in `docs/data-model.md`.
 #
-# The 403 is declared because the form branches on it, inline on the password field. The
-# message is change-password's, so a refused re-authentication reads the same wherever a
-# coach meets one.
+# The password is demanded for change-password's reason, with more at stake: the cookie
+# proves this browser was signed in once, not that whoever holds it now is the coach, and
+# there is nothing to recover to afterwards.
+#
+# Both the 403 and the 409 are declared because the form branches on each, the first
+# inline on the password field and the second on the roster. The 403's message is
+# change-password's, so a refused re-authentication reads the same wherever a coach meets
+# one.
 @router.delete(
     "/me",
     status_code=204,
     responses={
         401: {"model": ErrorDetail, "description": "Not signed in"},
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
+        409: {"model": ErrorDetail, "description": ACTIVE_PLAYERS_REMAIN},
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
@@ -220,9 +231,10 @@ def delete_current_coach(
 ) -> None:
     """Erase this coach and everything recorded under them, given their password.
 
-    The password is demanded for change-password's reason, with more at stake: the cookie
-    proves this browser was signed in once, not that whoever holds it now is the coach, and
-    there is nothing to recover to afterwards.
+    Refused with a 409 while any player is still on the active roster, so that someone
+    another coach is about to take over is not erased by an account closing: clear each
+    one first, by transfer or by archiving. `delete_active_players` waives the refusal and
+    takes the whole roster along, for the coach who means to leave nothing behind.
     """
     # In the handler rather than the decorator's dependencies, as change-password takes
     # its tiers: metering after the session resolves stops a stranger who can reach no
@@ -237,6 +249,17 @@ def delete_current_coach(
         per_coach: RateLimiter = request.app.state.close_account_per_coach_limit
         per_coach.take(str(coach.id))
         raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    # After the password and not before it: every answer this route gives past the 401
+    # comes from a caller who has just re-authenticated, so no later answer has to argue
+    # afresh about what it tells a stolen cookie.
+    #
+    # Archived players are not spared by the refusal having passed. Archiving is for a
+    # coach's own reversible tidying; closure is the coach leaving, and privacy beats
+    # recoverability there, so the delete below ignores `archived_at` entirely.
+    if not data.delete_active_players:
+        active = select(Player.id).where(Player.coach_id == coach.id, Player.archived_at.is_(None))
+        if db.scalar(select(active.exists())):
+            raise HTTPException(status_code=409, detail=ACTIVE_PLAYERS_REMAIN)
     # Children first, in one transaction, because every foreign key here declares no
     # `ondelete` — so a table added below the coach and left out of this list stops the
     # delete outright rather than being quietly missed. Nothing keys on the email

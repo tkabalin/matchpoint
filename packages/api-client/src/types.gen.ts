@@ -37,9 +37,9 @@ export type CoachCreate = {
  */
 export type CoachDelete = {
     /**
-     * Password
+     * Delete Active Players
      */
-    password: string;
+    delete_active_players?: boolean;
 };
 
 /**
@@ -406,6 +406,20 @@ export type CoachCreateWritable = {
      * Email
      */
     email: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
+ * CoachDelete
+ */
+export type CoachDeleteWritable = {
+    /**
+     * Delete Active Players
+     */
+    delete_active_players?: boolean;
     /**
      * Password
      */
@@ -794,7 +808,7 @@ export type CreateCoachResponses = {
 export type CreateCoachResponse = CreateCoachResponses[keyof CreateCoachResponses];
 
 export type DeleteCurrentCoachData = {
-    body: CoachDelete;
+    body: CoachDeleteWritable;
     path?: never;
     query?: never;
     url: '/coaches/me';
@@ -809,6 +823,10 @@ export type DeleteCurrentCoachErrors = {
      * Incorrect password
      */
     403: ErrorDetail;
+    /**
+     * Active players must be transferred or archived first
+     */
+    409: ErrorDetail;
     /**
      * Validation Error
      */

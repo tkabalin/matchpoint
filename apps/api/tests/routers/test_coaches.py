@@ -902,10 +902,11 @@ def _closable(client: TestClient, db_session: Session, **overrides: Any) -> Coac
     return coach
 
 
-def _close(client: TestClient, **overrides: str) -> httpx2.Response:
+def _close(client: TestClient, **overrides: object) -> httpx2.Response:
     """request() rather than delete(): httpx's delete() takes no body, and the password
     has to be in one — a credential in a query string lands in access logs."""
-    return client.request("DELETE", "/coaches/me", json={"password": CLOSE_PASSWORD} | overrides)
+    body: dict[str, object] = {"password": CLOSE_PASSWORD} | overrides
+    return client.request("DELETE", "/coaches/me", json=body)
 
 
 def _stub_out_verification(monkeypatch: pytest.MonkeyPatch, *, answer: bool) -> None:
@@ -925,20 +926,87 @@ def test_closing_an_account_erases_the_coach(client: TestClient, db_session: Ses
     assert db_session.get(Coach, coach.id) is None
 
 
-def test_closing_an_account_takes_the_roster_and_its_matches(
+def test_closing_an_account_takes_an_archived_roster_and_its_matches(
     client: TestClient, db_session: Session
 ) -> None:
-    """Option 1 of #146, the cascade. The matches go through the players rather than
-    directly: a match reaches its owner only through the player it was recorded against."""
+    """The closure a coach reaches by clearing the roster first, and what erasure means
+    once they do: being archived does not spare a player, because closure is privacy and
+    not tidying. The matches go through the players rather than directly, a match reaching
+    its owner only through the player it was recorded against."""
     coach = _closable(client, db_session)
-    player = make_player(db_session, coach_id=coach.id)
+    player = make_player(
+        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
+    )
     match = make_match(db_session, player_id=player.id)
     db_session.commit()
 
     assert _close(client).status_code == 204
 
+    assert db_session.get(Coach, coach.id) is None
     assert db_session.get(Player, player.id) is None
     assert db_session.get(Match, match.id) is None
+
+
+def test_closing_an_account_is_refused_while_a_player_is_active(
+    client: TestClient, db_session: Session
+) -> None:
+    """A name still on the roster may be one another coach is about to take over (#173),
+    so it has to be cleared before the account can erase it. The body is asserted exactly
+    because the route declares the 409 as ErrorDetail for the form to branch on."""
+    coach = _closable(client, db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _close(client)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Active players must be transferred or archived first"}
+    assert db_session.get(Coach, coach.id) is not None
+    assert db_session.get(Player, player.id) is not None
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_a_refusal_spends_none_of_the_wrong_guess_budget(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why the roster check sits after the password rather than in place of a failure: the
+    password was right every time, so a coach working out what the refusal wants must not
+    be locked out of their own closure by the tier that bounds guessing (burst 5)."""
+    coach = _closable(client, db_session)
+    make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _stub_out_verification(monkeypatch, answer=True)
+
+    for _ in range(6):
+        assert _close(client).status_code == 409
+
+    assert _close(client, delete_active_players=True).status_code == 204
+    assert db_session.get(Coach, coach.id) is None
+
+
+def test_closing_an_account_may_take_the_active_roster_along(
+    client: TestClient, db_session: Session
+) -> None:
+    """The one-step closure for the coach who wants out: clearing the roster and erasing
+    the account share a transaction, so there is no half-closed account to be stranded in
+    between the two. Every table below the coach is checked, since each foreign key here
+    declares no ondelete and one left out of the delete list would refuse the whole thing."""
+    coach = _closable(client, db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    reset = make_password_reset(db_session, coach_id=coach.id)
+    session_row = make_coach_session(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _close(client, delete_active_players=True)
+
+    assert response.status_code == 204
+    assert db_session.get(Coach, coach.id) is None
+    assert db_session.get(Player, player.id) is None
+    assert db_session.get(Match, match.id) is None
+    assert db_session.get(PasswordReset, reset.id) is None
+    assert db_session.get(CoachSession, session_row.id) is None
+    assert client.get("/coaches/me").status_code == 401
 
 
 def test_closing_an_account_ends_every_session_and_clears_the_cookie(
