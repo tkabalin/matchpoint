@@ -1,8 +1,11 @@
 import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
-import { QueryClient } from "@tanstack/react-query";
+import { getCurrentCoachOptions, listPlayersOptions } from "@matchpoint/api-client/react-query";
+import { QueryClient, dehydrate, onlineManager } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
+
+import { queryPersistOptions, removePersistedQueryCache } from "@/lib/query-persist";
 
 import { routeTree } from "./routeTree.gen";
 
@@ -56,8 +59,30 @@ function renderRouteTreeAt(path: string) {
   render(<RouterProvider router={router} />);
 }
 
-afterEach(() => {
+/**
+ * Seeds the persisted snapshot with what a previous online visit would have cached,
+ * then waits for the write to land: the persister throttles, so its promise can
+ * resolve before the store has it.
+ */
+async function persistLastVisit() {
+  const seed = new QueryClient();
+  seed.setQueryData(getCurrentCoachOptions().queryKey, coach);
+  seed.setQueryData(listPlayersOptions().queryKey, [player]);
+
+  await queryPersistOptions.persister.persistClient({
+    buster: queryPersistOptions.buster,
+    timestamp: Date.now(),
+    clientState: dehydrate(seed),
+  });
+  await vi.waitFor(async () => {
+    expect(await queryPersistOptions.persister.restoreClient()).toBeDefined();
+  });
+}
+
+afterEach(async () => {
   vi.unstubAllGlobals();
+  onlineManager.setOnline(true);
+  await removePersistedQueryCache();
 });
 
 test("/players renders the roster", async () => {
@@ -117,4 +142,30 @@ test("renders the protected route when the session check is rate-limited", async
   renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
+
+test("renders a protected route from the persisted cache with no connection", async () => {
+  await persistLastVisit();
+  // Query pauses rather than fails while the browser reports itself offline, so the
+  // guard's session check only settles because it asks for offlineFirst. Without
+  // that, beforeLoad never resolves and nothing behind the guard renders at all.
+  onlineManager.setOnline(false);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+  renderRouteTreeAt("/players");
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+  expect(await screen.findByText("Amahle Nkosi")).toBeInTheDocument();
+});
+
+test("a confirmed 401 leaves no persisted snapshot on the device", async () => {
+  await persistLastVisit();
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  renderRouteTreeAt("/players");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+  expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
 });

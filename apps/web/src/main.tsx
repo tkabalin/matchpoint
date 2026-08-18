@@ -7,6 +7,7 @@ import { registerSW } from "virtual:pwa-register";
 
 import "@/app.css";
 import { UpdatePrompt } from "@/features/pwa/update-prompt";
+import { QUERY_CACHE_MAX_AGE_MS } from "@/lib/query-persist";
 import { routeTree } from "@/routeTree.gen";
 
 // react-grab lets coding agents select page context to work from. Dev-only — the
@@ -26,7 +27,12 @@ registerErrorStatusInterceptor();
 // the same client to call ensureQueryData before RootLayout (or anything else) has
 // rendered, and router context is the only thing both a beforeLoad and a component can
 // reach.
-const queryClient = new QueryClient();
+// gcTime matches the persisted maxAge (see query-persist.ts): a query dropped from
+// memory is absent from the next save, so Query's 5-minute default would cut the
+// persisted cache down to whatever happened to be on screen recently.
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { gcTime: QUERY_CACHE_MAX_AGE_MS } },
+});
 const router = createRouter({ routeTree, context: { queryClient } });
 
 declare module "@tanstack/react-router" {

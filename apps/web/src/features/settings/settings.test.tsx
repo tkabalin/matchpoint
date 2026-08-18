@@ -14,6 +14,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { queryPersistOptions } from "@/lib/query-persist";
+
 import { Settings } from "./settings";
 
 const coach: CoachRead = {
@@ -123,6 +125,13 @@ test("Cancel closes the dialog without signing out", async () => {
 
 test("confirming signs out, clears the query cache, and shows a success dialog", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
+  // The IndexedDB copy of the cache outlives the tab, so clearing memory alone would
+  // still leave this coach's roster on a device the next coach signs in on.
+  await queryPersistOptions.persister.persistClient({
+    buster: queryPersistOptions.buster,
+    timestamp: Date.now(),
+    clientState: { mutations: [], queries: [] },
+  });
   const user = userEvent.setup();
   const queryClient = await renderSettings();
 
@@ -134,6 +143,7 @@ test("confirming signs out, clears the query cache, and shows a success dialog",
 
   expect(await screen.findByText("You've been signed out.")).toBeInTheDocument();
   expect(queryClient.getQueryData(["players"])).toBeUndefined();
+  expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 

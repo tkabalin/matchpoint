@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
+import { removePersistedQueryCache } from "@/lib/query-persist";
 import { useCountdown } from "@/lib/use-countdown";
 
 type DialogStep = "closed" | "confirm" | "success";
@@ -131,8 +132,10 @@ export function Settings() {
     // Logout can't fail (always 204, cookie-present or not) — nothing to branch on.
     await logout();
     // Otherwise the next coach to sign in on this device would see the previous
-    // coach's roster served straight from cache.
+    // coach's roster served straight from cache: from memory, and from the
+    // IndexedDB copy behind it that outlives the tab.
     queryClient.clear();
+    await removePersistedQueryCache();
     setDialogStep("success");
   }
 

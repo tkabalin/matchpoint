@@ -1,5 +1,7 @@
-import { QueryClientProvider } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { Outlet, useRouteContext } from "@tanstack/react-router";
+
+import { queryPersistOptions } from "@/lib/query-persist";
 
 export function RootLayout() {
   // Read from router context rather than created here: the _authenticated guard's
@@ -8,8 +10,12 @@ export function RootLayout() {
   const { queryClient } = useRouteContext({ from: "__root__" });
 
   return (
-    <QueryClientProvider client={queryClient}>
+    // PersistQueryClientProvider rather than a plain QueryClientProvider: as well as
+    // restoring the IndexedDB copy it holds every query rendered under it off the
+    // network until that restore lands. The _authenticated guard's beforeLoad runs
+    // before this mounts, so it fetches ahead of the restore and says why.
+    <PersistQueryClientProvider client={queryClient} persistOptions={queryPersistOptions}>
       <Outlet />
-    </QueryClientProvider>
+    </PersistQueryClientProvider>
   );
 }

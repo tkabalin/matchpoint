@@ -10,6 +10,10 @@ import { VitePWA } from "vite-plugin-pwa";
 // Relative, not `@/`: the alias is applied to the app's module graph, not to the config
 // itself, which esbuild bundles before `resolve.alias` below exists.
 import { pwaOptions } from "./src/features/pwa/pwa-config.ts";
+// The `with` attribute is required, not decoration: Vite's native config loader, which
+// becomes the default in a future major, warns on a JSON import without one. Default
+// import, not a named one: a JSON module exposes only a default binding to Node.
+import packageJson from "./package.json" with { type: "json" };
 
 // The generated client calls /api/* on its own origin, which is how production serves
 // it (Caddy strips the prefix and proxies to the API). This makes that true in dev too,
@@ -32,6 +36,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA(pwaOptions),
   ],
+  define: {
+    // The persisted read cache's buster (src/lib/query-persist.ts). Sourced from
+    // package.json so the version is stated once, and inlined at build time because
+    // nothing in the running app can read a package manifest.
+    __APP_VERSION__: JSON.stringify(packageJson.version),
+  },
   server: { proxy: apiProxy },
   preview: { proxy: apiProxy },
   resolve: {
