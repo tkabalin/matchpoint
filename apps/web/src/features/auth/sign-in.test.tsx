@@ -191,7 +191,7 @@ test("links to the sign-up page", async () => {
   const user = userEvent.setup();
   await renderSignIn();
 
-  await user.click(screen.getByRole("link", { name: "sign up here" }));
+  await user.click(screen.getByRole("link", { name: "Create account" }));
 
   expect(await screen.findByRole("heading", { name: "Sign Up" })).toBeInTheDocument();
 });
@@ -200,7 +200,7 @@ test("links to the forgot-password page", async () => {
   const user = userEvent.setup();
   await renderSignIn();
 
-  await user.click(screen.getByRole("link", { name: "Reset it here" }));
+  await user.click(screen.getByRole("link", { name: "Forgot password?" }));
 
   expect(await screen.findByRole("heading", { name: "Reset Password" })).toBeInTheDocument();
 });

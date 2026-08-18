@@ -99,18 +99,15 @@ export function SignIn() {
       </CardContent>
       <CardFooter className="flex-col gap-2">
         <p className="text-center text-sm text-muted-foreground">
-          If you don't have an account,{" "}
+          Don't have an account?{" "}
           <Link to="/sign-up" className="text-primary underline underline-offset-4">
-            sign up here
+            Create account
           </Link>
-          .
         </p>
         <p className="text-center text-sm text-muted-foreground">
-          Forgot your password?{" "}
           <Link to="/forgot-password" className="text-primary underline underline-offset-4">
-            Reset it here
+            Forgot password?
           </Link>
-          .
         </p>
       </CardFooter>
     </AuthShell>
