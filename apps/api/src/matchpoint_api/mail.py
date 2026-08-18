@@ -62,12 +62,14 @@ class EmailSendError(Exception):
 class EmailSender(Protocol):
     """What a route needs from email: one message, delivered.
 
-    `text` is the whole body for now. A branded HTML template is a keyword argument
-    beside it rather than a replacement, so adding one leaves every call site here and
-    in the tests as it is.
+    Both bodies, always: the plain-text one is what a client that refuses HTML shows, and
+    what a screen reader is left with. `email_templates.py` renders the pair, so no caller
+    is in a position to send one without the other.
     """
 
-    def send(self, *, to: str, subject: str, text: str) -> None: ...  # pragma: no cover
+    def send(  # pragma: no cover
+        self, *, to: str, subject: str, text: str, html: str
+    ) -> None: ...
 
 
 class LoggingEmailSender:
@@ -77,7 +79,9 @@ class LoggingEmailSender:
     you read the code the flow "sent" you.
     """
 
-    def send(self, *, to: str, subject: str, text: str) -> None:
+    def send(self, *, to: str, subject: str, text: str, html: str) -> None:
+        # The plain-text half only. What a local dev wants out of this log is the code,
+        # and a screenful of markup around it is the surest way to lose it.
         logger.info("to %s: %s\n%s", to, subject, text)
 
 
@@ -92,7 +96,9 @@ class FileEmailSender:
     def __init__(self, path: Path) -> None:
         self._path = path
 
-    def send(self, *, to: str, subject: str, text: str) -> None:
+    def send(self, *, to: str, subject: str, text: str, html: str) -> None:
+        # The text half only, same reason LoggingEmailSender keeps to it: mail.ts reads
+        # the six digits off this line, and html is markup with no code of its own.
         message = json.dumps({"to": to, "subject": subject, "text": text})
         # One append of one short line, which the kernel writes whole: browser projects
         # run in parallel, so several sign-ups can be sending at once.
@@ -117,8 +123,16 @@ class ResendEmailSender:
         self._client = client or httpx.Client(timeout=RESEND_TIMEOUT)
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
-    def send(self, *, to: str, subject: str, text: str) -> None:
-        message = {"from": EMAIL_FROM, "to": [to], "subject": subject, "text": text}
+    def send(self, *, to: str, subject: str, text: str, html: str) -> None:
+        # Both bodies in one request is how Resend is asked for a multipart message: the
+        # client picks, and neither half is a fallback the other can go without.
+        message = {
+            "from": EMAIL_FROM,
+            "to": [to],
+            "subject": subject,
+            "text": text,
+            "html": html,
+        }
         try:
             response = self._client.post(RESEND_URL, headers=self._headers, json=message)
             if response.status_code == 429:

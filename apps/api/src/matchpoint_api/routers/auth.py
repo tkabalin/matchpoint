@@ -27,6 +27,7 @@ from matchpoint_api.auth import (
 from matchpoint_api.breach import BreachChecker
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
+from matchpoint_api.email_templates import password_reset_code, signup_code
 from matchpoint_api.mail import EmailSender, EmailSendError
 from matchpoint_api.models import Coach, CoachSession, EmailVerification, PasswordReset
 from matchpoint_api.password_policy import REJECTION, check_password
@@ -335,13 +336,9 @@ def request_otp(data: OtpRequest, request: Request, db: DbSession) -> None:
     # accepted instead — provider latency sits in the request holding a threadpool
     # thread, bounded by mail.py's RESEND_TIMEOUT and by the three tiers above.
     sender: EmailSender = request.app.state.email_sender
+    message = signup_code(code=otp, expires_in=OTP_LIFETIME)
     try:
-        sender.send(
-            to=email,
-            subject="Your MatchPoint sign-up code",
-            text=f"Your sign-up code is {otp}. "
-            f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes.",
-        )
+        sender.send(to=email, subject=message.subject, text=message.text, html=message.html)
     except EmailSendError:
         # What this discloses is whether the provider accepted a message, not whether an
         # account exists. The row stays: it expires on its own, and a retry overwrites it.
@@ -554,14 +551,9 @@ def forgot_password(data: ForgotPasswordRequest, request: Request, db: DbSession
     # After the commit and inline, for request-otp's reasons: never mail a code that
     # failed to store, and never 202 before the provider has actually accepted.
     sender: EmailSender = request.app.state.email_sender
+    message = password_reset_code(code=otp, expires_in=OTP_LIFETIME)
     try:
-        sender.send(
-            to=email,
-            subject="Your MatchPoint password reset code",
-            text=f"Your password reset code is {otp}. "
-            f"It expires in {int(OTP_LIFETIME.total_seconds()) // 60} minutes. "
-            "If you didn't ask to reset your password, you can ignore this email.",
-        )
+        sender.send(to=email, subject=message.subject, text=message.text, html=message.html)
     except EmailSendError:
         # The row stays and the per-email token goes back, as at request-otp: that
         # tier meters mail to an inbox and this message never reached one.

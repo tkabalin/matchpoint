@@ -32,6 +32,10 @@ from matchpoint_api.mail import (
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
+# Stand-in for a rendered template: what these tests care about is that the second body
+# is carried, not what is in it. `email_templates.py` is where the markup is a subject.
+HTML = "<p>123456</p>"
+
 
 def _sender_answering(handler: Handler) -> ResendEmailSender:
     """A sender whose transport is the given handler, and whose key is not a real one."""
@@ -57,29 +61,45 @@ def test_the_selected_sender_is_the_logging_one() -> None:
     assert isinstance(create_email_sender(), LoggingEmailSender)
 
 
-def test_the_logging_sender_writes_the_whole_message_to_the_log(
+def test_the_logging_sender_writes_the_message_to_the_log(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The body included, deliberately: in local dev the log is where you go to read
     the code the flow 'sent' you."""
     with caplog.at_level(logging.INFO, logger="matchpoint_api.mail"):
-        LoggingEmailSender().send(to="new@example.com", subject="Your code", text="123456")
+        LoggingEmailSender().send(
+            to="new@example.com", subject="Your code", text="123456", html=HTML
+        )
 
     assert "new@example.com" in caplog.text
     assert "Your code" in caplog.text
     assert "123456" in caplog.text
 
 
+def test_the_logging_sender_leaves_the_markup_out(caplog: pytest.LogCaptureFixture) -> None:
+    """The half a person reading a dev log wants is the plain-text one. A template's worth
+    of tags around the code is how the code stops being findable."""
+    with caplog.at_level(logging.INFO, logger="matchpoint_api.mail"):
+        LoggingEmailSender().send(
+            to="new@example.com", subject="Your code", text="123456", html="<p>markup</p>"
+        )
+
+    assert "markup" not in caplog.text
+
+
 def test_the_resend_sender_posts_the_message_to_the_api() -> None:
-    """The whole request, because every part of it matters: the bearer key, the
-    verified From address, and `text` — a body under the wrong key sends a blank email."""
+    """The whole request, because every part of it matters: the bearer key, the verified
+    From address, and both bodies. One under the wrong key sends a blank email, and
+    `html` alone would leave a text-only client with nothing to show."""
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return _ok(request)
 
-    _sender_answering(handler).send(to="new@example.com", subject="Your code", text="123456")
+    _sender_answering(handler).send(
+        to="new@example.com", subject="Your code", text="123456", html=HTML
+    )
 
     [request] = seen
     assert request.method == "POST"
@@ -90,6 +110,7 @@ def test_the_resend_sender_posts_the_message_to_the_api() -> None:
         "to": ["new@example.com"],
         "subject": "Your code",
         "text": "123456",
+        "html": HTML,
     }
 
 
@@ -97,7 +118,9 @@ def test_the_resend_sender_logs_the_provider_id(caplog: pytest.LogCaptureFixture
     """Which is how a send gets looked up in Resend's dashboard when a coach reports a
     code that never arrived."""
     with caplog.at_level(logging.INFO, logger="matchpoint_api.mail"):
-        _sender_answering(_ok).send(to="new@example.com", subject="Your code", text="123456")
+        _sender_answering(_ok).send(
+            to="new@example.com", subject="Your code", text="123456", html=HTML
+        )
 
     assert "abc-123" in caplog.text
 
@@ -110,7 +133,7 @@ def test_a_refused_send_raises_email_send_error() -> None:
     )
 
     with pytest.raises(EmailSendError):
-        sender.send(to="new@example.com", subject="Your code", text="123456")
+        sender.send(to="new@example.com", subject="Your code", text="123456", html=HTML)
 
 
 def test_a_stalled_send_raises_email_send_error() -> None:
@@ -122,7 +145,9 @@ def test_a_stalled_send_raises_email_send_error() -> None:
         raise httpx.ConnectTimeout("too slow")
 
     with pytest.raises(EmailSendError):
-        _sender_answering(handler).send(to="new@example.com", subject="Your code", text="123456")
+        _sender_answering(handler).send(
+            to="new@example.com", subject="Your code", text="123456", html=HTML
+        )
 
 
 def test_a_rate_limited_send_is_retried_and_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -136,7 +161,7 @@ def test_a_rate_limited_send_is_retried_and_succeeds(monkeypatch: pytest.MonkeyP
     ]
 
     _sender_answering(lambda _request: answers.pop(0)).send(
-        to="new@example.com", subject="Your code", text="123456"
+        to="new@example.com", subject="Your code", text="123456", html=HTML
     )
 
     assert answers == []
@@ -153,7 +178,9 @@ def test_a_send_rate_limited_twice_still_fails(monkeypatch: pytest.MonkeyPatch) 
         return httpx.Response(429, json={"name": "rate_limit_exceeded"})
 
     with pytest.raises(EmailSendError):
-        _sender_answering(handler).send(to="new@example.com", subject="Your code", text="123456")
+        _sender_answering(handler).send(
+            to="new@example.com", subject="Your code", text="123456", html=HTML
+        )
 
     assert len(seen) == 2
 
@@ -164,7 +191,7 @@ def test_an_unreadable_success_body_is_still_a_send() -> None:
     and the retry that asks for would replace the code already on its way."""
     sender = _sender_answering(lambda _request: httpx.Response(200, text="<html>nope</html>"))
 
-    sender.send(to="new@example.com", subject="Your code", text="123456")
+    sender.send(to="new@example.com", subject="Your code", text="123456", html=HTML)
 
 
 def test_a_refused_send_logs_the_provider_s_reason(caplog: pytest.LogCaptureFixture) -> None:
@@ -178,7 +205,7 @@ def test_a_refused_send_logs_the_provider_s_reason(caplog: pytest.LogCaptureFixt
         caplog.at_level(logging.DEBUG, logger="matchpoint_api.mail"),
         pytest.raises(EmailSendError),
     ):
-        sender.send(to="new@example.com", subject="Your code", text="123456")
+        sender.send(to="new@example.com", subject="Your code", text="123456", html=HTML)
 
     assert "domain_not_verified" in caplog.text
 
@@ -192,7 +219,7 @@ def test_a_failed_send_keeps_the_code_out_of_the_log(caplog: pytest.LogCaptureFi
         caplog.at_level(logging.DEBUG, logger="matchpoint_api.mail"),
         pytest.raises(EmailSendError),
     ):
-        sender.send(to="new@example.com", subject="Your code", text="code is 123456")
+        sender.send(to="new@example.com", subject="Your code", text="code is 123456", html=HTML)
 
     assert "new@example.com" in caplog.text
     assert "123456" not in caplog.text
@@ -204,8 +231,8 @@ def test_the_file_sender_appends_every_message_as_a_line_of_json(tmp_path: Path)
     path = tmp_path / "mail.jsonl"
     sender = FileEmailSender(path)
 
-    sender.send(to="first@example.com", subject="Your code", text="123456")
-    sender.send(to="second@example.com", subject="Your code", text="654321")
+    sender.send(to="first@example.com", subject="Your code", text="123456", html=HTML)
+    sender.send(to="second@example.com", subject="Your code", text="654321", html=HTML)
 
     assert [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] == [
         {"to": "first@example.com", "subject": "Your code", "text": "123456"},

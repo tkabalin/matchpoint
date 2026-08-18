@@ -628,10 +628,10 @@ class RecordingEmailSender:
     can read what was handed to it — and nothing can reach the wire either way."""
 
     def __init__(self) -> None:
-        self.sent: list[tuple[str, str, str]] = []
+        self.sent: list[tuple[str, str, str, str]] = []
 
-    def send(self, *, to: str, subject: str, text: str) -> None:
-        self.sent.append((to, subject, text))
+    def send(self, *, to: str, subject: str, text: str, html: str) -> None:
+        self.sent.append((to, subject, text, html))
 
 
 def _record_email(client: TestClient) -> RecordingEmailSender:
@@ -644,7 +644,7 @@ class FailingEmailSender:
     """RecordingEmailSender's counterpart for the 502 paths: every send fails the
     way a provider refusal does."""
 
-    def send(self, *, to: str, subject: str, text: str) -> None:
+    def send(self, *, to: str, subject: str, text: str, html: str) -> None:
         raise EmailSendError("provider said no")
 
 
@@ -675,10 +675,13 @@ def test_requesting_a_code_emails_it_to_the_address(client: TestClient) -> None:
     response = client.post("/auth/request-otp", json={"email": PENDING_EMAIL})
 
     assert response.status_code == 202
-    [(to, subject, body)] = recorder.sent
+    [(to, subject, body, html)] = recorder.sent
     assert to == PENDING_EMAIL
     assert "code" in subject.lower()
     assert _code_in(body)
+    # Both halves carry it: whichever one the coach's client chooses to render, the code
+    # is in front of them.
+    assert _code_in(body) in html
 
 
 def test_a_failed_send_answers_502(client: TestClient, db_session: Session) -> None:
@@ -1137,10 +1140,11 @@ def test_forgetting_a_password_emails_a_code(client: TestClient, db_session: Ses
     response = client.post("/auth/forgot-password", json={"email": SIGN_UP["email"]})
 
     assert response.status_code == 202
-    [(to, subject, body)] = recorder.sent
+    [(to, subject, body, html)] = recorder.sent
     assert to == SIGN_UP["email"]
     assert "reset" in subject.lower()
     assert _code_in(body)
+    assert _code_in(body) in html
 
 
 def test_an_unknown_address_answers_the_same_202_with_no_mail_and_no_row(
@@ -1157,7 +1161,7 @@ def test_an_unknown_address_answers_the_same_202_with_no_mail_and_no_row(
 
     assert unknown.status_code == known.status_code == 202
     assert unknown.json() == known.json()
-    assert [to for to, _, _ in recorder.sent] == [SIGN_UP["email"]]
+    assert [to for to, _, _, _ in recorder.sent] == [SIGN_UP["email"]]
     assert db_session.scalars(select(PasswordReset)).one().coach_id == coach.id
 
 
