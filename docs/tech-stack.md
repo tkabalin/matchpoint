@@ -29,6 +29,7 @@ latest, since community support and documentation coverage peak there.
 | API codegen       | @hey-api/openapi-ts                        |
 | Schema validation | Zod 4 (generated from the spec)            |
 | Server state      | TanStack Query                             |
+| Charts            | Recharts 3 (via shadcn/ui `chart`)         |
 | Offline outbox    | _TBD -- TanStack Query mutations or Dexie_ |
 | Package manager   | pnpm 11.18 workspace                       |
 | Lint / format     | ESLint 10 + Prettier 3                     |
@@ -67,6 +68,13 @@ hand).
 **TanStack Router.** The strongest type safety of the options we looked at including typed search
 params (useful for dashboard filter state in shareable URLs), natural pairing with TanStack Query.
 React Router v8 was the conservative alternative -- either works; TanStack won on the type-safety.
+
+**Recharts, because shadcn/ui's `chart` is built on it.** The analytics dashboard needs a radar, a
+histogram, a scatter with a fitted line, and a slope graph; `chart` supplies the container, tooltip,
+legend and theming those share, and the alternative was hand-rolling SVG against the one rule this
+project is strictest about (`.claude/rules/web-color.md`). Bundle size is the real cost, and it is
+lazy-loaded with the routes that use it rather than the app shell. Alternative considered: hand-
+written SVG (no dependency, but every chart re-derives axes, scales and responsiveness by hand).
 
 **TanStack Query.** Built-in `networkMode`/`onlineManager` for offline handling, cache persistence
 to IndexedDB via `persistQueryClient`, optimistic updates. Used for server-state reads and
