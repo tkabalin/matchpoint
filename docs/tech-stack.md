@@ -29,6 +29,7 @@ latest, since community support and documentation coverage peak there.
 | API codegen       | @hey-api/openapi-ts                        |
 | Schema validation | Zod 4 (generated from the spec)            |
 | Server state      | TanStack Query                             |
+| Read-cache store  | persistQueryClient + idb-keyval            |
 | Charts            | Recharts 3 (via shadcn/ui `chart`)         |
 | Offline outbox    | Dexie 4 (IndexedDB)                        |
 | Package manager   | pnpm 11.18 workspace                       |
@@ -79,6 +80,17 @@ written SVG (no dependency, but every chart re-derives axes, scales and responsi
 **TanStack Query.** Built-in `networkMode`/`onlineManager` for offline handling, cache persistence
 to IndexedDB via `persistQueryClient`, optimistic updates. Used for server-state reads and
 optimistic UI.
+
+**Read-cache persistence through `persistQueryClient` and `idb-keyval`.** Match setup happens at the
+court, often with no connection, so the query cache is written to IndexedDB and restored at
+start-up: the roster and match lists render from the last visit instead of from a request that
+cannot complete. `persistQueryClient` is TanStack Query's own plugin for exactly this, and
+`idb-keyval` is the sub-kilobyte key/value wrapper over IndexedDB its documentation pairs with,
+holding the whole snapshot under one key. The cache gets a database of its own, never the outbox's,
+so evicting or clearing cached reads can never reach a point that has not synced yet. Alternatives
+considered: the localStorage persister from the same family (synchronous, so a cache large enough to
+matter blocks the main thread, and capped around 5 MB); Dexie, the outbox's own IndexedDB wrapper (a
+schema-and-index library, for what is one key holding one value).
 
 **Dexie for the offline outbox.** Captured points go into their own IndexedDB database, drained by
 the sync layer, rather than riding TanStack Query's mutation queue paused by `networkMode`. A paused
