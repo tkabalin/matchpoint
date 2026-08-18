@@ -209,6 +209,17 @@ blocked on; the provider owns deliverability. Senders sit behind a Protocol chos
 (`mail.py`), so a second provider is one class and one entry. Alternative considered: SMTP from the
 box (reputation, port 25, more moving parts).
 
+**Message bodies hand-authored in Python.** Each email is a plain-text half and an HTML half built
+by `email_templates.py`, in the same language and process that sends them. The obvious alternative
+was React Email, the component library Resend publishes for exactly this, but it renders from
+TypeScript: its output would have to be exported to files, committed, and re-substituted from
+Python, putting a build step and a generated artefact between a wording change and the message that
+goes out. The templates are two short documents with no images and no links, which is not enough
+markup to buy a second toolchain for. Table layout and inline styles are what mail clients support,
+and the structural accessibility rules that layout has to meet (a language declaration on two
+elements, presentational layout tables, one heading, a title) are asserted by the module's tests
+rather than left to a reviewer's eye.
+
 **structlog for logging.** Each request is logged as one JSON line carrying a request id that is
 also returned on the response, so a production question is a field filter over container logs and a
 reported error ties to the line it produced (`logs.py`). structlog is the standard structured
