@@ -904,7 +904,7 @@ def _closable(client: TestClient, db_session: Session, **overrides: Any) -> Coac
 
 def _close(client: TestClient, **overrides: object) -> httpx2.Response:
     """request() rather than delete(): httpx's delete() takes no body, and the password
-    has to be in one — a credential in a query string lands in access logs."""
+    has to be in one: a credential in a query string lands in access logs."""
     body: dict[str, object] = {"password": CLOSE_PASSWORD} | overrides
     return client.request("DELETE", "/coaches/me", json=body)
 
@@ -1139,7 +1139,7 @@ def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(
 ) -> None:
     """The wrong-guess budget, at the burst create_app sizes (5). What it bounds is a
     stolen session hunting for the password, which is the only way this route can be
-    guessed against — and here the prize is a delete nothing undoes."""
+    guessed against, and here the prize is a delete nothing undoes."""
     _closable(client, db_session)
     _stub_out_verification(monkeypatch, answer=False)
     for _ in range(5):

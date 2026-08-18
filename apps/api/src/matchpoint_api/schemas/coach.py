@@ -33,7 +33,7 @@ PASSWORD_MAX_LENGTH = 128
 #
 # SecretStr keeps the value out of reprs, tracebacks and any structured log of the model,
 # and unlike the date-of-birth bounds its own bounds do reach the OpenAPI spec (format:
-# password, writeOnly, minLength, maxLength) — so a form enforces them without a
+# password, writeOnly, minLength, maxLength), so a form enforces them without a
 # hand-written twin. What it cannot do is keep the value out of a 422 body, since FastAPI
 # echoes the submitted input back in detail[] and SecretStr never sees that error; the
 # field names are in `errors.py`'s SECRET_FIELDS, which redacts it there instead.
@@ -65,7 +65,7 @@ class CoachCreate(RequestModel):
         EmailStr, StringConstraints(strip_whitespace=True, max_length=EMAIL_MAX_LENGTH)
     ]
     display_name: ShortText
-    # A password being chosen, so both bounds apply — see NewPassword above.
+    # A password being chosen, so both bounds apply: see NewPassword above.
     password: NewPassword
 
 
@@ -82,8 +82,8 @@ class CoachUpdate(UpdateModel):
 
 
 # A body on a DELETE, which is unusual but is where the credential has to go: a password
-# in a query string lands in access logs and browser history. No email — the session says
-# whose account this is — and no confirmation field, since a typed "DELETE" proves only
+# in a query string lands in access logs and browser history. No email, the session saying
+# whose account this is, and no confirmation field, since a typed "DELETE" proves only
 # that the form was filled in, where the password proves who filled it in.
 class CoachDelete(RequestModel):
     # Named `password` as LoginRequest names it, for the same meaning and the same

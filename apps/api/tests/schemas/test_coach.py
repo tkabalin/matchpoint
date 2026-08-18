@@ -202,7 +202,7 @@ def test_a_closure_leaves_an_active_roster_alone_unless_asked() -> None:
 def test_a_closure_takes_the_ceiling_without_the_floor() -> None:
     """`Password`, not `NewPassword`: the floor is sign-up policy for a password being
     chosen, and applying it to one being checked would lock out any coach who enrolled
-    before a later raise of it — leaving them unable to close their own account."""
+    before a later raise of it, leaving them unable to close their own account."""
     short = "x" * (PASSWORD_MIN_LENGTH - 1)
 
     assert CoachDelete.model_validate({"password": short}).password.get_secret_value() == short
@@ -212,7 +212,7 @@ def test_a_closure_takes_the_ceiling_without_the_floor() -> None:
 
 
 def test_a_closure_password_is_not_in_the_repr() -> None:
-    """SecretStr's reason for being on this body too — a plain str would put the password
+    """SecretStr's reason for being on this body too: a plain str would put the password
     into any traceback or structured log that rendered the model."""
     data = CoachDelete.model_validate({"password": "a-good-password"})
 

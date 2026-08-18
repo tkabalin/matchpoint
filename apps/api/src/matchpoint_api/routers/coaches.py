@@ -261,7 +261,7 @@ def delete_current_coach(
         if db.scalar(select(active.exists())):
             raise HTTPException(status_code=409, detail=ACTIVE_PLAYERS_REMAIN)
     # Children first, in one transaction, because every foreign key here declares no
-    # `ondelete` — so a table added below the coach and left out of this list stops the
+    # `ondelete`, so a table added below the coach and left out of this list stops the
     # delete outright rather than being quietly missed. Nothing keys on the email
     # (`email_verifications` cannot hold a registered address), so the address is free for
     # a fresh sign-up the moment this commits.
@@ -276,7 +276,7 @@ def delete_current_coach(
     db.delete(coach)
     db.commit()
     # The rows are gone, so clearing the cookie only stops the browser presenting a
-    # corpse — with the flags it was set with, or the browser keeps the original. The
+    # corpse, and the flags repeat the ones it was set with for logout's reason. The
     # renewal channel is emptied in the same breath: `current_coach` may have left a token
     # there, and the middleware writes after this response is built, so it would re-set
     # the very cookie deleted here.
