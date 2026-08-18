@@ -109,11 +109,12 @@
   --card-foreground: oklch(0.987 0.002 197.1);
   --popover: oklch(0.218 0.008 223.9);
   --popover-foreground: oklch(0.987 0.002 197.1);
-  /* Same brand hue as light mode's #045C8C, darkened/desaturated by the same ratio
-     the previous dark-mode primary already used relative to its own light value —
-     a fully-saturated light-mode blue reads as glare on a dark background. */
-  --primary: oklch(0.394 0.086 241.939);
-  --primary-foreground: oklch(0.984 0.019 200.873);
+  /* #1E88C7 exactly, per .claude/rules/web-color.md's documented dark-mode brand
+     variant. That blue is light enough (L 0.60) that near-white text (the light-mode
+     foreground) drops below WCAG AA — foreground goes dark instead, following the
+     same light-primary/dark-foreground pairing --sidebar-primary already uses below. */
+  --primary: oklch(0.6 0.131 241.532);
+  --primary-foreground: oklch(0.2 0.056 241.532);
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.275 0.011 216.9);

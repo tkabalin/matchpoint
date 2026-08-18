@@ -36,3 +36,26 @@ globalThis.ResizeObserver ??= ResizeObserverStub;
 // though every test still reports as passing. Returning null is the correct "found
 // nothing at that point" answer, not just a silence.
 document.elementFromPoint ??= () => null;
+
+// jsdom does define window.scrollTo, but as a stub that logs "Not implemented:
+// Window's scrollTo() method" on every call rather than leaving it undefined — so
+// unlike the two stubs above, ??= never overrides it. TanStack Router calls it on
+// every navigation. A plain reassignment is the fix; nothing under test asserts on
+// actual scroll position.
+window.scrollTo = () => {};
+
+// jsdom has no rendering engine, so it has no notion of media queries either —
+// window.matchMedia is entirely absent. usePrefersDark (#176) calls it on every
+// render, so every test touching Logo needs this. Defaults to "not matched" (light):
+// no test currently asserts on the OS being in dark mode.
+window.matchMedia ??= (query: string) =>
+  ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    addListener: () => {},
+    removeListener: () => {},
+    dispatchEvent: () => false,
+  }) as unknown as MediaQueryList;

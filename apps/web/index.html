@@ -14,9 +14,28 @@
     />
 
     <!-- color-scheme stops the browser auto-darkening the canvas, form controls and
-         scrollbars; theme-color matches --background in src/app.css. -->
-    <meta name="color-scheme" content="light" />
-    <meta name="theme-color" content="#ffffff" />
+         scrollbars in the theme we're not in; theme-color matches --background in
+         src/app.css for each mode, picked via the media attribute so the browser
+         switches it without any JS. -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#090B0C" media="(prefers-color-scheme: dark)" />
+
+    <!-- Sets .dark on <html> from the OS preference before first paint (#176) — run
+         inline and synchronously so there's no flash of the wrong theme while
+         main.tsx loads. The change listener keeps it live if the OS preference flips
+         while the tab is open; nothing else in the app needs to re-run this, since
+         everything else keys off the .dark class via Tailwind's dark: variant. -->
+    <script>
+      (function () {
+        var query = window.matchMedia("(prefers-color-scheme: dark)");
+        var apply = function () {
+          document.documentElement.classList.toggle("dark", query.matches);
+        };
+        apply();
+        query.addEventListener("change", apply);
+      })();
+    </script>
 
     <!-- A tab-sized simplification of the mark, not the icon.svg the PNGs come from —
          the full one's service lines smear together at 16px. SVG so it stays sharp at

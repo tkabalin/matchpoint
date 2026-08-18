@@ -2,6 +2,7 @@ import logoDark from "@/assets/logo-dark.png";
 import logoDarkCompact from "@/assets/logo-dark-compact.png";
 import logoLight from "@/assets/logo-light.png";
 import logoLightCompact from "@/assets/logo-light-compact.png";
+import { usePrefersDark } from "@/lib/use-prefers-dark";
 import { cn } from "@/lib/utils";
 
 const VARIANTS = {
@@ -14,14 +15,10 @@ const VARIANTS = {
 } as const;
 
 /**
- * The MatchPoint mark.
- *
- * Always the light asset for now. A `prefers-color-scheme` swap was tried and
- * backed out: nothing in the app ever applies the `.dark` class (checked — no
- * toggle, no system-preference listener exists anywhere), so a coach with a dark OS
- * theme got the dark logo alone, floating as a black box on an otherwise all-white
- * page. The dark asset stays imported and ready; wiring it in belongs with actually
- * building the app's dark theme, not before it.
+ * The MatchPoint mark. Swaps light/dark asset by the live OS preference (#176) —
+ * `usePrefersDark` rather than a `dark:` CSS variant, since this picks between two
+ * whole image assets rather than a color, and a single `<img>` keeps one accessible
+ * name instead of two same-alt nodes racing in the DOM.
  */
 export function Logo({
   size = "compact",
@@ -31,10 +28,11 @@ export function Logo({
   className?: string;
 }) {
   const variant = VARIANTS[size];
+  const isDark = usePrefersDark();
 
   return (
     <img
-      src={variant.light}
+      src={isDark ? variant.dark : variant.light}
       alt="MatchPoint"
       className={cn(variant.className, "w-auto", className)}
     />
