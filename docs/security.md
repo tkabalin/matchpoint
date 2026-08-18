@@ -279,6 +279,37 @@ cap bound the guessing, and after that neither applies to what the caller holds.
 The cookie names are distinct per flow, and each action matches the cookie against the email in its
 own body, so a proof earned for one address cannot act on another.
 
+## Player transfer codes
+
+Moving a player to another coach is authorised by a code alone, so that the two coaches never need
+accounts that know about each other. Whoever holds the code can take the player and their match
+history, which makes it a bearer credential and not a reference: it is 256 random bits from the same
+mint as a session token, stored only as its SHA-256, and single-use.
+
+**Unguessable rather than short.** The prize is one player's profile and history, so the code cannot
+be a six-digit number bounded by an attempt cap: there is no account to charge the attempts against,
+since the code is the only thing a redemption presents. At 256 bits guessing is not a threat model,
+and the authenticated per-coach rate limit is what bounds attempts.
+
+**Redemption is atomic.** The row is selected `FOR UPDATE` and deleted in the same transaction as
+the ownership change, so two coaches presenting one code cannot both win: the second waits, re-reads
+its condition against the deleted row, and is refused.
+
+**No expiry, but revocable.** The code lasts until it is used, so a player can carry it to a coach
+the current one has never met. The current coach can delete an unredeemed code, which is what keeps
+an indefinite capability from being permanent when it reaches the wrong person.
+
+**Minting stops at the ownership boundary.** A code can only be minted for a player the caller
+already owns, and another coach's player answers 404 like every other read of one. Ownership is
+re-read under a row lock on every write to a player, so a check made before the write cannot be
+stale by the time it lands: without that, the coach handing a player over could keep writing to them
+after the transfer had committed.
+
+**The whole profile moves, notes included.** `players.notes` is the current coach's own prose about
+the player, and it travels with the row. Handing over the context a new coach would otherwise lack
+is what the transfer is for, and the notes are the part written closest to that; they are the
+minting coach's to edit or clear beforehand, so the mint endpoint names them among what leaves.
+
 ## Secret redaction in validation errors
 
 FastAPI's default 422 handler echoes the submitted body in `detail[].input`. A rejected sign-up
