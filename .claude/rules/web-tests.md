@@ -10,9 +10,9 @@ paths:
 ## Two Runners, Kept Apart
 
 - Vitest runs unit/integration tests: `src/**/*.test.{ts,tsx}`, jsdom, Testing Library.
-- Playwright runs browser e2e: `e2e/*.spec.ts` only. Never name a Vitest file `.spec.ts` or put a
-  Playwright spec under `src/` — the include patterns are what keep each runner off the other's
-  files.
+- Playwright runs browser e2e: `e2e/*.spec.ts`, plus `e2e/*.setup.ts` for the projects other
+  projects depend on. Never name a Vitest file `.spec.ts` or put a Playwright spec under `src/` —
+  the include patterns are what keep each runner off the other's files.
 
 ## Unit & Integration Tests (Vitest)
 
@@ -32,8 +32,13 @@ paths:
   integration test instead.
 - Use web-first assertions (`await expect(locator).toBeVisible()`) — never `waitForTimeout` or fixed
   sleeps.
-- The Playwright config starts the dev server itself (`webServer`); don't add server bootstrapping
-  to specs.
+- The Playwright config starts the Vite dev server **and the API** itself (`webServer`); don't add
+  server bootstrapping to specs.
+- Specs run against that live API. Reach for `page.route` only for a failure a healthy backend can't
+  be asked to produce, and make the mocked body match the OpenAPI spec: FastAPI's 422 `detail` is an
+  array of objects, not a string. See `docs/testing.md § A live API by default`.
+- A spec that needs a signed-in coach adopts the session `auth.setup.ts` saved
+  (`test.use({ storageState: COACH_STORAGE_STATE })`) rather than signing one up of its own.
 
 ## API Contract Checks
 

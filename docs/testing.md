@@ -28,7 +28,8 @@ When in doubt, write an integration test.
 
 Unit and integration tests run on **Vitest** (jsdom environment) with **Testing Library**; browser
 e2e runs on **Playwright**. The runners are kept apart by location and naming: Vitest picks up only
-`src/**/*.test.{ts,tsx}`, Playwright only `e2e/*.spec.ts`.
+`src/**/*.test.{ts,tsx}`, Playwright only `e2e/*.spec.ts` and the `e2e/*.setup.ts` its projects
+depend on.
 
 ### Unit & integration tests
 
@@ -66,10 +67,35 @@ output cannot be edited without the generator's input changing first.
 ### E2E tests
 
 - Specs live in `apps/web/e2e/`, configured by `apps/web/playwright.config.ts`.
-- Playwright starts the Vite dev server itself (`webServer`), so `pnpm run test:e2e` is
-  self-contained.
+- Playwright starts everything the suite needs itself (`webServer`): the Vite dev server, and the
+  API beside it through `scripts/e2e-api.sh`. Local runs expect the Compose Postgres to be up
+  (`docker compose up -d`); CI provides a service container. The API is always started fresh rather
+  than adopted from the port, so a dev stack has to be stopped first: its database, its mail sender
+  and its rate limits are not the ones the suite needs.
 - Projects cover desktop Chromium plus mobile emulation in Chromium and WebKit — the capture screen
   is used phone-in-hand, and installed-PWA users are on iOS Safari.
+- A `setup` project signs one coach up through the real sign-up flow and saves the session it earns.
+  Specs that need to be signed in adopt it with `test.use({ storageState })`; the rest run signed
+  out, which is how the route guard's redirect gets covered too.
+
+#### A live API by default
+
+Specs run against a real API, and `page.route` mocking is reserved for failure paths a healthy
+backend cannot be asked to produce on demand. A mocked route is a hand-written copy of the API, free
+to drift for the reason § Contract checks against the API gives. Where one is unavoidable, the
+mocked body has to match the shape the OpenAPI spec publishes: FastAPI's 422 carries `detail` as an
+array of objects rather than a string, and a mock that says otherwise is testing a response the API
+never sends.
+
+What makes the real flows runnable is configuration, applied by the boot script and by nothing
+deployed:
+
+- A database of its own, dropped and recreated per run, so a run never starts from what the last one
+  left behind.
+- An email sender that appends each message to a file instead of delivering it, so a spec can read
+  the code the sign-up flow emails and carry the journey on.
+- Rate limits scaled up, since browser projects signing in side by side outrun budgets sized for one
+  coach on one phone.
 
 ## Backend (`apps/api`)
 
