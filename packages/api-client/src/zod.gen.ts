@@ -104,6 +104,15 @@ export const zPlayerRead = z.object({
 });
 
 /**
+ * PlayerTransferCodeRead
+ *
+ * A code handing one player, with their match history, to another coach.
+ */
+export const zPlayerTransferCodeRead = z.object({
+    code: z.string()
+});
+
+/**
  * PlayerUpdate
  */
 export const zPlayerUpdate = z.object({
@@ -113,6 +122,13 @@ export const zPlayerUpdate = z.object({
     gender: zGender.nullish(),
     last_name: z.string().min(1).max(100).optional(),
     notes: z.string().min(1).max(2000).nullish()
+});
+
+/**
+ * RedeemTransferCodeRequest
+ */
+export const zRedeemTransferCodeRequest = z.object({
+    code: z.string().max(100)
 });
 
 /**
@@ -430,6 +446,13 @@ export const zCreatePlayerBody = zPlayerCreate;
  */
 export const zCreatePlayerResponse = zPlayerRead;
 
+export const zRedeemPlayerTransferCodeBody = zRedeemTransferCodeRequest;
+
+/**
+ * Successful Response
+ */
+export const zRedeemPlayerTransferCodeResponse = zPlayerRead;
+
 export const zGetPlayerPath = z.object({
     player_id: z.uuid()
 });
@@ -467,3 +490,21 @@ export const zRestorePlayerPath = z.object({
  * Successful Response
  */
 export const zRestorePlayerResponse = zPlayerRead;
+
+export const zDeletePlayerTransferCodePath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePlayerTransferCodeResponse = z.void();
+
+export const zCreatePlayerTransferCodePath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreatePlayerTransferCodeResponse = zPlayerTransferCodeRead;

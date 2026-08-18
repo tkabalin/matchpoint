@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, deleteCurrentCoach, deleteMatch, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { archivePlayer, changePassword, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCurrentCoach, deleteMatch, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getMatch, getPlayer, health, listMatches, listPlayers, login, logout, type Options, redeemPlayerTransferCode, requestOtp, resetPassword, restorePlayer, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ArchivePlayerData, ArchivePlayerError, ArchivePlayerResponse, ChangePasswordData, ChangePasswordError, ChangePasswordResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RestorePlayerData, RestorePlayerError, RestorePlayerResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -433,6 +433,28 @@ export const createPlayerMutation = (options?: Partial<Options<CreatePlayerData>
     return mutationOptions;
 };
 
+/**
+ * Redeem Player Transfer Code
+ *
+ * Take the player a transfer code names onto this coach's roster, matches included.
+ *
+ * The code is spent here, so presenting it again answers 400. The match history needs no
+ * rewriting: a match reaches its owner through its player, so it moves with them.
+ */
+export const redeemPlayerTransferCodeMutation = (options?: Partial<Options<RedeemPlayerTransferCodeData>>): UseMutationOptions<RedeemPlayerTransferCodeResponse, RedeemPlayerTransferCodeError, Options<RedeemPlayerTransferCodeData>> => {
+    const mutationOptions: UseMutationOptions<RedeemPlayerTransferCodeResponse, RedeemPlayerTransferCodeError, Options<RedeemPlayerTransferCodeData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await redeemPlayerTransferCode({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const getPlayerQueryKey = (options: Options<GetPlayerData>) => createQueryKey('getPlayer', options);
 
 /**
@@ -492,6 +514,53 @@ export const restorePlayerMutation = (options?: Partial<Options<RestorePlayerDat
     const mutationOptions: UseMutationOptions<RestorePlayerResponse, RestorePlayerError, Options<RestorePlayerData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await restorePlayer({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Delete Player Transfer Code
+ *
+ * Cancel an outstanding code, so a copy of it stops working.
+ *
+ * A code that never expires needs a way back, since handing one to the wrong person is
+ * otherwise permanent. 204 whether or not one was outstanding, as logout is: the request
+ * asks for a state, and a player with no live code is already in it.
+ */
+export const deletePlayerTransferCodeMutation = (options?: Partial<Options<DeletePlayerTransferCodeData>>): UseMutationOptions<DeletePlayerTransferCodeResponse, DeletePlayerTransferCodeError, Options<DeletePlayerTransferCodeData>> => {
+    const mutationOptions: UseMutationOptions<DeletePlayerTransferCodeResponse, DeletePlayerTransferCodeError, Options<DeletePlayerTransferCodeData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await deletePlayerTransferCode({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Create Player Transfer Code
+ *
+ * Mint a code that hands this player, their notes and their matches, to another coach.
+ *
+ * Asking again replaces the previous code, which the storage decides rather than the
+ * policy: only a hash is kept, so an earlier code can never be shown a second time. An
+ * archived player transfers like any other, since a coach leaving is exactly when their
+ * roster moves on.
+ */
+export const createPlayerTransferCodeMutation = (options?: Partial<Options<CreatePlayerTransferCodeData>>): UseMutationOptions<CreatePlayerTransferCodeResponse, CreatePlayerTransferCodeError, Options<CreatePlayerTransferCodeData>> => {
+    const mutationOptions: UseMutationOptions<CreatePlayerTransferCodeResponse, CreatePlayerTransferCodeError, Options<CreatePlayerTransferCodeData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await createPlayerTransferCode({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

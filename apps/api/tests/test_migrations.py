@@ -28,7 +28,15 @@ ROUND_TRIP_DATABASE = "matchpoint_migration_round_trip"
 # Every table the migrations are expected to build. `alembic_version` is deliberately
 # absent: Alembic creates it outside the revisions and leaves it behind at base.
 MIGRATED_TABLES = frozenset(
-    {"coaches", "coach_sessions", "email_verifications", "password_resets", "players", "matches"}
+    {
+        "coaches",
+        "coach_sessions",
+        "email_verifications",
+        "password_resets",
+        "players",
+        "player_transfer_codes",
+        "matches",
+    }
 )
 
 

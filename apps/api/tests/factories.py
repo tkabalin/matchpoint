@@ -29,6 +29,7 @@ from matchpoint_api.models import (
     Match,
     PasswordReset,
     Player,
+    PlayerTransferCode,
 )
 
 
@@ -178,6 +179,20 @@ def make_player(session: Session, **overrides: Any) -> Player:
     session.add(player)
     session.flush()
     return player
+
+
+def make_player_transfer_code(session: Session, **overrides: Any) -> PlayerTransferCode:
+    if "player_id" not in overrides:
+        overrides["player_id"] = make_player(session).id
+    # The default hash is a real SHA-256 for shape only and unique per call, since the
+    # column is unique. A test that wants a code a request can redeem passes
+    # token_hash=hash_token(code) over a code it keeps.
+    transfer = PlayerTransferCode(
+        **{"token_hash": hashlib.sha256(uuid.uuid4().bytes).hexdigest()} | overrides
+    )
+    session.add(transfer)
+    session.flush()
+    return transfer
 
 
 def make_match(session: Session, **overrides: Any) -> Match:

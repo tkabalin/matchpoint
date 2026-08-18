@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -247,6 +247,23 @@ export const createPlayer = <ThrowOnError extends boolean = false>(options: Opti
 });
 
 /**
+ * Redeem Player Transfer Code
+ *
+ * Take the player a transfer code names onto this coach's roster, matches included.
+ *
+ * The code is spent here, so presenting it again answers 400. The match history needs no
+ * rewriting: a match reaches its owner through its player, so it moves with them.
+ */
+export const redeemPlayerTransferCode = <ThrowOnError extends boolean = false>(options: Options<RedeemPlayerTransferCodeData, ThrowOnError>): RequestResult<RedeemPlayerTransferCodeResponses, RedeemPlayerTransferCodeErrors, ThrowOnError> => (options.client ?? client).post<RedeemPlayerTransferCodeResponses, RedeemPlayerTransferCodeErrors, ThrowOnError>({
+    url: '/players/redeem-transfer-code',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
  * Get Player
  */
 export const getPlayer = <ThrowOnError extends boolean = false>(options: Options<GetPlayerData, ThrowOnError>): RequestResult<GetPlayerResponses, GetPlayerErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerResponses, GetPlayerErrors, ThrowOnError>({ url: '/players/{player_id}', ...options });
@@ -272,3 +289,26 @@ export const archivePlayer = <ThrowOnError extends boolean = false>(options: Opt
  * Restore Player
  */
 export const restorePlayer = <ThrowOnError extends boolean = false>(options: Options<RestorePlayerData, ThrowOnError>): RequestResult<RestorePlayerResponses, RestorePlayerErrors, ThrowOnError> => (options.client ?? client).post<RestorePlayerResponses, RestorePlayerErrors, ThrowOnError>({ url: '/players/{player_id}/restore', ...options });
+
+/**
+ * Delete Player Transfer Code
+ *
+ * Cancel an outstanding code, so a copy of it stops working.
+ *
+ * A code that never expires needs a way back, since handing one to the wrong person is
+ * otherwise permanent. 204 whether or not one was outstanding, as logout is: the request
+ * asks for a state, and a player with no live code is already in it.
+ */
+export const deletePlayerTransferCode = <ThrowOnError extends boolean = false>(options: Options<DeletePlayerTransferCodeData, ThrowOnError>): RequestResult<DeletePlayerTransferCodeResponses, DeletePlayerTransferCodeErrors, ThrowOnError> => (options.client ?? client).delete<DeletePlayerTransferCodeResponses, DeletePlayerTransferCodeErrors, ThrowOnError>({ url: '/players/{player_id}/transfer-code', ...options });
+
+/**
+ * Create Player Transfer Code
+ *
+ * Mint a code that hands this player, their notes and their matches, to another coach.
+ *
+ * Asking again replaces the previous code, which the storage decides rather than the
+ * policy: only a hash is kept, so an earlier code can never be shown a second time. An
+ * archived player transfers like any other, since a coach leaving is exactly when their
+ * roster moves on.
+ */
+export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(options: Options<CreatePlayerTransferCodeData, ThrowOnError>): RequestResult<CreatePlayerTransferCodeResponses, CreatePlayerTransferCodeErrors, ThrowOnError> => (options.client ?? client).post<CreatePlayerTransferCodeResponses, CreatePlayerTransferCodeErrors, ThrowOnError>({ url: '/players/{player_id}/transfer-code', ...options });

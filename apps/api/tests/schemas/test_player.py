@@ -1,5 +1,4 @@
-"""Unit tests for the PlayerCreate and PlayerUpdate validation rules — no fixtures, no
-database.
+"""Unit tests for the player schemas' validation rules: no fixtures, no database.
 
 The `date_of_birth` bounds, `ShortText` and `LongText` all resolve during model
 construction, which makes them the only genuinely pure surface the API has today.
@@ -13,7 +12,13 @@ import pytest
 from pydantic import ValidationError
 
 from matchpoint_api.models import DominantHand, Gender
-from matchpoint_api.schemas.player import MAX_AGE_YEARS, PlayerCreate, PlayerUpdate
+from matchpoint_api.schemas.player import (
+    MAX_AGE_YEARS,
+    TRANSFER_CODE_MAX_LENGTH,
+    PlayerCreate,
+    PlayerUpdate,
+    RedeemTransferCodeRequest,
+)
 
 NAME_LIMIT = 100
 NOTES_LIMIT = 2000
@@ -234,3 +239,19 @@ def test_an_update_accepts_a_date_of_birth_inside_the_bounds() -> None:
     today = date.today()
 
     assert PlayerUpdate.model_validate({"date_of_birth": today}).date_of_birth == today
+
+
+def test_a_transfer_code_is_bounded() -> None:
+    """The bound keeps an unbounded string away from the hash; it reaches the spec, so
+    the redeem form knows the ceiling without a hand-written twin."""
+    with pytest.raises(ValidationError):
+        RedeemTransferCodeRequest.model_validate({"code": "x" * (TRANSFER_CODE_MAX_LENGTH + 1)})
+
+
+def test_a_transfer_code_is_a_secret() -> None:
+    """SecretStr, so errors.py keeps a rejected body from echoing the code back: the
+    value is a live capability to take a player, not a throwaway."""
+    request = RedeemTransferCodeRequest.model_validate({"code": "a-transfer-code"})
+
+    assert "a-transfer-code" not in repr(request)
+    assert request.code.get_secret_value() == "a-transfer-code"

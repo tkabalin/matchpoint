@@ -305,6 +305,18 @@ export type PlayerRead = {
 };
 
 /**
+ * PlayerTransferCodeRead
+ *
+ * A code handing one player, with their match history, to another coach.
+ */
+export type PlayerTransferCodeRead = {
+    /**
+     * Code
+     */
+    code: string;
+};
+
+/**
  * PlayerUpdate
  */
 export type PlayerUpdate = {
@@ -326,6 +338,16 @@ export type PlayerUpdate = {
      * Notes
      */
     notes?: string | null;
+};
+
+/**
+ * RedeemTransferCodeRequest
+ */
+export type RedeemTransferCodeRequest = {
+    /**
+     * Code
+     */
+    code: string;
 };
 
 /**
@@ -1198,6 +1220,47 @@ export type CreatePlayerResponses = {
 
 export type CreatePlayerResponse = CreatePlayerResponses[keyof CreatePlayerResponses];
 
+export type RedeemPlayerTransferCodeData = {
+    body: RedeemTransferCodeRequest;
+    path?: never;
+    query?: never;
+    url: '/players/redeem-transfer-code';
+};
+
+export type RedeemPlayerTransferCodeErrors = {
+    /**
+     * That transfer code is unknown or has already been used
+     */
+    400: ErrorDetail;
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * That player is already on your roster
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type RedeemPlayerTransferCodeError = RedeemPlayerTransferCodeErrors[keyof RedeemPlayerTransferCodeErrors];
+
+export type RedeemPlayerTransferCodeResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type RedeemPlayerTransferCodeResponse = RedeemPlayerTransferCodeResponses[keyof RedeemPlayerTransferCodeResponses];
+
 export type GetPlayerData = {
     body?: never;
     path: {
@@ -1349,3 +1412,79 @@ export type RestorePlayerResponses = {
 };
 
 export type RestorePlayerResponse = RestorePlayerResponses[keyof RestorePlayerResponses];
+
+export type DeletePlayerTransferCodeData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/transfer-code';
+};
+
+export type DeletePlayerTransferCodeErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeletePlayerTransferCodeError = DeletePlayerTransferCodeErrors[keyof DeletePlayerTransferCodeErrors];
+
+export type DeletePlayerTransferCodeResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePlayerTransferCodeResponse = DeletePlayerTransferCodeResponses[keyof DeletePlayerTransferCodeResponses];
+
+export type CreatePlayerTransferCodeData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/transfer-code';
+};
+
+export type CreatePlayerTransferCodeErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type CreatePlayerTransferCodeError = CreatePlayerTransferCodeErrors[keyof CreatePlayerTransferCodeErrors];
+
+export type CreatePlayerTransferCodeResponses = {
+    /**
+     * Successful Response
+     */
+    201: PlayerTransferCodeRead;
+};
+
+export type CreatePlayerTransferCodeResponse = CreatePlayerTransferCodeResponses[keyof CreatePlayerTransferCodeResponses];

@@ -29,7 +29,7 @@ from matchpoint_api.logs import REQUEST_ID_HEADER
 # The field names whose submitted value must never be echoed. `tests/test_errors.py`
 # fails if a schema grows a `SecretStr` field that is not named here — the failure
 # mode is silent otherwise.
-SECRET_FIELDS = frozenset({"password", "otp", "new_password"})
+SECRET_FIELDS = frozenset({"password", "otp", "new_password", "code"})
 
 REDACTED = "[redacted]"
 

@@ -2,7 +2,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr
 
 from matchpoint_api.models import DominantHand, Gender
 from matchpoint_api.schemas.types import UNSET, LongText, RequestModel, ShortText, UpdateModel
@@ -11,6 +11,11 @@ from matchpoint_api.schemas.types import UNSET, LongText, RequestModel, ShortTex
 # lifespan (122) — a gap this guard has no use for, since it exists to reject a
 # wrong century, not to adjudicate longevity records.
 MAX_AGE_YEARS = 120
+
+# Comfortably past the 43 characters `new_session_token` produces. The bound is here to
+# keep an unbounded string away from the hash, not to describe the code, so it does not
+# pin the generator's output length.
+TRANSFER_CODE_MAX_LENGTH = 100
 
 
 def _reject_implausible_date_of_birth(value: date) -> date:
@@ -80,3 +85,17 @@ class PlayerRead(BaseModel):
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class RedeemTransferCodeRequest(RequestModel):
+    # SecretStr for the reason the OTP is one: the code is a live credential, and naming
+    # it in errors.py's SECRET_FIELDS is what keeps it out of a 422's echoed input.
+    code: Annotated[SecretStr, Field(max_length=TRANSFER_CODE_MAX_LENGTH)]
+
+
+class PlayerTransferCodeRead(BaseModel):
+    """A code handing one player, with their match history, to another coach."""
+
+    # Plain str, not SecretStr: this is the one response that must carry the code
+    # itself, and SecretStr would serialise it as asterisks.
+    code: str

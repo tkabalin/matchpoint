@@ -14,6 +14,7 @@ erDiagram
     coaches ||--o{ players : owns
     coaches ||--o{ coach_sessions : "signs in as"
     coaches ||--o| password_resets : "resets password via"
+    players ||--o| player_transfer_codes : "moves coach via"
     players ||--o{ matches : plays
 
     coaches {
@@ -72,6 +73,14 @@ erDiagram
         timestamptz updated_at
     }
 
+    player_transfer_codes {
+        uuid id PK
+        uuid player_id FK,UK "the player on offer; unique, so one live code each"
+        varchar(64) token_hash UK "sha-256 of the code, never the code"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     matches {
         uuid id PK
         uuid player_id FK "the coach's tracked player"
@@ -103,6 +112,14 @@ and one row per address means a re-requested code replaces the old one rather th
 `password_resets` holds the same two states for an account that already exists, so it is keyed on
 the coach rather than an address: an unanswered code, then the proof that it was answered,
 exactly-one-of under a CHECK of its own, one row per coach.
+
+`player_transfer_codes` is how a player changes coach. Players switch coaches as they grow up, and
+the roster is coach-scoped, so without a transfer the history a new coach most needs is the history
+they cannot see. The current coach mints a code, hands it over out of band, and the coach who
+redeems it becomes the owner: `players.coach_id` moves, and the matches follow, since a match
+reaches its owner through its player rather than a coach column of its own. One row per player, and
+redeeming deletes it. There is no `expires_at`, so a player can carry the code to a coach the
+current one never meets; the minting coach can delete the row to cancel it.
 
 ## Conventions
 

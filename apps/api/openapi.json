@@ -702,6 +702,20 @@
         "title": "PlayerRead",
         "type": "object"
       },
+      "PlayerTransferCodeRead": {
+        "description": "A code handing one player, with their match history, to another coach.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "PlayerTransferCodeRead",
+        "type": "object"
+      },
       "PlayerUpdate": {
         "additionalProperties": false,
         "properties": {
@@ -764,6 +778,23 @@
           }
         },
         "title": "PlayerUpdate",
+        "type": "object"
+      },
+      "RedeemTransferCodeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "format": "password",
+            "maxLength": 100,
+            "title": "Code",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "RedeemTransferCodeRequest",
         "type": "object"
       },
       "ResetPasswordRequest": {
@@ -2144,6 +2175,88 @@
         ]
       }
     },
+    "/players/redeem-transfer-code": {
+      "post": {
+        "description": "Take the player a transfer code names onto this coach's roster, matches included.\n\nThe code is spent here, so presenting it again answers 400. The match history needs no\nrewriting: a match reaches its owner through its player, so it moves with them.",
+        "operationId": "redeem_player_transfer_code",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RedeemTransferCodeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "That transfer code is unknown or has already been used"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "That player is already on your roster"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Redeem Player Transfer Code",
+        "tags": [
+          "players"
+        ]
+      }
+    },
     "/players/{player_id}": {
       "get": {
         "operationId": "get_player",
@@ -2399,6 +2512,125 @@
           }
         },
         "summary": "Restore Player",
+        "tags": [
+          "players"
+        ]
+      }
+    },
+    "/players/{player_id}/transfer-code": {
+      "delete": {
+        "description": "Cancel an outstanding code, so a copy of it stops working.\n\nA code that never expires needs a way back, since handing one to the wrong person is\notherwise permanent. 204 whether or not one was outstanding, as logout is: the request\nasks for a state, and a player with no live code is already in it.",
+        "operationId": "delete_player_transfer_code",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Player Transfer Code",
+        "tags": [
+          "players"
+        ]
+      },
+      "post": {
+        "description": "Mint a code that hands this player, their notes and their matches, to another coach.\n\nAsking again replaces the previous code, which the storage decides rather than the\npolicy: only a hash is kept, so an earlier code can never be shown a second time. An\narchived player transfers like any other, since a coach leaving is exactly when their\nroster moves on.",
+        "operationId": "create_player_transfer_code",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerTransferCodeRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Create Player Transfer Code",
         "tags": [
           "players"
         ]

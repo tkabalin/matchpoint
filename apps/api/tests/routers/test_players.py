@@ -6,8 +6,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, DominantHand, Player
-from tests.factories import make_coach, make_player, sign_in
+from matchpoint_api.auth import new_session_token
+from matchpoint_api.models import Coach, DominantHand, Player, PlayerTransferCode
+from matchpoint_api.routers.players import ALREADY_OWNED, UNKNOWN_TRANSFER_CODE
+from tests.factories import make_coach, make_match, make_player, sign_in
 
 NOTES_LIMIT = 2000
 
@@ -655,6 +657,9 @@ def test_archive_and_restore_of_an_unknown_player_is_404(client: TestClient, act
         ("patch", f"/players/{uuid.UUID(int=0)}"),
         ("post", f"/players/{uuid.UUID(int=0)}/archive"),
         ("post", f"/players/{uuid.UUID(int=0)}/restore"),
+        ("post", f"/players/{uuid.UUID(int=0)}/transfer-code"),
+        ("delete", f"/players/{uuid.UUID(int=0)}/transfer-code"),
+        ("post", "/players/redeem-transfer-code"),
     ],
 )
 def test_player_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
@@ -664,3 +669,176 @@ def test_player_routes_require_a_session(client: TestClient, method: str, path: 
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}
+
+
+# Transferring a player (#173). The mint is driven through the route wherever a test
+# needs a code it can redeem, since the plaintext exists only in that response.
+
+
+def _mint(client: TestClient, player_id: uuid.UUID) -> str:
+    response = client.post(f"/players/{player_id}/transfer-code")
+    assert response.status_code == 201
+    return str(response.json()["code"])
+
+
+def test_a_transfer_code_moves_the_player_and_their_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The whole point of the flow: the new coach gets the history, and the old one
+    stops seeing the player at all. Matches need no rewriting of their own, reaching
+    their owner through the player they were recorded against."""
+    player = make_player(db_session, last_name="Barty", coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    new_coach = make_coach(db_session)
+    sign_in(client, db_session, new_coach)
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 200
+    assert response.json()["coach_id"] == str(new_coach.id)
+    assert [p["last_name"] for p in client.get("/players").json()] == ["Barty"]
+    assert [m["id"] for m in client.get("/matches").json()] == [str(match.id)]
+
+    sign_in(client, db_session, coach)
+    assert client.get("/players").json() == []
+
+
+def test_a_pasted_code_may_carry_whitespace(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The code travels through a chat message, so a trailing newline comes with it.
+    Answering that with "unknown code" would be a wrong answer to a right code."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    sign_in(client, db_session, make_coach(db_session))
+    response = client.post("/players/redeem-transfer-code", json={"code": f"  {code}\n"})
+
+    assert response.status_code == 200
+
+
+def test_an_archived_player_transfers_and_arrives_on_the_roster(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A coach closing their account is exactly when a roster moves on, so archiving
+    must not block the transfer, and the player arrives active, since being archived
+    said they had left the roster the transfer has just taken them off."""
+    player = make_player(
+        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
+    )
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    sign_in(client, db_session, make_coach(db_session))
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 200
+    assert response.json()["archived_at"] is None
+    assert [p["id"] for p in client.get("/players").json()] == [str(player.id)]
+
+
+def test_minting_again_replaces_the_previous_code(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Only the hash is stored, so a coach who asks twice cannot be shown the first
+    code again, which makes replacing it the only honest answer."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    first = _mint(client, player.id)
+
+    second = _mint(client, player.id)
+
+    assert second != first
+    sign_in(client, db_session, make_coach(db_session))
+    assert client.post("/players/redeem-transfer-code", json={"code": first}).status_code == 400
+    assert client.post("/players/redeem-transfer-code", json={"code": second}).status_code == 200
+
+
+def test_a_redeemed_code_cannot_be_used_again(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Single use: the code is spent on the transfer, so a copy of it left in a chat
+    log cannot take the player back off the coach who now has them."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+    sign_in(client, db_session, make_coach(db_session))
+    assert client.post("/players/redeem-transfer-code", json={"code": code}).status_code == 200
+
+    sign_in(client, db_session, make_coach(db_session))
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": UNKNOWN_TRANSFER_CODE}
+
+
+@pytest.mark.usefixtures("coach")
+def test_redeeming_an_unknown_code_is_400(client: TestClient) -> None:
+    response = client.post("/players/redeem-transfer-code", json={"code": new_session_token()})
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": UNKNOWN_TRANSFER_CODE}
+
+
+def test_redeeming_your_own_code_is_409_and_leaves_it_usable(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A coach checking the code they are about to hand over must not spend it, so the
+    409 writes nothing."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": ALREADY_OWNED}
+    sign_in(client, db_session, make_coach(db_session))
+    assert client.post("/players/redeem-transfer-code", json={"code": code}).status_code == 200
+
+
+def test_deleting_a_transfer_code_stops_it_working(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A code that never expires needs a way back: handing one to the wrong person is
+    otherwise permanent."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    response = client.delete(f"/players/{player.id}/transfer-code")
+
+    assert response.status_code == 204
+    sign_in(client, db_session, make_coach(db_session))
+    assert client.post("/players/redeem-transfer-code", json={"code": code}).status_code == 400
+
+
+def test_deleting_a_transfer_code_that_was_never_minted_is_204(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The request asks for a state, and a player with no live code is already in it:
+    logout's reasoning, so a retry is not an error."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}/transfer-code")
+
+    assert response.status_code == 204
+
+
+@pytest.mark.parametrize("method", ["post", "delete"])
+def test_transfer_code_for_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach, method: str
+) -> None:
+    """Minting is taking a capability over the row, so it stops at the same boundary
+    reading it does, and with the same 404 rather than a 403 that confirms the id."""
+    other_player = make_player(db_session)
+    db_session.commit()
+
+    response = client.request(method, f"/players/{other_player.id}/transfer-code")
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(PlayerTransferCode)) == 0
