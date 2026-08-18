@@ -16,7 +16,7 @@ import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/comp
 import { Skeleton } from "@/components/ui/skeleton";
 import { getHeadToHeadOptions, listHeadToHeadOptions } from "@/lib/analytics/analytics-options";
 import { metricToBullet } from "@/lib/analytics/format";
-import type { HeadToHeadSummary } from "@/lib/analytics/types.provisional";
+import type { HeadToHeadSummary, SlopeLine } from "@/lib/analytics/types.provisional";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
@@ -232,10 +232,15 @@ function OpponentDetail({
  * Three metrics, each drawn as its first-two vs last-two meeting average.
  *
  * Colours come from the safe non-outcome set and deliberately exclude blue: the
- * bottom nav is on screen, and blue is its.
+ * bottom nav is on screen, and blue is its. Fixed at three lines/colours by
+ * `SlopeLine`'s tuple type — see the comment there.
  */
-function SlopeGraph({ slope }: { slope: { label: string; first: number; last: number }[] }) {
-  const colors = [PATTERN_VAR.yellow, PATTERN_VAR.indigo, PATTERN_VAR.violet];
+function SlopeGraph({ slope }: { slope: readonly [SlopeLine, SlopeLine, SlopeLine] }) {
+  const colors: readonly [string, string, string] = [
+    PATTERN_VAR.yellow,
+    PATTERN_VAR.indigo,
+    PATTERN_VAR.violet,
+  ];
   const data = [
     { stage: "First 2", ...Object.fromEntries(slope.map((line) => [line.label, line.first])) },
     { stage: "Last 2", ...Object.fromEntries(slope.map((line) => [line.label, line.last])) },

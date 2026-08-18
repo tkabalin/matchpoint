@@ -208,7 +208,12 @@ export function Home() {
 
 function Snapshot({ value, label, tone }: { value: number; label: string; tone?: "alert" }) {
   return (
-    <div>
+    // <dt> before <dd> is what pairs each value with its own label for assistive
+    // tech — a <dd> describes the *preceding* <dt>, so the reverse order would pair
+    // every number with the previous tile's label. flex-col-reverse keeps the
+    // value-on-top look without reordering the actual markup.
+    <div className="flex flex-col-reverse">
+      <dt className="text-[0.625rem] text-muted-foreground">{label}</dt>
       <dd
         className={cn(
           "text-lg font-bold tabular-nums",
@@ -217,7 +222,6 @@ function Snapshot({ value, label, tone }: { value: number; label: string; tone?:
       >
         {value}
       </dd>
-      <dt className="text-[0.625rem] text-muted-foreground">{label}</dt>
     </div>
   );
 }

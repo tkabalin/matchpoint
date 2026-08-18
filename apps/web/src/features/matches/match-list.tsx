@@ -15,10 +15,8 @@ const SURFACE_LABEL: Record<string, string> = {
   carpet: "Carpet",
 };
 
-export function MatchList({ playerId }: { playerId?: string } = {}) {
-  const { data, isPending, isError } = useQuery(
-    listMatchesOptions(playerId ? { query: { player_id: playerId } } : undefined),
-  );
+export function MatchList() {
+  const { data, isPending, isError } = useQuery(listMatchesOptions());
 
   if (isPending) {
     return (

@@ -384,6 +384,21 @@ test("counts a match played today from a timezone ahead of UTC", async () => {
   expect(snapshot.getAllByRole("definition")[1]).toHaveTextContent("1");
 });
 
+// A <dd> describes the *preceding* <dt> inside a <dl> — reviewed by Thomas on !126,
+// where the value rendered before its label and paired every number with the
+// previous tile's label for assistive tech. Asserts the DOM order directly, since
+// getAllByRole alone wouldn't have caught the original bug.
+test("pairs each snapshot label with its own value, not the previous tile's", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  const snapshot = await screen.findByRole("region", { name: "Squad snapshot" });
+  const terms = within(snapshot).getAllByRole("term");
+  for (const term of terms) {
+    expect(term.nextElementSibling?.tagName).toBe("DD");
+  }
+});
+
 test("shows an empty needs-attention state until trend flagging exists", async () => {
   stubAuthenticatedHome();
   await renderHome();

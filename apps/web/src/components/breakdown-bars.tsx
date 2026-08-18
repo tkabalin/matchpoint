@@ -30,8 +30,11 @@ export function BreakdownBars({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       {rows.map((row) => {
-        const primary = (row.value / row.max) * 100;
-        const secondary = ((row.secondaryValue ?? 0) / row.max) * 100;
+        // A group where nothing has been recorded yet has max: 0, and 0 / 0 is NaN
+        // — a "NaN%" width is dropped by the browser, so the bar would render
+        // with no fill at all rather than as a legitimately empty one.
+        const primary = row.max === 0 ? 0 : (row.value / row.max) * 100;
+        const secondary = row.max === 0 ? 0 : ((row.secondaryValue ?? 0) / row.max) * 100;
         const rowPattern = typeof pattern === "function" ? pattern(row) : pattern;
 
         return (

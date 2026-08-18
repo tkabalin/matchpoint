@@ -119,14 +119,25 @@ export interface HeadToHeadSummary {
   winRate: number | null;
 }
 
+/** One metric's first-two vs. last-two meeting average, drawn as a slope line. */
+export interface SlopeLine {
+  label: string;
+  first: number;
+  last: number;
+}
+
 export interface HeadToHeadDetail extends HeadToHeadSummary {
   hero: Metric;
   /** Meeting by meeting, oldest first. */
   results: MatchOutcome[];
   exploit: string;
   avoid: string;
-  /** Slope graph: each metric's first-two vs. last-two meeting average. */
-  slope: { label: string; first: number; last: number }[];
+  /**
+   * The slope graph. Exactly three lines, matching the three colours
+   * .claude/rules/web-color.md allocates for it (yellow, indigo, violet) — a
+   * fourth metric here would have no colour of its own to draw with.
+   */
+  slope: readonly [SlopeLine, SlopeLine, SlopeLine];
   lossPatterns: BreakdownRow[];
   yourServe: Metric[];
   theirServe: Metric[];
