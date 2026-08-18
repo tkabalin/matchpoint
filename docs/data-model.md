@@ -147,10 +147,20 @@ with no `archived_at`. Archiving exists so history a coach still depends on surv
 the active roster, and when the coach themselves leaves there is nobody left whose analytics that
 history serves; a soft-deleted coach would just be their email, name and password hash sitting on a
 row nothing can reach, which is not what someone asking to be removed has asked for. So the closure
-deletes the coach and everything below them — their players, the matches recorded against those
-players, their sessions and any live reset code — in one transaction. Nothing keys on the address,
-so it is free for a fresh sign-up immediately, and no row survives to link the new account to the
-old one.
+deletes the coach and everything below them: their players, the matches recorded against those
+players, their sessions and any live reset code, in one transaction. Nothing keys on the address, so
+it is free for a fresh sign-up immediately, and no row survives to link the new account to the old
+one.
+
+**A closure is refused while any player is still active.** Players move between coaches as they grow
+up, so a name still on the roster may be one another coach is about to take over, and erasing it
+with the account would take a history that was never only this coach's. Each player has to be
+cleared first, transferred away or archived, and the refusal is a status the closure form branches
+on. A coach who does mean to leave nothing behind says so on the closure request instead of
+archiving one by one, and the clearing and the delete then share a transaction, so there is no
+half-closed account to be stranded in. Being archived does not spare a player from the delete:
+archiving is a coach's own reversible tidying, closure is the coach leaving, and privacy wins over
+recoverability there.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every

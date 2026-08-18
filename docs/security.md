@@ -176,6 +176,13 @@ guesses; a correct one is never refused by that tier, so a coach under attack fr
 stole can still close the account out from under them. Every session goes with the rows, and the
 cookie the request arrived on is cleared.
 
+**The roster refusal is not one of these defences.** The closure also refuses while the coach still
+has an active player, and the request can waive that refusal. The gate exists so a player another
+coach is about to take over is not erased by accident, and the password is the whole of what stands
+between a stolen cookie and the erasure, waiver or not. The password is checked first for that
+reason, so nothing this route answers past the 401 reaches a caller who has not just proved who they
+are.
+
 ## Cross-site request forgery
 
 `SameSite=Lax` stops cross-site writes from carrying the cookie, but treats every host under the
