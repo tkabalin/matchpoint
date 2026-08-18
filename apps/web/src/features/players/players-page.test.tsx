@@ -164,14 +164,21 @@ test("the floating action adds a player rather than starting a match", async () 
 
   await user.click(screen.getByRole("button", { name: "Add player" }));
 
-  expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
   // The floating action drops out of the tree while the sheet is open — Base UI
   // marks the background inert — so this "Add player" is the form's submit.
-  expect(screen.getByRole("textbox", { name: "First name" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add player" })).toHaveAttribute("type", "submit");
 });
 
-test("submitting the add-player form posts it to the API", async () => {
+/** Fills every required field with a valid value. */
+async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(await screen.findByRole("textbox", { name: "First name" }), "Nomsa");
+  await user.type(screen.getByRole("textbox", { name: "Last name" }), "Khumalo");
+  await user.type(screen.getByLabelText("Date of birth"), "2008-04-12");
+  await user.click(screen.getByRole("button", { name: "Female" }));
+}
+
+test("submitting the add-player form posts every required field", async () => {
   const posted: string[] = [];
   vi.stubGlobal(
     "fetch",
@@ -190,10 +197,62 @@ test("submitting the add-player form posts it to the API", async () => {
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Add player" }));
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: /^Add player$/ }));
+
+  await waitFor(() => expect(posted.some((entry) => entry.includes("/api/players"))).toBe(true));
+  const body = posted.join(" ");
+  expect(body).toContain('"first_name":"Nomsa"');
+  expect(body).toContain('"date_of_birth":"2008-04-12"');
+  expect(body).toContain('"gender":"female"');
+  expect(body).toContain('"dominant_hand":"right"');
+});
+
+// Player setup happens ahead of time, not courtside, so the full record is asked
+// for rather than just the name (#77).
+test("refuses to submit until date of birth and gender are given", async () => {
+  const posted: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      if (input.method === "POST") posted.push(input.url);
+      return Promise.resolve(Response.json([player]));
+    }),
+  );
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(screen.getByRole("button", { name: "Add player" }));
   await user.type(await screen.findByRole("textbox", { name: "First name" }), "Nomsa");
   await user.type(screen.getByRole("textbox", { name: "Last name" }), "Khumalo");
   await user.click(screen.getByRole("button", { name: /^Add player$/ }));
 
-  await waitFor(() => expect(posted.some((entry) => entry.includes("/api/players"))).toBe(true));
-  expect(posted.join(" ")).toContain('"first_name":"Nomsa"');
+  expect(await screen.findByText("Date of birth is required.")).toBeInTheDocument();
+  expect(screen.getByText("Gender is required.")).toBeInTheDocument();
+  expect(posted).toEqual([]);
+});
+
+// The API rejects both bounds but JSON Schema can express neither, so without this
+// check the coach just meets a 422.
+test("rejects a date of birth in the future before sending it", async () => {
+  const posted: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      if (input.method === "POST") posted.push(input.url);
+      return Promise.resolve(Response.json([player]));
+    }),
+  );
+  const user = userEvent.setup();
+  await renderPlayersPage();
+
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+  await user.type(await screen.findByRole("textbox", { name: "First name" }), "Nomsa");
+  await user.type(screen.getByRole("textbox", { name: "Last name" }), "Khumalo");
+  await user.type(screen.getByLabelText("Date of birth"), "2999-01-01");
+  await user.click(screen.getByRole("button", { name: "Other" }));
+  await user.click(screen.getByRole("button", { name: /^Add player$/ }));
+
+  expect(await screen.findByText("Date of birth cannot be in the future.")).toBeInTheDocument();
+  expect(posted).toEqual([]);
 });
