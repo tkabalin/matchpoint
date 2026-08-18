@@ -1,17 +1,18 @@
 import { getPlayerOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerLoadError } from "@/components/player-load-error";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
+import { EditPlayerSheet } from "./edit-player-sheet";
 import { H2hTab } from "./tabs/h2h-tab";
 import { MatchesTab } from "./tabs/matches-tab";
 import { NotesTab } from "./tabs/notes-tab";
@@ -37,6 +38,7 @@ const TABS = [
 export function PlayerProfile() {
   const { playerId } = routeApi.useParams();
   const [tab, setTab] = useState("overview");
+  const [editing, setEditing] = useState(false);
   const {
     data: player,
     isPending,
@@ -77,13 +79,34 @@ export function PlayerProfile() {
         trailing={<PlayerAvatar player={player} size="sm" />}
       />
 
-      <Link
-        to="/new-match/$playerId"
-        params={{ playerId }}
-        className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}
-      >
-        Start match
-      </Link>
+      <div className="flex items-center gap-2">
+        <Link
+          to="/new-match/$playerId"
+          params={{ playerId }}
+          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}
+        >
+          Start match
+        </Link>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={player.archived_at !== null}
+          onClick={() => setEditing(true)}
+        >
+          <Pencil />
+          Edit
+        </Button>
+
+        {player.archived_at !== null && (
+          <p className="text-xs text-muted-foreground">
+            Editing is unavailable for an archived player.
+          </p>
+        )}
+      </div>
+
+      <EditPlayerSheet player={player} open={editing} onOpenChange={setEditing} />
 
       {/* Single page, real tabs (not a route per tab) — MatchPoint is a mobile-first,
           installed-PWA app used courtside, where deep-linking to one facet of a player

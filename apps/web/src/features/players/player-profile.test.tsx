@@ -8,7 +8,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -28,15 +28,18 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-/** Routes by pathname — this page fetches both the player and their matches. */
-function stubFetch(routes: Record<string, () => Response>) {
+/**
+ * Routes by pathname — this page fetches both the player and their matches. A
+ * handler can read the request (method, body) for routes the edit flow PATCHes.
+ */
+function stubFetch(routes: Record<string, (input: Request) => Response | Promise<Response>>) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
       const handler = routes[pathname];
       if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
-      return Promise.resolve(handler());
+      return Promise.resolve(handler(input));
     }),
   );
 }
@@ -282,4 +285,83 @@ test("H2H tab lists opponents, drills into one, and comes back", async () => {
   await user.click(screen.getByRole("button", { name: "Back to opponents" }));
 
   expect(await screen.findByText("A. Torres")).toBeInTheDocument();
+});
+
+test("Edit opens the sheet pre-filled with the player's current values", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+
+  expect(await screen.findByRole("heading", { name: "Edit Amahle" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "First name" })).toHaveValue("Amahle");
+  expect(screen.getByRole("textbox", { name: "Last name" })).toHaveValue("Nkosi");
+  expect(screen.getByLabelText("Date of birth")).toHaveValue("2008-04-12");
+});
+
+test("saving Edit PATCHes only the field that changed", async () => {
+  const patches: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: async (input) => {
+      if (input.method === "PATCH") {
+        patches.push(await input.text());
+        return Response.json({ ...player, last_name: "Khumalo" });
+      }
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  const lastName = await screen.findByRole("textbox", { name: "Last name" });
+  await user.clear(lastName);
+  await user.type(lastName, "Khumalo");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() => expect(patches).toHaveLength(1));
+  expect(JSON.parse(patches[0]!)).toEqual({ last_name: "Khumalo" });
+});
+
+test("saving Edit with nothing changed just closes, no request sent", async () => {
+  const patches: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: async (input) => {
+      if (input.method === "PATCH") patches.push(await input.text());
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await screen.findByRole("heading", { name: "Edit Amahle" });
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() =>
+    expect(screen.queryByRole("heading", { name: "Edit Amahle" })).not.toBeInTheDocument(),
+  );
+  expect(patches).toEqual([]);
+});
+
+test("Edit is disabled for an archived player, with the reason shown", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () =>
+      Response.json({ ...player, archived_at: "2026-08-01T00:00:00Z" }),
+    "/api/matches": () => Response.json([]),
+  });
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
+  expect(screen.getByText("Editing is unavailable for an archived player.")).toBeInTheDocument();
 });

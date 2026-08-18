@@ -303,14 +303,16 @@ test("'See all' links to the players roster", async () => {
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });
 
-test("'Add' links to the players roster for now", async () => {
+// Was a Link to the roster that did nothing but navigate — the coach then still had
+// to find and press the roster's own Add action (#177 postscript).
+test("'Add' opens the add-player sheet directly", async () => {
   stubAuthenticatedHome();
   const user = userEvent.setup();
   await renderHome();
 
-  await user.click(screen.getByRole("link", { name: "Add" }));
+  await user.click(screen.getByRole("button", { name: "Add" }));
 
-  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
 });
 
 test("shows no last-viewed-player box when nothing has been viewed yet", async () => {

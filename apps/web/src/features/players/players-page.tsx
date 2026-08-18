@@ -2,12 +2,12 @@ import type { PlayerRead } from "@matchpoint/api-client";
 import { Plus, Search } from "lucide-react";
 import { useState } from "react";
 
+import { AddPlayerSheet } from "@/components/add-player-sheet";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerActionSheet } from "@/components/player-action-sheet";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
-import { AddPlayerSheet } from "./add-player-sheet";
 import { PlayerList } from "./player-list";
 
 export function PlayersPage() {

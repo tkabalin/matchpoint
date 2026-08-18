@@ -10,6 +10,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, Plus, Search, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 
+import { AddPlayerSheet } from "@/components/add-player-sheet";
 import { BulletBar } from "@/components/bullet-bar";
 import { OutcomeSwatch } from "@/components/outcome-swatch";
 import { AppPage } from "@/components/page-shell";
@@ -49,6 +50,7 @@ export function Home() {
   const { data: allMatches } = useQuery(listMatchesOptions());
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PlayerRead | null>(null);
+  const [adding, setAdding] = useState(false);
 
   const lastViewedPlayerId = getLastViewedPlayerId();
   // No error branch on purpose: a stale id in localStorage (archived player, or a
@@ -173,12 +175,16 @@ export function Home() {
           {roster.map((player) => (
             <RosterTile key={player.id} player={player} onSelect={setSelected} />
           ))}
-          <Link to="/players" className="flex shrink-0 flex-col items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex shrink-0 flex-col items-center gap-1"
+          >
             <span className="flex size-11 items-center justify-center rounded-sm border border-dashed text-muted-foreground">
               <Plus className="size-4" />
             </span>
             <span className="text-xs text-muted-foreground">Add</span>
-          </Link>
+          </button>
         </div>
       </section>
 
@@ -205,6 +211,8 @@ export function Home() {
         open={selected !== null}
         onOpenChange={(open) => !open && setSelected(null)}
       />
+
+      <AddPlayerSheet open={adding} onOpenChange={setAdding} />
     </AppPage>
   );
 }
