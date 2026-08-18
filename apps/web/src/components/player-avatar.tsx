@@ -1,8 +1,11 @@
 import type { PlayerRead } from "@matchpoint/api-client";
 
 // A small fixed palette, picked deterministically from the player's id — no images,
-// no per-player color picker, just enough to tell bubbles apart at a glance.
-const AVATAR_COLORS = ["#045C8C", "#2E1A47", "#C13584", "#009E73", "#D55E00"];
+// no per-player color picker, just enough to tell bubbles apart at a glance. The six
+// non-blue steps of the categorical palette in .claude/rules/web-color.md — blue is
+// nav/brand-exclusive there, so it's excluded here rather than reused as a category
+// color.
+const AVATAR_COLORS = ["#9C3D0A", "#E69F00", "#EDDD6E", "#1FBF8C", "#2E1A47", "#D9569E"];
 
 function colorFor(id: string): string {
   const sum = [...id].reduce((total, char) => total + char.charCodeAt(0), 0);
