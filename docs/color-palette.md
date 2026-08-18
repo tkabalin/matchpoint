@@ -134,6 +134,35 @@ progress-bar fill has no width to carry a pattern mark. The meter already render
 non-color channel a pattern would otherwise provide, rather than adding a second, redundant
 mechanism for the same job.
 
+## Dashboard color roles: why point outcomes get their own exclusive reservation
+
+Green, red, and orange already carried two roles before this — a categorical swatch, and (once the
+password strength meter shipped) a sequential-scale anchor. Extending them to also mean "point
+outcome" on the analytics dashboard wasn't adding a third, unrelated meaning grafted onto the same
+three hexes: the strength meter's weak → strong fill is already a good/neutral/bad score band, the
+exact same semantic a WHOOP-style hero metric or a point-outcome tally uses. The dashboard rule just
+names that pattern explicitly and locks it down, rather than leaving it as an implicit coincidence
+that the next chart built might not notice and quietly break.
+
+Locking it down matters because outcome meaning is exactly the kind of thing a coach needs to read
+at a glance, mid-session, without parsing a legend — the same scannability argument that already
+governs why blue is nav-exclusive. If green sometimes means "won the point" and sometimes means
+"category 4 in an unrelated legend," a coach has to stop and check which chart they're looking at
+before the color means anything. Reserving green/red/orange for outcomes and score bands only, and
+pulling every other categorical need from a separate "safe" set (yellow, indigo, violet, plus blue
+when nav chrome isn't in view), keeps that one glance reliable everywhere it appears on the
+dashboard.
+
+The per-chart assignments follow directly from what each chart is actually showing, not from a
+uniform rule applied blindly. Single-series charts (a distribution histogram, a scatter with one
+trend line) get no categorical color at all, because there's nothing to distinguish — reaching for a
+palette color there would imply a category distinction that doesn't exist. Two-series comparisons
+(the H2H radar overlay, the journal correlation panel) get two colors from the safe set; the
+three-line H2H slope graph gets three. The slope graph's specific call to avoid blue — even though
+blue is otherwise in the safe set — isn't a special exception invented for that screen: it's the
+same nav-chrome-visibility rule from the Navigation color section above, applied to the one
+dashboard screen where nav chrome and a data chart actually share the view.
+
 ## Why every color also needs a pattern
 
 A colorblind-safe, luminance-audited hue selection is necessary but not sufficient. It protects

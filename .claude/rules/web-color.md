@@ -30,10 +30,10 @@ categories, series, or values need distinct colors — charts, tags, legends, st
 
 | Position | Name             | Hex       | Pattern                                                                                                                |
 | -------- | ---------------- | --------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Red      | Burnt vermillion | `#9C3D0A` | Coarse diagonal bands (45°)                                                                                            |
-| Orange   | Orange           | `#E69F00` | Large sparse dots                                                                                                      |
+| Red      | Burnt vermillion | `#9C3D0A` | Coarse diagonal bands (45°) — **outcome-exclusive, see Dashboard color roles below**                                   |
+| Orange   | Orange           | `#E69F00` | Large sparse dots — **outcome-exclusive, see Dashboard color roles below**                                             |
 | Yellow   | Pale yellow      | `#EDDD6E` | Coarse cross-hatch                                                                                                     |
-| Green    | Jade green       | `#1FBF8C` | Medium vertical bands                                                                                                  |
+| Green    | Jade green       | `#1FBF8C` | Medium vertical bands — **outcome-exclusive, see Dashboard color roles below**                                         |
 | Blue     | Deep blue        | `#045C8C` | Fine diagonal bands (-45°) — **also the nav color; do not use as a category color if nav is visible in the same view** |
 | Indigo   | Dark indigo      | `#2E1A47` | Small dense dots                                                                                                       |
 | Violet   | Rose violet      | `#D9569E` | Fine cross-hatch                                                                                                       |
@@ -41,6 +41,11 @@ categories, series, or values need distinct colors — charts, tags, legends, st
 > Deep blue does double duty as both the nav color and a rainbow swatch. If a screen shows both
 > navigation chrome and this palette as data colors (e.g. a chart with a visible nav bar), skip blue
 > as a category color on that screen to avoid the same ambiguity this file exists to prevent.
+
+> Red, Orange, and Green are restricted further still: on the dashboard, they're reserved
+> exclusively for point outcomes and hero-metric score bands, never a general-purpose category color
+> the way Yellow, Indigo, and Violet are. See **Dashboard color roles** below for exactly which
+> chart gets which colors.
 
 ### Pattern rule
 
@@ -96,6 +101,42 @@ A sequential fill has no room for a pattern overlay (it's a thin continuous bar,
 swatch), so it can't lean on the categorical palette's pattern-redundancy rule. Pair it with a text
 label instead (e.g. "Weak" / "Strong") as the non-color channel — same purpose as a pattern, a
 different mechanism to fit a different shape of UI.
+
+## Dashboard color roles
+
+How the palettes above are actually assigned across MatchPoint's analytics dashboard — each chart
+type gets exactly one treatment below, not a free choice per screen.
+
+**Point outcomes — exclusive.** Jade green `#1FBF8C` (win), Burnt vermillion `#9C3D0A` (unforced
+error), Orange `#E69F00` (forced error). Reserved exclusively for point outcomes and WHOOP-style
+hero-metric score bands (good/neutral/bad) — the password strength meter's sequential scale above is
+already exactly this pattern (weak → strong as a bad → good score band), not a fourth, unrelated
+reuse of these hexes. Never use these three colors for anything else, including as a general
+categorical swatch — that's what Yellow, Indigo, and Violet are for.
+
+**Navigation / brand** — unchanged from above: `#045C8C` light / `#1E88C7` dark, never reused for
+outcome or category meaning, on any screen.
+
+**The safe non-outcome set** — Pale yellow `#EDDD6E`, Dark indigo `#2E1A47`, Rose violet `#D9569E`,
+plus Deep blue when nav chrome isn't visible on that particular screen. Reach for this set for any
+categorical distinction on the dashboard that isn't a point outcome.
+
+### Per-chart assignment
+
+- **Shot-type radar** — single color per series, not per axis. The five shot types (forehand,
+  backhand, volley, overhead, serve) are axis labels only, never separate colors.
+  - Single player view: one neutral/nav color.
+  - H2H overlay (player vs. opponent): two colors, one per player, from the safe non-outcome set
+    (e.g. blue vs. violet).
+- **Trends — distribution histogram / scatter + trend line** — single-series charts. Nav blue or
+  neutral. No categorical color needed.
+- **Trends — journal correlation panel** (binary tag comparison) — 2 colors from the safe
+  non-outcome set (e.g. yellow vs. violet).
+- **H2H — slope graph** (hold %, BP-conversion %, winner:UE — 3 lines) — 3 colors from the safe
+  non-outcome set (e.g. yellow, indigo, violet). Avoid blue here specifically — nav chrome is
+  visible on this screen.
+- **H2H — segmented control** (aggregate vs. per-match) — active state uses nav blue, inactive uses
+  neutral gray. No categorical color needed.
 
 ## Light/dark mode background rule
 
