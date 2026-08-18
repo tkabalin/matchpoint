@@ -230,6 +230,22 @@ test("shows no welcome-back line when the coach can't be loaded", async () => {
   expect(screen.queryByText("Welcome back")).not.toBeInTheDocument();
 });
 
+// The nudge is keyed on a signed-in coach existing, same as the welcome-back line
+// above — it has nothing to say to a visitor whose session hasn't resolved yet.
+test("shows the install nudge for a signed-in coach", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(await screen.findByText("Install MatchPoint")).toBeInTheDocument();
+});
+
+test("shows no install nudge before the coach is known", async () => {
+  stubUnauthenticatedHome();
+  await renderHome();
+
+  expect(screen.queryByText("Install MatchPoint")).not.toBeInTheDocument();
+});
+
 test("shows no results list until the user types", async () => {
   stubAuthenticatedHome();
   await renderHome();

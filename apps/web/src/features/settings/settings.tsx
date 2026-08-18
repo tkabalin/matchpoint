@@ -144,6 +144,9 @@ export function Settings() {
   return (
     <div>
       <h1>Settings</h1>
+      <p>
+        <Link to="/install">Install MatchPoint on your phone</Link>
+      </p>
       <Button variant="outline" onClick={() => setDialogStep("confirm")}>
         Sign Out
       </Button>

@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { InProgressBanner } from "@/components/in-progress-banner";
+import { InstallAppNudge } from "@/components/install-app-nudge";
 import { metricToBullet } from "@/lib/analytics/format";
 import type { AttentionFlag, Metric } from "@/lib/analytics/types.provisional";
 import {
@@ -97,6 +98,7 @@ export function Home() {
       </header>
 
       <InProgressBanner />
+      {coach && <InstallAppNudge />}
 
       <InputGroup>
         <InputGroupAddon>

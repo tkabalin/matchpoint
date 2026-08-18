@@ -67,7 +67,12 @@ async function renderSettings() {
     path: "/",
     component: () => <h1>Sign In</h1>,
   });
-  const routeTree = rootRoute.addChildren([settingsRoute, signInRoute]);
+  const installRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/install",
+    component: () => <h1>Install MatchPoint</h1>,
+  });
+  const routeTree = rootRoute.addChildren([settingsRoute, signInRoute, installRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/settings"] }),
@@ -83,6 +88,15 @@ async function renderSettings() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+test("links to the install guide", async () => {
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.click(screen.getByRole("link", { name: "Install MatchPoint on your phone" }));
+
+  expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
 });
 
 test("opens a confirmation dialog when Sign Out is clicked", async () => {

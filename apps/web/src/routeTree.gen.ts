@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 import { Route as AuthenticatedHomeRouteImport } from "./routes/_authenticated.home"
+import { Route as AuthenticatedInstallRouteImport } from "./routes/_authenticated.install"
 import { Route as AuthenticatedMatchesRouteImport } from "./routes/_authenticated.matches"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated.profile"
 import { Route as AuthenticatedSettingsRouteImport } from "./routes/_authenticated.settings"
@@ -45,6 +46,11 @@ const SignUpRoute = SignUpRouteImport.update({
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
   id: "/home",
   path: "/home",
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedInstallRoute = AuthenticatedInstallRouteImport.update({
+  id: "/install",
+  path: "/install",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedMatchesRoute = AuthenticatedMatchesRouteImport.update({
@@ -97,6 +103,7 @@ export interface FileRoutesByFullPath {
   "/forgot-password": typeof ForgotPasswordRoute
   "/sign-up": typeof SignUpRoute
   "/home": typeof AuthenticatedHomeRoute
+  "/install": typeof AuthenticatedInstallRoute
   "/matches": typeof AuthenticatedMatchesRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/settings": typeof AuthenticatedSettingsRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   "/forgot-password": typeof ForgotPasswordRoute
   "/sign-up": typeof SignUpRoute
   "/home": typeof AuthenticatedHomeRoute
+  "/install": typeof AuthenticatedInstallRoute
   "/matches": typeof AuthenticatedMatchesRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/settings": typeof AuthenticatedSettingsRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   "/forgot-password": typeof ForgotPasswordRoute
   "/sign-up": typeof SignUpRoute
   "/_authenticated/home": typeof AuthenticatedHomeRoute
+  "/_authenticated/install": typeof AuthenticatedInstallRoute
   "/_authenticated/matches": typeof AuthenticatedMatchesRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
   "/_authenticated/settings": typeof AuthenticatedSettingsRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | "/forgot-password"
     | "/sign-up"
     | "/home"
+    | "/install"
     | "/matches"
     | "/profile"
     | "/settings"
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | "/forgot-password"
     | "/sign-up"
     | "/home"
+    | "/install"
     | "/matches"
     | "/profile"
     | "/settings"
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | "/forgot-password"
     | "/sign-up"
     | "/_authenticated/home"
+    | "/_authenticated/install"
     | "/_authenticated/matches"
     | "/_authenticated/profile"
     | "/_authenticated/settings"
@@ -224,6 +236,13 @@ declare module "@tanstack/react-router" {
       path: "/home"
       fullPath: "/home"
       preLoaderRoute: typeof AuthenticatedHomeRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/install": {
+      id: "/_authenticated/install"
+      path: "/install"
+      fullPath: "/install"
+      preLoaderRoute: typeof AuthenticatedInstallRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/matches": {
@@ -287,6 +306,7 @@ declare module "@tanstack/react-router" {
 
 interface AuthenticatedRouteChildren {
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
+  AuthenticatedInstallRoute: typeof AuthenticatedInstallRoute
   AuthenticatedMatchesRoute: typeof AuthenticatedMatchesRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -299,6 +319,7 @@ interface AuthenticatedRouteChildren {
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
+  AuthenticatedInstallRoute: AuthenticatedInstallRoute,
   AuthenticatedMatchesRoute: AuthenticatedMatchesRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
