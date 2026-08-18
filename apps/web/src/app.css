@@ -9,6 +9,17 @@
    Design tokens go in @theme as the design system lands. */
 @theme {
   --color-court: oklch(0.55 0.13 160);
+
+  /* The categorical palette from .claude/rules/web-color.md, named by role rather
+     than by hue so the rule's restrictions are visible at the call site: the three
+     outcome-* colors are reserved for point outcomes and hero score bands, and only
+     the cat-* set is free for general categorical use. */
+  --color-outcome-win: #1fbf8c;
+  --color-outcome-forced: #e69f00;
+  --color-outcome-unforced: #9c3d0a;
+  --color-cat-yellow: #eddd6e;
+  --color-cat-indigo: #2e1a47;
+  --color-cat-violet: #d9569e;
 }
 
 @theme inline {
@@ -126,6 +137,58 @@
   --sidebar-accent-foreground: oklch(0.987 0.002 197.1);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.56 0.021 213.5);
+}
+
+/* One utility per categorical color, each pairing the color with the exact tile
+   geometry .claude/rules/web-color.md specifies for it. They exist as a pair so a
+   swatch can't ship colored-but-patternless, which is the failure mode that rule's
+   pattern section is written to prevent. */
+@utility pattern-win {
+  background-color: var(--color-outcome-win);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgb(255 255 255 / 0.4) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+@utility pattern-forced {
+  background-color: var(--color-outcome-forced);
+  background-image: radial-gradient(rgb(0 0 0 / 0.45) 3px, transparent 3.5px);
+  background-size: 14px 14px;
+}
+
+@utility pattern-unforced {
+  background-color: var(--color-outcome-unforced);
+  background-image: repeating-linear-gradient(45deg, rgb(0 0 0 / 0.5) 0 5px, transparent 5px 10px);
+}
+
+@utility pattern-yellow {
+  background-color: var(--color-cat-yellow);
+  background-image:
+    repeating-linear-gradient(45deg, rgb(0 0 0 / 0.45) 0 2.5px, transparent 2.5px 12px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.45) 0 2.5px, transparent 2.5px 12px);
+}
+
+@utility pattern-indigo {
+  background-color: var(--color-cat-indigo);
+  background-image: radial-gradient(rgb(255 255 255 / 0.5) 1.5px, transparent 1.8px);
+  background-size: 8px 8px;
+}
+
+@utility pattern-violet {
+  background-color: var(--color-cat-violet);
+  background-image:
+    repeating-linear-gradient(45deg, rgb(0 0 0 / 0.4) 0 1.5px, transparent 1.5px 6px),
+    repeating-linear-gradient(-45deg, rgb(0 0 0 / 0.4) 0 1.5px, transparent 1.5px 6px);
+}
+
+/* The dual-ring halo every swatch carries. One of the two rings always contrasts
+   with whatever is behind it, so no light/dark conditional is needed. */
+@utility swatch-halo {
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 2px #000;
 }
 
 @layer base {
