@@ -11,7 +11,7 @@ import Dexie, { type EntityTable } from "dexie";
 
 /**
  * Which entity a row's payload holds. A string union rather than a stored enum
- * so a new kind (#124 may add games and sets) widens it with no version bump —
+ * so a new kind (#174 may add sets) widens it with no version bump —
  * nothing is indexed on the member list.
  */
 export type OutboxEntityKind = "match" | "point";

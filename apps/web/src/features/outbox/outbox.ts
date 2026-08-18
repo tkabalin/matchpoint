@@ -115,7 +115,10 @@ export function readByMatch(matchId: string): Promise<OutboxRow[]> {
   return outboxDb.entries.where("matchId").equals(matchId).sortBy("seq");
 }
 
-/** Drops rows the server has durably acknowledged. */
+/**
+ * Drops rows the server has durably acknowledged, and points a coach undid
+ * before they synced: undo before sync is an outbox delete.
+ */
 export async function remove(ids: readonly string[]): Promise<void> {
   await outboxDb.entries.where("id").anyOf(ids).delete();
 }
