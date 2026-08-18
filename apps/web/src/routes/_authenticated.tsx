@@ -1,6 +1,7 @@
 import { getCurrentCoachOptions } from "@matchpoint/api-client/react-query";
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+import { AuthenticatedLayout } from "@/components/authenticated-layout";
 import { getErrorStatus } from "@/lib/error-status";
 
 // Pathless layout: every currently-protected route is renamed with this prefix so it
@@ -20,5 +21,5 @@ export const Route = createFileRoute("/_authenticated")({
       if (getErrorStatus(error) === 401) throw redirect({ to: "/" });
     }
   },
-  component: Outlet,
+  component: AuthenticatedLayout,
 });
