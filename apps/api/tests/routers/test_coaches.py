@@ -1133,6 +1133,7 @@ def test_a_rejected_closure_echoes_no_password(client: TestClient, db_session: S
     assert "x" * 129 not in response.text
 
 
+@pytest.mark.usefixtures("clock")
 def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1153,6 +1154,7 @@ def test_wrong_guesses_beyond_the_coach_s_budget_are_refused(
     assert int(response.headers["Retry-After"]) > 6
 
 
+@pytest.mark.usefixtures("clock")
 def test_a_correct_password_is_never_refused_by_the_coach_tier(
     client: TestClient, db_session: Session
 ) -> None:
@@ -1167,6 +1169,7 @@ def test_a_correct_password_is_never_refused_by_the_coach_tier(
     assert _close(client).status_code == 204
 
 
+@pytest.mark.usefixtures("clock")
 def test_closure_arrivals_beyond_the_address_burst_are_refused(
     client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
