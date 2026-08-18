@@ -171,7 +171,7 @@ export function ForgotPassword() {
       <AuthShell>
         <CardHeader>
           <CardTitle>
-            <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+            <h1 className="text-center text-2xl tracking-wide">Reset Password</h1>
           </CardTitle>
           <CardDescription className="text-center">Your password has been updated.</CardDescription>
         </CardHeader>
@@ -192,7 +192,7 @@ export function ForgotPassword() {
       <AuthShell>
         <CardHeader>
           <CardTitle>
-            <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+            <h1 className="text-center text-2xl tracking-wide">Reset Password</h1>
           </CardTitle>
           {/* forgot-password answers every address alike (202 whether or not it's
               registered), unlike sign-up's request-otp, so this can't claim the
@@ -299,7 +299,7 @@ export function ForgotPassword() {
     <AuthShell>
       <CardHeader>
         <CardTitle>
-          <h1 className="text-center text-sm font-bold tracking-wide">Reset Password</h1>
+          <h1 className="text-center text-2xl tracking-wide">Reset Password</h1>
         </CardTitle>
       </CardHeader>
       <CardContent>

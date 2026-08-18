@@ -57,7 +57,7 @@ export function SignIn() {
     <AuthShell>
       <CardHeader>
         <CardTitle>
-          <h1 className="text-center text-sm font-bold tracking-wide">Sign In</h1>
+          <h1 className="text-center text-2xl tracking-wide">Sign In</h1>
         </CardTitle>
       </CardHeader>
       <CardContent>

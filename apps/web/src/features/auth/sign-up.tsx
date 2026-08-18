@@ -188,7 +188,7 @@ export function SignUp() {
       <AuthShell>
         <CardHeader>
           <CardTitle>
-            <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+            <h1 className="text-center text-2xl tracking-wide">Sign Up</h1>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -279,7 +279,7 @@ export function SignUp() {
       <AuthShell>
         <CardHeader>
           <CardTitle>
-            <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+            <h1 className="text-center text-2xl tracking-wide">Sign Up</h1>
           </CardTitle>
           <CardDescription className="text-center">We sent a code to {email}.</CardDescription>
         </CardHeader>
@@ -335,7 +335,7 @@ export function SignUp() {
     <AuthShell>
       <CardHeader>
         <CardTitle>
-          <h1 className="text-center text-sm font-bold tracking-wide">Sign Up</h1>
+          <h1 className="text-center text-2xl tracking-wide">Sign Up</h1>
         </CardTitle>
       </CardHeader>
       <CardContent>
