@@ -191,6 +191,34 @@ and the roster screen shows the coach what they are about to lose better than a 
 courtside would. A stolen cookie is bounded here by the per-coach rate limit every route charges,
 and by the transfer-code refusal, which keeps a player another coach has a claim on out of reach.
 
+## Data left on the device
+
+Offline capture means a coach's data outlives the tab: cached reads sit in one IndexedDB database
+and points not yet sent sit in another. A club device gets passed between coaches, so what happens
+to those two stores when a session ends is a real decision, and it depends on how the session ended:
+
+| How the session ended                                 | Cached reads | Outbox (unsynced points) |        Ownership record         | Last-viewed player |
+| ----------------------------------------------------- | :----------: | :----------------------: | :-----------------------------: | :----------------: |
+| Sign-out                                              |   Deleted    |         Deleted          |             Deleted             |      Deleted       |
+| Sign-in by a different coach (or no ownership record) |   Deleted    |         Deleted          | Deleted, reset to the new coach |      Deleted       |
+| Sign-in by the coach who already owns the device      |     Kept     |           Kept           |              Kept               |        Kept        |
+| Session revoked server-side (401)                     |   Deleted    |           Kept           |              Kept               |        Kept        |
+
+Sign-out and a coach switch are the same purge: signing out, or a login by a coach other than the
+one the device's data belongs to, deletes the cached reads and the outbox, along with the record of
+whose data it was and the marker naming the player the device last showed. The switch is detected
+from the login response and completes before the first screen renders in the tab that signed in, so
+nothing of the previous coach's reaches it. A purge that cannot finish refuses the sign-in rather
+than going on to a device it failed to clear. The outbox rows also carry the coach they belong to,
+as a backstop for a purge that never ran.
+
+A session revoked server-side deletes only the cached reads. A 401 is not evidence that the coach
+has left the device, and unsynced points are the one thing on it the server cannot send back. Cached
+reads are dropped anyway, costing nothing but a refetch, and the ownership record is kept: it is
+what lets the next login tell the same coach resuming from someone else arriving. A device with no
+record at all is claimed by the first session the route guard confirms, so a login predating the
+record is not mistaken for a stranger's.
+
 ## Cross-site request forgery
 
 `SameSite=Lax` stops cross-site writes from carrying the cookie, but treats every host under the

@@ -23,6 +23,10 @@ paths:
   other (see `web-capture.md`). It stays a slice rather than moving to `src/lib/` because it owns a
   database schema and its own durability rules, not a helper. This is not a precedent — anything
   else two slices share still goes in `src/components/` or `src/lib/`.
+- `src/lib/local-data.ts` imports it too, the one place a `lib/` module depends on a slice. Deleting
+  what the device holds for a coach spans the outbox and the persisted query cache, so it belongs to
+  neither, and the keep-or-delete rules of a sign-out, a coach switch and a revoked session are only
+  checkable while they sit in one file.
 
 ## HTML Injection
 
