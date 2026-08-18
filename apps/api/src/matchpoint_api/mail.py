@@ -6,15 +6,17 @@ was sent swaps in its own recorder, and none can send real mail by accident. Whi
 sender gets built is `settings.email_sender`'s choice, so a second provider is one
 class and one entry in `create_email_sender`, with the routes none the wiser.
 
-`LoggingEmailSender` must never be what production runs: a deployed 202 whose email
-went to the log is a sign-up flow that looks alive and verifies nobody. What stops
-that is `infra/prod/compose.yml`, which names the real sender and refuses to start
-without a key for it.
+Neither `LoggingEmailSender` nor `FileEmailSender` must ever be what production runs: a
+deployed 202 whose email went to a log or a file is a sign-up flow that looks alive and
+verifies nobody. What stops that is `infra/prod/compose.yml`, which names the real sender
+and refuses to start without a key for it.
 """
 
+import json
 import logging
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol
 
 import httpx
@@ -79,6 +81,25 @@ class LoggingEmailSender:
         logger.info("to %s: %s\n%s", to, subject, text)
 
 
+class FileEmailSender:
+    """Appends the message to a file as one line of JSON, instead of the wire.
+
+    For the Playwright suite, which drives the real sign-up flow and so has to read the
+    code the API "sent" it. A file rather than the log because the runner starts the API
+    as a child process (`scripts/e2e-api.sh`) and does not own its output stream.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def send(self, *, to: str, subject: str, text: str) -> None:
+        message = json.dumps({"to": to, "subject": subject, "text": text})
+        # One append of one short line, which the kernel writes whole: browser projects
+        # run in parallel, so several sign-ups can be sending at once.
+        with self._path.open("a", encoding="utf-8") as file:
+            file.write(f"{message}\n")
+
+
 class ResendEmailSender:
     """Hands the message to Resend's HTTP API.
 
@@ -125,6 +146,13 @@ class ResendEmailSender:
         logger.info("sent to %s: %s", to, message_id)
 
 
+def _file_sender() -> EmailSender:
+    """Read the path out of settings, refusing the half-configured case as resend does."""
+    if settings.email_file is None:
+        raise RuntimeError("MATCHPOINT_EMAIL_SENDER=file needs MATCHPOINT_EMAIL_FILE set")
+    return FileEmailSender(settings.email_file)
+
+
 def _resend_sender() -> EmailSender:
     """Read the key out of settings, refusing the half-configured case.
 
@@ -148,6 +176,7 @@ def create_email_sender() -> EmailSender:
     # what rejects a name that isn't here, at startup rather than at first send.
     senders: dict[str, Callable[[], EmailSender]] = {
         "logging": LoggingEmailSender,
+        "file": _file_sender,
         "resend": _resend_sender,
     }
     return senders[settings.email_sender]()

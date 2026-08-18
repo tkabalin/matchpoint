@@ -13,6 +13,7 @@ anyway, `@example.com` being a domain they answer 422 to on principle.
 import json
 import logging
 from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 import pytest
@@ -23,6 +24,7 @@ from matchpoint_api.config import Settings, settings
 from matchpoint_api.mail import (
     EMAIL_FROM,
     EmailSendError,
+    FileEmailSender,
     LoggingEmailSender,
     ResendEmailSender,
     create_email_sender,
@@ -194,6 +196,43 @@ def test_a_failed_send_keeps_the_code_out_of_the_log(caplog: pytest.LogCaptureFi
 
     assert "new@example.com" in caplog.text
     assert "123456" not in caplog.text
+
+
+def test_the_file_sender_appends_every_message_as_a_line_of_json(tmp_path: Path) -> None:
+    """One line per send, and the body in it: the Playwright suite reads the sign-up code
+    back out of this file, and picks its own message out by the address it went to."""
+    path = tmp_path / "mail.jsonl"
+    sender = FileEmailSender(path)
+
+    sender.send(to="first@example.com", subject="Your code", text="123456")
+    sender.send(to="second@example.com", subject="Your code", text="654321")
+
+    assert [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()] == [
+        {"to": "first@example.com", "subject": "Your code", "text": "123456"},
+        {"to": "second@example.com", "subject": "Your code", "text": "654321"},
+    ]
+
+
+def test_the_setting_selects_the_file_sender(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """What scripts/e2e-api.sh relies on, and the half a path on its own cannot show."""
+    monkeypatch.setattr(settings, "email_sender", "file")
+    monkeypatch.setattr(settings, "email_file", tmp_path / "mail.jsonl")
+
+    assert isinstance(create_email_sender(), FileEmailSender)
+
+
+def test_selecting_the_file_sender_without_a_path_fails_loudly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Resend's rule for the half-configured case: an e2e run whose mail went nowhere
+    readable must not start, since every spec that needs a code would fail instead."""
+    monkeypatch.setattr(settings, "email_sender", "file")
+    monkeypatch.setattr(settings, "email_file", None)
+
+    with pytest.raises(RuntimeError, match="MATCHPOINT_EMAIL_FILE"):
+        create_email_sender()
 
 
 def test_the_setting_selects_the_resend_sender(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -30,10 +30,15 @@ class Settings(BaseSettings):
     # MATCHPOINT_SESSION_COOKIE_SECURE=false in apps/api/.env.
     session_cookie_secure: bool = True
     # Which outbound email sender create_app builds (mail.py). "logging" writes the
-    # message to the log — right for dev and tests, a lie anywhere deployed; "resend"
-    # is the one that delivers, and is what infra/prod/compose.yml sets. The default
-    # stays the harmless one, so nothing sends real mail without being told to.
-    email_sender: Literal["logging", "resend"] = "logging"
+    # message to the log and "file" appends it to email_file, both right for dev and
+    # tests and a lie anywhere deployed; "resend" is the one that delivers, and is what
+    # infra/prod/compose.yml sets. The default stays a harmless one, so nothing sends
+    # real mail without being told to.
+    email_sender: Literal["logging", "file", "resend"] = "logging"
+    # Required when email_sender is "file", and unused otherwise. It exists for the
+    # Playwright suite, which drives the real sign-up flow and so has to read back the
+    # code the API "sent" (scripts/e2e-api.sh).
+    email_file: Path | None = None
     # Required when email_sender is "resend", and unused otherwise — create_email_sender
     # refuses the pairing rather than letting a blank key become a 502 per sign-up.
     # SecretStr because a plain str reaches repr(), and this object is the kind of thing
