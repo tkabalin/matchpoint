@@ -16,13 +16,16 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
 
 import { AuthShell } from "./auth-shell";
 
-type Step = "email" | "reset" | "done";
+// Mirrors sign-up's own step shape (email / otp / password), which this now matches
+// rather than combining verification and reset on one screen (#150).
+type Step = "email" | "otp" | "password" | "done";
 
 // Mirror the bounds the OpenAPI spec already publishes (VerifyResetCodeRequest.otp,
 // ResetPasswordRequest.new_password) so an ordinary typo is blocked client-side
@@ -40,20 +43,18 @@ export function ForgotPassword() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  // Neither submit is safely repeatable: a second forgot-password call replaces
-  // the code the first one emailed, and a second run at the reset step burns
+  // Neither request is safely repeatable, so the button is closed for the duration of
+  // one rather than left open to an impatient second click: a second forgot-password
+  // call replaces the code the first one emailed, and a second verify-reset-code burns
   // another attempt against the code's budget.
   const [submitting, setSubmitting] = useState(false);
-  // verify-reset-code spends the code as it answers it, so a retry after the password
-  // call failed must not send that code again: it would be refused as expired and cost
-  // the coach a reset they typed correctly. The cookie it set is the proof from here on.
-  const [codeVerified, setCodeVerified] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const retryCountdown = useCountdown(retryAfterSeconds);
   const waiting = retryCountdown !== null && retryCountdown > 0;
   const errorText = error && waiting ? `${error} Try again in ${retryCountdown}s.` : error;
 
   const canSubmitEmail = email !== "" && !waiting;
+  const canSubmitOtp = otp.length === OTP_LENGTH && !waiting;
   const otpWrongLength = otp !== "" && otp.length !== OTP_LENGTH;
   const passwordsMismatch = confirmPassword !== "" && password !== confirmPassword;
   const passwordTooShort = password !== "" && password.length < PASSWORD_MIN_LENGTH;
@@ -70,8 +71,7 @@ export function ForgotPassword() {
     password.length >= PASSWORD_MIN_LENGTH &&
     password.length <= PASSWORD_MAX_LENGTH &&
     passwordStrengthScore < PASSWORD_STRENGTH_MIN_SCORE;
-  const canSubmitReset =
-    otp.length === OTP_LENGTH &&
+  const canSubmitPassword =
     password.length >= PASSWORD_MIN_LENGTH &&
     password.length <= PASSWORD_MAX_LENGTH &&
     password === confirmPassword &&
@@ -88,7 +88,7 @@ export function ForgotPassword() {
       const { error: forgotPasswordError, response } = await forgotPassword({ body: { email } });
 
       if (response?.status === 202) {
-        setStep("reset");
+        setStep("otp");
         return;
       }
 
@@ -103,35 +103,41 @@ export function ForgotPassword() {
     }
   }
 
-  async function handleResetSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleOtpSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setRetryAfterSeconds(null);
     setSubmitting(true);
 
     try {
-      // Two calls behind the one button: the code is answered first, which is what
-      // mints the cookie reset-password reads. Splitting them across two screens is
-      // the point of the API change, and its own issue.
-      if (!codeVerified) {
-        const { error: verifyError, response: verifyResponse } = await verifyResetCode({
-          body: { email, otp },
-        });
+      const { error: verifyError, response } = await verifyResetCode({ body: { email, otp } });
 
-        if (verifyResponse?.status !== 200) {
-          if (verifyResponse?.status === 429) {
-            setRetryAfterSeconds(getRetryAfterSeconds(verifyResponse));
-          }
-          // 400 covers wrong code, expired code, unknown email, and attempt-budget-
-          // exhausted alike: one message for all four, shown verbatim. 429 is "Too
-          // many attempts".
-          setError(parseErrorMessage(verifyError, "Could not verify that code."));
-          return;
-        }
-
-        setCodeVerified(true);
+      if (response?.status === 200) {
+        // No token to capture — the verification cookie the backend just set is what
+        // reset-password (the next step) will present, not anything held here.
+        setStep("password");
+        return;
       }
 
+      if (response?.status === 429) {
+        setRetryAfterSeconds(getRetryAfterSeconds(response));
+      }
+
+      // 400 covers wrong code, expired code, unknown email, and attempt-budget-exhausted
+      // alike: one message for all four, shown verbatim. 429 is "Too many attempts".
+      setError(parseErrorMessage(verifyError, "Could not verify that code."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setRetryAfterSeconds(null);
+    setSubmitting(true);
+
+    try {
       const { error: resetPasswordError, response } = await resetPassword({
         body: { email, new_password: password },
       });
@@ -145,10 +151,10 @@ export function ForgotPassword() {
         setRetryAfterSeconds(getRetryAfterSeconds(response));
       }
 
-      // A 429 or an unreachable server leaves the verified code standing, so the button
-      // simply retries. A 401 means the cookie is gone, and the code with it, so the only
-      // way on is "Request a new one" below: re-answering a spent code cannot help. A 400
-      // means the code was fine but the server's policy refused the new password, shown
+      // A 429 or an unreachable server leaves the verified cookie standing, so the
+      // button simply retries. A 401 means the cookie is gone, so the only way on is
+      // "Start over" below: the code screen has nothing left to re-answer. A 400 means
+      // the code was fine but the server's policy refused the new password, shown
       // verbatim so the reason is legible.
       setError(parseErrorMessage(resetPasswordError, "Could not reset your password."));
     } finally {
@@ -156,6 +162,9 @@ export function ForgotPassword() {
     }
   }
 
+  // Shared by the OTP step's "request a new one" and the password step's "start
+  // over": both send the coach back to the email step, email preserved, without
+  // auto-firing a new forgot-password call — every request stays a deliberate click.
   function handleStartOver() {
     setStep("email");
     setOtp("");
@@ -163,7 +172,6 @@ export function ForgotPassword() {
     setConfirmPassword("");
     setError(null);
     setRetryAfterSeconds(null);
-    setCodeVerified(false);
   }
 
   if (step === "done") {
@@ -187,37 +195,17 @@ export function ForgotPassword() {
     );
   }
 
-  if (step === "reset") {
+  if (step === "password") {
     return (
       <AuthShell>
         <CardHeader>
           <CardTitle>
             <h1 className="text-center text-2xl tracking-wide">Reset Password</h1>
           </CardTitle>
-          {/* forgot-password answers every address alike (202 whether or not it's
-              registered), unlike sign-up's request-otp, so this can't claim the
-              account exists the way sign-up's OTP step does. */}
-          <CardDescription className="text-center">
-            If an account exists for {email}, we've sent it a code.
-          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleResetSubmit}>
+          <form onSubmit={handlePasswordSubmit}>
             <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="otp">Code</FieldLabel>
-                {/* Settled once the server has accepted it, because from then on the cookie
-                    is the proof and this field no longer decides anything. Left editable, a
-                    retry after a failed password call would silently ignore the new value
-                    and reset the password on the old code's proof. */}
-                <Input
-                  id="otp"
-                  type="text"
-                  value={otp}
-                  disabled={codeVerified}
-                  onChange={(event) => setOtp(event.target.value)}
-                />
-              </Field>
               <Field>
                 <FieldLabel htmlFor="password">New password</FieldLabel>
                 <PasswordInput
@@ -238,11 +226,6 @@ export function ForgotPassword() {
                 />
               </Field>
             </FieldGroup>
-            {otpWrongLength && (
-              <Alert variant="destructive" className="mt-3">
-                <AlertDescription>Enter the 6-digit code.</AlertDescription>
-              </Alert>
-            )}
             {passwordTooShort && (
               <Alert variant="destructive" className="mt-3">
                 <AlertDescription>Password must be at least 8 characters.</AlertDescription>
@@ -272,10 +255,77 @@ export function ForgotPassword() {
             )}
             <Button
               type="submit"
-              disabled={!canSubmitReset || submitting}
+              disabled={!canSubmitPassword || submitting}
               className="mt-5 w-full uppercase tracking-wide"
             >
               Reset Password
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className="flex-col">
+          <p className="text-center text-sm">
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="text-primary underline underline-offset-4"
+            >
+              Start over
+            </button>
+          </p>
+        </CardFooter>
+      </AuthShell>
+    );
+  }
+
+  if (step === "otp") {
+    return (
+      <AuthShell>
+        <CardHeader>
+          <CardTitle>
+            <h1 className="text-center text-2xl tracking-wide">Reset Password</h1>
+          </CardTitle>
+          {/* forgot-password answers every address alike (202 whether or not it's
+              registered), unlike sign-up's request-otp, so this can't claim the
+              account exists the way sign-up's OTP step does. */}
+          <CardDescription className="text-center">
+            If an account exists for {email}, we've sent it a code.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleOtpSubmit}>
+            <FieldGroup>
+              <Field className="items-center">
+                <FieldLabel htmlFor="otp">Code</FieldLabel>
+                {/* onComplete is deliberately left unwired — the explicit Verify button
+                    below stays the only way to submit (#148). */}
+                <InputOTP id="otp" maxLength={OTP_LENGTH} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </Field>
+            </FieldGroup>
+            {otpWrongLength && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>Enter the 6-digit code.</AlertDescription>
+              </Alert>
+            )}
+            {errorText && (
+              <Alert variant="destructive" className="mt-3">
+                <AlertDescription>{errorText}</AlertDescription>
+              </Alert>
+            )}
+            <Button
+              type="submit"
+              disabled={!canSubmitOtp || submitting}
+              className="mt-5 w-full uppercase tracking-wide"
+            >
+              Verify
             </Button>
           </form>
         </CardContent>

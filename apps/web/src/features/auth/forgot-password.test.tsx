@@ -26,18 +26,6 @@ function stubFetch(response: () => Response) {
   );
 }
 
-/** Stubs the reset step's two calls: 200 for the verification, 204 for the reset. One
- * status cannot serve both, so the stub answers on the URL it was called with. */
-function stubResetFlow() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((request: Request) => {
-      const status = request.url.includes("verify-reset-code") ? 200 : 204;
-      return Promise.resolve(new Response(null, { status }));
-    }),
-  );
-}
-
 /** Stubs a fetch that stays unresolved until the returned function answers it, so the
  * in-flight window is observable from a test — same as sign-up.test.tsx. */
 function stubPendingFetch() {
@@ -136,7 +124,7 @@ test("sends the email to /api/auth/forgot-password", async () => {
   expect(body).toEqual({ email: "coach@example.com" });
 });
 
-test("moves to the reset step on a 202 response", async () => {
+test("moves to the OTP step on a 202 response", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
   const user = userEvent.setup();
   await renderForgotPassword();
@@ -214,7 +202,7 @@ test("sends one forgot-password request however impatiently Continue is clicked"
   expect(await screen.findByLabelText("Code")).toBeInTheDocument();
 });
 
-async function goToResetStep(user: ReturnType<typeof userEvent.setup>) {
+async function goToOtpStep(user: ReturnType<typeof userEvent.setup>) {
   stubFetch(() => new Response(null, { status: 202 }));
   await renderForgotPassword();
   await fillAndSubmitEmail(user);
@@ -222,41 +210,166 @@ async function goToResetStep(user: ReturnType<typeof userEvent.setup>) {
   vi.unstubAllGlobals();
 }
 
-test("renders the reset step's fields once it's reached", async () => {
+test("renders the OTP field once the OTP step is reached", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToOtpStep(user);
 
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
-  expect(screen.getByLabelText("New password")).toBeInTheDocument();
-  expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+  expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
 });
 
-test("blocks the reset submit until the code and matching passwords are entered", async () => {
+test("updates the OTP field as the user types", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToOtpStep(user);
 
-  const submit = screen.getByRole("button", { name: "Reset Password" });
+  await user.type(screen.getByLabelText("Code"), "123456");
+
+  expect(screen.getByLabelText("Code")).toHaveValue("123456");
+});
+
+test("blocks the OTP submit until a code is entered", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+
+  const submit = screen.getByRole("button", { name: "Verify" });
   expect(submit).toBeDisabled();
 
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
-  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   expect(submit).toBeEnabled();
 });
 
 test("blocks submit while the code is the wrong length, with a visible hint", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123");
 
-  expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Verify" })).toBeDisabled();
   expect(await screen.findByRole("alert")).toHaveTextContent("Enter the 6-digit code.");
+});
+
+async function fillAndSubmitOtp(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.click(screen.getByRole("button", { name: "Verify" }));
+}
+
+test("sends the email and code to /api/auth/verify-reset-code", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(() => new Response(null, { status: 200 }));
+
+  await fillAndSubmitOtp(user);
+  await screen.findByLabelText("New password");
+
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/verify-reset-code");
+  const body = await realRequest.json();
+  expect(zVerifyResetCodeBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({ email: "coach@example.com", otp: "123456" });
+});
+
+test("shows the server's error and stays on the OTP step on a 400 response", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(
+    () => new Response(JSON.stringify({ detail: "Incorrect or expired code" }), { status: 400 }),
+  );
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("shows the retry wait and disables submit on a verify-reset-code 429 response", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  stubFetch(
+    () =>
+      new Response(JSON.stringify({ detail: "Too many attempts" }), {
+        status: 429,
+        headers: { "Retry-After": "7" },
+      }),
+  );
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts Try again in 7s.");
+  expect(screen.getByRole("button", { name: "Verify" })).toBeDisabled();
+});
+
+test("shows a generic error when the verify-reset-code request fails outright", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+
+  await fillAndSubmitOtp(user);
+
+  expect(await screen.findByRole("alert")).toBeInTheDocument();
+  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+});
+
+test("sends one verify-reset-code however impatiently Verify is clicked", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+  const respond = stubPendingFetch();
+
+  await fillAndSubmitOtp(user);
+  const submit = screen.getByRole("button", { name: "Verify" });
+  expect(submit).toBeDisabled();
+  await user.click(submit);
+
+  expect(fetch).toHaveBeenCalledTimes(1);
+
+  respond(new Response(null, { status: 200 }));
+  expect(await screen.findByLabelText("New password")).toBeInTheDocument();
+});
+
+test("requesting a new code from the OTP step returns to the email step with the email preserved", async () => {
+  const user = userEvent.setup();
+  await goToOtpStep(user);
+
+  await user.type(screen.getByLabelText("Code"), "123456");
+  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+
+  expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
+  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
+async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
+  await goToOtpStep(user);
+  stubFetch(() => new Response(null, { status: 200 }));
+  await fillAndSubmitOtp(user);
+  await screen.findByLabelText("New password");
+  vi.unstubAllGlobals();
+}
+
+test("renders the new password and confirm fields once the password step is reached", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  expect(screen.getByLabelText("New password")).toBeInTheDocument();
+  expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
+test("blocks the password submit until matching passwords are entered", async () => {
+  const user = userEvent.setup();
+  await goToPasswordStep(user);
+
+  const submit = screen.getByRole("button", { name: "Reset Password" });
+  expect(submit).toBeDisabled();
+
+  await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
+  await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
+  expect(submit).toBeEnabled();
 });
 
 test("blocks submit while the new password is too short, with a visible hint", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("New password"), "short");
 
@@ -268,7 +381,7 @@ test("blocks submit while the new password is too short, with a visible hint", a
 
 test("blocks submit while the passwords don't match, with a visible hint", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
   await user.type(screen.getByLabelText("Confirm password"), "zebra-canyon-1984-lark");
@@ -277,115 +390,88 @@ test("blocks submit while the passwords don't match, with a visible hint", async
   expect(await screen.findByRole("alert")).toHaveTextContent("Passwords don't match.");
 });
 
-async function fillAndSubmitReset(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Code"), "123456");
+async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
   await user.type(screen.getByLabelText("Confirm password"), "granite-otter-42-quiz");
   await user.click(screen.getByRole("button", { name: "Reset Password" }));
 }
 
-test("answers the code, then sends the new password to /api/auth/reset-password", async () => {
+test("sends the email and new password to /api/auth/reset-password, no code field", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
-  stubResetFlow();
+  await goToPasswordStep(user);
+  stubFetch(() => new Response(null, { status: 204 }));
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
   await screen.findByText("Your password has been updated.");
 
-  // The generated client calls fetch with a single Request object, not (url, init).
-  const requests = vi.mocked(fetch).mock.calls.map(([call]) => call as Request);
-  expect(requests).toHaveLength(2);
-  const [verifyRequest, resetRequest] = requests as [Request, Request];
-  expect(verifyRequest.url).toContain("/api/auth/verify-reset-code");
-  const verifyBody = await verifyRequest.json();
-  // The schema comes from the API's spec, the literal below from this test. Only the
-  // first can tell us the API would accept this body (see docs/testing.md).
-  expect(zVerifyResetCodeBody.safeParse(verifyBody).error).toBeUndefined();
-  expect(verifyBody).toEqual({ email: "coach@example.com", otp: "123456" });
+  const [request] = vi.mocked(fetch).mock.calls[0] ?? [];
+  expect(request).toBeInstanceOf(Request);
+  const realRequest = request as Request;
+  expect(realRequest.url).toContain("/api/auth/reset-password");
+  const body = await realRequest.json();
   // Guards the new_password/password naming trap: the request body's key must be
-  // new_password, matching ResetPasswordRequestWritable, not password. The code is not
-  // in it at all: the cookie the call above set is what carries that proof now.
-  expect(resetRequest.url).toContain("/api/auth/reset-password");
-  const resetBody = await resetRequest.json();
-  expect(zResetPasswordBody.safeParse(resetBody).error).toBeUndefined();
-  expect(resetBody).toEqual({
-    email: "coach@example.com",
-    new_password: "granite-otter-42-quiz",
-  });
+  // new_password, matching ResetPasswordRequestWritable, not password. The code is
+  // not in it at all: the cookie the OTP step's call set is what carries that proof.
+  expect(zResetPasswordBody.safeParse(body).error).toBeUndefined();
+  expect(body).toEqual({ email: "coach@example.com", new_password: "granite-otter-42-quiz" });
 });
 
-test("shows the server's error and stays on the reset step on a 400 response", async () => {
+test("shows the server's error and stays on the password step on a 400 response", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
   stubFetch(
-    () => new Response(JSON.stringify({ detail: "Incorrect or expired code" }), { status: 400 }),
+    () => new Response(JSON.stringify({ detail: "Password rejected by policy" }), { status: 400 }),
   );
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Incorrect or expired code");
-  expect(screen.getByLabelText("Code")).toBeInTheDocument();
-  // A refused code never reaches the password call: there is no cookie for it to use.
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Password rejected by policy");
+  expect(screen.getByLabelText("New password")).toBeInTheDocument();
 });
 
-test("shows the server's error and stays on the reset step on a 401 response", async () => {
+test("shows the server's error and stays on the password step on a 401 response", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
-  // The code verifies, and the reset then meets a 401: the proof it minted is missing or
-  // already spent, which from here means starting the flow over.
-  vi.stubGlobal(
-    "fetch",
-    vi
-      .fn()
-      .mockImplementation((request: Request) =>
-        Promise.resolve(
-          request.url.includes("verify-reset-code")
-            ? new Response(null, { status: 200 })
-            : new Response(JSON.stringify({ detail: "Reset code not verified" }), { status: 401 }),
-        ),
-      ),
+  await goToPasswordStep(user);
+  // The verification cookie is gone or already spent — from here the only way on is
+  // starting over, since there is nothing left on this screen to re-answer.
+  stubFetch(
+    () => new Response(JSON.stringify({ detail: "Reset code not verified" }), { status: 401 }),
   );
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Reset code not verified");
-  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+  expect(screen.getByLabelText("New password")).toBeInTheDocument();
 });
 
-test("shows the server's error, the retry wait, and stays on the reset step on a 429 response", async () => {
+test("shows the server's error, the retry wait, and stays on the password step on a 429 response", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
   stubFetch(
     () =>
-      new Response(JSON.stringify({ detail: "Too many attempts" }), {
+      new Response(JSON.stringify({ detail: "Too many requests" }), {
         status: 429,
         headers: { "Retry-After": "8" },
       }),
   );
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Too many attempts Try again in 8s.");
-  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests Try again in 8s.");
   expect(screen.getByRole("button", { name: "Reset Password" })).toBeDisabled();
 });
 
-test("retries the password call alone, so a failure does not spend the code twice", async () => {
+test("retries the password submit alone on failure, without re-verifying the code", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
-  // verify-reset-code spends the code as it answers it, so the retry has to go straight
-  // to the password call. Answering the code a second time would meet the 400 a spent one
-  // gets, losing a reset the coach typed correctly.
+  await goToPasswordStep(user);
+  // The OTP step's own call already spent the code by the time this screen is
+  // reached — nothing on the password step can trigger verify-reset-code again, so a
+  // retry here is just a second reset-password call.
   let resetCalls = 0;
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation((request: Request) => {
-      if (request.url.includes("verify-reset-code")) {
-        return Promise.resolve(new Response(null, { status: 200 }));
-      }
+    vi.fn().mockImplementation(() => {
       resetCalls += 1;
-      // No Retry-After, so nothing keeps the button disabled and the retry is a click away.
       return Promise.resolve(
         resetCalls === 1
           ? new Response(JSON.stringify({ detail: "Too many requests" }), { status: 429 })
@@ -394,82 +480,61 @@ test("retries the password call alone, so a failure does not spend the code twic
     }),
   );
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
   expect(await screen.findByRole("alert")).toHaveTextContent("Too many requests");
-  // And the code is settled, so the retry cannot be a different code than the one the
-  // proof was minted for.
-  expect(screen.getByLabelText("Code")).toBeDisabled();
 
   await user.click(screen.getByRole("button", { name: "Reset Password" }));
 
   expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
-  const verifications = vi
-    .mocked(fetch)
-    .mock.calls.filter(([request]) => (request as Request).url.includes("verify-reset-code"));
-  expect(verifications).toHaveLength(1);
   expect(resetCalls).toBe(2);
 });
 
 test("shows a generic error when the reset-password request fails outright", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
 
   expect(await screen.findByRole("alert")).toBeInTheDocument();
-  expect(screen.getByLabelText("Code")).toBeInTheDocument();
+  expect(screen.getByLabelText("New password")).toBeInTheDocument();
 });
 
-test("sends one reset request however impatiently Reset Password is clicked", async () => {
+test("sends one reset-password request however impatiently Reset Password is clicked", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
-  // Only the verification is left hanging; the reset behind it answers at once, so what
-  // the click count proves is that the flow itself ran only once.
-  let respond!: (response: Response) => void;
-  const pending = new Promise<Response>((resolve) => {
-    respond = resolve;
-  });
-  vi.stubGlobal(
-    "fetch",
-    vi
-      .fn()
-      .mockImplementationOnce(() => pending)
-      .mockImplementation(() => Promise.resolve(new Response(null, { status: 204 }))),
-  );
+  await goToPasswordStep(user);
+  const respond = stubPendingFetch();
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
   const submit = screen.getByRole("button", { name: "Reset Password" });
   expect(submit).toBeDisabled();
   await user.click(submit);
 
   expect(fetch).toHaveBeenCalledTimes(1);
 
-  respond(new Response(null, { status: 200 }));
+  respond(new Response(null, { status: 204 }));
   expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
 });
 
-test("reaches the confirmation view once both calls succeed, and its link signs back in", async () => {
+test("reaches the confirmation view once both steps succeed, and its link signs back in", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
-  stubResetFlow();
+  await goToPasswordStep(user);
+  stubFetch(() => new Response(null, { status: 204 }));
 
-  await fillAndSubmitReset(user);
+  await fillAndSubmitPassword(user);
 
   expect(await screen.findByText("Your password has been updated.")).toBeInTheDocument();
   await user.click(screen.getByRole("link", { name: "Sign in" }));
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
-test("starting over returns to the email step with the email preserved", async () => {
+test("starting over from the password step returns to the email step with the email preserved", async () => {
   const user = userEvent.setup();
-  await goToResetStep(user);
+  await goToPasswordStep(user);
 
-  await user.type(screen.getByLabelText("Code"), "123456");
   await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
-  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+  await user.click(screen.getByRole("button", { name: "Start over" }));
 
   expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
-  expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("New password")).not.toBeInTheDocument();
 });
