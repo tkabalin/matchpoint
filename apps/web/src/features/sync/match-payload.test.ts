@@ -22,6 +22,13 @@ describe("toMatchCreate", () => {
     expect(() => zMatchCreate.parse(toMatchCreate(match()))).not.toThrow();
   });
 
+  // Dropping the id would cost the server the only thing that lets it recognise a
+  // replayed flush, so a retry would store the match a second time (#110).
+  test("sends the id the match was minted with", () => {
+    const played = match();
+    expect(toMatchCreate(played).id).toBe(played.matchId);
+  });
+
   test("maps the tracked player, not the opponent, to player_id", () => {
     expect(toMatchCreate(match()).player_id).toBe(TRACKED_ID);
   });

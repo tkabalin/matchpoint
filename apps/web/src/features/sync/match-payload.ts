@@ -18,6 +18,9 @@ import type { Match } from "@/features/capture/match";
 
 export function toMatchCreate(match: Match): MatchCreate {
   return {
+    // The id minted on the device, sent so a POST replayed after a dropped response
+    // returns the match already stored instead of writing a second one (#110).
+    id: match.matchId,
     player_id: match.trackedPlayerId,
     played_on: match.playedOn,
     // "unspecified" is a real SurfaceType member (see match.ts); the backend has no
