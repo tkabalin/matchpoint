@@ -15,7 +15,10 @@ test("loads the player roster at /players", async ({ page }) => {
 // The wait covers the query client's three retries before it gives up.
 test("loads a player profile at /players/:playerId", async ({ page }) => {
   await page.goto("/players/3f1c2b4e-0000-4000-8000-000000000001");
-  await expect(page.getByRole("alert")).toHaveText("Could not load that player.", {
+  // Regex rather than an exact string: PlayerLoadError's generic branch (#78) pairs
+  // the headline with a second line of detail, and this only needs to confirm the
+  // headline is present, not own the whole alert's copy.
+  await expect(page.getByRole("alert")).toHaveText(/Could not load that player\./, {
     timeout: 20_000,
   });
 });

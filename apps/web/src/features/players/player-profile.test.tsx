@@ -196,7 +196,22 @@ test("falls back to a generic message for an unexpected failure", async () => {
 
   await renderPlayerProfile();
 
-  expect(await screen.findByText("Could not load that player")).toBeInTheDocument();
+  expect(await screen.findByText("Could not load that player.")).toBeInTheDocument();
+});
+
+// Regression: PlayerLoadError's move off `Alert` onto `Empty` (#78) dropped the
+// role="alert" the original error carried — caught by e2e/smoke.spec.ts, which
+// exercises exactly this branch against a live server with no API behind it.
+test("announces a load failure as an alert, for every branch", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () =>
+      new Response(JSON.stringify({ detail: "Player not found" }), { status: 404 }),
+    "/api/matches": () => Response.json([]),
+  });
+
+  await renderPlayerProfile();
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Player not found");
 });
 
 test("links back to home", async () => {
