@@ -95,7 +95,8 @@ test("renders the player's name and static fields", async () => {
 
   expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
   expect(screen.getByText("AN")).toBeInTheDocument();
-  expect(screen.getByText("2008-04-12")).toBeInTheDocument();
+  // The static fields sit in the Overview tab's details panel, which loads with it.
+  expect(await screen.findByText("2008-04-12")).toBeInTheDocument();
   expect(screen.getByText("right")).toBeInTheDocument();
   expect(screen.getByText("Strong two-handed backhand.")).toBeInTheDocument();
 });
@@ -110,10 +111,10 @@ test("shows a placeholder for unset fields", async () => {
   await renderPlayerProfile();
 
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
-  expect(screen.getAllByText("—")).toHaveLength(3);
+  expect(await screen.findAllByText("—")).toHaveLength(3);
 });
 
-test("shows that player's match count", async () => {
+test("lists that player's matches on the Matches tab", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () =>
@@ -132,9 +133,13 @@ test("shows that player's match count", async () => {
       ]),
   });
 
+  const user = userEvent.setup();
   await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  expect(await screen.findByText("Matches: 1")).toBeInTheDocument();
+  await user.click(screen.getByRole("tab", { name: "Matches" }));
+
+  expect(await screen.findByText("vs T. Naidoo")).toBeInTheDocument();
 });
 
 test("shows an error message when the player can't be loaded", async () => {
@@ -157,7 +162,7 @@ test("links back to home", async () => {
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  await user.click(screen.getByRole("link", { name: "← Home" }));
+  await user.click(screen.getByRole("link", { name: "Back to home" }));
 
   expect(await screen.findByRole("heading", { name: "Welcome to Home" })).toBeInTheDocument();
 });
@@ -171,7 +176,7 @@ test("links to the match setup screen", async () => {
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  await user.click(screen.getByRole("button", { name: "Start match" }));
+  await user.click(screen.getByRole("link", { name: "Start match" }));
 
   expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
 });
@@ -185,41 +190,17 @@ test("switches to a tab's content when its trigger is clicked", async () => {
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  expect(screen.queryByText(/Serve — Amahle Nkosi/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Serve or return" })).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("tab", { name: "Serve" }));
 
-  expect(await screen.findByText(/Serve — Amahle Nkosi/)).toBeInTheDocument();
+  expect(await screen.findByText("Hold % (service games won)")).toBeInTheDocument();
 });
 
-test("H2H tab lists opponents derived from match history, with meeting counts", async () => {
+test("H2H tab lists opponents, drills into one, and comes back", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
-    "/api/matches": () =>
-      Response.json([
-        {
-          id: "3f1c2b4e-0000-4000-8000-00000000ma01",
-          player_id: player.id,
-          opponent_name: "T. Naidoo",
-          played_on: "2026-08-10",
-          surface: "hard",
-          event: null,
-          scoring_system: "traditional",
-          created_at: "2026-08-11T09:00:00Z",
-          updated_at: "2026-08-11T09:00:00Z",
-        },
-        {
-          id: "3f1c2b4e-0000-4000-8000-00000000ma02",
-          player_id: player.id,
-          opponent_name: "T. Naidoo",
-          played_on: "2026-08-03",
-          surface: "clay",
-          event: null,
-          scoring_system: "traditional",
-          created_at: "2026-08-04T09:00:00Z",
-          updated_at: "2026-08-04T09:00:00Z",
-        },
-      ]),
+    "/api/matches": () => Response.json([]),
   });
   const user = userEvent.setup();
   await renderPlayerProfile();
@@ -227,14 +208,17 @@ test("H2H tab lists opponents derived from match history, with meeting counts", 
 
   await user.click(screen.getByRole("tab", { name: "H2H" }));
 
-  expect(await screen.findByText("T. Naidoo")).toBeInTheDocument();
-  expect(screen.getByText("2 meetings")).toBeInTheDocument();
+  expect(await screen.findByText("A. Torres")).toBeInTheDocument();
+  expect(screen.getByText("n=4 · 3–1 · 67%")).toBeInTheDocument();
+  // Under the threshold a rate would be noise, so only the raw record is shown.
+  expect(screen.getByText("n=2 · 1–1 · too few for a rate")).toBeInTheDocument();
 
-  await user.click(screen.getByText("T. Naidoo"));
+  await user.click(screen.getByRole("button", { name: /A. Torres/ }));
 
-  expect(await screen.findByText(/H2H detail vs T. Naidoo/)).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "vs A. Torres" })).toBeInTheDocument();
+  expect(screen.getByText(/Her backhand under pressure/)).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "← Back to opponents" }));
+  await user.click(screen.getByRole("button", { name: "Back to opponents" }));
 
-  expect(await screen.findByText("T. Naidoo")).toBeInTheDocument();
+  expect(await screen.findByText("A. Torres")).toBeInTheDocument();
 });
