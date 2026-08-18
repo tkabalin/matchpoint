@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,7 +11,13 @@ from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Match, Player
 from matchpoint_api.schemas.errors import ErrorDetail
-from matchpoint_api.schemas.match import MatchCreate, MatchRead, MatchUpdate
+from matchpoint_api.schemas.match import (
+    MatchCaptureClaim,
+    MatchCaptureRead,
+    MatchCreate,
+    MatchRead,
+    MatchUpdate,
+)
 
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
@@ -32,18 +39,34 @@ router = APIRouter(
 
 DbSession = Annotated[Session, Depends(get_db)]
 
+# How long a capture claim stands without being renewed. Claiming again renews it, so
+# this only bounds how long a device that has gone quiet keeps the match to itself: it
+# outlasts any plausible match, because a device capturing offline cannot renew, and
+# the release route frees a match sooner when a device is not coming back.
+CAPTURE_CLAIM_TTL = timedelta(hours=4)
 
-def match_for_coach(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Match:
+
+def match_for_coach(
+    db: Session, match_id: uuid.UUID, coach_id: uuid.UUID, *, for_update: bool = False
+) -> Match:
     """One coach's match by id, or a 404.
 
     Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
     confirm the id exists, and ids must stay unenumerable across coaches.
+    `for_update` takes a row lock, which every route that reads the claim and then
+    writes it needs: without it two requests read the same row and both write, so a
+    second device wins a claim, or a finish clears one taken since it read.
     """
-    match = db.scalar(
+    statement = (
         select(Match)
         .join(Player, Match.player_id == Player.id)
         .where(Match.id == match_id, Player.coach_id == coach_id)
     )
+    if for_update:
+        # of=Match so the lock is on the row being written, not on the player joined
+        # to prove ownership.
+        statement = statement.with_for_update(of=Match)
+    match = db.scalar(statement)
     if match is None:
         raise HTTPException(status_code=404, detail="Match not found")
     return match
@@ -109,21 +132,96 @@ def list_matches(
     return list(db.scalars(statement))
 
 
+def capture_holder(match: Match) -> uuid.UUID | None:
+    """The device capturing this match, or None while it is free to claim.
+
+    A lapsed claim counts as free: a device that stops talking to the server never
+    releases, so the deadline is what keeps an abandoned claim from locking the match
+    for good. The point ingestion endpoint (#107) checks the holder through here too.
+    """
+    expires_at = match.capture_claim_expires_at
+    if expires_at is None or expires_at <= datetime.now(UTC):
+        return None
+    return match.capture_claim_device_id
+
+
 @router.get("/{match_id}", response_model=MatchRead)
 def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
     return match_for_coach(db, match_id, coach.id)
 
 
-@router.patch("/{match_id}", response_model=MatchRead)
+# The 409 is declared because the client branches on it: a recorded result closes the
+# match to edits, so an edit screen has to send the coach to delete-and-re-record
+# rather than retry.
+@router.patch(
+    "/{match_id}",
+    response_model=MatchRead,
+    responses={409: {"model": ErrorDetail, "description": "Match is completed"}},
+)
 def update_match(
     match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
 ) -> Match:
-    match = match_for_coach(db, match_id, coach.id)
+    # Locked for the read like the capture routes: the completed check and the claim
+    # clearing below both read then write, so an unlocked read lets a second result
+    # land, and leaves a claim taken since the read standing.
+    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    # A recorded result completes the match and locks it (#108). Re-sending the values
+    # already stored is not an edit and answers 200: the client queues its writes
+    # offline and retries them, and a retried finish must not come back as a failure.
+    if match.result is not None and any(
+        getattr(match, field) != value
+        for field, value in data.model_dump(exclude_unset=True).items()
+    ):
+        raise HTTPException(status_code=409, detail="Match is completed")
     # player_id is not on MatchUpdate, so apply_to cannot move a match to another
     # player. updated_at is the column's onupdate, never set here.
     data.apply_to(match)
+    if match.result is not None:
+        # Finishing the match ends capture, so the claim goes with it rather than
+        # standing until it lapses over a match nothing can capture.
+        match.capture_claim_device_id = None
+        match.capture_claim_expires_at = None
     db.commit()
     return match
+
+
+# One 409 covering both refusals, distinguished by its message: either way the answer
+# is that capture cannot start here, and a client branching on the wording would be
+# reading a sentence rather than a status.
+@router.post(
+    "/{match_id}/capture",
+    response_model=MatchCaptureRead,
+    responses={409: {"model": ErrorDetail, "description": "Match cannot be captured"}},
+)
+def claim_capture(
+    match_id: uuid.UUID, data: MatchCaptureClaim, db: DbSession, coach: CurrentCoach
+) -> MatchCaptureRead:
+    """Claim a match for capture on this device, or renew a claim it already holds."""
+    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    if match.result is not None:
+        raise HTTPException(status_code=409, detail="Match is completed")
+    holder = capture_holder(match)
+    if holder is not None and holder != data.device_id:
+        raise HTTPException(status_code=409, detail="Match is being captured on another device")
+    match.capture_claim_device_id = data.device_id
+    expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
+    match.capture_claim_expires_at = expires_at
+    db.commit()
+    return MatchCaptureRead(device_id=data.device_id, expires_at=expires_at)
+
+
+@router.post("/{match_id}/capture/release", status_code=204)
+def release_capture(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
+    """Free a match for capture on another device."""
+    # Any of the coach's devices may release, and the request names none: the device
+    # that mattered is often the one that cannot ask (flat battery, app gone), and a
+    # coach moving to their tablet mid-match needs a way through that does not wait
+    # out the claim. Releasing a match nobody holds is a no-op, so a retry is safe.
+    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    if match.capture_claim_device_id is not None:
+        match.capture_claim_device_id = None
+        match.capture_claim_expires_at = None
+        db.commit()
 
 
 @router.delete("/{match_id}", status_code=204)

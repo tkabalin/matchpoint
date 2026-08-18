@@ -133,6 +133,34 @@ export type LoginRequest = {
 };
 
 /**
+ * MatchCaptureClaim
+ *
+ * The device asking to capture a match, named by an id it mints and keeps.
+ */
+export type MatchCaptureClaim = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+};
+
+/**
+ * MatchCaptureRead
+ *
+ * A live capture claim: who holds the match, and when the claim lapses.
+ */
+export type MatchCaptureRead = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Expires At
+     */
+    expires_at: string;
+};
+
+/**
  * MatchCreate
  */
 export type MatchCreate = {
@@ -1123,6 +1151,10 @@ export type UpdateMatchErrors = {
      */
     401: ErrorDetail;
     /**
+     * Match is completed
+     */
+    409: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -1142,6 +1174,86 @@ export type UpdateMatchResponses = {
 };
 
 export type UpdateMatchResponse = UpdateMatchResponses[keyof UpdateMatchResponses];
+
+export type ClaimCaptureData = {
+    body: MatchCaptureClaim;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/capture';
+};
+
+export type ClaimCaptureErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Match cannot be captured
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ClaimCaptureError = ClaimCaptureErrors[keyof ClaimCaptureErrors];
+
+export type ClaimCaptureResponses = {
+    /**
+     * Successful Response
+     */
+    200: MatchCaptureRead;
+};
+
+export type ClaimCaptureResponse = ClaimCaptureResponses[keyof ClaimCaptureResponses];
+
+export type ReleaseCaptureData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/capture/release';
+};
+
+export type ReleaseCaptureErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ReleaseCaptureError = ReleaseCaptureErrors[keyof ReleaseCaptureErrors];
+
+export type ReleaseCaptureResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ReleaseCaptureResponse = ReleaseCaptureResponses[keyof ReleaseCaptureResponses];
 
 export type ListPlayersData = {
     body?: never;

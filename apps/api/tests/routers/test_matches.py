@@ -1,12 +1,13 @@
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.models import Coach, Match, MatchResult, Surface
+from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
 from tests.factories import make_coach, make_match, make_player, sign_in
 
 
@@ -669,6 +670,72 @@ def test_update_match_records_a_result(
     assert saved.result is MatchResult.WIN
 
 
+def test_update_match_on_a_completed_match_is_409(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A recorded result locks the match: the coach's remedy for a wrong one is to
+    delete the match and record it again, which is why the row has to come through
+    the refusal untouched."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"opponent_name": "Iga"})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.opponent_name == "Aryna"
+
+
+def test_update_match_cannot_change_a_recorded_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The result is the field that completes the match, so it is locked by the same
+    rule as the rest and not exempt from it."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"result": "loss"})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.result is MatchResult.WIN
+
+
+def test_update_match_resending_the_stored_values_is_a_no_op(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The lock refuses edits, not repeats: capture queues its writes offline and
+    retries them, so the second delivery of a finish that already landed has to read
+    as success rather than park in the client's outbox."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        opponent_name="Aryna",
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(
+        f"/matches/{match.id}", json={"result": "win", "opponent_name": "Aryna"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result"] == "win"
+
+
 def test_update_match_rejects_a_null_played_on(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -825,6 +892,298 @@ def test_delete_match_malformed_id_is_422(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_delete_match_is_allowed_on_a_completed_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The one thing the completed lock leaves open, and the reason the lock can be as
+    strict as it is: a match recorded wrongly is cleared away and entered again."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def _claimed_match(
+    session: Session, coach: Coach, device_id: uuid.UUID, **overrides: object
+) -> Match:
+    """One of the coach's matches, being captured on `device_id`.
+
+    The claim runs the full lifetime unless a test passes an expiry of its own, which
+    is how the lapsed-claim cases are arranged without waiting four hours for one.
+    """
+    return make_match(
+        session,
+        player_id=make_player(session, coach_id=coach.id).id,
+        **{
+            "capture_claim_device_id": device_id,
+            "capture_claim_expires_at": datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+        }
+        | overrides,
+    )
+
+
+def test_claim_capture_takes_a_free_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    device_id = uuid.uuid4()
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(device_id)})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["device_id"] == str(device_id)
+    # The whole lifetime and not merely a deadline in the future: the lapse design
+    # rests on the figure, and a route granting one of its own would pass anything
+    # weaker while leaving a claim to expire mid-match.
+    granted = datetime.fromisoformat(body["expires_at"])
+    assert CAPTURE_CLAIM_TTL - timedelta(minutes=1) < granted - datetime.now(UTC)
+    assert granted - datetime.now(UTC) <= CAPTURE_CLAIM_TTL
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == device_id
+    assert saved.capture_claim_expires_at == granted
+
+
+def test_claim_capture_renews_the_claim_of_the_device_holding_it(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Claiming again is how a device keeps the match: without the renewal, a capture
+    running longer than the lifetime would lose the match part-way through it."""
+    device_id = uuid.uuid4()
+    match = _claimed_match(
+        db_session,
+        coach,
+        device_id,
+        capture_claim_expires_at=datetime.now(UTC) + timedelta(minutes=1),
+    )
+    db_session.commit()
+    before = match.capture_claim_expires_at
+    assert before is not None
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(device_id)})
+
+    assert response.status_code == 200
+    assert datetime.fromisoformat(response.json()["expires_at"]) > before
+
+
+def test_claim_capture_refuses_a_second_device(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The whole point of the claim: the same coach on a second device would otherwise
+    capture the same match twice over, and the two streams of points cannot be
+    reconciled afterwards."""
+    holder = uuid.uuid4()
+    match = _claimed_match(db_session, coach, holder)
+    db_session.commit()
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(uuid.uuid4())})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == holder
+
+
+def test_claim_capture_takes_over_a_lapsed_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A device that goes quiet never releases, so the deadline is what stops one
+    flat battery locking a match out of capture for good."""
+    device_id = uuid.uuid4()
+    match = _claimed_match(
+        db_session,
+        coach,
+        uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    db_session.commit()
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(device_id)})
+
+    assert response.status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == device_id
+
+
+def test_claim_capture_on_a_completed_match_is_409(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Capture is for a match in progress, and a recorded result is what ends one."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(uuid.uuid4())})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id is None
+
+
+def test_claim_capture_of_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The 404 every other match route gives across the boundary, and the claim it
+    would have overwritten is left alone."""
+    holder = uuid.uuid4()
+    other_match = make_match(
+        db_session,
+        capture_claim_device_id=holder,
+        capture_claim_expires_at=datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+    )
+    db_session.commit()
+
+    response = client.post(
+        f"/matches/{other_match.id}/capture", json={"device_id": str(uuid.uuid4())}
+    )
+
+    assert response.status_code == 404
+
+    saved = db_session.get(Match, other_match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == holder
+
+
+@pytest.mark.usefixtures("coach")
+def test_claim_capture_unknown_id_is_404(client: TestClient) -> None:
+    response = client.post(
+        f"/matches/{uuid.uuid4()}/capture", json={"device_id": str(uuid.uuid4())}
+    )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.usefixtures("coach")
+def test_claim_capture_requires_a_device_id(client: TestClient) -> None:
+    """The claim is worth nothing without one: a claim naming nobody could not tell a
+    renewal from a second device."""
+    response = client.post(f"/matches/{uuid.uuid4()}/capture", json={})
+
+    assert response.status_code == 422
+
+
+def test_release_capture_frees_the_match_for_another_device(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Release names no device deliberately: it is how a coach whose phone died moves
+    to the tablet without waiting the claim out."""
+    match = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+
+    assert client.post(f"/matches/{match.id}/capture/release").status_code == 204
+
+    response = client.post(f"/matches/{match.id}/capture", json={"device_id": str(uuid.uuid4())})
+
+    assert response.status_code == 200
+
+
+def test_release_capture_on_an_unclaimed_match_is_a_no_op(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Retried like every other write the client queues, so releasing twice is a
+    second 204 rather than an error."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert client.post(f"/matches/{match.id}/capture/release").status_code == 204
+    assert client.post(f"/matches/{match.id}/capture/release").status_code == 204
+
+
+def test_release_capture_of_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A release answered across the boundary would drop another coach's device out of
+    a match it is part-way through capturing."""
+    holder = uuid.uuid4()
+    other_match = make_match(
+        db_session,
+        capture_claim_device_id=holder,
+        capture_claim_expires_at=datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+    )
+    db_session.commit()
+
+    response = client.post(f"/matches/{other_match.id}/capture/release")
+
+    assert response.status_code == 404
+
+    saved = db_session.get(Match, other_match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == holder
+
+
+def test_recording_the_result_releases_the_capture_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Finishing the match ends capture, so the claim goes with it rather than
+    standing for hours over a match nothing can capture."""
+    match = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+
+    assert client.patch(f"/matches/{match.id}", json={"result": "win"}).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id is None
+    assert saved.capture_claim_expires_at is None
+
+
+@pytest.mark.parametrize(
+    ("method", "suffix", "body"),
+    [
+        ("post", "/capture", {"device_id": str(uuid.UUID(int=1))}),
+        ("post", "/capture/release", None),
+        ("patch", "", {"result": "win"}),
+    ],
+)
+def test_the_routes_that_write_the_claim_lock_the_match_row(
+    client: TestClient,
+    db_session: Session,
+    coach: Coach,
+    method: str,
+    suffix: str,
+    body: dict[str, str] | None,
+) -> None:
+    """Each of these reads the claim and then writes it, so the read has to be locked:
+    two requests reading before either writes would both win. Pinned on the emitted SQL
+    because the suite shares one session, which cannot produce two concurrent requests,
+    so dropping the lock would otherwise leave every test here green."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    statements: list[str] = []
+
+    @event.listens_for(db_session.get_bind(), "before_cursor_execute")
+    def _record(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    response = getattr(client, method)(f"/matches/{match.id}{suffix}", json=body)
+
+    assert response.status_code in {200, 204}
+    assert any("FOR UPDATE OF matches" in statement for statement in statements)
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     [
@@ -833,6 +1192,8 @@ def test_delete_match_malformed_id_is_422(client: TestClient) -> None:
         ("get", f"/matches/{uuid.UUID(int=0)}"),
         ("patch", f"/matches/{uuid.UUID(int=0)}"),
         ("delete", f"/matches/{uuid.UUID(int=0)}"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/capture"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:

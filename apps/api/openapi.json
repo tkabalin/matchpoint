@@ -255,6 +255,43 @@
         "title": "LoginRequest",
         "type": "object"
       },
+      "MatchCaptureClaim": {
+        "additionalProperties": false,
+        "description": "The device asking to capture a match, named by an id it mints and keeps.",
+        "properties": {
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id"
+        ],
+        "title": "MatchCaptureClaim",
+        "type": "object"
+      },
+      "MatchCaptureRead": {
+        "description": "A live capture claim: who holds the match, and when the claim lapses.",
+        "properties": {
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "expires_at"
+        ],
+        "title": "MatchCaptureRead",
+        "type": "object"
+      },
       "MatchCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2004,6 +2041,16 @@
             },
             "description": "Not signed in"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match is completed"
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2026,6 +2073,147 @@
           }
         },
         "summary": "Update Match",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/{match_id}/capture": {
+      "post": {
+        "description": "Claim a match for capture on this device, or renew a claim it already holds.",
+        "operationId": "claim_capture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchCaptureClaim"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchCaptureRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match cannot be captured"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Claim Capture",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/{match_id}/capture/release": {
+      "post": {
+        "description": "Free a match for capture on another device.",
+        "operationId": "release_capture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Release Capture",
         "tags": [
           "matches"
         ]

@@ -61,6 +61,25 @@ export const zLoginRequest = z.object({
 });
 
 /**
+ * MatchCaptureClaim
+ *
+ * The device asking to capture a match, named by an id it mints and keeps.
+ */
+export const zMatchCaptureClaim = z.object({
+    device_id: z.uuid()
+});
+
+/**
+ * MatchCaptureRead
+ *
+ * A live capture claim: who holds the match, and when the claim lapses.
+ */
+export const zMatchCaptureRead = z.object({
+    device_id: z.uuid(),
+    expires_at: z.iso.datetime()
+});
+
+/**
  * MatchResult
  *
  * Whether the tracked player won, from their side and never the opponent's.
@@ -427,6 +446,26 @@ export const zUpdateMatchPath = z.object({
  * Successful Response
  */
 export const zUpdateMatchResponse = zMatchRead;
+
+export const zClaimCaptureBody = zMatchCaptureClaim;
+
+export const zClaimCapturePath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zClaimCaptureResponse = zMatchCaptureRead;
+
+export const zReleaseCapturePath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zReleaseCaptureResponse = z.void();
 
 /**
  * Response List Players

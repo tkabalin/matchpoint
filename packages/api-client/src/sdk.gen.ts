@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -229,6 +229,27 @@ export const updateMatch = <ThrowOnError extends boolean = false>(options: Optio
         ...options.headers
     }
 });
+
+/**
+ * Claim Capture
+ *
+ * Claim a match for capture on this device, or renew a claim it already holds.
+ */
+export const claimCapture = <ThrowOnError extends boolean = false>(options: Options<ClaimCaptureData, ThrowOnError>): RequestResult<ClaimCaptureResponses, ClaimCaptureErrors, ThrowOnError> => (options.client ?? client).post<ClaimCaptureResponses, ClaimCaptureErrors, ThrowOnError>({
+    url: '/matches/{match_id}/capture',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Release Capture
+ *
+ * Free a match for capture on another device.
+ */
+export const releaseCapture = <ThrowOnError extends boolean = false>(options: Options<ReleaseCaptureData, ThrowOnError>): RequestResult<ReleaseCaptureResponses, ReleaseCaptureErrors, ThrowOnError> => (options.client ?? client).post<ReleaseCaptureResponses, ReleaseCaptureErrors, ThrowOnError>({ url: '/matches/{match_id}/capture/release', ...options });
 
 /**
  * List Players

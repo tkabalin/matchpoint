@@ -65,6 +65,22 @@ class MatchUpdate(UpdateModel):
     result: MatchResult | None = None
 
 
+class MatchCaptureClaim(RequestModel):
+    """The device asking to capture a match, named by an id it mints and keeps."""
+
+    device_id: uuid.UUID
+
+
+# Answered by the capture routes and deliberately absent from MatchRead: a claim read
+# off a list is already out of date, and the only answer a client can act on is the one
+# its own claim request gives it.
+class MatchCaptureRead(BaseModel):
+    """A live capture claim: who holds the match, and when the claim lapses."""
+
+    device_id: uuid.UUID
+    expires_at: datetime
+
+
 class MatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
