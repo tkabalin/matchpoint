@@ -24,6 +24,10 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+# What the API the suite runs against would have emailed, and the session the signed-up
+# coach earned (scripts/e2e-api.sh, apps/web/e2e/auth.setup.ts).
+/apps/web/e2e/.mail.jsonl
+/apps/web/e2e/.auth/
 
 # -----------------------------------------------------------------------------
 # Python / uv / FastAPI (apps/api)
