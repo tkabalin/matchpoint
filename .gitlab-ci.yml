@@ -266,9 +266,51 @@ web-e2e:
   # needs: [] deliberately — this is the longest job in the pipeline, so it
   # starts at t=0 rather than waiting for a lint stage it has no dependency on.
   needs: []
-  rules: *web-app-rules
+  # Spelled out rather than sharing *web-app-rules with web-test: the suite runs
+  # against the real API (docs/testing.md), so apps/api and the script that boots
+  # it are inputs to this job and to no other web one.
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - apps/web/**/*
+        - apps/api/**/*
+        - packages/**/*
+        - scripts/e2e-api.sh
+        - package.json
+        - pnpm-lock.yaml
+        - pnpm-workspace.yaml
+        - tsconfig.base.json
+        - .gitlab-ci.yml
+  # api-test's service and settings, since scripts/e2e-api.sh needs the same
+  # server. It creates and migrates matchpoint_e2e itself, so only the database
+  # named in the URL differs from what the API is handed here. Its local-host
+  # guard needs the same waiver conftest's does, for the same reason.
+  services:
+    - postgres:18
+  variables:
+    UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
+    POSTGRES_USER: matchpoint
+    POSTGRES_PASSWORD: matchpoint
+    POSTGRES_DB: matchpoint
+    MATCHPOINT_DATABASE_URL: postgresql+psycopg://matchpoint:matchpoint@postgres:5432/matchpoint_e2e
+    MATCHPOINT_TEST_ALLOW_NONLOCAL_DB: "1"
+  # Both pull-only: web-lint pushes the pnpm store under its key and python-lint
+  # pushes uv's under its own, so neither is produced here. cache: is a list, so
+  # extends replaces .web-base's entry wholesale rather than merging.
   cache:
-    policy: pull
+    - key:
+        files:
+          - pnpm-lock.yaml
+      paths:
+        - .pnpm-store
+      policy: pull
+    - key:
+        files:
+          - apps/api/uv.lock
+      paths:
+        - .uv-cache
+      policy: pull
   # The image tag must track @playwright/test in pnpm-lock.yaml. It ships the
   # browser builds that release expects, which is what the suite runs against:
   # pnpm doesn't execute the playwright postinstall that would otherwise
@@ -276,6 +318,12 @@ web-e2e:
   # image doesn't carry.
   image: mcr.microsoft.com/playwright:v1.62.1-noble
   script:
+    # The API runs in this container too (Playwright starts it), and this image
+    # carries browsers rather than a Python toolchain. Pinned via astral's
+    # per-version installer URL to the exact uv the api jobs' floating 0.11
+    # image tag currently resolves to; bump both together.
+    - curl -LsSf https://astral.sh/uv/0.11.33/install.sh | sh
+    - export PATH="$HOME/.local/bin:$PATH"
     - pnpm --filter @matchpoint/web run test:e2e
   artifacts:
     when: always
