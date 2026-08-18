@@ -263,6 +263,30 @@ lands only after the session cookie proves live, so nothing an outsider sends ca
 budget. The burst is sized for the legitimate worst case, an offline outbox flushing a full match
 point by point, and the sustained rate for a runaway client rather than any human.
 
+**Recovery routes spend from a budget of their own.** A thief holding a copy of the session cookie
+is the same coach to that shared budget, so ordinary-looking traffic through the stolen session
+could hold it drained and leave the coach's own change-password and sign-out-everywhere answering
+429: the theft turning into a denial of recovery. Those two routes therefore authenticate through a
+separate dependency spending a separate per-coach budget, so however busy the rest of the API has
+been made to look, the routes that end the thief's access are reachable. The reset-by-email flow is
+unauthenticated and was never on the shared budget at all. The new budget is still keyed on the
+coach, so a thief can drain that one too, but only by hammering the recovery routes themselves
+rather than as a side effect of traffic they had reason to send. It refills at the same rate as the
+budget it is carved out of, since holding a bucket empty costs its refill rate and a slower one
+would leave that deliberate starvation cheaper to mount than it was before the carve-out. Keying on
+the address instead would be worse, since behind the CDN it is an edge address the coach may be
+arriving on as well.
+
+**Unknown session tokens are charged after the lookup.** A cookie naming no session costs an indexed
+query against the sessions table on every route that authenticates, and the per-coach budget cannot
+meter it because no coach was found. A tier keyed on the caller's address is charged once the lookup
+comes back empty, which is login's charge-after-failure shape for login's reason: a live session
+never consults the tier, so it can never refuse a signed-in coach. Behind the CDN that address is an
+edge many callers share, so the tier is sized to bound abuse by orders of magnitude rather than to
+meter one caller. Draining it turns the 401 a caller with a dead cookie would have had into a 429,
+which a client deciding whether its session is over has to read as an unanswered question to retry
+rather than as a session still standing.
+
 ## Request size limits
 
 Request bodies are capped at 1 MB, enforced twice: by Caddy on the public path and by
