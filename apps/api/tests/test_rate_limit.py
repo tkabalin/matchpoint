@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from matchpoint_api.config import settings
 from matchpoint_api.rate_limit import RateLimiter, take_all
 from tests.conftest import Clock
 
@@ -25,6 +26,27 @@ def test_a_key_is_admitted_up_to_the_burst_and_refused_beyond_it(clock: Clock) -
     for _ in range(3):
         limiter.take("1.2.3.4")
 
+    take_expecting_429(limiter, "1.2.3.4")
+
+
+def test_the_scale_setting_widens_a_bucket(clock: Clock, monkeypatch: pytest.MonkeyPatch) -> None:
+    """What the Playwright suite turns up (config.py). Both halves move together, or a
+    suite given a bigger burst would still be metered at a coach's sustained rate.
+
+    Read at construction, so the setting has to be in place before the limiter is built,
+    which is why `create_app` gets a scaled set of buckets or an unscaled one, never a mix.
+    """
+    monkeypatch.setattr(settings, "rate_limit_scale", 10.0)
+    limiter = RateLimiter(per_minute=60, burst=2)
+
+    for _ in range(20):
+        limiter.take("1.2.3.4")
+    take_expecting_429(limiter, "1.2.3.4")
+
+    clock.now = 1.0
+
+    for _ in range(10):
+        limiter.take("1.2.3.4")
     take_expecting_429(limiter, "1.2.3.4")
 
 

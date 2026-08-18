@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # stop checking. "allow_all" is the opt-out: what tests pin, and what a dev box that
     # would rather stay off the network sets.
     breach_checker: Literal["allow_all", "pwned"] = "pwned"
+    # Multiplies every token bucket's burst and refill rate (rate_limit.py). For the
+    # Playwright suite, which runs the real sign-up and sign-in flows from one address
+    # far faster than the coach those limits are sized for. Never below 1: this may
+    # loosen a limit for a test run, never quietly tighten one on a deployed box.
+    rate_limit_scale: float = Field(default=1.0, ge=1)
 
 
 settings = Settings()

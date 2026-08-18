@@ -27,6 +27,8 @@ import time
 
 from fastapi import HTTPException, Request
 
+from matchpoint_api.config import settings
+
 # One lock for every bucket in the process rather than one per limiter, so a request
 # counted against several buckets can read them all and spend them all without another
 # thread slipping in between — see `take_all`. The critical section is dict arithmetic
@@ -46,8 +48,11 @@ class RateLimiter:
     """
 
     def __init__(self, *, per_minute: float, burst: int) -> None:
-        self._rate = per_minute / 60
-        self._burst = burst
+        # `rate_limit_scale` is 1 everywhere but the Playwright suite, which runs the
+        # real flows from one address far faster than any coach (`config.py`). Applied
+        # here rather than at each bucket in `main.py` so no tier can be left out of it.
+        self._rate = per_minute * settings.rate_limit_scale / 60
+        self._burst = burst * settings.rate_limit_scale
         # key -> (tokens remaining, the monotonic instant they were counted at)
         self._buckets: dict[str, tuple[float, float]] = {}
         self._pruned_at = -math.inf
