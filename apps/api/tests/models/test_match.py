@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 from sqlalchemy import inspect, text
@@ -51,6 +51,10 @@ def test_only_the_player_and_date_are_required(db_session: Session) -> None:
     assert saved.event is None
     assert saved.scoring_system is None
     assert saved.result is None
+    # A new match is free to capture: the claim is written by the capture route, never
+    # at creation.
+    assert saved.capture_claim_device_id is None
+    assert saved.capture_claim_expires_at is None
 
 
 def test_match_requires_a_played_on_date(db_session: Session) -> None:
@@ -97,9 +101,10 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
     session.execute(
         text(
             "INSERT INTO matches "
-            "(id, player_id, played_on, opponent_name, surface, scoring_system, result) "
+            "(id, player_id, played_on, opponent_name, surface, scoring_system, result, "
+            "capture_claim_device_id, capture_claim_expires_at) "
             "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, "
-            ":scoring_system, :result)"
+            ":scoring_system, :result, :capture_claim_device_id, :capture_claim_expires_at)"
         ),
         {
             "id": uuid.uuid4(),
@@ -109,6 +114,8 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
             "surface": None,
             "scoring_system": None,
             "result": None,
+            "capture_claim_device_id": None,
+            "capture_claim_expires_at": None,
             **columns,
         },
     )
@@ -152,6 +159,32 @@ def test_database_rejects_free_text_over_the_column_width(db_session: Session) -
     would first surface as a 500 in production."""
     with pytest.raises(DataError):
         _insert_raw_match(db_session, opponent_name="x" * 101)
+
+
+@pytest.mark.parametrize(
+    "half",
+    [
+        {"capture_claim_device_id": uuid.uuid4()},
+        {"capture_claim_expires_at": datetime(2026, 8, 1, tzinfo=UTC)},
+    ],
+)
+def test_database_rejects_half_a_capture_claim(
+    db_session: Session, half: dict[str, object]
+) -> None:
+    """The two claim columns are one fact: a device with no deadline holds the match
+    for good, and a deadline naming no device frees nothing."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_match(db_session, **half)
+
+
+def test_database_accepts_a_whole_capture_claim(db_session: Session) -> None:
+    """The other side of the CHECK. A constraint written as `= 1` by mistake, which is
+    the condition the two neighbouring tables use, fails here rather than in capture."""
+    _insert_raw_match(
+        db_session,
+        capture_claim_device_id=uuid.uuid4(),
+        capture_claim_expires_at=datetime(2026, 8, 1, tzinfo=UTC),
+    )
 
 
 def test_player_id_is_indexed(db_session: Session) -> None:

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from matchpoint_api.db import Base
@@ -51,6 +51,16 @@ class Match(Base):
     """Match metadata only — score/set/point structure belongs to the scoring engine work."""
 
     __tablename__ = "matches"
+    __table_args__ = (
+        # The two claim columns are one fact, so a row carrying half of it is refused:
+        # a device id with no deadline would hold the match for good, and a deadline
+        # with no device would name nobody. Held in the database because sync payloads
+        # reach this table without the ORM having vetted them.
+        CheckConstraint(
+            "num_nonnulls(capture_claim_device_id, capture_claim_expires_at) <> 1",
+            name="match_capture_claim_paired",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # The coach's tracked player. The opponent is free text, not a foreign key:
@@ -68,6 +78,15 @@ class Match(Base):
     # many matches will only ever have a result. Null until recorded; the scoring
     # engine can set it at match end once point capture exists.
     result: Mapped[MatchResult | None] = mapped_column(str_enum(MatchResult, "result"))
+    # Which device is capturing this match, and when its claim lapses. Capture is
+    # single-writer per match (#127), so a second device is refused while a live claim
+    # stands; both columns are null when the match is free. The id is the client's own
+    # and not the session's, which a password change rotates without changing device.
+    capture_claim_device_id: Mapped[uuid.UUID | None]
+    # A deadline rather than a lock: a device that goes quiet (flat battery, offline for
+    # the rest of the match) can never release, so the claim has to lapse on its own.
+    # `routers/matches.py` holds the lifetime and the release that frees a match sooner.
+    capture_claim_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # clock_timestamp(), not now(): now() is the transaction timestamp, so a batch of
     # matches synced in one transaction would all claim the same creation time and the
     # created_at tiebreaker in list_matches would order them arbitrarily.

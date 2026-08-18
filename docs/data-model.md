@@ -89,6 +89,8 @@ erDiagram
         varchar(100) event "nullable: tournament or fixture"
         varchar(24) scoring_system "nullable: traditional, mens_grand_slam, womens_grand_slam, no_ad_scoring, match_tiebreak_10_points, short_sets, pro_set, legacy"
         varchar(4) result "nullable: win, loss"
+        uuid capture_claim_device_id "nullable: the device capturing this match"
+        timestamptz capture_claim_expires_at "nullable: when that claim lapses"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -98,6 +100,12 @@ A match carries metadata only. Point-level data — serves, rally outcomes, rall
 against a match rather than stored on it, and is modelled separately. `result` is the exception, a
 win or loss held on the row rather than derived from points: capture is optional, so a match can
 carry an outcome with no point data to compute it from.
+
+A match's lifecycle is read off the row rather than stored: it is in progress while `result` is
+null, and complete once a result is recorded. The two `capture_claim_` columns are the exception,
+the one piece of state capture genuinely adds, and they are one fact under a CHECK: which device is
+capturing the match, and when that claim lapses if the device stops renewing it. Capture is
+single-writer per match, so a second device is refused while a live claim stands.
 
 `scoring_system` names the system the match was played under and nothing more. What each name
 implies (deuce or sudden death at 40-40, how long a set runs, what settles the decider) belongs to
