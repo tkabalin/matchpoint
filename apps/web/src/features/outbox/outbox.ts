@@ -142,6 +142,16 @@ export function retryFailed(coachId: string): Promise<number> {
 }
 
 /**
+ * Deletes the queue outright, rows and schema. Only `purgeLocalData` calls it, and
+ * only sign-out and a coach switch reach that: everything in here is unsynced by
+ * definition. Dexie would otherwise refuse to reopen the database the next coach
+ * signs in and appends to.
+ */
+export async function deleteOutboxDatabase(): Promise<void> {
+  await outboxDb.delete({ disableAutoOpen: false });
+}
+
+/**
  * Pending and failed counts for the sync indicator, re-emitted whenever the
  * queue changes, so nothing polls. Both counts run in one read transaction, so
  * the pair is a consistent snapshot here rather than by grace of `liveQuery`

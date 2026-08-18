@@ -14,6 +14,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { outboxDb } from "@/features/outbox/db";
+import { append, readPending } from "@/features/outbox/outbox";
 import { queryPersistOptions } from "@/lib/query-persist";
 
 import { Settings } from "./settings";
@@ -90,6 +92,7 @@ async function renderSettings() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 test("links to the install guide", async () => {
@@ -145,6 +148,50 @@ test("confirming signs out, clears the query cache, and shows a success dialog",
   expect(queryClient.getQueryData(["players"])).toBeUndefined();
   expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
   expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test("confirming also deletes the points that never synced", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  await outboxDb.delete();
+  await outboxDb.open();
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a1",
+    coachId: coach.id,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
+  await screen.findByText("You've been signed out.");
+
+  // The one path on which unsynced points go: a coach who signs out has said this
+  // device is no longer theirs, and a queue left behind is a queue the next coach
+  // on it inherits (#117). A revoked session takes the other branch and keeps them.
+  expect(await readPending(coach.id)).toHaveLength(0);
+});
+
+test("says so when the device could not be cleared", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  // What a browser with storage blocked does. The session is gone by then, so the
+  // dialog has to finish either way, and finishing silently would claim a clean device.
+  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    throw new Error("storage blocked");
+  });
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
+
+  expect(
+    await screen.findByText("Some of your data could not be cleared from this device."),
+  ).toBeInTheDocument();
 });
 
 test("acknowledging the success dialog navigates to sign in", async () => {

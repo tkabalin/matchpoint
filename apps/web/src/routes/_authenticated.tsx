@@ -3,7 +3,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 
 import { AuthenticatedLayout } from "@/components/authenticated-layout";
 import { getErrorStatus } from "@/lib/error-status";
-import { removePersistedQueryCache } from "@/lib/query-persist";
+import { clearCachedReads, recordOwnerIfUnknown } from "@/lib/local-data";
 
 // Pathless layout: every currently-protected route is renamed with this prefix so it
 // runs through this one session check rather than each route repeating its own.
@@ -15,7 +15,7 @@ export const Route = createFileRoute("/_authenticated")({
       // can't complete. retry: false overrides Query's default 3-attempt backoff —
       // without it, a real 401 takes several seconds of retries before this can even
       // decide whether to redirect.
-      await context.queryClient.ensureQueryData({
+      const coach = await context.queryClient.ensureQueryData({
         ...getCurrentCoachOptions(),
         retry: false,
         // Query's default networkMode leaves a fetch *paused*, never settled, while
@@ -23,14 +23,18 @@ export const Route = createFileRoute("/_authenticated")({
         // route would render at all. offlineFirst lets the attempt fail instead.
         networkMode: "offlineFirst",
       });
+      // Sessions outlive releases, so a coach signed in before #117 shipped has no
+      // ownership record and their own next sign-in would read as a stranger's, taking
+      // their unsynced points with it. Claims the device only when nothing claims it.
+      recordOwnerIfUnknown(coach.id);
     } catch (error) {
       // Only a confirmed 401 ends the visit — a network blip or a transient 500
       // renders through instead of signing someone out for an unrelated failure.
       if (getErrorStatus(error) === 401) {
-        // A dead session leaves no data behind, in memory or in the IndexedDB copy
-        // that outlives the tab, so the next coach on this device starts clean.
-        context.queryClient.clear();
-        await removePersistedQueryCache();
+        // Cached reads only. The queue of unsynced points survives a session the
+        // server ended, along with the record of whose device this is, so the same
+        // coach signing back in still has the points they captured courtside (#117).
+        await clearCachedReads(context.queryClient);
         throw redirect({ to: "/" });
       }
     }

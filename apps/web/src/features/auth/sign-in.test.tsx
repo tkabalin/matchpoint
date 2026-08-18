@@ -1,4 +1,5 @@
 import { zLoginBody } from "@matchpoint/api-client/zod";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -9,9 +10,16 @@ import {
 } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+import { outboxDb } from "@/features/outbox/db";
+import { append, readPending } from "@/features/outbox/outbox";
+import { purgeIfCoachChanged } from "@/lib/local-data";
 
 import { SignIn } from "./sign-in";
+
+const COACH_ID = "c0ac0000-0000-4000-8000-000000000001";
+const OTHER_COACH_ID = "c0ac0000-0000-4000-8000-000000000002";
 
 /** Stubs the transport, not the component — same reasoning as player-list.test.tsx:
  * a factory, not a shared Response, since a body can only be read once. */
@@ -54,8 +62,30 @@ async function renderSignIn() {
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/"] }),
   });
-  render(<RouterProvider router={router} />);
+  // A QueryClientProvider because a successful sign-in clears the cache the previous
+  // coach on this device left behind, and the client is what holds the in-memory half.
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   await screen.findByRole("heading", { name: "Sign In" });
+}
+
+/** The coach the stubbed login signs in, whoever the device belonged to before. */
+function loginResponse(id: string) {
+  return () => Response.json({ id, email: "coach@example.com", display_name: "Coach" });
+}
+
+/** A point captured on this device and never sent, of the given coach's. */
+function queuePoint(coachId: string) {
+  return append({
+    id: `3f1c2b4e-0000-4000-8000-0000000000${coachId.slice(-2)}`,
+    coachId,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
@@ -64,8 +94,15 @@ async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Sign In" }));
 }
 
+beforeEach(async () => {
+  localStorage.clear();
+  await outboxDb.delete();
+  await outboxDb.open();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 test("renders the email and password fields", async () => {
@@ -203,4 +240,65 @@ test("links to the forgot-password page", async () => {
   await user.click(screen.getByRole("link", { name: "Forgot password?" }));
 
   expect(await screen.findByRole("heading", { name: "Reset Password" })).toBeInTheDocument();
+});
+
+test("wipes what the previous coach left when a different one signs in", async () => {
+  // What a previous sign-in on this device would have left: the ownership record and
+  // that coach's queue. #117 requires both gone before the first screen renders.
+  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await queuePoint(COACH_ID);
+  stubFetch(loginResponse(OTHER_COACH_ID));
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await fillAndSubmit(user);
+
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+  expect(await readPending(COACH_ID)).toHaveLength(0);
+});
+
+test("keeps the queue when the same coach signs in again", async () => {
+  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await queuePoint(COACH_ID);
+  stubFetch(loginResponse(COACH_ID));
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await fillAndSubmit(user);
+
+  // The way back from a session the server revoked: the points captured before it
+  // died are still on the device, waiting for a drain (#117).
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+  expect(await readPending(COACH_ID)).toHaveLength(1);
+});
+
+test("refuses a 200 that names no coach rather than signing in as nobody", async () => {
+  stubFetch(() => new Response(null, { status: 200 }));
+  const user = userEvent.setup();
+  await renderSignIn();
+
+  await fillAndSubmit(user);
+
+  // Without an id there is no telling whose device this now is, so the purge cannot
+  // run. The session the server did mint is ended, or a reload of a protected route
+  // would walk straight in on the previous coach's cache.
+  expect(await screen.findByRole("alert")).toHaveTextContent("couldn't tell who you are");
+  expect(screen.queryByRole("heading", { name: "Home" })).not.toBeInTheDocument();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("keeps the coach on the form when this device cannot be cleared", async () => {
+  stubFetch(loginResponse(OTHER_COACH_ID));
+  const user = userEvent.setup();
+  await renderSignIn();
+  // What a browser with storage blocked does. Signing in anyway would hand this coach
+  // a device still holding the previous one's data, which is the leak #117 closes.
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+    throw new Error("storage blocked");
+  });
+
+  await fillAndSubmit(user);
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Close any other MatchPoint tabs");
+  expect(screen.queryByRole("heading", { name: "Home" })).not.toBeInTheDocument();
 });

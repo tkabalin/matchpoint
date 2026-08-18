@@ -19,9 +19,9 @@ import { PasswordInput } from "@/components/password-input";
 import { PasswordStrengthMeter } from "@/components/password-strength-meter";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { purgeLocalData } from "@/lib/local-data";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
-import { removePersistedQueryCache } from "@/lib/query-persist";
 import { useCountdown } from "@/lib/use-countdown";
 
 type DialogStep = "closed" | "confirm" | "success";
@@ -36,12 +36,13 @@ export function Settings() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [dialogStep, setDialogStep] = useState<DialogStep>("closed");
+  const [purgeFailed, setPurgeFailed] = useState(false);
   // Already warm in the cache — #98's route guard fetches this before any protected
   // route renders — so this costs no extra round trip, just the email/display name
   // for zxcvbn's userInputs below. Disabled once signed out: handleConfirmSignOut's
-  // queryClient.clear() wipes this from the cache while the change-password form (and
-  // this query) is still mounted underneath the success dialog, which would otherwise
-  // trigger a pointless refetch against a session that no longer exists.
+  // purge wipes this from the cache while the change-password form (and this query) is
+  // still mounted underneath the success dialog, which would otherwise trigger a
+  // pointless refetch against a session that no longer exists.
   const { data: coach } = useQuery({
     ...getCurrentCoachOptions(),
     enabled: dialogStep !== "success",
@@ -131,11 +132,16 @@ export function Settings() {
   async function handleConfirmSignOut() {
     // Logout can't fail (always 204, cookie-present or not) — nothing to branch on.
     await logout();
-    // Otherwise the next coach to sign in on this device would see the previous
-    // coach's roster served straight from cache: from memory, and from the
-    // IndexedDB copy behind it that outlives the tab.
-    queryClient.clear();
-    await removePersistedQueryCache();
+    try {
+      // Otherwise the next coach to sign in on this device would see the previous
+      // coach's roster served straight from cache. Signing out is also the one moment
+      // queued points are deliberately thrown away rather than kept for a drain (#117).
+      await purgeLocalData(queryClient);
+    } catch {
+      // The session is already gone, so the dialog has to end somewhere. It ends
+      // saying the device was not cleared rather than claiming it was.
+      setPurgeFailed(true);
+    }
     setDialogStep("success");
   }
 
@@ -178,6 +184,11 @@ export function Settings() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>You've been signed out.</AlertDialogTitle>
+            {purgeFailed && (
+              <AlertDialogDescription>
+                Some of your data could not be cleared from this device.
+              </AlertDialogDescription>
+            )}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogAction onClick={handleAcknowledge}>OK</AlertDialogAction>

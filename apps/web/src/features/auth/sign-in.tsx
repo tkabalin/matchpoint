@@ -1,4 +1,5 @@
-import { login } from "@matchpoint/api-client";
+import { login, logout } from "@matchpoint/api-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { purgeIfCoachChanged } from "@/lib/local-data";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
 
@@ -16,6 +18,7 @@ import { AuthShell } from "./auth-shell";
 
 export function SignIn() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -31,9 +34,32 @@ export function SignIn() {
     setError(null);
     setRetryAfterSeconds(null);
 
-    const { error: loginError, response } = await login({ body: { email, password } });
+    const { data: coach, error: loginError, response } = await login({ body: { email, password } });
 
     if (response?.status === 200) {
+      // A 200 nothing could be parsed out of leaves a session no one can attribute, so
+      // the purge has nothing to key on. End it: otherwise a reload of a protected
+      // route walks in on the previous coach's restored cache, the leak #117 closes.
+      if (!coach) {
+        await logout();
+        setError("We signed you in but couldn't tell who you are. Please try again.");
+        return;
+      }
+
+      // Awaited before the navigation, so a device that was another coach's is wiped
+      // before the first protected screen can render anything of theirs (#117). The
+      // login response is the earliest the app learns who just signed in.
+      try {
+        await purgeIfCoachChanged(coach.id, queryClient);
+      } catch {
+        // Failing closed. Navigating on a device that still holds the previous coach's
+        // data is the one outcome worse than refusing to navigate at all.
+        setError(
+          "We couldn't clear this device before signing you in. Close any other MatchPoint tabs and try again.",
+        );
+        return;
+      }
+
       await navigate({ to: "/home" });
       return;
     }

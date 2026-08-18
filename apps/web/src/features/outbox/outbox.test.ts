@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry } from "./db";
 import {
   append,
+  deleteOutboxDatabase,
   markFailed,
   onAppendFailure,
   readByMatch,
@@ -339,6 +340,21 @@ describe("retryFailed", () => {
 
     expect(retried).toBe(1);
     expect((await readPending(COACH_ID)).map((row) => row.id)).toEqual(["p1", "p2"]);
+    expect(await readPending(OTHER_COACH_ID)).toEqual([]);
+  });
+});
+
+describe("deleteOutboxDatabase", () => {
+  test("takes every coach's rows with it and leaves the queue writable", async () => {
+    await append(pointEntry("p1"));
+    await append(pointEntry("p2", { coachId: OTHER_COACH_ID }));
+
+    await deleteOutboxDatabase();
+    await append(pointEntry("p3"));
+
+    // Writable afterwards because Dexie's default is to refuse to reopen a deleted
+    // database, which would strand the next coach on the device with a dead queue.
+    expect((await readPending(COACH_ID)).map((row) => row.id)).toEqual(["p3"]);
     expect(await readPending(OTHER_COACH_ID)).toEqual([]);
   });
 });

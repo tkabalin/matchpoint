@@ -5,6 +5,9 @@ import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/rea
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { outboxDb } from "@/features/outbox/db";
+import { append, readPending } from "@/features/outbox/outbox";
+import { purgeIfCoachChanged } from "@/lib/local-data";
 import { queryPersistOptions, removePersistedQueryCache } from "@/lib/query-persist";
 
 import { routeTree } from "./routeTree.gen";
@@ -82,6 +85,7 @@ async function persistLastVisit() {
 afterEach(async () => {
   vi.unstubAllGlobals();
   onlineManager.setOnline(true);
+  localStorage.clear();
   await removePersistedQueryCache();
 });
 
@@ -168,4 +172,50 @@ test("a confirmed 401 leaves no persisted snapshot on the device", async () => {
 
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
   expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
+});
+
+test("a confirmed session claims a device nothing has claimed yet", async () => {
+  await outboxDb.delete();
+  await outboxDb.open();
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json([player]),
+  });
+
+  renderRouteTreeAt("/players");
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a1",
+    coachId: coach.id,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  await purgeIfCoachChanged(coach.id, new QueryClient());
+
+  // A session older than the ownership record leaves nothing claiming the device, and
+  // its own coach then reads as a stranger the next time they sign in (#117).
+  expect(await readPending(coach.id)).toHaveLength(1);
+});
+
+test("a confirmed 401 keeps the points that never synced", async () => {
+  await outboxDb.delete();
+  await outboxDb.open();
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a1",
+    coachId: coach.id,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  renderRouteTreeAt("/players");
+
+  // A session the server ended is not the same as the coach leaving the device: they
+  // sign back in and the points they captured courtside are still there (#117).
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+  expect(await readPending(coach.id)).toHaveLength(1);
 });
