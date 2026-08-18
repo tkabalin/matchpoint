@@ -28,10 +28,10 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-function stubFetch() {
+function stubFetch(response: () => Response = () => Response.json(player)) {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation(() => Promise.resolve(Response.json(player))),
+    vi.fn().mockImplementation(() => Promise.resolve(response())),
   );
 }
 
@@ -53,8 +53,13 @@ async function renderMatchSetup() {
     path: "/new-match/$playerId",
     component: MatchSetup,
   });
+  const rosterRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
+    path: "/players",
+    component: () => <h1>Players</h1>,
+  });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([profileRoute, newMatchRoute]),
+    authenticatedRoute.addChildren([profileRoute, newMatchRoute, rosterRoute]),
   ]);
   const router = createRouter({
     routeTree,
@@ -98,4 +103,17 @@ test("cancel returns to the player profile", async () => {
   await user.click(screen.getByRole("link", { name: "Cancel" }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+});
+
+// Reachable by typing a url, or from a stale link after the player was archived.
+// Before #78 this rendered the form headed "New match" with no name, offering to
+// start a match for a player the coach cannot see.
+test("says not found instead of an unnamed form when the player isn't the coach's", async () => {
+  stubFetch(() => new Response(JSON.stringify({ detail: "Player not found" }), { status: 404 }));
+
+  await renderMatchSetup();
+
+  expect(await screen.findByText("Player not found")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: /New match/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Start match" })).not.toBeInTheDocument();
 });

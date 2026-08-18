@@ -6,7 +6,7 @@ import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PlayerLoadError } from "@/components/player-load-error";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -41,6 +41,7 @@ export function PlayerProfile() {
     data: player,
     isPending,
     isError,
+    error,
   } = useQuery(getPlayerOptions({ path: { player_id: playerId } }));
 
   if (isPending)
@@ -53,9 +54,7 @@ export function PlayerProfile() {
   if (isError)
     return (
       <AppPage nav={false}>
-        <Alert variant="destructive">
-          <AlertDescription>Could not load that player.</AlertDescription>
-        </Alert>
+        <PlayerLoadError error={error} />
       </AppPage>
     );
 

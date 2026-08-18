@@ -67,8 +67,20 @@ async function renderPlayerProfile(playerId = player.id) {
     path: "/new-match/$playerId",
     component: () => <h1>New match</h1>,
   });
+  // Where the not-found and expired-session states send the coach.
+  const rosterRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
+    path: "/players",
+    component: () => <h1>Players</h1>,
+  });
+  const signInRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/",
+    component: () => <h1>Sign in</h1>,
+  });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([homeRoute, profileRoute, newMatchRoute]),
+    signInRoute,
+    authenticatedRoute.addChildren([homeRoute, profileRoute, newMatchRoute, rosterRoute]),
   ]);
   const router = createRouter({
     routeTree,
@@ -142,15 +154,49 @@ test("lists that player's matches on the Matches tab", async () => {
   expect(await screen.findByText("vs T. Naidoo")).toBeInTheDocument();
 });
 
-test("shows an error message when the player can't be loaded", async () => {
+// The API answers 404 rather than 403 for another coach's player, so a 403 cannot
+// confirm the id exists. The copy has to keep that property (#78).
+test("says not found for a player id that isn't the coach's", async () => {
   stubFetch({
-    [`/api/players/${player.id}`]: () => new Response(null, { status: 404 }),
+    // Body shape matches the real route: FastAPI's HTTPException emits
+    // {"detail": ...}, and the error interceptor can only attach the status to an
+    // object error, so a bodiless stub would silently test the generic branch.
+    [`/api/players/${player.id}`]: () =>
+      new Response(JSON.stringify({ detail: "Player not found" }), { status: 404 }),
     "/api/matches": () => Response.json([]),
   });
 
   await renderPlayerProfile();
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Could not load that player.");
+  expect(await screen.findByText("Player not found")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Go to roster" })).toHaveAttribute("href", "/players");
+  expect(screen.queryByText(/permission/i)).not.toBeInTheDocument();
+});
+
+test("sends the coach back to sign in on a 401, not to the roster", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () =>
+      new Response(JSON.stringify({ detail: "Not signed in" }), { status: 401 }),
+    "/api/matches": () => Response.json([]),
+  });
+
+  await renderPlayerProfile();
+
+  expect(await screen.findByText("Your session has expired")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/");
+  expect(screen.queryByText("Player not found")).not.toBeInTheDocument();
+});
+
+test("falls back to a generic message for an unexpected failure", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () =>
+      new Response(JSON.stringify({ detail: "boom" }), { status: 500 }),
+    "/api/matches": () => Response.json([]),
+  });
+
+  await renderPlayerProfile();
+
+  expect(await screen.findByText("Could not load that player")).toBeInTheDocument();
 });
 
 test("links back to home", async () => {

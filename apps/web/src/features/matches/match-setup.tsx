@@ -2,6 +2,7 @@ import { getPlayerOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
 
+import { PlayerLoadError } from "@/components/player-load-error";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
@@ -15,7 +16,21 @@ const routeApi = getRouteApi("/_authenticated/new-match/$playerId");
 
 export function MatchSetup() {
   const { playerId } = routeApi.useParams();
-  const { data: player } = useQuery(getPlayerOptions({ path: { player_id: playerId } }));
+  const {
+    data: player,
+    isError,
+    error,
+  } = useQuery(getPlayerOptions({ path: { player_id: playerId } }));
+
+  // Without this the form renders headed "New match" with no name, plus a Start
+  // button, for a player the coach cannot reach — the 404 has to stop the flow
+  // rather than just leave a blank (#78).
+  if (isError)
+    return (
+      <div className="mx-auto max-w-sm p-4">
+        <PlayerLoadError error={error} />
+      </div>
+    );
 
   return (
     <div className="mx-auto max-w-sm p-4">
