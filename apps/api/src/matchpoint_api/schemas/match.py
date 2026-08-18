@@ -39,6 +39,10 @@ PlayedOn = Annotated[date, AfterValidator(_reject_implausible_played_on)]
 
 
 class MatchCreate(RequestModel):
+    # Client-assigned: a match is created offline and syncs later, so it needs an
+    # identity before any server sees it, and a retried sync needs that id to name the
+    # row an interrupted attempt may already have written. Server-minted when absent.
+    id: uuid.UUID | None = None
     player_id: uuid.UUID
     opponent_name: ShortText | None = None
     played_on: PlayedOn

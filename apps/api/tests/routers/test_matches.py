@@ -341,6 +341,126 @@ def test_create_match_strips_surrounding_whitespace(
     assert response.json()["event"] == "Roland-Garros"
 
 
+def test_create_match_stores_a_client_supplied_id(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Capture happens offline, so the match is given its identity before any server
+    sees it and has to keep it once it syncs."""
+    player = make_player(db_session, coach_id=coach.id)
+    match_id = uuid.uuid4()
+
+    response = client.post(
+        "/matches",
+        json={"id": str(match_id), "player_id": str(player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["id"] == str(match_id)
+    assert db_session.get(Match, match_id) is not None
+
+
+def test_create_match_mints_a_fresh_id_each_time_none_is_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    body = {"player_id": str(player.id), "played_on": "2026-08-01"}
+
+    first = client.post("/matches", json=body)
+    second = client.post("/matches", json=body)
+
+    assert first.json()["id"] != second.json()["id"]
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 2
+
+
+def test_create_match_repeated_with_the_same_id_returns_the_stored_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The retry after a flush that was interrupted between the server writing and the
+    client hearing: it has to succeed on the row already there rather than duplicate
+    it, and the stored match wins over a body that disagrees with it."""
+    player = make_player(db_session, coach_id=coach.id)
+    body = {
+        "id": str(uuid.uuid4()),
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "opponent_name": "Aryna",
+    }
+
+    first = client.post("/matches", json=body)
+    repeat = client.post("/matches", json=body | {"opponent_name": "Iga"})
+
+    assert first.status_code == 201
+    assert repeat.status_code == 201
+    assert repeat.json() == first.json()
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+    # Expired first, because both requests ran through this one session: its identity
+    # map would answer with the first write even if the repeat had overwritten the row,
+    # so only a re-read proves the SET left it alone. Same below.
+    db_session.expire_all()
+    stored = db_session.get(Match, uuid.UUID(first.json()["id"]))
+    assert stored is not None
+    assert stored.opponent_name == "Aryna"
+
+
+def test_create_match_repeated_under_another_player_returns_the_stored_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The id is the identity, so a repeat that disagrees about the player still gets
+    the row that id already names, on the same first-write-wins rule."""
+    player = make_player(db_session, coach_id=coach.id)
+    other_player = make_player(db_session, coach_id=coach.id)
+    stored = make_match(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = client.post(
+        "/matches",
+        json={
+            "id": str(stored.id),
+            "player_id": str(other_player.id),
+            "played_on": "2026-08-01",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["player_id"] == str(player.id)
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+    db_session.expire_all()
+    assert stored.player_id == player.id
+
+
+def test_create_match_with_another_coachs_match_id_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """An id belonging to someone else's match gets the 404 the match routes give any
+    id the coach cannot reach, naming nothing about the row, and leaves it as it was."""
+    theirs = make_match(db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(
+        "/matches",
+        json={"id": str(theirs.id), "player_id": str(player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+    db_session.expire_all()
+    stored = db_session.get(Match, theirs.id)
+    assert stored is not None
+    assert stored.player_id != player.id
+
+
+@pytest.mark.usefixtures("coach")
+def test_create_match_rejects_a_malformed_id(client: TestClient) -> None:
+    response = client.post(
+        "/matches",
+        json={"id": "not-a-uuid", "player_id": str(uuid.uuid4()), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 422
+
+
 def test_list_matches_newest_first(client: TestClient, db_session: Session, coach: Coach) -> None:
     player = make_player(db_session, coach_id=coach.id)
     older = make_match(db_session, player_id=player.id, played_on=date(2026, 7, 1))

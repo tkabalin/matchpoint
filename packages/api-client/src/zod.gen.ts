@@ -175,6 +175,7 @@ export const zCoachUpdate = z.object({
  */
 export const zMatchCreate = z.object({
     event: z.string().min(1).max(100).nullish(),
+    id: z.uuid().nullish(),
     opponent_name: z.string().min(1).max(100).nullish(),
     played_on: z.iso.date(),
     player_id: z.uuid(),

@@ -3,6 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach
@@ -32,6 +33,22 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 
 
+def match_for_coach(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Match:
+    """One coach's match by id, or a 404.
+
+    Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
+    confirm the id exists, and ids must stay unenumerable across coaches.
+    """
+    match = db.scalar(
+        select(Match)
+        .join(Player, Match.player_id == Player.id)
+        .where(Match.id == match_id, Player.coach_id == coach_id)
+    )
+    if match is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return match
+
+
 # The 409 is declared because the roster screen branches on it: an archived player is a
 # state the coach can undo, so the client says restore them first rather than reporting
 # a failure. The 404 below stays undeclared, being nothing a caller can act on.
@@ -56,8 +73,25 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
     # new matches; the ones already recorded stay listed and readable.
     if player.archived_at is not None:
         raise HTTPException(status_code=409, detail="Player is archived")
-    match = Match(**data.model_dump())
-    db.add(match)
+    values = data.model_dump()
+    if values["id"] is None:
+        values["id"] = uuid.uuid4()
+    # One statement, so two retries of the same offline match cannot both insert: the
+    # loser waits on the row lock and reads back what the winner wrote. DO NOTHING takes
+    # no lock, so it would return no row and a follow-up select could miss the winner's
+    # uncommitted one. The no-op SET keeps the stored match, whatever a repeat body says.
+    match = db.scalars(
+        insert(Match)
+        .values(**values)
+        .on_conflict_do_update(index_elements=[Match.id], set_={"id": Match.id})
+        .returning(Match)
+    ).one()
+    # The id already named a match, and not one of the player it was posted against, so
+    # ownership has to be established through that match instead. This coach's own comes
+    # back, the first write having won; another coach's gets the match routes' ordinary
+    # 404, which reveals only that the id is taken, an unused one having been created.
+    if match.player_id != player.id:
+        match = match_for_coach(db, match.id, coach.id)
     db.commit()
     return match
 
@@ -82,22 +116,6 @@ def list_matches(
     if player_id is not None:
         statement = statement.where(Match.player_id == player_id)
     return list(db.scalars(statement))
-
-
-def match_for_coach(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Match:
-    """One coach's match by id, or a 404.
-
-    Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
-    confirm the id exists, and ids must stay unenumerable across coaches.
-    """
-    match = db.scalar(
-        select(Match)
-        .join(Player, Match.player_id == Player.id)
-        .where(Match.id == match_id, Player.coach_id == coach_id)
-    )
-    if match is None:
-        raise HTTPException(status_code=404, detail="Match not found")
-    return match
 
 
 @router.get("/{match_id}", response_model=MatchRead)

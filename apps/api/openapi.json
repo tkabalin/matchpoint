@@ -271,6 +271,18 @@
             ],
             "title": "Event"
           },
+          "id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "opponent_name": {
             "anyOf": [
               {

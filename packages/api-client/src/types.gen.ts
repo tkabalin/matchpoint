@@ -141,6 +141,10 @@ export type MatchCreate = {
      */
     event?: string | null;
     /**
+     * Id
+     */
+    id?: string | null;
+    /**
      * Opponent Name
      */
     opponent_name?: string | null;

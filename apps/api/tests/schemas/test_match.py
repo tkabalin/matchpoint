@@ -16,6 +16,7 @@ from matchpoint_api.models import MatchResult, ScoringSystem, Surface
 from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate, MatchUpdate
 
 PLAYER_ID = "3f8c1a2e-0b4d-4c7e-9a51-2d6f8b0e4c13"
+MATCH_ID = "6b2e9d41-7c05-4f38-b0a9-1e5c3a7d82f6"
 REQUIRED: dict[str, Any] = {"player_id": PLAYER_ID, "played_on": "2026-08-01"}
 
 # The two free-text fields carry the same ShortText annotation, and each one is a
@@ -31,11 +32,31 @@ def test_only_the_player_and_date_are_required() -> None:
     match = _match()
 
     assert match.played_on == date(2026, 8, 1)
+    assert match.id is None
     assert match.opponent_name is None
     assert match.surface is None
     assert match.event is None
     assert match.scoring_system is None
     assert match.result is None
+
+
+# --- id ---------------------------------------------------------------------
+
+
+def test_coerces_an_id_string_to_a_uuid() -> None:
+    """The id the client assigned offline, arriving as JSON like every other uuid."""
+    assert str(_match(id=MATCH_ID).id) == MATCH_ID
+
+
+def test_rejects_a_malformed_id() -> None:
+    with pytest.raises(ValidationError):
+        _match(id="not-a-uuid")
+
+
+def test_treats_an_explicitly_null_id_as_an_absent_one() -> None:
+    """Null reads the same as omitting the field, as it does on every other optional
+    field here: either way the server mints the id."""
+    assert _match(id=None).id is None
 
 
 # --- player_id --------------------------------------------------------------
