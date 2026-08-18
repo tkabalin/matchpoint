@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { PASSWORD_STRENGTH_MIN_SCORE, getPasswordStrengthScore } from "@/lib/password-strength";
 import { useCountdown } from "@/lib/use-countdown";
@@ -286,14 +287,21 @@ export function SignUp() {
         <CardContent>
           <form onSubmit={handleOtpSubmit}>
             <FieldGroup>
-              <Field>
+              <Field className="items-center">
                 <FieldLabel htmlFor="otp">Code</FieldLabel>
-                <Input
-                  id="otp"
-                  type="text"
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value)}
-                />
+                {/* onComplete is deliberately left unwired — the explicit Verify button
+                    below stays the only way to submit, matching every other step in
+                    this flow rather than auto-submitting on the 6th digit (#148). */}
+                <InputOTP id="otp" maxLength={OTP_LENGTH} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
               </Field>
             </FieldGroup>
             {otpWrongLength && (

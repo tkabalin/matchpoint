@@ -16,3 +16,23 @@ configure({ asyncUtilTimeout: 5_000 });
 // Mirrors main.tsx: without this, a test asserting on a thrown error's `.status`
 // (see error-interceptor.ts) would run against an unregistered interceptor.
 registerErrorStatusInterceptor();
+
+// jsdom implements no layout, so it has no ResizeObserver — the input-otp package
+// (shadcn's InputOTP, #148) uses one internally to size itself, and every test
+// rendering it throws "ResizeObserver is not defined" without this. A no-op stub is
+// enough: nothing under test asserts on a real resize.
+class ResizeObserverStub {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.ResizeObserver ??= ResizeObserverStub;
+
+// Same gap, different API: input-otp also polls document.elementFromPoint on an
+// internal timer to track focus, which jsdom doesn't implement either. Without this
+// it doesn't fail a test directly — the timer fires after the test that rendered
+// the component has already finished and torn down — but it throws an uncaught
+// exception into the run every time, which is not something to ship quietly even
+// though every test still reports as passing. Returning null is the correct "found
+// nothing at that point" answer, not just a silence.
+document.elementFromPoint ??= () => null;
