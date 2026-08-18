@@ -20,7 +20,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, NoReturn
 
 from fastapi import Depends, HTTPException, Request, Response
 from sqlalchemy import delete, select
@@ -30,7 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Coach, CoachSession
-from matchpoint_api.rate_limit import RateLimiter
+from matchpoint_api.rate_limit import RateLimiter, client_key
 
 # The `__Host-` prefix binds the cookie to one host: a browser refuses it unless it is
 # Secure, Path=/ and carries no Domain, and thereafter no other host can set or shadow
@@ -240,13 +240,31 @@ def _unauthenticated() -> HTTPException:
     return HTTPException(status_code=401, detail="Not authenticated")
 
 
-def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> Coach:
+def _reject_unknown_token(request: Request) -> NoReturn:
+    """Refuse a token naming no session, charging the lookup it has just cost.
+
+    Otherwise a junk cookie buys an indexed query on every route in the app for free, and
+    nothing else meters it: the budget below cannot be charged when no coach was found.
+    Charged after the miss rather than before the query, which is reject_login's shape for
+    reject_login's reason. A live session never consults this tier, so draining it can
+    repeat a 401 as a 429 but can never refuse a signed-in coach, and behind Cloudflare
+    the key is an edge address real coaches arrive on too.
+    """
+    limiter: RateLimiter = request.app.state.unknown_session_per_ip_limit
+    limiter.take(client_key(request))
+    raise _unauthenticated()
+
+
+def _authenticated_coach(request: Request, db: Session, limiter: RateLimiter) -> Coach:
     """The coach whose session cookie authenticates this request, or a 401.
 
     Read from `request.cookies` rather than a `Cookie()` parameter, because a declared
     cookie parameter reaches the OpenAPI spec and so the generated client's function
     signatures — as an argument the browser, not the caller, is the one attaching.
     The cost is that routes must declare their 401 in `responses` themselves.
+
+    `limiter` is the per-coach budget this request spends from, and picking it is the
+    whole difference between the two dependencies below.
     """
     token = request.cookies.get(SESSION_COOKIE)
     if token is None:
@@ -260,7 +278,7 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
         .where(CoachSession.token_hash == token_hash)
     ).first()
     if row is None:
-        raise _unauthenticated()
+        _reject_unknown_token(request)
     session, coach = row
     now = datetime.now(UTC)
     if session.expires_at <= now:
@@ -273,11 +291,9 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
         db.execute(delete(CoachSession).where(CoachSession.token_hash == token_hash))
         db.commit()
         raise _unauthenticated()
-    # One budget over every authenticated route, charged here so no router can forget
-    # it; sized in create_app. Only after the cookie has proven live, so nothing an
-    # outsider sends can drain a coach's bucket, and before the renewal write below,
-    # so a refused request pays no write.
-    limiter: RateLimiter = request.app.state.authenticated_per_coach_limit
+    # Charged here so no router can forget it; sized in create_app. Only after the
+    # cookie has proven live, so nothing an outsider sends can drain a coach's bucket,
+    # and before the renewal write below, so a refused request pays no write.
     limiter.take(str(coach.id))
     if session.expires_at - now < SESSION_LIFETIME / 2:
         # Renewal on use, from the halfway mark: a coach who opens the app at all
@@ -303,4 +319,27 @@ def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> 
     return coach
 
 
+def current_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> Coach:
+    """Authenticate this request against the budget every ordinary route shares."""
+    return _authenticated_coach(request, db, request.app.state.authenticated_per_coach_limit)
+
+
+def recovery_coach(request: Request, db: Annotated[Session, Depends(get_db)]) -> Coach:
+    """Authenticate a route whose job is taking the account back, on a budget of its own.
+
+    A thief holding a copy of the cookie is the same coach to the shared budget above, so
+    ordinary traffic sent through a stolen session could hold it drained and leave the
+    coach's own change-password and sign-out-everywhere answering 429: the credential
+    theft becoming a denial of recovery (#121). Out of that budget, those two routes are
+    reachable however busy the rest of the API has been made to look.
+
+    Still keyed on the coach, so the thief can drain this one too, but only by hammering
+    the recovery routes themselves rather than as a side effect of traffic they had
+    reason to send. Keying on the address instead would be worse, since behind Cloudflare
+    that is an edge address the coach may well be arriving on as well.
+    """
+    return _authenticated_coach(request, db, request.app.state.recovery_per_coach_limit)
+
+
 CurrentCoach = Annotated[Coach, Depends(current_coach)]
+RecoveryCoach = Annotated[Coach, Depends(recovery_coach)]

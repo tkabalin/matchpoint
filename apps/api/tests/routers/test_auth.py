@@ -29,7 +29,12 @@ from matchpoint_api.password_policy import BREACHED, CONTEXT, REPEATED
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.auth import SEND_FAILED
 from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
-from tests.conftest import ORIGIN_HEADERS, breach_every_password, break_the_breach_check
+from tests.conftest import (
+    ORIGIN_HEADERS,
+    Clock,
+    breach_every_password,
+    break_the_breach_check,
+)
 from tests.factories import (
     make_coach,
     make_coach_session,
@@ -2088,20 +2093,122 @@ def test_a_dead_cookie_s_401_does_not_charge_the_coach(
     assert client.get("/players").status_code == 200
 
 
-def test_the_ceiling_reaches_change_password_too(client: TestClient, db_session: Session) -> None:
-    """A route on a router that mixes authenticated and unauthenticated ones, so its 429
-    is declared per-route. The refusal comes from current_coach, ahead of both this
-    route's own tiers and the pair of Argon2 runs behind them."""
+# --- Recovery routes spend from a budget of their own ---
+
+
+def _drain_the_shared_budget(client: TestClient) -> None:
+    """Leave the budget every ordinary route shares with nothing left to spend.
+
+    A bucket of its own rather than the real 600, so two requests drain it. Callers take
+    the frozen `clock`, which is what stops a stalled runner refilling it mid-test.
+    """
     cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
         per_minute=6, burst=1
     )
-    sign_in(client, db_session, make_coach(db_session))
     assert client.get("/coaches/me").status_code == 200
+    assert client.get("/coaches/me").status_code == 429
 
-    refused = client.post(
-        "/auth/change-password",
-        json={"password": SIGN_UP["password"], "new_password": NEW_PASSWORD},
-    )
+
+def test_a_drained_shared_budget_still_admits_a_revocation(
+    client: TestClient, db_session: Session, clock: Clock
+) -> None:
+    """The stolen-cookie case (#121): a thief holding a copy of the coach's session is
+    the same coach to that budget, so ordinary traffic through it could otherwise leave
+    the one route that ends their access answering 429."""
+    sign_in(client, db_session, make_coach(db_session))
+    _drain_the_shared_budget(client)
+
+    assert _revoke(client).status_code == 204
+
+
+def test_a_drained_shared_budget_still_admits_a_password_change(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch, clock: Clock
+) -> None:
+    """The same carve-out over the other recovery route, the one that also retires the
+    password the thief may know."""
+    _signed_in(client, db_session)
+    _stub_out_hashing(monkeypatch)
+    _drain_the_shared_budget(client)
+
+    assert _change(client).status_code == 204
+
+
+def test_the_recovery_budget_still_bounds_the_recovery_routes(
+    client: TestClient, db_session: Session, clock: Clock
+) -> None:
+    """Carved out of the shared budget, not out of metering: these routes have a bound of
+    their own, and it is the one they spend."""
+    cast(FastAPI, client.app).state.recovery_per_coach_limit = RateLimiter(per_minute=6, burst=1)
+    sign_in(client, db_session, make_coach(db_session))
+    assert _revoke(client).status_code == 204
+
+    refused = _revoke(client)
 
     assert refused.status_code == 429
     assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_a_drained_recovery_budget_leaves_the_ordinary_routes_alone(
+    client: TestClient, db_session: Session, clock: Clock
+) -> None:
+    """The carve-out runs both ways, so a coach who hammered the recovery routes is
+    refused there and nowhere else."""
+    cast(FastAPI, client.app).state.recovery_per_coach_limit = RateLimiter(per_minute=6, burst=1)
+    sign_in(client, db_session, make_coach(db_session))
+    assert _revoke(client).status_code == 204
+    assert _revoke(client).status_code == 429
+
+    assert client.get("/players").status_code == 200
+
+
+# --- Tokens that name no session ---
+
+
+def test_a_flood_of_unknown_tokens_is_refused(client: TestClient, clock: Clock) -> None:
+    """Each junk cookie costs an indexed query against coach_sessions, on every route in
+    the app. Charging the caller's address once the lookup comes back empty is what stops
+    that being free work."""
+    cast(FastAPI, client.app).state.unknown_session_per_ip_limit = RateLimiter(
+        per_minute=6, burst=2
+    )
+    for _ in range(2):
+        client.cookies.set(SESSION_COOKIE, new_session_token())
+        assert client.get("/players").status_code == 401
+
+    client.cookies.set(SESSION_COOKIE, new_session_token())
+
+    refused = client.get("/players")
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_a_drained_unknown_token_tier_still_admits_a_live_session(
+    client: TestClient, db_session: Session, clock: Clock
+) -> None:
+    """Only a token resolving to nothing is charged, so this tier can repeat a 401 as a
+    429 but can never refuse a coach who is signed in. Behind Cloudflare the key is an
+    edge address real coaches share, which is what makes that property necessary rather
+    than merely tidy."""
+    cast(FastAPI, client.app).state.unknown_session_per_ip_limit = RateLimiter(
+        per_minute=6, burst=1
+    )
+    client.cookies.set(SESSION_COOKIE, new_session_token())
+    assert client.get("/players").status_code == 401
+    assert client.get("/players").status_code == 429
+
+    client.cookies.clear()
+    sign_in(client, db_session, make_coach(db_session))
+
+    assert client.get("/players").status_code == 200
+
+
+def test_a_request_carrying_no_cookie_is_never_charged(client: TestClient, clock: Clock) -> None:
+    """No cookie means no lookup and so nothing to meter, and a signed-out browser
+    reaching a protected route is ordinary rather than a flood."""
+    cast(FastAPI, client.app).state.unknown_session_per_ip_limit = RateLimiter(
+        per_minute=6, burst=1
+    )
+
+    for _ in range(3):
+        assert client.get("/players").status_code == 401

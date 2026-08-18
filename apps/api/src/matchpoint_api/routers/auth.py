@@ -14,7 +14,7 @@ from matchpoint_api.auth import (
     SESSION_COOKIE,
     SESSION_LIFETIME,
     VERIFICATION_LIFETIME,
-    CurrentCoach,
+    RecoveryCoach,
     hash_otp,
     hash_token,
     new_otp,
@@ -175,8 +175,13 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
 
 # 204 whether or not this coach had other sessions, for logout's reason: the request
 # asks for a state, and a coach signed in nowhere else is already in it. The 401 is
-# declared per-route, with a model for ErrorDetail's reason; the 429 is the per-coach
-# budget current_coach charges.
+# declared per-route, with a model for ErrorDetail's reason; the 429 is the recovery
+# budget `recovery_coach` charges.
+#
+# RecoveryCoach and not CurrentCoach because this is the route that ends a thief's
+# access, so it must not be reachable only while the budget their traffic shares with
+# the coach has a token left (#121). Two indexed statements is the whole cost here, so
+# that budget is also the only tier this route needs.
 @router.delete(
     "/sessions",
     status_code=204,
@@ -185,7 +190,7 @@ def logout(request: Request, db: DbSession, response: Response) -> None:
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
-def revoke_other_sessions(coach: CurrentCoach, request: Request, db: DbSession) -> None:
+def revoke_other_sessions(coach: RecoveryCoach, request: Request, db: DbSession) -> None:
     """Sign out every other client holding a session for this coach.
 
     The calling device stays signed in, on a session issued here rather than the one it
@@ -737,6 +742,12 @@ def reset_password(data: ResetPasswordRequest, request: Request, db: DbSession) 
 # the cookie proves this browser was signed in once, not that whoever holds it now knows
 # the password. Without the check, a stolen session is a permanent account takeover: the
 # thief sets a password of their own and the coach cannot even recover to it.
+#
+# Which is also why it takes RecoveryCoach: a route that exists to end a stolen session's
+# access cannot spend from a budget that session's own traffic drains (#121). Its tiers
+# below are unchanged: the arrival ones bound the two Argon2 runs, and the wrong-guess one
+# is consulted only by a caller who has the password wrong, so a thief draining it with
+# guesses still cannot refuse the coach who knows it.
 
 INCORRECT_PASSWORD = "Incorrect password"
 
@@ -749,13 +760,13 @@ INCORRECT_PASSWORD = "Incorrect password"
         401: {"model": ErrorDetail, "description": "Not signed in"},
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
         # Two things now answer 429 here, this route's wrong-guess and arrival tiers and
-        # the per-coach budget current_coach charges, so the description is the wider one
-        # the body already carries.
+        # the recovery budget `recovery_coach` charges, so the description is the wider
+        # one the body already carries.
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
 def change_password(
-    data: ChangePasswordRequest, coach: CurrentCoach, request: Request, db: DbSession
+    data: ChangePasswordRequest, coach: RecoveryCoach, request: Request, db: DbSession
 ) -> None:
     """Replace this coach's password, given the current one, and end every session.
 

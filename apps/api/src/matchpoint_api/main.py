@@ -152,6 +152,18 @@ def create_app() -> FastAPI:
     # point ingestion exists to measure (#56).
     app.state.authenticated_per_coach_limit = RateLimiter(per_minute=120, burst=600)
 
+    # The routes that take the account back, held out of the budget above so a stolen
+    # session cannot starve them (auth.recovery_coach). The same sustained rate as that
+    # budget deliberately: holding a bucket empty costs its refill rate, so a slower one
+    # here would make the denial this carve-out prevents cheaper to mount than it was.
+    app.state.recovery_per_coach_limit = RateLimiter(per_minute=120, burst=60)
+
+    # A cookie naming no session, charged after the lookup it cost (auth.py). The key is
+    # a Cloudflare edge address many coaches share, and every device still presenting a
+    # revoked cookie charges it, so this bounds abuse by orders of magnitude rather than
+    # metering one caller: a tight figure here would refuse honest callers first.
+    app.state.unknown_session_per_ip_limit = RateLimiter(per_minute=600, burst=600)
+
     # Outbound email, on app state for the buckets' reason — every create_app() gets
     # a sender of its own, so no test can send real mail and any test can read what
     # was sent by swapping in a recorder. Which sender is settings' call (mail.py).
