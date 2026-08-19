@@ -43,9 +43,18 @@ tradeoff explicitly rather than silently picking a side.
 
 - The most-used / highest-value action on a screen gets the largest, easiest-to-reach tap target.
 - Destructive or irreversible actions (delete account, sign out of all sessions) get smaller
-  targets, more visual separation from routine actions, and ideally a confirmation step. They should
-  never sit directly adjacent to a similarly-worded safe action (e.g. "Sign out" vs "Sign out all
-  sessions") — that adjacency is the failure mode to avoid, not a detail to gloss over.
+  targets, lighter visual weight, and a confirmation step scaled to severity (a plain confirm for
+  "sign out all sessions"; confirm + typed verification for "delete account"). They should never sit
+  directly adjacent to a similarly-worded safe action with no divider between them (e.g. "Sign out"
+  vs "Sign out all sessions") — that adjacency with no separation is the failure mode to avoid, not
+  a detail to gloss over.
+- Do this separation within the same functional group, not by physically relocating an item to a
+  different part of the page. Exiling "Sign out" to its own section at the bottom of the screen to
+  protect it from "Sign out all sessions" breaks Jakob's Law (users expect all session/account
+  actions in one place — Google, Slack, Notion all do this) without actually fixing the mis-tap
+  risk. Use an internal divider and graduated visual weight/confirmation friction inside Account &
+  Security instead: routine actions plain and easy, escalating actions behind more friction, most
+  severe action lightest in weight but heaviest in confirmation.
 - Don't shrink or crowd a frequently-used control for aesthetic symmetry.
 
 ## 5. Miller's Law — chunk into groups of ~5–7 (comfortably 3–5 for touch UI)

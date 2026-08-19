@@ -65,7 +65,9 @@ not the original Okabe-Ito hexes the wireframe mockup itself used — always def
 `.claude/rules/web-color.md` as the source of truth if the two ever disagree again. Inter +
 tabular-nums for stats.
 
-**Skip these frames entirely — do not build or reference them:** 2a, 2b, 2d.
+If the wireframe itself flags certain frames as deprecated, superseded, or not to be built (e.g. an
+early draft left in the export alongside its replacement), skip those and say so — don't guess from
+a frame's content alone that it should be skipped.
 
 ### 4. Data vs. navigation components
 
@@ -74,10 +76,9 @@ Most components on any screen fall into one of two buckets — handle each diffe
 - **Navigation** (tabs, bottom nav, links, route transitions): must be fully functional. Wire real
   TanStack Router routes/links, not stubs. This is not optional or placeholder-able.
 - **Data-bearing** (anything rendering player/match/stat data): check `apps/api/openapi.json` first.
-  If the endpoint already exists (currently only OTP auth, coaches CRUD, players CRUD, matches
-  CRUD-with-metadata), wire it for real through the generated API client and TanStack Query. If it
-  doesn't exist yet (points/capture/stats/H2H/notes all currently don't), use the placeholder
-  pattern below — do not block the wireframe build on missing backend work.
+  If the endpoint already exists, wire it for real through the generated API client and TanStack
+  Query. If it doesn't exist yet, use the placeholder pattern below — do not block the wireframe
+  build on missing backend work.
 
 **Placeholder pattern for missing schema:**
 
@@ -95,29 +96,25 @@ Most components on any screen fall into one of two buckets — handle each diffe
 - Keep placeholders out of `packages/api-client` (generated-only, never hand-edited) — they live in
   the feature slice's own `mocks/` folder.
 
-### 5. Frame-specific behavior: 3b (and 3a)
+### 5. State-dependent primary actions
 
-The primary action button on 3b/3a is state-dependent, not a fixed icon:
-
-- **A match is currently in progress:** show a **Play** button. Its only behavior is continuing that
-  in-progress match — do not offer starting a new one while one is active.
-- **No match in progress:** show a **+ (plus)** button, matching the treatment already shown on
-  frame 3a, to start a new match.
-
-This is a single component with two states driven by whether an in-progress match exists
-(client-side `matches` state until the capture/points API exists — see placeholder pattern above),
-not two separate buttons.
+A frame's primary action button is sometimes state-dependent rather than a fixed icon — e.g. a
+control that resumes something already in progress instead of offering to start a new one while
+one is active. When a frame implies this, build it as a single component with multiple states
+driven by the relevant state (client-side until the backing API exists — see the placeholder
+pattern above), never as separate hard-coded buttons for each state. If the wireframe doesn't make
+unambiguous what governs each state, ask rather than guess.
 
 ## Workflow
 
 1. Confirm both the wireframe and the defaults doc are available; ask for whichever is missing.
-2. Identify the target frame(s) from the user's request.
-3. Skip immediately if the frame is 2a, 2b, or 2d.
-4. Inventory the shadcn components the frame needs; confirm each is generated in
+2. Identify the target frame(s) from the user's request. Skip any the wireframe itself flags as
+   deprecated or superseded, and say so.
+3. Inventory the shadcn components the frame needs; confirm each is generated in
    `apps/web/src/components/ui/`.
-5. Build the page/component, applying defaults-doc values to every component instance.
-6. Wire navigation fully. For data: check `apps/api/openapi.json` for the endpoint; wire real data
+4. Build the page/component, applying defaults-doc values to every component instance.
+5. Wire navigation fully. For data: check `apps/api/openapi.json` for the endpoint; wire real data
    if present, placeholder pattern if not.
-7. For 3a/3b specifically, implement the Play/+ state logic described above.
-8. Before finishing, self-check against rules 1–2: did anything get hand-rolled instead of using
+6. Where a frame implies a state-dependent primary action, implement it as described above.
+7. Before finishing, self-check against rules 1–2: did anything get hand-rolled instead of using
    shadcn, and does every component match the defaults doc?
