@@ -13,8 +13,9 @@ import { afterEach } from "vitest";
 afterEach(cleanup);
 
 // `testTimeout` in vite.config.ts bounds a whole test, but findBy*/waitFor keep their
-// own budget, which defaults to 1s. The runner's contention has pushed a router
-// redirect past that, so these get the slack that timeout's 15s already assumes.
+// own budget, which defaults to 1s. A screen that fetches its own data still waits
+// inside one of those, so these get the slack that timeout's 15s already assumes.
+// Raising it again is no answer to a starved runner: see docs/testing.md.
 configure({ asyncUtilTimeout: 5_000 });
 
 // Mirrors main.tsx: without this, a test asserting on a thrown error's `.status`

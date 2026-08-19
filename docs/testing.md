@@ -139,6 +139,32 @@ collect coverage and emit JUnit reports, so merge requests are annotated with fa
 coverage figure. Coverage is informational — there is no enforced threshold; review judges whether
 behaviour is adequately tested.
 
+### Timing on a shared runner
+
+Several CI jobs run at once on one machine, and Vitest sizes its worker pool from the cores it can
+see rather than the share it gets, so concurrent jobs together ask for a multiple of the CPU that
+exists. Every test budget is wall-clock, so the same work takes more of each one under that load and
+the tightest expires first: a render that resolves in half a second on an idle machine can take ten
+times longer.
+
+Widening a budget only moves the next failure, so two things are done instead:
+
+- **Await asynchronous work rather than polling for its result.** A `findBy*` or `waitFor` query has
+  its own budget (`asyncUtilTimeout` in `src/test-setup.ts`), well below the whole-test one, so
+  anything left inside a poll breaks first. Where the framework exposes a promise for that work, as
+  the router does for resolving a route, awaiting it moves the wait to the wider budget and leaves
+  the query asserting on a result already in the DOM.
+- **Run the heaviest suite one job at a time.** Two copies sharing the cores each take about twice
+  as long, so serializing them across pipelines (GitLab's `resource_group`, which admits one job of
+  a named group at a time) finishes both at about the same moment. This removes the worst offender's
+  second copy, not the contention itself: the other jobs in a pipeline still share the machine.
+
+Neither reaches a budget that was never the suite's own: a library default sitting well below the
+configured figure is the one that expires first, so a poll with no promise to await states its
+budget at the call site. Capping a job's own worker count is not the lever it looks like either,
+since a pool with fewer runnable processes gets a smaller share of a contended machine: it lengthens
+the job without shortening any test.
+
 ## Regression testing
 
 The full suite (unit, integration, and e2e) runs on every push via CI, so a change that breaks
