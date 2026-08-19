@@ -28,6 +28,23 @@ therefore less likely to run into issues than a newer release.
 **Domain**: `thomaskabalin.com` is a personal domain, already owned. MatchPoint is on its
 `matchpoint` subdomain.
 
+## Stored photos
+
+Profile photos are files in a Docker volume mounted into the api container, not rows and not an
+object store; `docs/tech-stack.md` records why, and `docs/security.md` how they are served.
+
+The disk is the constraint the design answers to. Every upload is re-encoded to one fixed size, so a
+stored photo costs a known few tens of kilobytes whatever arrived, and the total is bounded by the
+number of coaches and players rather than by what anyone chooses to upload — a thousand profiles is
+a fraction of a percent of the disk above. Nothing else grows: each row holds at most one photo, and
+replacing one deletes the file it replaced. The only unbounded term is a file stranded by a crash
+between writing it and committing the row that names it, which nothing sweeps and which costs
+kilobytes.
+
+The volume is outside the nightly database dump, which is logical and covers the database alone. The
+daily snapshot is what carries it, and is taken after the dump, so a snapshot restore is internally
+consistent where a dump restored on its own leaves rows naming photos that are gone.
+
 ## Access & Security
 
 **Principle of least privilege** governs SSH access; access is limited to what's needed, nothing

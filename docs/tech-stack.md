@@ -131,6 +131,7 @@ not bind on a validator used in tests and at one sync boundary).
 | Sessions            | Opaque tokens, HttpOnly cookie |
 | Rate limiting       | In-process token bucket        |
 | Transactional email | Resend (HTTP API via httpx)    |
+| Image processing    | Pillow 12                      |
 | Logging             | structlog 26                   |
 | Tests               | pytest 9                       |
 
@@ -220,6 +221,19 @@ and the structural accessibility rules that layout has to meet (a language decla
 elements, presentational layout tables, one heading, a title) are asserted by the module's tests
 rather than left to a reviewer's eye.
 
+**Pillow for profile photos.** A coach uploads whatever their phone produced; what is stored is one
+thing, a small square WebP. Doing that server-side is what makes it a guarantee rather than a
+request: a crop performed in the browser is a suggestion, and the bytes that reach the disk are the
+ones a browser will later be asked to render. It also bounds the feature's cost on a 25 GB VPS,
+since a stored photo is a constant rather than a function of what clients send. Pillow is the
+imaging library for Python, ships prebuilt wheels so the runtime image needs no build toolchain, and
+opens lazily — dimensions come off the header, which is the only place a decode bound can be applied
+before the memory has already been claimed. Alternatives considered: resizing in the browser alone
+(the API would then store bytes it never parsed under an image's name, and the client is expected to
+downscale regardless, for the 1 MB body cap rather than for the crop); pyvips (faster and lighter,
+for a system library in the runtime image and a handful of uploads a day); ImageMagick over a
+subprocess (a long history of parser CVEs, and a process boundary to get wrong).
+
 **structlog for logging.** Each request is logged as one JSON line carrying a request id that is
 also returned on the response, so a production question is a field filter over container logs and a
 reported error ties to the line it produced (`logs.py`). structlog is the standard structured
@@ -237,6 +251,7 @@ lines inside a middleware the request line needs anyway).
 | ------------------ | --------------------------------- |
 | Database           | PostgreSQL 18                     |
 | Containers         | Docker Compose (local dev + prod) |
+| Photo storage      | Docker volume on the VPS          |
 | Web server / proxy | Caddy 2                           |
 | CI/CD              | GitLab CI                         |
 
@@ -252,6 +267,18 @@ regardless.
 **Docker Compose for local dev and prod.** Gives dev/prod parity with minimal overhead. Local dev
 runs just Postgres (root `docker-compose.yml`); production runs the full stack on the VPS from
 `infra/prod/compose.yml`.
+
+**Photos on a volume, served by the API.** Profile photos are files in a Docker volume, named by an
+unguessable key and served by the API from a path under `/api`. There is one server, so a bucket
+would add a vendor, a credential and a client library to a feature whose whole corpus is one small
+image per coach and per player; the volume needs none of those, and the path being under `/api`
+means the proxy and the dev server route it with the configuration they already have. What it costs
+is that the files are not replicated and are covered by the daily VPS snapshot rather than by the
+database dump, and that they are the one state a restore can leave inconsistent. Alternatives
+considered: Cloudflare R2 or another S3-compatible bucket (the right answer the moment photos must
+outlive the box, and the wrong one while nothing does); the bytes in a database column (every row a
+query touches grows whether or not it wanted pixels, and there is no URL left for a client to
+cache).
 
 **Caddy.** Serves the built SPA and reverse-proxies `/api/*` to the API from a single origin, which
 removes CORS from the picture entirely. TLS is a two-line config using a Cloudflare Origin
