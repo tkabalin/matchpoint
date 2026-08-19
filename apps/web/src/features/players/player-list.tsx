@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 
 import { PlayerAvatar } from "@/components/player-avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import {
   Item,
@@ -137,7 +138,13 @@ function PlayerRow({
         <PlayerAvatar player={player} size="md" />
       </ItemMedia>
       <ItemContent>
-        <ItemTitle>{`${player.first_name} ${player.last_name}`}</ItemTitle>
+        <ItemTitle className="flex items-center gap-2">
+          {`${player.first_name} ${player.last_name}`}
+          {/* Non-interactive — the whole row is already a button, so a live transfer
+              code is a badge here, not a control. #185 owns cancelling it, from the
+              player's profile. */}
+          {player.has_transfer_code && <Badge variant="secondary">Transfer pending</Badge>}
+        </ItemTitle>
         <ItemDescription className={flag ? "text-outcome-unforced" : undefined}>
           {flag ?? `Form ${overview?.form.value ?? "—"}%`}
         </ItemDescription>

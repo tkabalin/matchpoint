@@ -352,3 +352,149 @@ test("saving Edit with nothing changed just closes, no request sent", async () =
   );
   expect(patches).toEqual([]);
 });
+
+test("Delete player asks for confirmation before sending anything", async () => {
+  const deletes: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") deletes.push(input.url);
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+
+  expect(await screen.findByRole("heading", { name: "Delete Amahle?" })).toBeInTheDocument();
+  expect(screen.getByText(/every match recorded against them/)).toBeInTheDocument();
+  expect(deletes).toEqual([]);
+});
+
+test("Cancel on the delete step returns to the form without deleting", async () => {
+  const deletes: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") deletes.push(input.url);
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+  await screen.findByRole("heading", { name: "Delete Amahle?" });
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(await screen.findByRole("heading", { name: "Edit Amahle" })).toBeInTheDocument();
+  expect(deletes).toEqual([]);
+});
+
+test("confirming Delete removes the player and returns to the roster", async () => {
+  const deletes: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") {
+        deletes.push(input.url);
+        return new Response(null, { status: 204 });
+      }
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+  await screen.findByRole("heading", { name: "Delete Amahle?" });
+  // Two buttons share the label across the two steps ("Delete player" also opens the
+  // confirm step) — the confirm step's own button is the one still on screen here.
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+
+  await waitFor(() => expect(deletes).toHaveLength(1));
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
+
+test("a player already flagged as pending transfer skips straight to the explanation, no request sent", async () => {
+  const deletes: string[] = [];
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") deletes.push(input.url);
+      return Response.json({ ...player, has_transfer_code: true });
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Can't delete Amahle yet" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/transfer code waiting to be used/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /cancel.*code/i })).not.toBeInTheDocument();
+  expect(deletes).toEqual([]);
+});
+
+test("a code created since the page loaded is caught by the request's own 409, same explanation", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") {
+        return new Response(JSON.stringify({ detail: "Outstanding transfer code" }), {
+          status: 409,
+        });
+      }
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+  await screen.findByRole("heading", { name: "Delete Amahle?" });
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Can't delete Amahle yet" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText(/transfer code waiting to be used/)).toBeInTheDocument();
+});
+
+// parseErrorMessage surfaces a string `detail` verbatim (see lib/parse-error.ts) —
+// the generic fallback is only for a body with no usable detail, e.g. a bare network
+// failure, not every non-2xx response.
+test("an unexpected delete failure shows the server's own message", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: (input) => {
+      if (input.method === "DELETE") {
+        return new Response(JSON.stringify({ detail: "boom" }), { status: 500 });
+      }
+      return Response.json(player);
+    },
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+  await user.click(await screen.findByRole("button", { name: "Delete player" }));
+  await screen.findByRole("heading", { name: "Delete Amahle?" });
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+
+  expect(await screen.findByText("boom")).toBeInTheDocument();
+});

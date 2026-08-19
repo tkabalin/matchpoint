@@ -83,6 +83,26 @@ test("renders the players the API returns", async () => {
   await renderPlayerList();
 
   expect(await screen.findByText("Amahle Nkosi")).toBeInTheDocument();
+  expect(screen.queryByText("Transfer pending")).not.toBeInTheDocument();
+});
+
+// #102 owns this indicator; #185 owns minting and cancelling the code itself, from
+// the player's own profile.
+test("flags a player whose transfer code is still out", async () => {
+  stubFetch(() => Response.json([{ ...player, has_transfer_code: true }]));
+
+  await renderPlayerList();
+
+  expect(await screen.findByText("Transfer pending")).toBeInTheDocument();
+});
+
+test("the pending-transfer flag is part of the row, not a control of its own", async () => {
+  stubFetch(() => Response.json([{ ...player, has_transfer_code: true }]));
+
+  await renderPlayerList();
+
+  await screen.findByText("Transfer pending");
+  expect(screen.getAllByRole("button")).toHaveLength(1);
 });
 
 test("requests the roster from the API's own origin", async () => {
