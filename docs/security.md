@@ -294,8 +294,14 @@ Request bodies are capped at 1 MB, enforced twice: by Caddy on the public path a
 `Content-Length` are counted as they stream, so the header cannot be omitted to bypass the limit.
 
 Without a cap, a single request could claim enough memory to crash the container (out-of-memory
-kill). 1 MB is roughly ten times the largest legitimate payload (a full match's batch of points),
-leaving room for future fields without silently breaking.
+kill). 1 MB is sized against the largest body the API takes, an uploaded profile photo, with room
+above every other one — a full match's batch of points is a tenth of it.
+
+Bytes are not the whole bound, because an image is not the size it decodes to: a megabyte of JPEG
+allocates whatever its header claims, several bytes to the pixel. So an upload is refused on its
+pixel count, read from that header before anything is decoded, and a fixed number of decodes may
+hold a buffer at once — the same arithmetic against the same container memory limit as the Argon2
+slots above.
 
 ## OTP codes
 
@@ -375,6 +381,27 @@ the player, and it travels with the row. Handing over the context a new coach wo
 is what the transfer is for, and the notes are the part written closest to that; they are the
 minting coach's to edit or clear beforehand, so the mint endpoint names them among what leaves.
 
+## Profile photos
+
+**The filename is the credential.** A stored photo is served without a session check, under a name
+of 128 random bits. The alternative costs a session lookup and a database read per image, on pages
+that show a whole roster of them, to guard a cropped photograph rather than account data. What it
+does not do is expire: anyone handed a URL keeps it. Replacing or clearing a photo stores the new
+one under a new name and deletes the old file, so a URL that has been handed out dies with the photo
+it named rather than outliving it.
+
+**Re-encoding is the sanitiser.** Nothing that arrives is stored. Every upload is decoded and
+written out again at one fixed size, so the bytes served share nothing with the bytes submitted and
+no malformed or polyglot container survives to be handed back from our own origin. That is also what
+removes the camera metadata a phone attaches, including the coordinates a photo was taken at, which
+matters here because the subjects are players and some of them are children. The formats a decoder
+will be pointed at are an allowlist checked from the header first, which is what keeps the plugins
+that shell out to an external interpreter out of reach.
+
+**The name reaches the logs.** A request for a photo is logged like any other, path included, so the
+credential appears in the container logs and in Caddy's. Accepted rather than redacted: the log sits
+on the same disk as the file it names, and anyone who can read one can read the other.
+
 ## Secret redaction in validation errors
 
 FastAPI's default 422 handler echoes the submitted body in `detail[].input`. A rejected sign-up
@@ -413,6 +440,10 @@ page, so `MATCHPOINT_DEBUG` belongs to development and stays unset wherever the 
 **404, not 403, for another coach's resources.** A request for a player or match belonging to
 another coach returns 404. A 403 would confirm the row exists, which is the same enumeration concern
 as the authentication design above.
+
+**Photos are the documented exception.** A stored photo is reachable by URL without a session, so it
+is not scoped to a coach the way every other resource is. The photo section above records what that
+means and why it is the trade worth making.
 
 **No coach list endpoint.** No route returns a coach other than the caller's own. A list route would
 be an open dump of every coach's email address. Pinned by a test asserting `GET /coaches`
