@@ -30,8 +30,8 @@ import type { Point } from "./point";
  * gameStateFor needs.
  *
  * TODO: confirm against the brief/BBD — "short_sets" is inferred, not
- * settled (the reference table calls it "often paired with no-ad," not a
- * hard rule), same caveat as maxSetsFor's "traditional"/"legacy" guesses.
+ * settled (docs/scoring-systems.md calls it "often paired with no-ad," not
+ * a hard rule), same caveat as maxSetsFor's "legacy" guess.
  */
 export function isAdScoringFor(scoringSystem: ScoringSystem): boolean {
   switch (scoringSystem) {
@@ -59,8 +59,8 @@ export function isAdScoringFor(scoringSystem: ScoringSystem): boolean {
  * earlier (e.g. a straight-sets win), so this is a ceiling, not a
  * prediction.
  *
- * TODO: confirm against the brief/BBD once set/game rules are firmed up —
- * "traditional" and "legacy" are placeholder assumptions (best-of-3) for now.
+ * "traditional" is confirmed best-of-3 — see docs/scoring-systems.md. "legacy" isn't
+ * stated there — best-of-3 stays a placeholder assumption for it.
  */
 export function maxSetsFor(scoringSystem: ScoringSystem): number {
   switch (scoringSystem) {
@@ -200,8 +200,8 @@ export interface SetRules {
  * no games phase to play at all.
  *
  * TODO: confirm against the brief/BBD. short_sets' tiebreakTarget isn't in
- * the reference table at all — 5 is Fast4's common convention, not
- * confirmed. pro_set's games-to-win is stated as "8 (or 10)" with no
+ * docs/scoring-systems.md at all — 5 is Fast4's common convention, not
+ * confirmed. pro_set's games-to-win is stated there as "8 (or 10)" with no
  * target given; defaulting to the more common 8-game/7-point convention.
  */
 export function setRulesFor(
@@ -588,8 +588,11 @@ export function matchSetsFor(
 }
 
 // Flips between the two participant ids — the building block server rotation is
-// built from, since "whose turn" always means "not whoever had it last."
-function otherIdOf(id: string, trackedPlayerId: string, opponentId: string): string {
+// built from, since "whose turn" always means "not whoever had it last." Exported
+// for match-flow.ts's retireMatch, which needs the same flip (a retirement's winner
+// is the other participant) but not this function's assumption that `id` is already
+// one of the two — that's checked by whichever caller needs it checked.
+export function otherIdOf(id: string, trackedPlayerId: string, opponentId: string): string {
   return id === trackedPlayerId ? opponentId : trackedPlayerId;
 }
 
