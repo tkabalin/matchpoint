@@ -312,6 +312,12 @@ re-read under a row lock on every write to a player, so a check made before the 
 stale by the time it lands: without that, the coach handing a player over could keep writing to them
 after the transfer had committed.
 
+**The player read reports that a code exists, never the code.** One screen has to survive a reload
+with a transfer still pending, and two have to explain a refusal whose message names no player, so
+the player read carries a boolean saying a code is outstanding, derived from the code table rather
+than stored. It discloses nothing: only the SHA-256 is kept, so showing the code again is impossible
+by construction, and the coach who reads the flag is the one who minted it.
+
 **The whole profile moves, notes included.** `players.notes` is the current coach's own prose about
 the player, and it travels with the row. Handing over the context a new coach would otherwise lack
 is what the transfer is for, and the notes are the part written closest to that; they are the
