@@ -153,15 +153,15 @@ def upload_player_photo(
 ) -> Player:
     """Replace this player's photo, and answer with the player."""
     photos.limit_photo_upload_rate(request, coach.id)
-    # Ownership before the decode, so a probe at another coach's id gets its 404 having
-    # stored nothing. The row lock is then held across the decode, which is a wait on
-    # this coach's own player and so contends with nothing but their own next upload.
+    # Ownership checked unlocked first, so a probe at another coach's id gets its 404
+    # having stored nothing — then the transaction is ended, so the connection isn't
+    # pinned across the semaphore wait inside store_photo below. The row lock is taken
+    # only around the write, which is the part that actually needs it.
+    owned_player(db, player_id, coach.id)
+    db.rollback()
+    new_key = photos.store_photo(file)
     player = owned_player(db, player_id, coach.id, for_update=True)
-    replaced = player.photo_key
-    player.photo_key = photos.store_photo(file)
-    db.commit()
-    # After the commit, never before it — see the ordering note in photos.py.
-    photos.delete(replaced)
+    photos.replace_key(db, player, new_key)
     return player
 
 
@@ -169,13 +169,10 @@ def upload_player_photo(
 def delete_player_photo(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
     """Clear this player's photo, back to the initials avatar the app falls back to."""
     player = owned_player(db, player_id, coach.id, for_update=True)
-    cleared = player.photo_key
     # Clearing a photo that is not there is a no-op rather than a 404, for the reason
     # archiving twice is: a retried request must neither error nor move the row.
-    if cleared is not None:
-        player.photo_key = None
-        db.commit()
-        photos.delete(cleared)
+    if player.photo_key is not None:
+        photos.replace_key(db, player, None)
     return player
 
 

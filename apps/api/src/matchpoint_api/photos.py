@@ -27,15 +27,22 @@ import secrets
 import threading
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException, Request, UploadFile
 from PIL import Image, ImageOps
+from sqlalchemy.orm import Session
 from starlette.responses import Response
 from starlette.staticfiles import PathLike, StaticFiles
 from starlette.types import Scope
 
 from matchpoint_api.config import settings
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
+
+if TYPE_CHECKING:
+    # Deferred: models/coach.py and models/player.py import this module at runtime, so
+    # a top-level import here would cycle. Type-checking only, never executed.
+    from matchpoint_api.models import Coach, Player
 
 # One stored size, square, because every surface that shows a photo shows it in a small
 # square avatar. 512 covers those at twice their pixel density, and the crop is centred
@@ -144,6 +151,19 @@ def delete(key: str | None) -> None:
     if key is None:
         return
     path_for(key).unlink(missing_ok=True)
+
+
+def replace_key(db: Session, obj: "Coach | Player", new_key: str | None) -> None:
+    """Point `obj.photo_key` at `new_key`, commit, then unlink whatever it replaced.
+
+    After the commit, never before it — see the ordering note above. Shared by the
+    coach and player upload/clear routes, so that ordering is written once rather than
+    copied at each of the four call sites.
+    """
+    old_key = obj.photo_key
+    obj.photo_key = new_key
+    db.commit()
+    delete(old_key)
 
 
 def limit_photo_upload_rate(request: Request, coach_id: uuid.UUID) -> None:

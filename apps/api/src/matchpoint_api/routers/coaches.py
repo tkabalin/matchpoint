@@ -213,6 +213,19 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
 # a new key and so a URL the caller has no other way to learn.
 
 
+def _locked_coach(db: Session, coach: Coach) -> Coach:
+    """Re-select this coach FOR UPDATE, closing the race `owned_player`'s lock closes.
+
+    `current_coach` loads the row without a lock, so two requests racing on the same
+    coach's photo could each read the same starting `photo_key`, each store a file, and
+    each commit — orphaning the loser's file.
+    """
+    locked = db.get(Coach, coach.id, with_for_update=True)
+    if locked is None:
+        raise HTTPException(status_code=401, detail="Not signed in")
+    return locked
+
+
 @router.post(
     "/me/photo",
     response_model=CoachRead,
@@ -227,13 +240,13 @@ def upload_coach_photo(
 ) -> Coach:
     """Replace this coach's profile photo, and answer with the coach."""
     photos.limit_photo_upload_rate(request, coach.id)
-    replaced = coach.photo_key
-    coach.photo_key = photos.store_photo(file)
-    db.commit()
-    # After the commit, never before it: an unlinked file whose row still names it is a
-    # broken image on every render, where a file nothing names is a few unreachable
-    # kilobytes. Two uploads racing leave the loser's file behind on the same argument.
-    photos.delete(replaced)
+    # Ends whatever transaction current_coach's session began, so a connection isn't
+    # pinned across the semaphore wait inside store_photo below — the row lock is taken
+    # only around the write, which is the part that actually needs it.
+    db.rollback()
+    new_key = photos.store_photo(file)
+    coach = _locked_coach(db, coach)
+    photos.replace_key(db, coach, new_key)
     return coach
 
 
@@ -247,13 +260,11 @@ def upload_coach_photo(
 )
 def delete_coach_photo(coach: CurrentCoach, db: DbSession) -> Coach:
     """Clear this coach's profile photo, back to the app's initials avatar."""
-    cleared = coach.photo_key
+    coach = _locked_coach(db, coach)
     # Clearing a photo that is not there is a no-op rather than a 404, for the reason
     # archiving twice is: a retried request must neither error nor move the row.
-    if cleared is not None:
-        coach.photo_key = None
-        db.commit()
-        photos.delete(cleared)
+    if coach.photo_key is not None:
+        photos.replace_key(db, coach, None)
     return coach
 
 
@@ -333,14 +344,17 @@ def delete_current_coach(
     # Postgres cannot help here the way its foreign keys do for a table left out of the
     # list: a photo file has nothing pointing at it, so one missed is simply never
     # reclaimed rather than a delete that fails loudly.
-    photo_keys = [
-        coach.photo_key,
-        *db.scalars(
-            select(Player.photo_key).where(
-                Player.coach_id == coach.id, Player.photo_key.is_not(None)
-            )
-        ),
-    ]
+    #
+    # FOR UPDATE on every one of the coach's players, not only those with a photo
+    # already set: a concurrent upload takes the same lock (owned_player's for_update)
+    # before it stores a file, so locking only the rows that already have a key would
+    # let an upload to a still-bare player slip in between this select and the delete
+    # below, and its file would never be queued for cleanup.
+    coach = _locked_coach(db, coach)
+    player_photo_keys = db.scalars(
+        select(Player.photo_key).where(Player.coach_id == coach.id).with_for_update()
+    )
+    photo_keys = [coach.photo_key, *(key for key in player_photo_keys if key is not None)]
     # Children first, in one transaction, because every foreign key here declares no
     # `ondelete`, so a table added below the coach and left out of this list stops the
     # delete outright rather than being quietly missed. Nothing keys on the email
