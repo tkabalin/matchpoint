@@ -272,6 +272,9 @@ def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
+    # A column_property, unpopulated on a row built rather than queried; PlayerRead
+    # needs it regardless, since it is not what this test is about.
+    player.has_transfer_code = False
 
     assert PlayerRead.model_validate(player).photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"
 

@@ -15,6 +15,16 @@ export type BodyUploadCoachPhoto = {
 };
 
 /**
+ * Body_upload_player_photo
+ */
+export type BodyUploadPlayerPhoto = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
  * ChangePasswordRequest
  */
 export type ChangePasswordRequest = {
@@ -1561,6 +1571,86 @@ export type UpdatePlayerResponses = {
 };
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
+
+export type DeletePlayerPhotoData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/photo';
+};
+
+export type DeletePlayerPhotoErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeletePlayerPhotoError = DeletePlayerPhotoErrors[keyof DeletePlayerPhotoErrors];
+
+export type DeletePlayerPhotoResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type DeletePlayerPhotoResponse = DeletePlayerPhotoResponses[keyof DeletePlayerPhotoResponses];
+
+export type UploadPlayerPhotoData = {
+    body: BodyUploadPlayerPhoto;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/photo';
+};
+
+export type UploadPlayerPhotoErrors = {
+    /**
+     * That file is not an image, Photos must be JPEG, PNG or WebP, or That image has too many pixels — resize it before uploading
+     */
+    400: ErrorDetail;
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type UploadPlayerPhotoError = UploadPlayerPhotoErrors[keyof UploadPlayerPhotoErrors];
+
+export type UploadPlayerPhotoResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerRead;
+};
+
+export type UploadPlayerPhotoResponse = UploadPlayerPhotoResponses[keyof UploadPlayerPhotoResponses];
 
 export type DeletePlayerTransferCodeData = {
     body?: never;

@@ -25,14 +25,17 @@ import os
 import re
 import secrets
 import threading
+import uuid
 from pathlib import Path
 
+from fastapi import HTTPException, Request, UploadFile
 from PIL import Image, ImageOps
 from starlette.responses import Response
 from starlette.staticfiles import PathLike, StaticFiles
 from starlette.types import Scope
 
 from matchpoint_api.config import settings
+from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 
 # One stored size, square, because every surface that shows a photo shows it in a small
 # square avatar. 512 covers those at twice their pixel density, and the crop is centred
@@ -90,6 +93,8 @@ NOT_AN_IMAGE = "That file is not an image"
 UNSUPPORTED_FORMAT = "Photos must be JPEG, PNG or WebP"
 TOO_MANY_PIXELS = "That image has too many pixels — resize it before uploading"
 
+PHOTO_REFUSED = f"{NOT_AN_IMAGE}, {UNSUPPORTED_FORMAT}, or {TOO_MANY_PIXELS}"
+
 
 class UnusableImage(Exception):
     """An upload this API will not store, carrying the reason to answer the caller with.
@@ -139,6 +144,36 @@ def delete(key: str | None) -> None:
     if key is None:
         return
     path_for(key).unlink(missing_ok=True)
+
+
+def limit_photo_upload_rate(request: Request, coach_id: uuid.UUID) -> None:
+    """Meter one upload across all three tiers, or refuse it having spent nothing.
+
+    Called from the handler rather than the decorator's `dependencies`, which run
+    before the handler's own parameters: there is no coach to key on until the current
+    coach has resolved. Shared by both the coach and player upload routes, so the two
+    cannot come to disagree about which buckets an upload spends from.
+    """
+    per_coach: RateLimiter = request.app.state.photo_upload_per_coach_limit
+    per_ip: RateLimiter = request.app.state.photo_upload_per_ip_limit
+    total: RateLimiter = request.app.state.photo_upload_total_limit
+    take_all((per_coach, str(coach_id)), (per_ip, client_key(request)), (total, "total"))
+
+
+def store_photo(file: UploadFile) -> str:
+    """Normalise one upload into the store, answering 400 for anything it will not take.
+
+    A 400 rather than a hand-raised 422, whose `detail` the generated client reads as a
+    list of validation errors and not as a message a form can show.
+
+    Shared by both the coach and player upload routes, which each decide for
+    themselves where in the route this call belongs relative to the row it is about
+    to write.
+    """
+    try:
+        return store(file.file.read())
+    except UnusableImage as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _normalise(data: bytes) -> Image.Image:

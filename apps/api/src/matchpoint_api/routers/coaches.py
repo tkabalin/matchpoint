@@ -1,4 +1,3 @@
-import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -213,45 +212,12 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
 # back is where they ended up. Both answer with the whole coach, since a new photo means
 # a new key and so a URL the caller has no other way to learn.
 
-PHOTO_REFUSED = f"{photos.NOT_AN_IMAGE}, {photos.UNSUPPORTED_FORMAT}, or {photos.TOO_MANY_PIXELS}"
-
-
-def limit_photo_upload_rate(request: Request, coach_id: uuid.UUID) -> None:
-    """Meter one upload across all three tiers, or refuse it having spent nothing.
-
-    In the handler rather than the decorator's `dependencies`, which run before the
-    handler's own parameters: there is no coach to key on until `current_coach` has
-    resolved. `delete_current_coach` meters in the same place for the same reason.
-
-    Imported by `routers/players.py`, which has the other upload route: one helper, so
-    the two cannot come to disagree about which buckets an upload spends from.
-    """
-    per_coach: RateLimiter = request.app.state.photo_upload_per_coach_limit
-    per_ip: RateLimiter = request.app.state.photo_upload_per_ip_limit
-    total: RateLimiter = request.app.state.photo_upload_total_limit
-    take_all((per_coach, str(coach_id)), (per_ip, client_key(request)), (total, "total"))
-
-
-def store_photo(file: UploadFile) -> str:
-    """Normalise one upload into the store, answering 400 for anything it will not take.
-
-    A 400 rather than a hand-raised 422, whose `detail` the generated client reads as a
-    list of validation errors and not as a message a form can show.
-
-    Shared by both upload routes, which each decide for themselves where in the route
-    this call belongs relative to the row it is about to write.
-    """
-    try:
-        return photos.store(file.file.read())
-    except photos.UnusableImage as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
 
 @router.post(
     "/me/photo",
     response_model=CoachRead,
     responses={
-        400: {"model": ErrorDetail, "description": PHOTO_REFUSED},
+        400: {"model": ErrorDetail, "description": photos.PHOTO_REFUSED},
         401: {"model": ErrorDetail, "description": "Not signed in"},
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
@@ -260,9 +226,9 @@ def upload_coach_photo(
     file: Annotated[UploadFile, File()], coach: CurrentCoach, db: DbSession, request: Request
 ) -> Coach:
     """Replace this coach's profile photo, and answer with the coach."""
-    limit_photo_upload_rate(request, coach.id)
+    photos.limit_photo_upload_rate(request, coach.id)
     replaced = coach.photo_key
-    coach.photo_key = store_photo(file)
+    coach.photo_key = photos.store_photo(file)
     db.commit()
     # After the commit, never before it: an unlinked file whose row still names it is a
     # broken image on every render, where a file nothing names is a few unreachable

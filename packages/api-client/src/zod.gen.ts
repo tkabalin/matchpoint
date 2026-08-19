@@ -10,6 +10,13 @@ export const zBodyUploadCoachPhoto = z.object({
 });
 
 /**
+ * Body_upload_player_photo
+ */
+export const zBodyUploadPlayerPhoto = z.object({
+    file: z.string()
+});
+
+/**
  * ChangePasswordRequest
  */
 export const zChangePasswordRequest = z.object({
@@ -537,6 +544,26 @@ export const zUpdatePlayerPath = z.object({
  * Successful Response
  */
 export const zUpdatePlayerResponse = zPlayerRead;
+
+export const zDeletePlayerPhotoPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePlayerPhotoResponse = zPlayerRead;
+
+export const zUploadPlayerPhotoBody = zBodyUploadPlayerPhoto;
+
+export const zUploadPlayerPhotoPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUploadPlayerPhotoResponse = zPlayerRead;
 
 export const zDeletePlayerTransferCodePath = z.object({
     player_id: z.uuid()

@@ -1,11 +1,14 @@
 import uuid
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
+from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
 from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode
 from matchpoint_api.routers.players import (
@@ -13,6 +16,7 @@ from matchpoint_api.routers.players import (
     TRANSFER_CODES_OUTSTANDING,
     UNKNOWN_TRANSFER_CODE,
 )
+from tests.conftest import image_bytes, stored_photos
 from tests.factories import (
     make_coach,
     make_match,
@@ -861,3 +865,139 @@ def test_the_flag_and_the_delete_refusal_agree(
     assert client.delete(f"/players/{flagged.id}").status_code == 409
     assert client.get(f"/players/{free.id}").json()["has_transfer_code"] is False
     assert client.delete(f"/players/{free.id}").status_code == 204
+
+
+# --- Player photos: POST and DELETE /players/{player_id}/photo ---
+
+
+def _upload(client: TestClient, player_id: uuid.UUID, data: bytes | None = None) -> httpx2.Response:
+    return client.post(
+        f"/players/{player_id}/photo", files={"file": ("photo.png", data or image_bytes())}
+    )
+
+
+def test_uploading_a_photo_answers_with_the_player(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _upload(client, player.id)
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] == f"/api/media/{player.photo_key}{photos.EXTENSION}"
+    assert len(stored_photos(media_root)) == 1
+
+
+def test_an_uploaded_photo_is_served_at_the_url_it_reports(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The URL carries /api, stripped by Caddy in production and by the dev proxy
+    locally; a test client is fronted by neither, so it asks for what arrives."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    photo_url = _upload(client, player.id).json()["photo_url"]
+
+    response = client.get(photo_url.removeprefix("/api"))
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "image/webp"
+
+
+def test_replacing_a_photo_removes_the_one_it_replaced(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    first = _upload(client, player.id).json()["photo_url"]
+
+    second = _upload(client, player.id).json()["photo_url"]
+
+    assert first != second
+    assert len(stored_photos(media_root)) == 1
+
+
+def test_clearing_a_photo_removes_the_file(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _upload(client, player.id)
+
+    response = client.delete(f"/players/{player.id}/photo")
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] is None
+    assert stored_photos(media_root) == []
+
+
+def test_clearing_a_photo_that_is_not_there_is_a_no_op(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}/photo")
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] is None
+
+
+def test_another_coachs_player_is_a_404_and_stores_nothing(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    """Ownership is checked before the decode, so probing another coach's ids cannot
+    fill the disk one refused upload at a time."""
+    theirs = make_player(db_session, coach_id=make_coach(db_session).id)
+    db_session.commit()
+
+    assert _upload(client, theirs.id).status_code == 404
+    assert client.delete(f"/players/{theirs.id}/photo").status_code == 404
+
+    assert stored_photos(media_root) == []
+
+
+def test_a_file_that_is_not_an_image_is_refused(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = _upload(client, player.id, b"this is not an image")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == photos.NOT_AN_IMAGE
+    assert stored_photos(media_root) == []
+
+
+def test_deleting_a_player_removes_their_photo(
+    client: TestClient, db_session: Session, coach: Coach, media_root: Path
+) -> None:
+    """Deleting the row is not enough on its own: nothing else ever points at the file,
+    so the route has to take it down itself or it never gets reclaimed."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _upload(client, player.id)
+
+    response = client.delete(f"/players/{player.id}")
+
+    assert response.status_code == 204
+    assert stored_photos(media_root) == []
+
+
+def test_a_transferred_player_keeps_their_photo(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The key rides on the player row, so the photo goes with them to the new coach —
+    which is the point of a transfer, the history being what the new coach most needs."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _upload(client, player.id)
+    code = client.post(f"/players/{player.id}/transfer-code").json()["code"]
+    new_coach = make_coach(db_session, email="new@example.com")
+    sign_in(client, db_session, new_coach)
+
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] is not None

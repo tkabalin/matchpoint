@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -331,6 +331,28 @@ export const updatePlayer = <ThrowOnError extends boolean = false>(options: Opti
     ...options,
     headers: {
         'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Player Photo
+ *
+ * Clear this player's photo, back to the initials avatar the app falls back to.
+ */
+export const deletePlayerPhoto = <ThrowOnError extends boolean = false>(options: Options<DeletePlayerPhotoData, ThrowOnError>): RequestResult<DeletePlayerPhotoResponses, DeletePlayerPhotoErrors, ThrowOnError> => (options.client ?? client).delete<DeletePlayerPhotoResponses, DeletePlayerPhotoErrors, ThrowOnError>({ url: '/players/{player_id}/photo', ...options });
+
+/**
+ * Upload Player Photo
+ *
+ * Replace this player's photo, and answer with the player.
+ */
+export const uploadPlayerPhoto = <ThrowOnError extends boolean = false>(options: Options<UploadPlayerPhotoData, ThrowOnError>): RequestResult<UploadPlayerPhotoResponses, UploadPlayerPhotoErrors, ThrowOnError> => (options.client ?? client).post<UploadPlayerPhotoResponses, UploadPlayerPhotoErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/players/{player_id}/photo',
+    ...options,
+    headers: {
+        'Content-Type': null,
         ...options.headers
     }
 });

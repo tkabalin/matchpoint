@@ -1,11 +1,12 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from matchpoint_api import photos
 from matchpoint_api.auth import CurrentCoach, hash_token, new_session_token
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Match, Player, PlayerTransferCode
@@ -123,9 +124,59 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     # Children first, in one transaction, for the reason account closure gives: every
     # foreign key here declares no `ondelete`, so a table added below players and left
     # out of this list stops the delete outright rather than orphaning rows.
+    photo_key = player.photo_key
     db.execute(delete(Match).where(Match.player_id == player.id))
     db.delete(player)
     db.commit()
+    # After the commit, as everywhere else a row and a file change together: the row is
+    # gone either way, and a file left behind costs disk, not correctness.
+    photos.delete(photo_key)
+
+
+# A photo is set and cleared by its own endpoints rather than through PATCH, because a
+# client cannot name a URL it does not own: what it sends is bytes, and what it gets back
+# is where they ended up. Both answer with the whole player, since a new photo is stored
+# under a new key and the response is the only place the caller learns it.
+
+
+@router.post(
+    "/{player_id}/photo",
+    response_model=PlayerRead,
+    responses={400: {"model": ErrorDetail, "description": photos.PHOTO_REFUSED}},
+)
+def upload_player_photo(
+    player_id: uuid.UUID,
+    file: Annotated[UploadFile, File()],
+    db: DbSession,
+    coach: CurrentCoach,
+    request: Request,
+) -> Player:
+    """Replace this player's photo, and answer with the player."""
+    photos.limit_photo_upload_rate(request, coach.id)
+    # Ownership before the decode, so a probe at another coach's id gets its 404 having
+    # stored nothing. The row lock is then held across the decode, which is a wait on
+    # this coach's own player and so contends with nothing but their own next upload.
+    player = owned_player(db, player_id, coach.id, for_update=True)
+    replaced = player.photo_key
+    player.photo_key = photos.store_photo(file)
+    db.commit()
+    # After the commit, never before it — see the ordering note in photos.py.
+    photos.delete(replaced)
+    return player
+
+
+@router.delete("/{player_id}/photo", response_model=PlayerRead)
+def delete_player_photo(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
+    """Clear this player's photo, back to the initials avatar the app falls back to."""
+    player = owned_player(db, player_id, coach.id, for_update=True)
+    cleared = player.photo_key
+    # Clearing a photo that is not there is a no-op rather than a 404, for the reason
+    # archiving twice is: a retried request must neither error nor move the row.
+    if cleared is not None:
+        player.photo_key = None
+        db.commit()
+        photos.delete(cleared)
+    return player
 
 
 # Transferring a player (#173): players change coach as they grow up, and the roster is
