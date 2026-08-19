@@ -1,17 +1,21 @@
+import io
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, cast
 
 import httpx2
 import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
+from PIL import Image
 from psycopg.errors import CheckViolation
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
+from matchpoint_api import photos
 from matchpoint_api.auth import (
     SESSION_COOKIE,
     SESSION_LIFETIME,
@@ -38,6 +42,8 @@ from tests.conftest import (
     TEST_ORIGIN,
     breach_every_password,
     break_the_breach_check,
+    image_bytes,
+    stored_photos,
 )
 from tests.factories import (
     make_coach,
@@ -888,6 +894,146 @@ def test_updating_without_a_cookie_is_a_401(client: TestClient) -> None:
     assert response.json() == {"detail": "Not authenticated"}
 
 
+# --- Profile photos: POST and DELETE /coaches/me/photo ---
+
+
+def _upload(client: TestClient, data: bytes | None = None) -> httpx2.Response:
+    """A multipart POST, which is the only way image bytes reach a JSON API."""
+    return client.post("/coaches/me/photo", files={"file": ("photo.png", data or image_bytes())})
+
+
+def test_uploading_a_photo_answers_with_the_coach(
+    client: TestClient, db_session: Session, media_root: Path
+) -> None:
+    """The whole coach rather than the URL alone: a new photo is a new key, so this is
+    the only place the caller learns where it went."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+
+    response = _upload(client)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["photo_url"] == f"/api/media/{coach.photo_key}{photos.EXTENSION}"
+    assert len(stored_photos(media_root)) == 1
+
+
+def test_an_uploaded_photo_is_served_at_the_url_it_reports(
+    client: TestClient, db_session: Session
+) -> None:
+    """The reported URL carries /api, which Caddy and the dev proxy strip before the app
+    ever sees it; a test client is fronted by neither, so it asks for what arrives."""
+    sign_in(client, db_session, make_coach(db_session))
+    photo_url = _upload(client).json()["photo_url"]
+
+    response = client.get(photo_url.removeprefix("/api"))
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "image/webp"
+    with Image.open(io.BytesIO(response.content)) as served:
+        assert served.size == (photos.SIZE, photos.SIZE)
+
+
+def test_replacing_a_photo_removes_the_one_it_replaced(
+    client: TestClient, db_session: Session, media_root: Path
+) -> None:
+    sign_in(client, db_session, make_coach(db_session))
+    first = _upload(client).json()["photo_url"]
+
+    second = _upload(client).json()["photo_url"]
+
+    assert first != second
+    assert len(stored_photos(media_root)) == 1
+
+
+def test_clearing_a_photo_removes_the_file(
+    client: TestClient, db_session: Session, media_root: Path
+) -> None:
+    sign_in(client, db_session, make_coach(db_session))
+    _upload(client)
+
+    response = client.delete("/coaches/me/photo")
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] is None
+    assert stored_photos(media_root) == []
+
+
+def test_clearing_a_photo_that_is_not_there_is_a_no_op(
+    client: TestClient, db_session: Session
+) -> None:
+    """Not a 404, for the reason archiving twice is not: a retried request must neither
+    error nor move the row."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = client.delete("/coaches/me/photo")
+
+    assert response.status_code == 200
+    assert response.json()["photo_url"] is None
+
+
+def test_a_file_that_is_not_an_image_is_refused(
+    client: TestClient, db_session: Session, media_root: Path
+) -> None:
+    """400 rather than a hand-raised 422, whose `detail` the generated client reads as a
+    list of validation errors and not as a message a form can show."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = _upload(client, b"this is not an image")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == photos.NOT_AN_IMAGE
+    assert stored_photos(media_root) == []
+
+
+def test_an_image_with_too_many_pixels_is_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Monkeypatched rather than built: a genuine 12-megapixel upload would cost tens of
+    megabytes and seconds a run to prove the same refusal."""
+    sign_in(client, db_session, make_coach(db_session))
+    monkeypatch.setattr(photos, "MAX_PIXELS", 4)
+
+    response = _upload(client)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == photos.TOO_MANY_PIXELS
+
+
+def test_an_upload_with_no_file_part_is_a_422(client: TestClient, db_session: Session) -> None:
+    """FastAPI's own, so `detail` stays the list the generated client unpacks."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = client.post("/coaches/me/photo")
+
+    assert response.status_code == 422
+    assert isinstance(response.json()["detail"], list)
+
+
+def test_uploading_a_photo_needs_a_session(client: TestClient) -> None:
+    assert _upload(client).status_code == 401
+
+
+def test_clearing_a_photo_needs_a_session(client: TestClient) -> None:
+    assert client.delete("/coaches/me/photo").status_code == 401
+
+
+@pytest.mark.usefixtures("clock")
+def test_uploads_are_rate_limited_per_coach(client: TestClient, db_session: Session) -> None:
+    """Pinned at the per-coach burst create_app sizes (10). A decode is CPU behind a
+    one-slot semaphore, which the authenticated budget's burst of 600 would let a stolen
+    session spend the box's one core on."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    for _ in range(10):
+        assert _upload(client).status_code == 200
+    response = _upload(client)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+    assert int(response.headers["Retry-After"]) >= 1
+
+
 # --- Closing an account: DELETE /coaches/me ---
 
 CLOSE_PASSWORD = "a-good-password"
@@ -928,7 +1074,23 @@ def test_closing_an_account_erases_the_coach(client: TestClient, db_session: Ses
     assert db_session.get(Coach, coach.id) is None
 
 
-def test_closing_an_account_is_refused_while_a_player_remains(
+def test_closing_an_account_takes_every_photo_under_it(
+    client: TestClient, db_session: Session, media_root: Path
+) -> None:
+    """The one place the keys have to be read before the deletes rather than after: once
+    the rows are gone there is nothing left to say which files they named."""
+    coach = _closable(client, db_session, photo_key=photos.store(image_bytes()))
+    make_player(db_session, coach_id=coach.id, photo_key=photos.store(image_bytes()))
+    make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    assert len(stored_photos(media_root)) == 2
+
+    assert _close(client, delete_players=True).status_code == 204
+
+    assert stored_photos(media_root) == []
+
+
+def test_closing_an_account_is_refused_while_a_player_is_active(
     client: TestClient, db_session: Session
 ) -> None:
     """A name still on the roster may be one another coach is about to take over (#173),

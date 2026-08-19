@@ -3,6 +3,13 @@
 import * as z from 'zod';
 
 /**
+ * Body_upload_coach_photo
+ */
+export const zBodyUploadCoachPhoto = z.object({
+    file: z.string()
+});
+
+/**
  * ChangePasswordRequest
  */
 export const zChangePasswordRequest = z.object({
@@ -394,6 +401,18 @@ export const zUpdateCurrentCoachBody = zCoachUpdate;
  * Successful Response
  */
 export const zUpdateCurrentCoachResponse = zCoachRead;
+
+/**
+ * Successful Response
+ */
+export const zDeleteCoachPhotoResponse = zCoachRead;
+
+export const zUploadCoachPhotoBody = zBodyUploadCoachPhoto;
+
+/**
+ * Successful Response
+ */
+export const zUploadCoachPhotoResponse = zCoachRead;
 
 /**
  * Response Health

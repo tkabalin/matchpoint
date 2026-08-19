@@ -5,6 +5,16 @@ export type ClientOptions = {
 };
 
 /**
+ * Body_upload_coach_photo
+ */
+export type BodyUploadCoachPhoto = {
+    /**
+     * File
+     */
+    file: Blob | File;
+};
+
+/**
  * ChangePasswordRequest
  */
 export type ChangePasswordRequest = {
@@ -971,6 +981,72 @@ export type UpdateCurrentCoachResponses = {
 };
 
 export type UpdateCurrentCoachResponse = UpdateCurrentCoachResponses[keyof UpdateCurrentCoachResponses];
+
+export type DeleteCoachPhotoData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/coaches/me/photo';
+};
+
+export type DeleteCoachPhotoErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeleteCoachPhotoError = DeleteCoachPhotoErrors[keyof DeleteCoachPhotoErrors];
+
+export type DeleteCoachPhotoResponses = {
+    /**
+     * Successful Response
+     */
+    200: CoachRead;
+};
+
+export type DeleteCoachPhotoResponse = DeleteCoachPhotoResponses[keyof DeleteCoachPhotoResponses];
+
+export type UploadCoachPhotoData = {
+    body: BodyUploadCoachPhoto;
+    path?: never;
+    query?: never;
+    url: '/coaches/me/photo';
+};
+
+export type UploadCoachPhotoErrors = {
+    /**
+     * That file is not an image, Photos must be JPEG, PNG or WebP, or That image has too many pixels — resize it before uploading
+     */
+    400: ErrorDetail;
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type UploadCoachPhotoError = UploadCoachPhotoErrors[keyof UploadCoachPhotoErrors];
+
+export type UploadCoachPhotoResponses = {
+    /**
+     * Successful Response
+     */
+    200: CoachRead;
+};
+
+export type UploadCoachPhotoResponse = UploadCoachPhotoResponses[keyof UploadCoachPhotoResponses];
 
 export type HealthData = {
     body?: never;

@@ -1,12 +1,14 @@
+import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile
 from psycopg.errors import UniqueViolation
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from matchpoint_api import photos
 from matchpoint_api.auth import (
     SESSION_COOKIE,
     VERIFICATION_COOKIE,
@@ -206,6 +208,89 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
     return coach
 
 
+# A photo is set and cleared by its own endpoints rather than through PATCH /me, because
+# a client cannot name a URL it does not own: what it sends is bytes, and what it gets
+# back is where they ended up. Both answer with the whole coach, since a new photo means
+# a new key and so a URL the caller has no other way to learn.
+
+PHOTO_REFUSED = f"{photos.NOT_AN_IMAGE}, {photos.UNSUPPORTED_FORMAT}, or {photos.TOO_MANY_PIXELS}"
+
+
+def limit_photo_upload_rate(request: Request, coach_id: uuid.UUID) -> None:
+    """Meter one upload across all three tiers, or refuse it having spent nothing.
+
+    In the handler rather than the decorator's `dependencies`, which run before the
+    handler's own parameters: there is no coach to key on until `current_coach` has
+    resolved. `delete_current_coach` meters in the same place for the same reason.
+
+    Imported by `routers/players.py`, which has the other upload route: one helper, so
+    the two cannot come to disagree about which buckets an upload spends from.
+    """
+    per_coach: RateLimiter = request.app.state.photo_upload_per_coach_limit
+    per_ip: RateLimiter = request.app.state.photo_upload_per_ip_limit
+    total: RateLimiter = request.app.state.photo_upload_total_limit
+    take_all((per_coach, str(coach_id)), (per_ip, client_key(request)), (total, "total"))
+
+
+def store_photo(file: UploadFile) -> str:
+    """Normalise one upload into the store, answering 400 for anything it will not take.
+
+    A 400 rather than a hand-raised 422, whose `detail` the generated client reads as a
+    list of validation errors and not as a message a form can show.
+
+    Shared by both upload routes, which each decide for themselves where in the route
+    this call belongs relative to the row it is about to write.
+    """
+    try:
+        return photos.store(file.file.read())
+    except photos.UnusableImage as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post(
+    "/me/photo",
+    response_model=CoachRead,
+    responses={
+        400: {"model": ErrorDetail, "description": PHOTO_REFUSED},
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+def upload_coach_photo(
+    file: Annotated[UploadFile, File()], coach: CurrentCoach, db: DbSession, request: Request
+) -> Coach:
+    """Replace this coach's profile photo, and answer with the coach."""
+    limit_photo_upload_rate(request, coach.id)
+    replaced = coach.photo_key
+    coach.photo_key = store_photo(file)
+    db.commit()
+    # After the commit, never before it: an unlinked file whose row still names it is a
+    # broken image on every render, where a file nothing names is a few unreachable
+    # kilobytes. Two uploads racing leave the loser's file behind on the same argument.
+    photos.delete(replaced)
+    return coach
+
+
+@router.delete(
+    "/me/photo",
+    response_model=CoachRead,
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+def delete_coach_photo(coach: CurrentCoach, db: DbSession) -> Coach:
+    """Clear this coach's profile photo, back to the app's initials avatar."""
+    cleared = coach.photo_key
+    # Clearing a photo that is not there is a no-op rather than a 404, for the reason
+    # archiving twice is: a retried request must neither error nor move the row.
+    if cleared is not None:
+        coach.photo_key = None
+        db.commit()
+        photos.delete(cleared)
+    return coach
+
+
 # Closing an account erases the coach and everything below them (#146), rather than
 # leaving the email, the name and the password hash on a row nobody can reach, which is
 # not what a coach asking to be removed has asked for. What the cascade takes with it is
@@ -278,6 +363,18 @@ def delete_current_coach(
     )
     if db.scalar(select(outstanding_codes.exists())):
         raise HTTPException(status_code=409, detail=TRANSFER_CODES_OUTSTANDING)
+    # Collected before the deletes below, which are what removes the rows holding them.
+    # Postgres cannot help here the way its foreign keys do for a table left out of the
+    # list: a photo file has nothing pointing at it, so one missed is simply never
+    # reclaimed rather than a delete that fails loudly.
+    photo_keys = [
+        coach.photo_key,
+        *db.scalars(
+            select(Player.photo_key).where(
+                Player.coach_id == coach.id, Player.photo_key.is_not(None)
+            )
+        ),
+    ]
     # Children first, in one transaction, because every foreign key here declares no
     # `ondelete`, so a table added below the coach and left out of this list stops the
     # delete outright rather than being quietly missed. Nothing keys on the email
@@ -293,6 +390,10 @@ def delete_current_coach(
     revoke_sessions(db, coach.id)
     db.delete(coach)
     db.commit()
+    # After the commit, as everywhere else a row and a file change together: the rows are
+    # gone whichever way this goes, and a file left behind costs disk, not correctness.
+    for key in photo_keys:
+        photos.delete(key)
     # The rows are gone, so clearing the cookie only stops the browser presenting a
     # corpse, and the flags repeat the ones it was set with for logout's reason. The
     # renewal channel is emptied in the same breath: `current_coach` may have left a token

@@ -40,6 +40,12 @@ def test_every_request_body_forbids_unknown_keys() -> None:
     Asserted through the spec because that is where `RequestModel`'s `extra="forbid"`
     lands, as `additionalProperties: false`: a schema that skipped the base shows up
     here rather than only in whatever it silently accepted.
+
+    A file upload's body model is FastAPI's, synthesised from the route's parameters and
+    so unable to subclass anything of ours, which is why multipart is skipped. It is not
+    a hole: what this test guards against is a misspelled key reaching a row, and a
+    multipart part that no parameter declares is dropped by the parser rather than
+    written anywhere.
     """
     spec = json.loads(spec_json())
     components = spec["components"]["schemas"]
@@ -49,13 +55,30 @@ def test_every_request_body_forbids_unknown_keys() -> None:
             body = operation.get("requestBody")
             if body is None:
                 continue
-            for media in body["content"].values():
+            for media_type, media in body["content"].items():
+                if media_type == "multipart/form-data":
+                    continue
                 # Every body is a model, so a $ref is what the spec carries for one.
                 name = media["schema"]["$ref"].rsplit("/", 1)[-1]
                 if components[name].get("additionalProperties") is not False:
                     permissive.append(name)
 
     assert permissive == [], "these request schemas do not subclass RequestModel"
+
+
+def test_an_upload_body_is_typed_as_a_file() -> None:
+    """The generated client types this field `Blob | File`, which is what makes a real
+    File assignable at the call site. It reads that off `contentMediaType`, OpenAPI 3.1's
+    replacement for `format: binary`, so a generator that stopped honouring it would type
+    the field `string` and every upload call site would need a cast to compile.
+    """
+    spec = json.loads(spec_json())
+    body = spec["paths"]["/coaches/me/photo"]["post"]["requestBody"]
+    name = body["content"]["multipart/form-data"]["schema"]["$ref"].rsplit("/", 1)[-1]
+
+    field = spec["components"]["schemas"][name]["properties"]["file"]
+
+    assert field["contentMediaType"] == "application/octet-stream"
 
 
 def test_main_writes_the_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

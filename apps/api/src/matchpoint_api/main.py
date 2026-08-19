@@ -147,6 +147,16 @@ def create_app() -> FastAPI:
     app.state.close_account_per_ip_limit = RateLimiter(per_minute=10, burst=10)
     app.state.close_account_total_limit = RateLimiter(per_minute=30, burst=10)
 
+    # Photo upload: a decode is real CPU and tens of megabytes of pixels, gated two at
+    # a time like Argon2 (photos.py), so these are arrival rates rather than budgets.
+    # Deliberately mean per coach — setting an avatar is something done once and then
+    # rarely — which still never refuses a coach changing their mind, and keeps a stolen
+    # session from spending the one core on decodes. The shared bucket is the hard
+    # bound, since getting past the first tier costs an account per bucket.
+    app.state.photo_upload_per_coach_limit = RateLimiter(per_minute=6, burst=10)
+    app.state.photo_upload_per_ip_limit = RateLimiter(per_minute=20, burst=20)
+    app.state.photo_upload_total_limit = RateLimiter(per_minute=60, burst=20)
+
     # Every authenticated route: one budget per coach, charged in auth.current_coach.
     # The burst clears an outbox flushing two three-set matches of individually-posted
     # points (~250 each); the sustained rate is far above human use. An estimate until
