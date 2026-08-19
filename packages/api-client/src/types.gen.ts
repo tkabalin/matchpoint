@@ -283,6 +283,10 @@ export type PlayerRead = {
     first_name: string;
     gender: Gender | null;
     /**
+     * Has Transfer Code
+     */
+    has_transfer_code: boolean;
+    /**
      * Id
      */
     id: string;

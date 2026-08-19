@@ -96,6 +96,7 @@ export const zPlayerRead = z.object({
     dominant_hand: zDominantHand.nullable(),
     first_name: z.string(),
     gender: zGender.nullable(),
+    has_transfer_code: z.boolean(),
     id: z.uuid(),
     last_name: z.string(),
     notes: z.string().nullable(),

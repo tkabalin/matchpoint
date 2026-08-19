@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import new_session_token
@@ -13,7 +13,13 @@ from matchpoint_api.routers.players import (
     TRANSFER_CODES_OUTSTANDING,
     UNKNOWN_TRANSFER_CODE,
 )
-from tests.factories import make_coach, make_match, make_player, sign_in
+from tests.factories import (
+    make_coach,
+    make_match,
+    make_player,
+    make_player_transfer_code,
+    sign_in,
+)
 
 NOTES_LIMIT = 2000
 
@@ -732,3 +738,126 @@ def test_transfer_code_for_another_coachs_player_is_404(
 
     assert response.status_code == 404
     assert db_session.scalar(select(func.count()).select_from(PlayerTransferCode)) == 0
+
+
+# Reporting an outstanding code (#189). Three screens branch on it: the pending-transfer
+# state a reload has to survive, and the two 409s (this delete and account closure) that
+# would otherwise arrive unannounced.
+
+
+def test_a_freshly_created_player_has_no_transfer_code(client: TestClient, coach: Coach) -> None:
+    response = client.post("/players", json=_payload())
+
+    assert response.status_code == 201
+    assert response.json()["has_transfer_code"] is False
+
+
+def test_the_roster_flags_only_the_players_holding_a_code(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """What the roster needs is the answer for every player at once, so the screen can
+    mark the one player it must not offer a delete for."""
+    make_player_transfer_code(
+        db_session,
+        player_id=make_player(db_session, last_name="Barty", coach_id=coach.id).id,
+    )
+    make_player(db_session, last_name="Osaka", coach_id=coach.id)
+    db_session.commit()
+
+    response = client.get("/players")
+
+    assert response.status_code == 200
+    assert [(p["last_name"], p["has_transfer_code"]) for p in response.json()] == [
+        ("Barty", True),
+        ("Osaka", False),
+    ]
+
+
+def test_the_roster_reports_every_flag_in_one_statement(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Computed inside the roster's own SELECT rather than looked up per player: a lazy
+    load reads the same as this test until the roster is long, and then costs a round
+    trip each. Counting statements against the table is what pins that down."""
+    for _ in range(3):
+        player = make_player(db_session, coach_id=coach.id)
+        make_player_transfer_code(db_session, player_id=player.id)
+    db_session.commit()
+    connection = db_session.connection()
+    statements: list[str] = []
+
+    def record(
+        _connection: object, _cursor: object, statement: str, *_rest: object, **_kwargs: object
+    ) -> None:
+        if "player_transfer_codes" in statement:
+            statements.append(statement)
+
+    event.listen(connection, "after_cursor_execute", record)
+    try:
+        response = client.get("/players")
+    finally:
+        event.remove(connection, "after_cursor_execute", record)
+
+    assert [p["has_transfer_code"] for p in response.json()] == [True, True, True]
+    assert len(statements) == 1
+
+
+def test_minting_a_code_shows_up_on_the_player(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The reload case: the plaintext code exists only in the mint response, so a coach
+    who refreshes the page can learn nothing but that one is still outstanding."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    _mint(client, player.id)
+
+    assert client.get(f"/players/{player.id}").json()["has_transfer_code"] is True
+
+
+def test_cancelling_a_code_clears_the_flag(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Cancel answers 204 whether or not a code was live, so the flag going false is the
+    only way the screen can tell the request did anything."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _mint(client, player.id)
+
+    assert client.delete(f"/players/{player.id}/transfer-code").status_code == 204
+
+    assert client.get(f"/players/{player.id}").json()["has_transfer_code"] is False
+
+
+def test_redeeming_a_code_clears_the_flag_on_the_response(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The redeem response is the new coach's first sight of the player, and the code it
+    spent is gone, so the row it returns has to say so rather than repeat what it read
+    before the delete."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    code = _mint(client, player.id)
+
+    sign_in(client, db_session, make_coach(db_session))
+    response = client.post("/players/redeem-transfer-code", json={"code": code})
+
+    assert response.status_code == 200
+    assert response.json()["has_transfer_code"] is False
+    assert client.get(f"/players/{player.id}").json()["has_transfer_code"] is False
+
+
+def test_the_flag_and_the_delete_refusal_agree(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The pair this field exists to keep in step: a player the roster shows as free of a
+    code must not answer 409, and one it flags must."""
+    flagged = make_player(db_session, coach_id=coach.id)
+    free = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    _mint(client, flagged.id)
+
+    assert client.get(f"/players/{flagged.id}").json()["has_transfer_code"] is True
+    assert client.delete(f"/players/{flagged.id}").status_code == 409
+    assert client.get(f"/players/{free.id}").json()["has_transfer_code"] is False
+    assert client.delete(f"/players/{free.id}").status_code == 204

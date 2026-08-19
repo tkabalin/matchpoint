@@ -648,6 +648,10 @@
               }
             ]
           },
+          "has_transfer_code": {
+            "title": "Has Transfer Code",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -684,7 +688,8 @@
           "notes",
           "coach_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "has_transfer_code"
         ],
         "title": "PlayerRead",
         "type": "object"

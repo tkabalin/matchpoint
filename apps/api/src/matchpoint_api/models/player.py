@@ -2,10 +2,11 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, select
+from sqlalchemy.orm import Mapped, column_property, mapped_column
 
 from matchpoint_api.db import Base
+from matchpoint_api.models.player_transfer_code import PlayerTransferCode
 from matchpoint_api.models.types import str_enum
 
 
@@ -57,4 +58,14 @@ class Player(Base):
         DateTime(timezone=True),
         server_default=func.clock_timestamp(),
         onupdate=func.clock_timestamp(),
+    )
+    # Derived, never stored: a row in player_transfer_codes is the whole definition of a
+    # live code, since there is no expiry and cancelling or redeeming one deletes it. As
+    # a column_property it rides in the same SELECT the player comes back in, so the
+    # roster reads it for the whole list at once and the 409s reuse this one predicate.
+    has_transfer_code: Mapped[bool] = column_property(
+        select(PlayerTransferCode.id)
+        .where(PlayerTransferCode.player_id == id)
+        .exists()
+        .correlate_except(PlayerTransferCode)
     )

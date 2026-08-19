@@ -6,7 +6,7 @@ from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api.models import DominantHand, Gender, Player
-from tests.factories import make_coach
+from tests.factories import make_coach, make_player, make_player_transfer_code
 
 NAME_FIELDS = ["first_name", "last_name"]
 
@@ -104,6 +104,41 @@ def test_updated_at_advances_when_a_row_changes(db_session: Session) -> None:
     db_session.commit()
 
     assert player.updated_at > first_written
+
+
+def test_has_transfer_code_follows_the_code_row(db_session: Session) -> None:
+    """Derived rather than stored, so no write has to remember to keep it in step.
+
+    The mint, the cancel and the redeem each only touch player_transfer_codes, and the
+    attribute is an EXISTS over that table read alongside the player.
+    """
+    player = make_player(db_session)
+    db_session.commit()
+    assert player.has_transfer_code is False
+
+    code = make_player_transfer_code(db_session, player_id=player.id)
+    db_session.commit()
+    db_session.expire(player)
+    assert player.has_transfer_code is True
+
+    db_session.delete(code)
+    db_session.commit()
+    db_session.expire(player)
+    assert player.has_transfer_code is False
+
+
+def test_has_transfer_code_answers_for_one_player_at_a_time(db_session: Session) -> None:
+    """The EXISTS correlates on the player's own id, which a roster of two proves and a
+    roster of one cannot: one code must not light up every row beside it."""
+    coach = make_coach(db_session)
+    holder = make_player(db_session, coach_id=coach.id)
+    other = make_player(db_session, coach_id=coach.id)
+    make_player_transfer_code(db_session, player_id=holder.id)
+    db_session.commit()
+
+    flags = {p.id: p.has_transfer_code for p in db_session.scalars(select(Player))}
+
+    assert flags == {holder.id: True, other.id: False}
 
 
 # The nullability, the column widths and the enum CHECK constraints are deliberate

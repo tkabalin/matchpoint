@@ -84,6 +84,10 @@ class PlayerRead(BaseModel):
     coach_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    # That a code is outstanding, not the code itself, which only a hash is kept of. The
+    # screens that offer to cancel one, and the ones that must explain a 409 refusing a
+    # delete or an account closure, need nothing more than this.
+    has_transfer_code: bool
 
 
 class RedeemTransferCodeRequest(RequestModel):

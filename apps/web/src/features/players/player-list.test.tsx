@@ -25,6 +25,7 @@ const player: PlayerRead = {
   gender: null,
   notes: null,
   coach_id: "3f1c2b4e-0000-4000-8000-0000000000c1",
+  has_transfer_code: false,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };

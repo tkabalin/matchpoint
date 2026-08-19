@@ -47,8 +47,12 @@ def owned_player(
     Every route that goes on to write passes `for_update`: `coach_id` moves when a
     transfer code is redeemed, so an ownership check read without the row lock can be
     stale by the time the write lands, and Postgres would apply it anyway.
+
+    `populate_existing` because the suite's client shares one session across requests,
+    where a cached instance would answer `has_transfer_code` with whatever an earlier read
+    computed. A production request gets its own session, so nothing there is overwritten.
     """
-    player = db.get(Player, player_id, with_for_update=for_update)
+    player = db.get(Player, player_id, populate_existing=True, with_for_update=for_update)
     # Another coach's player gets the 404 an unknown id gets, not a 403: a 403 would
     # confirm the id exists.
     if player is None or player.coach_id != coach_id:
@@ -107,9 +111,14 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     player = owned_player(db, player_id, coach.id, for_update=True)
     # A live code is another coach's pending claim, which is why account closure refuses
     # over one too. Agreeing with that refusal is what stops it being sidestepped a
-    # player at a time; `DELETE /players/{id}/transfer-code` is the way past it.
-    outstanding = select(PlayerTransferCode.id).where(PlayerTransferCode.player_id == player.id)
-    if db.scalar(select(outstanding.exists())):
+    # player at a time; `DELETE /players/{id}/transfer-code` is the way past it. Read off
+    # the same predicate the roster shows, so the two cannot disagree.
+    #
+    # Expired so the check reads after the row lock rather than in the statement that
+    # takes it: that statement's snapshot predates the wait for the lock, so a mint which
+    # committed during the wait would not be in it.
+    db.expire(player, ["has_transfer_code"])
+    if player.has_transfer_code:
         raise HTTPException(status_code=409, detail=TRANSFER_CODES_OUTSTANDING)
     # Children first, in one transaction, for the reason account closure gives: every
     # foreign key here declares no `ondelete`, so a table added below players and left
@@ -214,4 +223,8 @@ def redeem_player_transfer_code(
     player.coach_id = coach.id
     db.delete(transfer)
     db.commit()
+    # The response is read off this row, and has_transfer_code was loaded before the
+    # code was deleted, so it still says a code is live. The session does not expire on
+    # commit, which is what leaves it to be dropped by hand.
+    db.expire(player, ["has_transfer_code"])
     return player
