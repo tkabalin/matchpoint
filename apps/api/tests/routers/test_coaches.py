@@ -21,6 +21,7 @@ from matchpoint_api.auth import (
     SESSION_LIFETIME,
     VERIFICATION_COOKIE,
     CurrentCoach,
+    current_coach,
     hash_token,
     new_session_token,
 )
@@ -1018,6 +1019,29 @@ def test_uploading_a_photo_needs_a_session(client: TestClient) -> None:
 
 def test_clearing_a_photo_needs_a_session(client: TestClient) -> None:
     assert client.delete("/coaches/me/photo").status_code == 401
+
+
+def test_clearing_a_photo_answers_401_when_the_coach_is_already_gone(
+    db_session: Session,
+) -> None:
+    """`current_coach` reads the row without a lock, so the re-select FOR UPDATE the photo
+    routes take can find it gone: closing the account in another request is what does it.
+
+    Injected rather than arranged, because authentication and the lock read one database
+    here: a row the session cookie can still be resolved against is a row that is there.
+    """
+    app = create_app()
+    app.dependency_overrides[get_db] = lambda: db_session
+    coach = make_coach(db_session)
+    db_session.delete(coach)
+    db_session.flush()
+    app.dependency_overrides[current_coach] = lambda: coach
+
+    with TestClient(app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS) as closed_client:
+        response = closed_client.delete("/coaches/me/photo")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Not signed in"
 
 
 @pytest.mark.usefixtures("clock")
