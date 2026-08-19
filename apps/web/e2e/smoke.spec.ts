@@ -70,9 +70,12 @@ test.describe("signed in", () => {
     await expect(page.getByRole("heading", { name: "Stats — coming soon" })).toBeVisible();
   });
 
-  test("loads the profile placeholder at /profile", async ({ page }) => {
+  // The heading is the coach's own display name, which profile-photo.spec.ts edits and
+  // restores concurrently — asserting the role rather than the exact text keeps this
+  // free of that race while still confirming a real coach record rendered (#179).
+  test("loads the profile page at /profile", async ({ page }) => {
     await page.goto("/profile");
-    await expect(page.getByRole("heading", { name: "Profile" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
   });
 
   test("loads settings at /settings", async ({ page }) => {
