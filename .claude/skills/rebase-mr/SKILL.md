@@ -81,6 +81,12 @@ rebases this branch what will conflict and how to resolve it.
      continuing.
    - A conflict the Merge notes text names explicitly (a sibling MR's file, a shared test helper,
      with a stated fix) → apply that fix literally.
+   - Both sides only _add_ new, self-contained content at the same insertion point (e.g. two new
+     test cases each appended after the same anchor test, neither editing a line the other side
+     touches) and nothing in either addition contradicts the other → keep both in full, target
+     branch's addition first, then re-check the file for leftover conflict markers before
+     continuing. The test: deleting the markers and keeping every added line from both sides
+     reproduces each side's diff exactly, with no real choice to make beyond ordering.
    - Anything else → **stop, leaving the rebase mid-conflict in the worktree.** Report the
      conflicted files and whatever the Merge notes said (or that they're silent on this) so the user
      can resolve it or hand it to a follow-up agent. Do not improvise a resolution the notes don't
