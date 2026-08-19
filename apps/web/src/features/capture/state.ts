@@ -11,8 +11,9 @@
  * e.g. "does this point end the game" — belongs here instead.
  */
 
-import type { ScoringSystem } from "./match";
-import type { MatchSet, TiebreakScore } from "./match-set";
+import type { Match, ScoringSystem } from "./match";
+import { MatchSet } from "./match-set";
+import type { TiebreakScore } from "./match-set";
 import type { Point } from "./point";
 
 // --- ScoringSystem-derived rules ---------------------------------------------
@@ -245,12 +246,36 @@ export function setRulesFor(
   }
 }
 
+// Whether a set at this game score has entered (or, for the gamesToWin: 0 degenerate
+// case, always is) the breaker — the single place this condition is computed, so
+// setStateFor's own loop and the exported isTiebreakFor below can't drift apart.
+function isTiebreakAt(trackedPlayerGames: number, opponentGames: number, rules: SetRules): boolean {
+  if (rules.gamesToWin === 0) return true;
+  return (
+    rules.tiebreakAt !== null &&
+    trackedPlayerGames === rules.tiebreakAt &&
+    opponentGames === rules.tiebreakAt
+  );
+}
+
 export interface SetState {
   trackedPlayerGames: number;
   opponentGames: number;
   tiebreak: TiebreakScore | null;
   // trackedPlayerId, opponentId, or null while the set is still in progress.
   winner: string | null;
+}
+
+/**
+ * Whether the *next* point in this set is a tiebreak point. Not simply
+ * `state.tiebreak !== null` — at games-all with zero breaker points played yet,
+ * `tiebreak` is still null (setStateFor only builds a TiebreakScore once a breaker
+ * point has actually been recorded), but the next point must still follow tiebreak
+ * serving rules. Derives straight from the game score instead, via the same
+ * isTiebreakAt setStateFor's own loop uses.
+ */
+export function isTiebreakFor(state: SetState, rules: SetRules): boolean {
+  return isTiebreakAt(state.trackedPlayerGames, state.opponentGames, rules);
 }
 
 /**
@@ -291,8 +316,7 @@ export function setStateFor(
   let currentGameTrackedPoints = 0;
   let currentGameOpponentPoints = 0;
   const tiebreakPoints: Point[] = [];
-  // match_tiebreak_10_points' decider has no games phase at all — straight to the breaker.
-  let inTiebreak = rules.gamesToWin === 0;
+  let inTiebreak = isTiebreakAt(0, 0, rules);
 
   // Tally completed games from a running per-game point count — not a winner decided
   // mid-walk, which would wrongly lock one in from an early lead ahead of games that
@@ -334,11 +358,7 @@ export function setStateFor(
     currentGameTrackedPoints = 0;
     currentGameOpponentPoints = 0;
 
-    if (
-      rules.tiebreakAt !== null &&
-      trackedPlayerGames === rules.tiebreakAt &&
-      opponentGames === rules.tiebreakAt
-    ) {
+    if (isTiebreakAt(trackedPlayerGames, opponentGames, rules)) {
       // Tied at the tiebreak threshold — the rest of the set is the breaker, not more games.
       inTiebreak = true;
     }
@@ -460,4 +480,224 @@ export function matchStateFor(
   }
 
   return { trackedPlayerSets, opponentSets, winner };
+}
+
+// --- Whole-match derivation -----------------------------------------------------
+//
+// Everything above answers "what's the score of one game/set" given exactly that
+// game's or set's Points already sliced out. Nothing yet turns a whole match's flat,
+// ordered Point[] into that slicing — these three functions close that gap.
+//
+// TODO: deuce vs ad court isn't derived anywhere yet — which service box is in
+// play alternates by point number within the game (point 1 deuce, 2 ad, 3 deuce, ...,
+// same rule through deuce/advantage under ad scoring), purely arithmetic from how
+// many points have been played in the current game so far. Worth adding once
+// there's a caller for it (analytics on serve placement needs it — "wide" points
+// from the deuce and ad courts go in opposite physical directions, so lumping them
+// together silently mixes two different tendencies).
+
+export interface MatchSetsState {
+  completedSets: MatchSet[];
+  // The in-progress set's own live state — trackedPlayerGames/opponentGames/tiebreak
+  // so far, winner always null (a decided set moves to completedSets instead). Null
+  // only when the match's last point exactly completed a set and no point has been
+  // recorded for the next one yet — NOT for a brand-new, zero-point match, where set
+  // 1 genuinely is the current set at 0-0 from the first instant.
+  currentSet: { setNumber: number; state: SetState } | null;
+}
+
+/**
+ * Slices a match's flat, ordered `Point[]` into its sets — the composing step
+ * `setStateFor` itself can't do, since a Point carries no setId (see point.ts's
+ * module doc comment) any more than it carries a gameId. Re-probes `setStateFor`
+ * after every point rather than in bigger chunks, because there's no other way to
+ * find a set boundary — `setStateFor` requires its input to be *exactly* one set's
+ * points, so the only way to find where that boundary falls is to keep asking.
+ * Quadratic in a set's own point count, not the whole match's — accepted here the
+ * same way setStateFor already accepts it one level down for games, and for the
+ * same reason: a phone-scale capture path, not a hot loop (see web-capture.md).
+ *
+ * Trusts the input past a mathematically-decided match, same convention
+ * gameStateFor/setStateFor already have — it isn't this function's job to guess
+ * whether a caller should still be recording points; it just answers "given these
+ * points, what happened." Supplying points for a set beyond `maxSets` surfaces
+ * setRulesFor's own existing "setNumber cannot exceed maxSets" error, unchanged.
+ */
+export function matchSetsFor(
+  points: readonly Point[],
+  matchId: string,
+  trackedPlayerId: string,
+  opponentId: string,
+  scoringSystem: ScoringSystem,
+): MatchSetsState {
+  const isAdScoring = isAdScoringFor(scoringSystem);
+  const maxSets = maxSetsFor(scoringSystem);
+
+  let setNumber = 1;
+  let buffer: Point[] = [];
+  const completedSets: MatchSet[] = [];
+  let currentSetState: SetState | null = null;
+  let lastSequence = -Infinity;
+
+  for (const point of points) {
+    if (point.matchId !== matchId) {
+      throw new Error("matchSetsFor requires every point to belong to the given match");
+    }
+    if (point.sequence < lastSequence) {
+      throw new Error("matchSetsFor requires points in non-decreasing sequence order");
+    }
+    lastSequence = point.sequence;
+
+    buffer.push(point);
+    const rules = setRulesFor(scoringSystem, setNumber, maxSets);
+    currentSetState = setStateFor(buffer, trackedPlayerId, opponentId, isAdScoring, rules);
+    if (currentSetState.winner !== null) {
+      completedSets.push(
+        MatchSet.create({
+          matchId,
+          setNumber,
+          trackedPlayerId,
+          opponentId,
+          trackedPlayerGames: currentSetState.trackedPlayerGames,
+          opponentGames: currentSetState.opponentGames,
+          tiebreak: currentSetState.tiebreak,
+          winner: currentSetState.winner,
+        }),
+      );
+      buffer = [];
+      currentSetState = null;
+      setNumber += 1;
+    }
+  }
+
+  if (currentSetState === null) {
+    if (completedSets.length === 0) {
+      const rules = setRulesFor(scoringSystem, 1, maxSets);
+      return {
+        completedSets,
+        currentSet: {
+          setNumber: 1,
+          state: setStateFor([], trackedPlayerId, opponentId, isAdScoring, rules),
+        },
+      };
+    }
+    return { completedSets, currentSet: null };
+  }
+
+  return { completedSets, currentSet: { setNumber, state: currentSetState } };
+}
+
+// Flips between the two participant ids — the building block server rotation is
+// built from, since "whose turn" always means "not whoever had it last."
+function otherIdOf(id: string, trackedPlayerId: string, opponentId: string): string {
+  return id === trackedPlayerId ? opponentId : trackedPlayerId;
+}
+
+// Who serves the game at this 0-indexed position, counted across the whole match —
+// a completed tiebreak counts as exactly one such position, same as a regular game
+// (see nextServerFor's own comment on why that's always safe to assume).
+function serverForGameIndex(
+  gameIndex: number,
+  firstServer: string,
+  trackedPlayerId: string,
+  opponentId: string,
+): string {
+  return gameIndex % 2 === 0 ? firstServer : otherIdOf(firstServer, trackedPlayerId, opponentId);
+}
+
+// How many alternation "slots" a completed set consumed — the real game count for a
+// set decided without a breaker, or that count already including tennis' own device
+// for recording a breaker as one game (see nextServerFor's own comment). The one
+// exception is match_tiebreak_10_points' decider, which never credits a game at all
+// (see setStateFor) despite still consuming exactly one slot.
+function alternationSlotsForCompletedSet(matchSet: MatchSet, rules: SetRules): number {
+  return rules.gamesToWin === 0 ? 1 : matchSet.trackedPlayerGames + matchSet.opponentGames;
+}
+
+/**
+ * Who serves the next point — the input `capture-flow.startPoint`'s own `server`
+ * parameter needs, which this codebase doesn't derive anywhere else.
+ *
+ * The key fact making this tractable: a completed set's `trackedPlayerGames +
+ * opponentGames` already equals its true alternation-slot count, tiebreak or not.
+ * A set decided without a breaker (6-3) sums to the real game count (9), one slot
+ * each. A set decided by one (6-6 → breaker, stored as 7-6 per setStateFor's own
+ * "credit the winner an extra game" convention) sums to 13 — the 12 real games plus
+ * one slot for the breaker itself, which standard tennis service rotation treats as
+ * a single game regardless of how many points it took. Both conventions record the
+ * breaker as "one game," so the two counts coincide by construction, and no
+ * was-there-a-tiebreak branching is needed for a *completed* set — except
+ * match_tiebreak_10_points' decider, whose games stay 0/0 even once decided
+ * (setStateFor never credits a game there at all), hence
+ * `alternationSlotsForCompletedSet`'s own special case.
+ *
+ * Inside a *live* tiebreak, rotation is local to it: the player who'd have served
+ * that game slot serves point 1 alone, then serve alternates every 2 points after —
+ * point 1 → A, 2-3 → B, 4-5 → A, 6-7 → B, .... `floor(pointNumber / 2) % 2 === 0`
+ * is that pattern's closed form (verified by hand against points 1 through 8).
+ *
+ * Never checks whether the match has already ended — it always answers "who serves
+ * the next point," trusting the caller only to ask when one is actually expected.
+ * Whether the match is over is `finalWinnerFor`'s question, not this one.
+ */
+export function nextServerFor(
+  liveSets: MatchSetsState,
+  scoringSystem: ScoringSystem,
+  firstServer: string,
+  trackedPlayerId: string,
+  opponentId: string,
+): string {
+  const maxSets = maxSetsFor(scoringSystem);
+
+  let cumulativeSlots = 0;
+  for (const set of liveSets.completedSets) {
+    const rules = setRulesFor(scoringSystem, set.setNumber, maxSets);
+    cumulativeSlots += alternationSlotsForCompletedSet(set, rules);
+  }
+
+  if (liveSets.currentSet === null) {
+    return serverForGameIndex(cumulativeSlots, firstServer, trackedPlayerId, opponentId);
+  }
+
+  const { setNumber, state } = liveSets.currentSet;
+  const rules = setRulesFor(scoringSystem, setNumber, maxSets);
+  cumulativeSlots += state.trackedPlayerGames + state.opponentGames;
+
+  if (!isTiebreakFor(state, rules)) {
+    return serverForGameIndex(cumulativeSlots, firstServer, trackedPlayerId, opponentId);
+  }
+
+  const tiebreakFirstServer = serverForGameIndex(
+    cumulativeSlots,
+    firstServer,
+    trackedPlayerId,
+    opponentId,
+  );
+  const pointsPlayed =
+    state.tiebreak === null
+      ? 0
+      : state.tiebreak.trackedPlayerPoints + state.tiebreak.opponentPoints;
+  const nextPointNumber = pointsPlayed + 1;
+  const firstServerServesNext = Math.floor(nextPointNumber / 2) % 2 === 0;
+  return firstServerServesNext
+    ? tiebreakFirstServer
+    : otherIdOf(tiebreakFirstServer, trackedPlayerId, opponentId);
+}
+
+/**
+ * The match's real, final winner — `matchStateFor`'s own doc comment warns its
+ * winner isn't final until `Match.outcomeOverride` is checked separately; this is
+ * that check, so a caller can't forget it. Falls back to set-based derivation only
+ * when there's no override, and composes matchRulesFor/matchStateFor rather than
+ * duplicating either. `matchSets` is meant to be `MatchSetsState.completedSets` —
+ * an in-progress current set has no `winner` at all, so it's excluded by
+ * construction, the same way matchStateFor already treats an unfinished set as not
+ * counting toward either side.
+ */
+export function finalWinnerFor(match: Match, matchSets: readonly MatchSet[]): string | null {
+  if (match.outcomeOverride !== null) {
+    return match.outcomeOverride.winner;
+  }
+  const rules = matchRulesFor(match.scoringSystem);
+  return matchStateFor(matchSets, match.trackedPlayerId, match.opponentId, rules).winner;
 }

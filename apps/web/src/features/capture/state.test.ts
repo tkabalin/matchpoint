@@ -1,13 +1,19 @@
 import { describe, expect, test } from "vitest";
 
+import { createMatch } from "./match";
+import type { MatchOutcomeOverride, ScoringSystem } from "./match";
 import { MatchSet } from "./match-set";
 import { Point } from "./point";
 import {
+  finalWinnerFor,
   gameStateFor,
   isAdScoringFor,
+  isTiebreakFor,
   matchRulesFor,
+  matchSetsFor,
   matchStateFor,
   maxSetsFor,
+  nextServerFor,
   setRulesFor,
   setStateFor,
 } from "./state";
@@ -403,7 +409,7 @@ function matchSetWonBy(winner: string | null, setNumber: number) {
 }
 
 /** `trackedPlayerWins` sets won by the tracked player, then `opponentWins` by the opponent. */
-function matchSetsFor(trackedPlayerWins: number, opponentWins: number) {
+function decidedMatchSets(trackedPlayerWins: number, opponentWins: number) {
   const sets = [];
   let setNumber = 1;
   for (let index = 0; index < trackedPlayerWins; index += 1, setNumber += 1) {
@@ -427,7 +433,7 @@ describe("matchStateFor", () => {
 
   test("counts sets won by each side", () => {
     const state = matchStateFor(
-      matchSetsFor(1, 1),
+      decidedMatchSets(1, 1),
       TRACKED_ID,
       OPPONENT_ID,
       TRADITIONAL_MATCH_RULES,
@@ -438,7 +444,7 @@ describe("matchStateFor", () => {
   });
 
   test("an in-progress set doesn't count toward either side", () => {
-    const sets = [...matchSetsFor(1, 0), matchSetWonBy(null, 2)];
+    const sets = [...decidedMatchSets(1, 0), matchSetWonBy(null, 2)];
     const state = matchStateFor(sets, TRACKED_ID, OPPONENT_ID, TRADITIONAL_MATCH_RULES);
     expect(state.trackedPlayerSets).toBe(1);
     expect(state.opponentSets).toBe(0);
@@ -448,7 +454,7 @@ describe("matchStateFor", () => {
   describe("traditional (best-of-3, setsToWin: 2)", () => {
     test("2-0 is a win", () => {
       const state = matchStateFor(
-        matchSetsFor(2, 0),
+        decidedMatchSets(2, 0),
         TRACKED_ID,
         OPPONENT_ID,
         TRADITIONAL_MATCH_RULES,
@@ -458,7 +464,7 @@ describe("matchStateFor", () => {
 
     test("2-1 is a win", () => {
       const state = matchStateFor(
-        matchSetsFor(2, 1),
+        decidedMatchSets(2, 1),
         TRACKED_ID,
         OPPONENT_ID,
         TRADITIONAL_MATCH_RULES,
@@ -468,7 +474,7 @@ describe("matchStateFor", () => {
 
     test("1-1 is not decided yet", () => {
       const state = matchStateFor(
-        matchSetsFor(1, 1),
+        decidedMatchSets(1, 1),
         TRACKED_ID,
         OPPONENT_ID,
         TRADITIONAL_MATCH_RULES,
@@ -478,7 +484,7 @@ describe("matchStateFor", () => {
 
     test("the opponent can win too", () => {
       const state = matchStateFor(
-        matchSetsFor(0, 2),
+        decidedMatchSets(0, 2),
         TRACKED_ID,
         OPPONENT_ID,
         TRADITIONAL_MATCH_RULES,
@@ -490,7 +496,7 @@ describe("matchStateFor", () => {
   describe("mens_grand_slam (best-of-5, setsToWin: 3)", () => {
     test("3-1 is a win", () => {
       const state = matchStateFor(
-        matchSetsFor(3, 1),
+        decidedMatchSets(3, 1),
         TRACKED_ID,
         OPPONENT_ID,
         GRAND_SLAM_MATCH_RULES,
@@ -500,7 +506,7 @@ describe("matchStateFor", () => {
 
     test("2-2 is not decided yet — traditional's setsToWin (2) would say otherwise", () => {
       const state = matchStateFor(
-        matchSetsFor(2, 2),
+        decidedMatchSets(2, 2),
         TRACKED_ID,
         OPPONENT_ID,
         GRAND_SLAM_MATCH_RULES,
@@ -510,7 +516,12 @@ describe("matchStateFor", () => {
   });
 
   test("pro_set (setsToWin: 1) is decided by a single set", () => {
-    const state = matchStateFor(matchSetsFor(1, 0), TRACKED_ID, OPPONENT_ID, PRO_SET_MATCH_RULES);
+    const state = matchStateFor(
+      decidedMatchSets(1, 0),
+      TRACKED_ID,
+      OPPONENT_ID,
+      PRO_SET_MATCH_RULES,
+    );
     expect(state.winner).toBe(TRACKED_ID);
   });
 
@@ -532,5 +543,480 @@ describe("matchStateFor", () => {
         /match the given participants/,
       );
     });
+  });
+});
+
+describe("isTiebreakFor", () => {
+  test.each([
+    [5, 5, false],
+    [6, 5, false], // at the threshold but not tied
+    [6, 6, true],
+    [7, 6, false], // post-breaker, credited score — no longer "at" the threshold
+  ] as const)(
+    "%i-%i under traditional rules: isTiebreak=%s",
+    (trackedPlayerGames, opponentGames, expected) => {
+      const rules = setRulesFor("traditional", 1, 3);
+      expect(
+        isTiebreakFor({ trackedPlayerGames, opponentGames, tiebreak: null, winner: null }, rules),
+      ).toBe(expected);
+    },
+  );
+
+  test("legacy's decider never enters a tiebreak, even tied high", () => {
+    const rules = setRulesFor("legacy", 3, 3);
+    expect(
+      isTiebreakFor(
+        { trackedPlayerGames: 10, opponentGames: 10, tiebreak: null, winner: null },
+        rules,
+      ),
+    ).toBe(false);
+  });
+
+  test("match_tiebreak_10_points' decider is always a tiebreak, even at 0-0", () => {
+    const rules = setRulesFor("match_tiebreak_10_points", 3, 3);
+    expect(
+      isTiebreakFor(
+        { trackedPlayerGames: 0, opponentGames: 0, tiebreak: null, winner: null },
+        rules,
+      ),
+    ).toBe(true);
+  });
+
+  test("true even with zero breaker points played — not simply tiebreak !== null", () => {
+    // setStateFor only builds a TiebreakScore once a breaker point exists, but the
+    // next point still has to follow tiebreak serving rules the instant games-all
+    // is reached. This is the exact subtlety nextServerFor depends on.
+    const rules = setRulesFor("traditional", 1, 3);
+    const state = { trackedPlayerGames: 6, opponentGames: 6, tiebreak: null, winner: null };
+    expect(state.tiebreak).toBeNull();
+    expect(isTiebreakFor(state, rules)).toBe(true);
+  });
+});
+
+describe("matchSetsFor", () => {
+  test("no points: 0-0, current set 1, no completed sets", () => {
+    const result = matchSetsFor([], MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toEqual([]);
+    expect(result.currentSet).toEqual({
+      setNumber: 1,
+      state: { trackedPlayerGames: 0, opponentGames: 0, tiebreak: null, winner: null },
+    });
+  });
+
+  test("set 1 completes exactly, no points beyond it — currentSet is null", () => {
+    // Loser's games first, winner's last: matchSetsFor cuts a set the instant it's
+    // decided (unlike setStateFor, which only tallies a final result), so a block
+    // of the eventual winner's games followed by the loser's would let the winner
+    // decide it early (e.g. 6-0) and turn the loser's games into a false set 2.
+    const points = [...completedGames(OPPONENT_ID, 4), ...completedGames(TRACKED_ID, 6)];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toHaveLength(1);
+    expect(result.completedSets[0]?.winner).toBe(TRACKED_ID);
+    expect(result.completedSets[0]?.setNumber).toBe(1);
+    expect(result.currentSet).toBeNull();
+  });
+
+  test("set 1 completes, a few set-2 points follow — currentSet reflects set 2", () => {
+    const points = [
+      ...completedGames(OPPONENT_ID, 4),
+      ...completedGames(TRACKED_ID, 6),
+      ...completedGames(TRACKED_ID, 1),
+    ];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toHaveLength(1);
+    expect(result.currentSet).toEqual({
+      setNumber: 2,
+      state: { trackedPlayerGames: 1, opponentGames: 0, tiebreak: null, winner: null },
+    });
+  });
+
+  test("a full best-of-3 match decided 2-0 processes both sets with no error", () => {
+    const points = [
+      ...completedGames(OPPONENT_ID, 4),
+      ...completedGames(TRACKED_ID, 6),
+      ...completedGames(OPPONENT_ID, 2),
+      ...completedGames(TRACKED_ID, 6),
+    ];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toHaveLength(2);
+    expect(result.completedSets.map((set) => set.winner)).toEqual([TRACKED_ID, TRACKED_ID]);
+    expect(result.currentSet).toBeNull();
+  });
+
+  test("trusts the input past an already-decided match — a third set for a 2-0 best-of-3 still processes", () => {
+    const points = [
+      ...completedGames(OPPONENT_ID, 4),
+      ...completedGames(TRACKED_ID, 6), // set 1: tracked 6-4
+      ...completedGames(OPPONENT_ID, 2),
+      ...completedGames(TRACKED_ID, 6), // set 2: tracked 6-2 — match already decided 2-0
+      ...completedGames(OPPONENT_ID, 5),
+      ...completedGames(TRACKED_ID, 3), // set 3, in progress: opponent 5, tracked 3
+    ];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toHaveLength(2);
+    expect(result.currentSet).toEqual({
+      setNumber: 3,
+      state: { trackedPlayerGames: 3, opponentGames: 5, tiebreak: null, winner: null },
+    });
+  });
+
+  test("points beyond maxSets throw via setRulesFor's own guard", () => {
+    const points = [
+      ...completedGames(OPPONENT_ID, 4),
+      ...completedGames(TRACKED_ID, 6), // set 1: tracked 6-4
+      ...completedGames(OPPONENT_ID, 2),
+      ...completedGames(TRACKED_ID, 6), // set 2: tracked 6-2 — match already decided 2-0
+      ...completedGames(TRACKED_ID, 3),
+      ...completedGames(OPPONENT_ID, 6), // set 3: opponent 6-3
+      pointWonBy(TRACKED_ID), // a stray point starting a notional set 4
+    ];
+    expect(() => matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional")).toThrow(
+      /cannot exceed/,
+    );
+  });
+
+  test("a tiebreak-decided set produces a MatchSet with tiebreak populated, 7-6", () => {
+    const points = [
+      // Reach 6-6 without either side crossing the win threshold early: tracked's
+      // first 5 games (5-0, safe — under 6), then all 6 of the opponent's (5-6,
+      // opponent reaches 6 but only a 1-game lead — not enough to decide), then
+      // tracked's 6th (6-6, ties it and enters the breaker).
+      ...completedGames(TRACKED_ID, 5),
+      ...completedGames(OPPONENT_ID, 6),
+      ...completedGames(TRACKED_ID, 1),
+      // Breaker: opponent's points first (0-5, safe — under the 7-point target),
+      // then tracked's, which cross it only at the intended 7-5.
+      ...Array.from({ length: 5 }, () => pointWonBy(OPPONENT_ID)),
+      ...Array.from({ length: 7 }, () => pointWonBy(TRACKED_ID)),
+    ];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(result.completedSets).toHaveLength(1);
+    const set = result.completedSets[0];
+    expect(set?.trackedPlayerGames).toBe(7);
+    expect(set?.opponentGames).toBe(6);
+    expect(set?.tiebreak).toEqual({ trackedPlayerPoints: 7, opponentPoints: 5, target: 7 });
+    expect(set?.winner).toBe(TRACKED_ID);
+  });
+
+  test("legacy's decider (set 3) finalizes past 6-6 with no tiebreak, e.g. 8-6", () => {
+    const points = [
+      ...completedGames(TRACKED_ID, 6), // set 1: tracked 6-0
+      ...completedGames(OPPONENT_ID, 6), // set 2: opponent 6-0
+      // Set 3 (decider, no tiebreak): reach 6-6 the same safe way as above, then
+      // keep extending — tracked's 7th (7-6, only a 1-game lead, still not
+      // decided), then its 8th (8-6, a 2-game lead, decided).
+      ...completedGames(TRACKED_ID, 5),
+      ...completedGames(OPPONENT_ID, 5),
+      ...completedGames(TRACKED_ID, 1),
+      ...completedGames(OPPONENT_ID, 1),
+      ...completedGames(TRACKED_ID, 2),
+    ];
+    const result = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "legacy");
+    expect(result.completedSets).toHaveLength(3);
+    const decider = result.completedSets[2];
+    expect(decider?.trackedPlayerGames).toBe(8);
+    expect(decider?.opponentGames).toBe(6);
+    expect(decider?.tiebreak).toBeNull();
+    expect(decider?.winner).toBe(TRACKED_ID);
+  });
+
+  test("match_tiebreak_10_points' decider (set 3) is a single breaker, games stay 0-0", () => {
+    const points = [
+      ...completedGames(TRACKED_ID, 6), // set 1: tracked 6-0
+      ...completedGames(OPPONENT_ID, 6), // set 2: opponent 6-0
+      // Set 3 (decider): straight to the breaker at 0-0 — opponent's points first
+      // (safe, under the 10-point target), then tracked's, crossing it at 10-7.
+      ...Array.from({ length: 7 }, () => pointWonBy(OPPONENT_ID)),
+      ...Array.from({ length: 10 }, () => pointWonBy(TRACKED_ID)),
+    ];
+    const result = matchSetsFor(
+      points,
+      MATCH_ID,
+      TRACKED_ID,
+      OPPONENT_ID,
+      "match_tiebreak_10_points",
+    );
+    expect(result.completedSets).toHaveLength(3);
+    const decider = result.completedSets[2];
+    expect(decider?.trackedPlayerGames).toBe(0);
+    expect(decider?.opponentGames).toBe(0);
+    expect(decider?.tiebreak).toEqual({ trackedPlayerPoints: 10, opponentPoints: 7, target: 10 });
+    expect(decider?.winner).toBe(TRACKED_ID);
+  });
+
+  test("rejects points out of sequence order across the whole match", () => {
+    // setStateFor's own per-set check can't catch a reversal once it straddles a set
+    // boundary — matchSetsFor needs its own whole-match check.
+    const first = pointWonBy(TRACKED_ID);
+    const second = pointWonBy(TRACKED_ID);
+    expect(() =>
+      matchSetsFor([second, first], MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional"),
+    ).toThrow(/sequence/);
+  });
+
+  test("rejects a point that doesn't belong to the given match", () => {
+    const point = pointWonBy(TRACKED_ID, { matchId: "some-other-match" });
+    expect(() => matchSetsFor([point], MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional")).toThrow(
+      /belong to the given match/,
+    );
+  });
+});
+
+describe("nextServerFor", () => {
+  function liveSetsAt(
+    trackedPlayerGames: number,
+    opponentGames: number,
+    completedSets: MatchSet[] = [],
+  ) {
+    return {
+      completedSets,
+      currentSet: {
+        setNumber: completedSets.length + 1,
+        state: { trackedPlayerGames, opponentGames, tiebreak: null, winner: null },
+      },
+    };
+  }
+
+  describe("regular alternation within a set", () => {
+    // Only the SUM of games completed this set matters for alternation, so every
+    // case attributes them all to the tracked player for a clean table.
+    test.each([
+      [0, TRACKED_ID, TRACKED_ID],
+      [1, TRACKED_ID, OPPONENT_ID],
+      [2, TRACKED_ID, TRACKED_ID],
+      [3, TRACKED_ID, OPPONENT_ID],
+      [4, TRACKED_ID, TRACKED_ID],
+      [5, TRACKED_ID, OPPONENT_ID],
+      [0, OPPONENT_ID, OPPONENT_ID],
+      [1, OPPONENT_ID, TRACKED_ID],
+      [3, OPPONENT_ID, TRACKED_ID],
+    ] as const)(
+      "%i games completed this set, firstServer=%s -> server=%s",
+      (gamesCompleted, firstServer, expected) => {
+        const liveSets = liveSetsAt(gamesCompleted, 0);
+        expect(nextServerFor(liveSets, "traditional", firstServer, TRACKED_ID, OPPONENT_ID)).toBe(
+          expected,
+        );
+      },
+    );
+  });
+
+  describe("tiebreak entry — the breaker's own first server matches plain alternation", () => {
+    test("traditional: tiebreakAt 6, tied 6-6, zero breaker points played", () => {
+      const liveSets = liveSetsAt(6, 6);
+      // 12 games completed this set -> even -> firstServer serves the breaker.
+      expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        TRACKED_ID,
+      );
+    });
+
+    test("short_sets: tiebreakAt 3, tied 3-3", () => {
+      const liveSets = liveSetsAt(3, 3);
+      // 6 games completed -> even -> firstServer serves.
+      expect(nextServerFor(liveSets, "short_sets", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        TRACKED_ID,
+      );
+    });
+
+    test("match_tiebreak_10_points' decider: immediately in the breaker at 0-0", () => {
+      const set1 = MatchSet.create({
+        matchId: MATCH_ID,
+        setNumber: 1,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        trackedPlayerGames: 6,
+        opponentGames: 0,
+        tiebreak: null,
+        winner: TRACKED_ID,
+      });
+      const set2 = MatchSet.create({
+        matchId: MATCH_ID,
+        setNumber: 2,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        trackedPlayerGames: 0,
+        opponentGames: 6,
+        tiebreak: null,
+        winner: OPPONENT_ID,
+      });
+      const liveSets = liveSetsAt(0, 0, [set1, set2]);
+      // slots: 6 + 6 = 12 (even), plus 0 completed games this set -> firstServer.
+      expect(
+        nextServerFor(liveSets, "match_tiebreak_10_points", TRACKED_ID, TRACKED_ID, OPPONENT_ID),
+      ).toBe(TRACKED_ID);
+    });
+  });
+
+  describe("tiebreak-internal rotation", () => {
+    function liveSetsInTiebreak(pointsPlayed: number) {
+      return {
+        completedSets: [],
+        currentSet: {
+          setNumber: 1,
+          state: {
+            trackedPlayerGames: 6,
+            opponentGames: 6,
+            tiebreak:
+              pointsPlayed === 0
+                ? null
+                : { trackedPlayerPoints: pointsPlayed, opponentPoints: 0, target: 7 },
+            winner: null,
+          },
+        },
+      };
+    }
+
+    // Point 1 -> A, 2-3 -> B, 4-5 -> A, 6-7 -> B, 8 -> A. A is TRACKED_ID here since
+    // 12 completed games this set is even (firstServer serves the breaker — see the
+    // "tiebreak entry" block above).
+    test.each([
+      [0, TRACKED_ID],
+      [1, OPPONENT_ID],
+      [2, OPPONENT_ID],
+      [3, TRACKED_ID],
+      [4, TRACKED_ID],
+      [5, OPPONENT_ID],
+      [6, OPPONENT_ID],
+      [7, TRACKED_ID],
+    ] as const)("%i tiebreak points played -> server=%s", (pointsPlayed, expected) => {
+      const liveSets = liveSetsInTiebreak(pointsPlayed);
+      expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        expected,
+      );
+    });
+  });
+
+  describe("tiebreak exit into the next set", () => {
+    test("a 7-6 breaker-decided set flips server for the next set's game 1", () => {
+      const set1 = MatchSet.create({
+        matchId: MATCH_ID,
+        setNumber: 1,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        trackedPlayerGames: 7,
+        opponentGames: 6,
+        tiebreak: { trackedPlayerPoints: 7, opponentPoints: 5, target: 7 },
+        winner: TRACKED_ID,
+      });
+      const liveSets = { completedSets: [set1], currentSet: null };
+      // slots = 13 (odd) -> the other player from firstServer opens set 2.
+      expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        OPPONENT_ID,
+      );
+    });
+
+    test("short_sets: a 4-3 breaker-decided set (tiebreakAt 3) also flips", () => {
+      const set1 = MatchSet.create({
+        matchId: MATCH_ID,
+        setNumber: 1,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        trackedPlayerGames: 4,
+        opponentGames: 3,
+        tiebreak: { trackedPlayerPoints: 5, opponentPoints: 3, target: 5 },
+        winner: TRACKED_ID,
+      });
+      const liveSets = { completedSets: [set1], currentSet: null };
+      // slots = 7 (odd) -> flips.
+      expect(nextServerFor(liveSets, "short_sets", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        OPPONENT_ID,
+      );
+    });
+
+    test("a straight 6-2 set (no breaker) does NOT flip — even game count preserves parity", () => {
+      const set1 = MatchSet.create({
+        matchId: MATCH_ID,
+        setNumber: 1,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        trackedPlayerGames: 6,
+        opponentGames: 2,
+        tiebreak: null,
+        winner: TRACKED_ID,
+      });
+      const liveSets = { completedSets: [set1], currentSet: null };
+      // slots = 8 (even) -> the same player who opened set 1 opens set 2.
+      expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+        TRACKED_ID,
+      );
+    });
+  });
+
+  test("full match, checked at four points: set 1 = 6-4 (no tiebreak), set 2 = 7-6 (tiebreak)", () => {
+    const midSet1Points = [...completedGames(TRACKED_ID, 3)];
+    let liveSets = matchSetsFor(midSet1Points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    // 3 games completed -> odd -> flips from firstServer.
+    expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+      OPPONENT_ID,
+    );
+
+    // Loser's games first, winner's last — see matchSetsFor's own tests for why.
+    const set1Points = [...completedGames(OPPONENT_ID, 4), ...completedGames(TRACKED_ID, 6)];
+    liveSets = matchSetsFor(set1Points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(liveSets.currentSet).toBeNull();
+    // 10 games (6-4) -> even -> same player who opened set 1 opens set 2.
+    expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+      TRACKED_ID,
+    );
+
+    const midTiebreakPoints = [
+      ...set1Points,
+      // Reach 6-6 without an early decision — see the matchSetsFor tiebreak test.
+      ...completedGames(TRACKED_ID, 5),
+      ...completedGames(OPPONENT_ID, 6),
+      ...completedGames(TRACKED_ID, 1),
+      ...Array.from({ length: 2 }, () => pointWonBy(OPPONENT_ID)),
+      ...Array.from({ length: 3 }, () => pointWonBy(TRACKED_ID)), // 5 tiebreak points played so far
+    ];
+    liveSets = matchSetsFor(midTiebreakPoints, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(liveSets.currentSet).not.toBeNull();
+    // set 2's 12 completed games -> even -> firstServer opened the breaker; 5 points
+    // played -> next point 6 -> the other player.
+    expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
+      OPPONENT_ID,
+    );
+  });
+});
+
+/** A minimal Match via createMatch — override just what a test cares about. */
+function matchOf(
+  scoringSystem: ScoringSystem = "traditional",
+  outcomeOverride: MatchOutcomeOverride | null = null,
+) {
+  return createMatch(
+    "2024-01-01",
+    TRACKED_ID,
+    { opponentId: OPPONENT_ID },
+    TRACKED_ID,
+    scoringSystem,
+    "unspecified",
+    outcomeOverride,
+  );
+}
+
+describe("finalWinnerFor", () => {
+  test.each(["retirement", "walkover", "default"] as const)(
+    "%s override wins regardless of matchSets",
+    (reason) => {
+      const match = matchOf("traditional", { reason, winner: OPPONENT_ID });
+      expect(finalWinnerFor(match, [])).toBe(OPPONENT_ID);
+    },
+  );
+
+  test("no override, decided by sets, matches matchStateFor's own winner", () => {
+    const match = matchOf("traditional");
+    expect(finalWinnerFor(match, decidedMatchSets(2, 0))).toBe(TRACKED_ID);
+  });
+
+  test("no override, not yet decided -> null", () => {
+    const match = matchOf("traditional");
+    expect(finalWinnerFor(match, decidedMatchSets(1, 1))).toBeNull();
+  });
+
+  test("uses the match's own scoringSystem rules, not a hardcoded best-of-3 assumption", () => {
+    const sets = decidedMatchSets(2, 1);
+    // 2-1 decides a best-of-3 match but not a best-of-5 one.
+    expect(finalWinnerFor(matchOf("traditional"), sets)).toBe(TRACKED_ID);
+    expect(finalWinnerFor(matchOf("mens_grand_slam"), sets)).toBeNull();
   });
 });
