@@ -9,8 +9,8 @@ paths:
   the wire. ESLint enforces the import side (see the `features/capture` block in
   `eslint.config.mjs`) and a violation fails CI, but the invariant is broader than lint can see.
 - Instead: a tap handler updates local state and appends to the local outbox, synchronously. A
-  separate sync layer drains it. Never make a tap wait on a promise — the brief requires a point in
-  no more than three taps, and that has to hold with the device offline mid-match.
+  separate sync layer drains it. Never make a tap wait on a promise — capture has to keep working
+  with the device offline mid-match.
 - Scoring logic lives here in TypeScript, not on the server, for the same reason: the score must
   update with zero connectivity.
 
