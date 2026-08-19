@@ -178,11 +178,18 @@ every metered route here, so a flood delays a closure without preventing one. Ev
 with the rows, and the cookie the request arrived on is cleared.
 
 **The roster refusal is not one of these defences.** The closure also refuses while the coach still
-has an active player, and the request can waive that refusal. The gate exists so a player another
-coach is about to take over is not erased by accident, and the password is the whole of what stands
-between a stolen cookie and the erasure, waiver or not. The password is checked first for that
-reason, so nothing this route answers past the 401 reaches a caller who has not just proved who they
-are.
+has a player on the roster, and the request can waive that refusal. The gate exists so a player
+another coach is about to take over is not erased by accident, and the password is the whole of what
+stands between a stolen cookie and the erasure, waiver or not. The password is checked first for
+that reason, so nothing this route answers past the 401 reaches a caller who has not just proved who
+they are.
+
+**Deleting one player does not re-authenticate.** `DELETE /players/{id}` erases the player and their
+matches on the session alone. The password guards closure because closure destroys the credential
+itself, leaving nothing to refuse a later request with; a player delete leaves the account standing,
+and the roster screen shows the coach what they are about to lose better than a second round trip
+courtside would. A stolen cookie is bounded here by the per-coach rate limit every route charges,
+and by the transfer-code refusal, which keeps a player another coach has a claim on out of reach.
 
 ## Cross-site request forgery
 

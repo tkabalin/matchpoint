@@ -14,8 +14,8 @@ paths:
   don't recognise is a caller bug, and ignoring it makes a misspelled field look like success.
   `tests/test_openapi.py` fails on a body schema that skipped the base, since nothing else would: it
   produces a valid spec and a 200 that wrote nothing.
-- Server-owned fields — `coach_id`, the timestamps, `archived_at` — belong on `Read` and never on
-  `Create`. Adding one to a `Create` schema turns the splat into mass assignment, quietly.
+- Server-owned fields, `coach_id` and the timestamps, belong on `Read` and never on `Create`. Adding
+  one to a `Create` schema turns the splat into mass assignment, quietly.
 - `Read` schemas set `model_config = ConfigDict(from_attributes=True)` and routes return the ORM
   object; `response_model` does the serialisation.
 
@@ -35,14 +35,12 @@ paths:
   writable one would let a match walk across the ownership boundary, for a correction that
   delete-and-recreate serves better.
 
-## Archived Rows Leave the List, Not the Lookup
+## A List Endpoint Returns Everything the Caller Owns
 
-- List endpoints exclude archived rows. Fetch-by-id does not — a stored link or a match referencing
-  an archived player must still resolve, rather than breaking once someone is off the roster.
-- A list may take an explicit `include_archived` flag, defaulting to false, for a screen that offers
-  restore: with exclusion the only behaviour, an archived row is reachable only by remembered id.
-  The flag widens which of the caller's rows come back, never whose, and the default stays
-  exclusion.
+- Lists come back whole: every row of that kind the caller owns, filtered by nothing but ownership
+  and any filter the caller asked for. There is no state a row can be in that hides it from its own
+  list, since a row a coach wanted gone is deleted rather than hidden, so a screen showing the list
+  and a screen fetching one by id can never disagree about what exists.
 
 ## Let Pydantic Raise the 422
 
@@ -87,9 +85,10 @@ paths:
 - So a status is declared with a model or not declared at all. Declaring one exists to let the
   client branch on it, which is exactly what the missing model takes away.
 - Which is also the test for whether to declare at all: a status the caller can act on gets
-  declared, one it cannot does not. Sign-up's 409 and an archived player's are branches a form
-  takes; the ownership 404 is the same dead end whatever caused it, and stays undeclared. Take the
-  test from what the status is for, not from what a neighbouring route in the file happens to do.
+  declared, one it cannot does not. Sign-up's 409 and an outstanding transfer code's are branches a
+  form takes; the ownership 404 is the same dead end whatever caused it, and stays undeclared. Take
+  the test from what the status is for, not from what a neighbouring route in the file happens to
+  do.
 - Nothing catches this: the spec test only checks that the committed `openapi.json` matches the
   routes, and it does — `unknown` is what the routes asked for.
 

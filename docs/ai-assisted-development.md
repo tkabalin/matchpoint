@@ -68,21 +68,21 @@ rather than dutifully implement it.
 
 Each committed rule declares a `paths` glob in its frontmatter:
 
-| Rule                | Paths                              | Protects                                                                                             |
-| ------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `api.md`            | `apps/api/**`                      | Sync SQLAlchemy, `def` (not `async def`) database routes, Alembic from the first table, uv-not-pnpm  |
-| `api-models.md`     | Model modules                      | Archiving over deletion, client-assignable UUID ids, enums as VARCHAR + CHECK, the timestamp pair    |
-| `api-routes.md`     | Routers and schemas                | `XCreate` as the client-settable columns, archived rows leaving the list, letting Pydantic raise 422 |
-| `api-migrations.md` | `apps/api/migrations/**`           | Alembic's `generic` template plus the two local `env.py` edits; no `sqlalchemy.url` in `alembic.ini` |
-| `api-data-model.md` | Model modules and migrations       | The ERD in `docs/data-model.md` updated in the same commit as any change to the schema's shape       |
-| `api-tests.md`      | `apps/api/tests/**`                | A test tree mirroring the source; real Postgres over SQLite or a mocked session; savepoint rollback  |
-| `api-spec.md`       | Routers, schemas, app factory      | Regenerating the spec and TypeScript client in the same commit as the change that moved them         |
-| `api-client.md`     | `packages/api-client/**`           | Generated output, never hand-edited — fix the API, then regenerate                                   |
-| `web.md`            | `apps/web/**`                      | Tailwind v4 CSS-first via `@theme`, feature slices, the `@/` alias, kebab-case filenames             |
-| `web-capture.md`    | `apps/web/src/features/capture/**` | A network-free capture path; portrait _and_ landscape; touch-first affordances                       |
-| `web-components.md` | `apps/web/src/components/**`       | Components generated via the shadcn CLI; Base UI, not Radix                                          |
-| `web-tests.md`      | Vitest and Playwright test files   | The two runners kept off each other's files; co-located tests; queries by accessible role            |
-| `docs.md`           | `docs/**`                          | Finished documentation only; drafts to gitignored `docs/scratch/`                                    |
+| Rule                | Paths                              | Protects                                                                                              |
+| ------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `api.md`            | `apps/api/**`                      | Sync SQLAlchemy, `def` (not `async def`) database routes, Alembic from the first table, uv-not-pnpm   |
+| `api-models.md`     | Model modules                      | Deletion over flagging and who owns the cascade, client-assignable UUID ids, enums as VARCHAR + CHECK |
+| `api-routes.md`     | Routers and schemas                | `XCreate` as the client-settable columns, whole lists scoped by ownership, letting Pydantic raise 422 |
+| `api-migrations.md` | `apps/api/migrations/**`           | Alembic's `generic` template plus the two local `env.py` edits; no `sqlalchemy.url` in `alembic.ini`  |
+| `api-data-model.md` | Model modules and migrations       | The ERD in `docs/data-model.md` updated in the same commit as any change to the schema's shape        |
+| `api-tests.md`      | `apps/api/tests/**`                | A test tree mirroring the source; real Postgres over SQLite or a mocked session; savepoint rollback   |
+| `api-spec.md`       | Routers, schemas, app factory      | Regenerating the spec and TypeScript client in the same commit as the change that moved them          |
+| `api-client.md`     | `packages/api-client/**`           | Generated output, never hand-edited: fix the API, then regenerate                                     |
+| `web.md`            | `apps/web/**`                      | Tailwind v4 CSS-first via `@theme`, feature slices, the `@/` alias, kebab-case filenames              |
+| `web-capture.md`    | `apps/web/src/features/capture/**` | A network-free capture path; portrait _and_ landscape; touch-first affordances                        |
+| `web-components.md` | `apps/web/src/components/**`       | Components generated via the shadcn CLI; Base UI, not Radix                                           |
+| `web-tests.md`      | Vitest and Playwright test files   | The two runners kept off each other's files; co-located tests; queries by accessible role             |
+| `docs.md`           | `docs/**`                          | Finished documentation only; drafts to gitignored `docs/scratch/`                                     |
 
 Two deliberate patterns run through them.
 

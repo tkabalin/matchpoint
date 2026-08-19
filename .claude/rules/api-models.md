@@ -3,24 +3,24 @@ paths:
   - apps/api/src/matchpoint_api/models/**
 ---
 
-## Rows Are Archived, Never Deleted
+## Rows Are Deleted, Never Flagged
 
-- Player rows carry `archived_at` and are archived, not deleted. A player with matches recorded
-  against them cannot be removed without taking the match history along, and analytics that compare
-  a player across matches would lose the comparison. Don't add a hard-delete path; new tables that
-  anything else references get the same treatment.
-- A match is the exception while nothing references it: one entered by mistake hard-deletes
-  outright. A points table's no-`ondelete` foreign key takes that away, and nothing catches the
-  `IntegrityError` it raises, so adding that table includes choosing the status the API answers a
-  refused delete with (`docs/data-model.md` records the policy).
-- The convention above governs the data **inside** an account. `Coach` sits outside it and
-  deliberately has no `archived_at`: closing an account is the coach leaving, so
-  `DELETE /coaches/me` erases the coach and every row below them. It refuses while any player is
-  still active, which is what keeps archiving the way a coach clears a roster; the erasure is not a
-  soft-delete path that wanted an `archived_at`. A **new table hanging off `coaches`, or off
-  anything already below it, extends that route's delete list**. The foreign keys declare no
-  `ondelete`, so one left out makes closing an account fail rather than orphan rows. Nothing else
-  catches it; a route test that closes an account with the new table populated does.
+- No table carries a deleted-but-kept flag, and a new one must not introduce the idea: a coach who
+  asks to be rid of a row means it, and a flag would leave the data sitting where nothing can reach
+  it. `DELETE /players/{id}` erases the player and their matches; `DELETE /coaches/me` erases the
+  coach and every row below them; a match entered by mistake deletes on its own.
+- **A route that deletes a parent deletes each child table in turn itself**, in the request's one
+  transaction, so a **new table hanging off `players` or `coaches`, or off anything already below
+  them, extends that route's delete list**. The foreign keys declare no `ondelete`, so one left out
+  makes the delete fail rather than orphan rows. Nothing else catches it; a route test that deletes
+  with the new table populated does. A points table under `matches` puts `DELETE /matches/{id}` in
+  the same position, and nothing catches the `IntegrityError` it would raise, so adding that table
+  includes choosing what the route does with the point data (`docs/data-model.md` records the
+  policy).
+- A delete is refused where the row is not this coach's alone to destroy: a live transfer code is
+  another coach's pending claim, so it answers 409 on the player delete and on account closure
+  alike. Refusals like that belong on **every** route that reaches the row, or the first one left
+  out is the way around it.
 
 ## Ids Are Client-Assignable UUIDs
 
