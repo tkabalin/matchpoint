@@ -99,11 +99,11 @@ Most components on any screen fall into one of two buckets — handle each diffe
 ### 5. State-dependent primary actions
 
 A frame's primary action button is sometimes state-dependent rather than a fixed icon — e.g. a
-control that resumes something already in progress instead of offering to start a new one while
-one is active. When a frame implies this, build it as a single component with multiple states
-driven by the relevant state (client-side until the backing API exists — see the placeholder
-pattern above), never as separate hard-coded buttons for each state. If the wireframe doesn't make
-unambiguous what governs each state, ask rather than guess.
+control that resumes something already in progress instead of offering to start a new one while one
+is active. When a frame implies this, build it as a single component with multiple states driven by
+the relevant state (client-side until the backing API exists — see the placeholder pattern above),
+never as separate hard-coded buttons for each state. If the wireframe doesn't make unambiguous what
+governs each state, ask rather than guess.
 
 ## Workflow
 
