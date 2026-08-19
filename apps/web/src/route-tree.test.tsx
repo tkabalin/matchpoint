@@ -104,3 +104,17 @@ test("renders the protected route through a non-401 session-check failure", asyn
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });
+
+// The 500 above already covers the non-401 branch; 429 is pinned separately because the
+// API's per-coach budget is shared across every endpoint, so a burst of captures can
+// make the session check itself the request that gets refused.
+test("renders the protected route when the session check is rate-limited", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Too many requests" }, { status: 429 }),
+    "/api/players": () => Response.json([player]),
+  });
+
+  renderRouteTreeAt("/players");
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
