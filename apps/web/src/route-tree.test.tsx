@@ -70,6 +70,9 @@ async function renderRouteTreeAt(path: string) {
  * Seeds the persisted snapshot with what a previous online visit would have cached,
  * then waits for the write to land: the persister throttles, so its promise can
  * resolve before the store has it.
+ *
+ * The wait carries the suite's poll budget rather than `vi.waitFor`'s own, which is
+ * one second, the same length as the throttle window it is waiting out.
  */
 async function persistLastVisit() {
   const seed = new QueryClient();
@@ -81,9 +84,12 @@ async function persistLastVisit() {
     timestamp: Date.now(),
     clientState: dehydrate(seed),
   });
-  await vi.waitFor(async () => {
-    expect(await queryPersistOptions.persister.restoreClient()).toBeDefined();
-  });
+  await vi.waitFor(
+    async () => {
+      expect(await queryPersistOptions.persister.restoreClient()).toBeDefined();
+    },
+    { timeout: 5_000 },
+  );
 }
 
 afterEach(async () => {
