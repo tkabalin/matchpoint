@@ -192,3 +192,17 @@ def test_database_accepts_a_password_hash_of_any_length(db_session: Session) -> 
 
     stored = db_session.scalar(text("SELECT length(password_hash) FROM coaches"))
     assert stored == 1000
+
+
+def test_a_coach_without_a_photo_has_no_photo_url(db_session: Session) -> None:
+    coach = make_coach(db_session)
+
+    assert coach.photo_key is None
+    assert coach.photo_url is None
+
+
+def test_a_stored_photo_key_becomes_a_url(db_session: Session) -> None:
+    """The column holds the store's filename; the URL is derived, never written down."""
+    coach = make_coach(db_session, photo_key="mBKcJ7Yh3QhBOTd3ffVXbw")
+
+    assert coach.photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"

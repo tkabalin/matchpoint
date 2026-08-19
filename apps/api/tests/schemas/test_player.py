@@ -6,19 +6,22 @@ construction, which makes them the only genuinely pure surface the API has today
 cases belong here, where they cost a millisecond instead of a round trip.
 """
 
-from datetime import date, timedelta
+import uuid
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
 
-from matchpoint_api.models import DominantHand, Gender
+from matchpoint_api.models import DominantHand, Gender, Player
 from matchpoint_api.schemas.player import (
     MAX_AGE_YEARS,
     TRANSFER_CODE_MAX_LENGTH,
     PlayerCreate,
+    PlayerRead,
     PlayerUpdate,
     RedeemTransferCodeRequest,
 )
+from matchpoint_api.schemas.types import RequestModel
 
 NAME_LIMIT = 100
 NOTES_LIMIT = 2000
@@ -255,3 +258,29 @@ def test_a_transfer_code_is_a_secret() -> None:
 
     assert "a-transfer-code" not in repr(request)
     assert request.code.get_secret_value() == "a-transfer-code"
+
+
+def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
+    """from_attributes reaches the model's property, not a column, which is the point:
+    the URL is derived from what is stored, so no row can hold a stale one."""
+    player = Player(
+        id=uuid.uuid4(),
+        first_name="Test",
+        last_name="Player",
+        coach_id=uuid.uuid4(),
+        photo_key="mBKcJ7Yh3QhBOTd3ffVXbw",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert PlayerRead.model_validate(player).photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"
+
+
+@pytest.mark.parametrize("schema", [PlayerCreate, PlayerUpdate])
+def test_neither_create_nor_update_accepts_a_photo_url(schema: type[RequestModel]) -> None:
+    """A photo is set by POST .../photo and cleared by DELETE .../photo. Pinned here so
+    that putting the field back on a request schema fails rather than quietly working."""
+    with pytest.raises(ValidationError):
+        schema.model_validate(
+            {"first_name": "A", "last_name": "B", "photo_url": "/api/media/anything.webp"}
+        )

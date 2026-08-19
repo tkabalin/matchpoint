@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import CheckConstraint, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
+from matchpoint_api import photos
 from matchpoint_api.db import Base
 from matchpoint_api.models.match import ScoringSystem, Surface
 from matchpoint_api.models.types import str_enum
@@ -47,6 +48,10 @@ class Coach(Base):
     # width bound guards nothing and would need widening on any change of algorithm.
     # Deliberately absent from CoachRead — nothing reads it back out over the API.
     password_hash: Mapped[str] = mapped_column(Text)
+    # The photo store's name for this coach's profile photo, null for none. Text rather
+    # than a width, for password_hash's reason: the value is opaque, never typed by a
+    # person, and a bound would need widening on any change to how photos.py mints one.
+    photo_key: Mapped[str | None] = mapped_column(Text)
     # Match-setup defaults, reusing the Match enums so a preference is always a value a
     # match can store. #97's client half prefills its setup form from these; the server
     # never writes them into a match, so MatchCreate keeps absent distinct from null.
@@ -64,6 +69,11 @@ class Coach(Base):
         server_default=func.clock_timestamp(),
         onupdate=func.clock_timestamp(),
     )
+
+    @property
+    def photo_url(self) -> str | None:
+        """Where this coach's photo is served, or None. Read through from_attributes."""
+        return photos.url_for(self.photo_key)
 
     @validates("email")
     def _normalise_email(self, _key: str, email: str) -> str:

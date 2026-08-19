@@ -119,6 +119,7 @@ export const zPlayerRead = z.object({
     id: z.uuid(),
     last_name: z.string(),
     notes: z.string().nullable(),
+    photo_url: z.string().nullable(),
     updated_at: z.iso.datetime()
 });
 
@@ -193,6 +194,7 @@ export const zCoachRead = z.object({
     display_name: z.string(),
     email: z.string(),
     id: z.uuid(),
+    photo_url: z.string().nullable(),
     updated_at: z.iso.datetime()
 });
 

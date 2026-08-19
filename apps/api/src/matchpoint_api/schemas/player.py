@@ -82,6 +82,10 @@ class PlayerRead(BaseModel):
     # Readable but absent from PlayerCreate: ownership comes from the authenticated
     # coach, never from the request body, so there is nothing for a client to send.
     coach_id: uuid.UUID
+    # Read-only, and absent from every Create and Update schema: a photo is set
+    # by POST .../photo and cleared by DELETE .../photo, never by a PATCH body —
+    # a client cannot name a URL it does not own.
+    photo_url: str | None
     created_at: datetime
     updated_at: datetime
     # That a code is outstanding, not the code itself, which only a hash is kept of. The

@@ -5,6 +5,7 @@ from datetime import date, datetime
 from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, select
 from sqlalchemy.orm import Mapped, column_property, mapped_column
 
+from matchpoint_api import photos
 from matchpoint_api.db import Base
 from matchpoint_api.models.player_transfer_code import PlayerTransferCode
 from matchpoint_api.models.types import str_enum
@@ -43,6 +44,10 @@ class Player(Base):
     # Text rather than String(n): coach notes are prose, and the length bound belongs
     # on the schema, where it reaches the OpenAPI spec and so the client form.
     notes: Mapped[str | None] = mapped_column(Text)
+    # The photo store's name for this player's photo, null for the initials avatar the
+    # app falls back to. Text for the reason Coach.photo_key is: an opaque value nobody
+    # types, where a width bound guards nothing and would need widening later.
+    photo_key: Mapped[str | None] = mapped_column(Text)
     # The owning coach, set by the route from the session — never from the request
     # body, which is why PlayerCreate does not carry it. No ondelete, so Postgres
     # refuses to delete a coach who still has players rather than taking their match
@@ -69,3 +74,8 @@ class Player(Base):
         .exists()
         .correlate_except(PlayerTransferCode)
     )
+
+    @property
+    def photo_url(self) -> str | None:
+        """Where this player's photo is served, or None. Read through from_attributes."""
+        return photos.url_for(self.photo_key)

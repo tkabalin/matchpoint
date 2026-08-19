@@ -241,3 +241,26 @@ def test_reading_a_coach_row_drops_the_password_hash() -> None:
     assert "password_hash" not in dumped
     assert dumped["email"] == "mike@example.com"
     assert dumped["display_name"] == "Coach Mike"
+
+
+def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
+    """from_attributes reaches the model's property, not a column, which is the point:
+    the URL is derived from what is stored, so no row can hold a stale one."""
+    coach = Coach(
+        id=uuid.uuid4(),
+        email="coach@example.com",
+        display_name="Test Coach",
+        password_hash="argon2",
+        photo_key="mBKcJ7Yh3QhBOTd3ffVXbw",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert CoachRead.model_validate(coach).photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"
+
+
+def test_an_update_refuses_a_photo_url() -> None:
+    """A photo is set by POST .../photo and cleared by DELETE .../photo. Pinned here so
+    that putting the field back on an Update schema fails rather than quietly working."""
+    with pytest.raises(ValidationError):
+        CoachUpdate.model_validate({"photo_url": "/api/media/anything.webp"})

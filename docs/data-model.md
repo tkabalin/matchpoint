@@ -22,6 +22,7 @@ erDiagram
         varchar(254) email UK "the sign-in identity, stored lowercased"
         varchar(100) display_name "full name, or whatever they go by"
         text password_hash "argon2id hash"
+        text photo_key "nullable: the profile photo's filename, served from /api/media"
         varchar(6) default_surface "nullable: match-setup default, same members as matches.surface"
         varchar(24) default_scoring_system "nullable: match-setup default, same members as matches.scoring_system"
         timestamptz created_at
@@ -67,6 +68,7 @@ erDiagram
         varchar(5) dominant_hand "nullable: right, left"
         varchar(6) gender "nullable: male, female, other"
         text notes "nullable: coach notes"
+        text photo_key "nullable: the profile photo's filename, served from /api/media"
         uuid coach_id FK "the owning coach"
         timestamptz created_at
         timestamptz updated_at
@@ -188,6 +190,17 @@ of that waiver: the code is a claim another coach may still act on, not this coa
 by asking to leave nothing behind. Deleting that player on its own is refused for the same reason,
 so the refusal cannot be walked past a player at a time. The code must be cancelled or redeemed
 first.
+
+**A photo is a file, and the row holds only its name.** `photo_key` names a re-encoded image in a
+directory outside the database, not the bytes: an image column would grow every row that a query
+touches whether or not it wanted pixels, and would leave nothing for a client to cache by URL. The
+cost is that the file and the row are no longer one transaction, so the ordering is fixed everywhere
+they change together: commit the row, then unlink the file it replaced, never the reverse. An
+unreferenced file costs a few kilobytes and is unreachable, since its name appears in no row and
+cannot be guessed; a row naming a file that is gone costs a broken image on every render and looks
+exactly like a bug. Nothing sweeps the orphans, which only a crash in the moment between a write and
+a commit can produce. Closing an account is the one place the keys have to be collected before the
+deletes rather than after, because afterwards there is no row left to read them from.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every

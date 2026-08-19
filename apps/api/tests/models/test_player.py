@@ -239,3 +239,17 @@ def test_coach_id_is_indexed(db_session: Session) -> None:
     }
 
     assert ("coach_id",) in indexed_columns
+
+
+def test_a_player_without_a_photo_has_no_photo_url(db_session: Session) -> None:
+    player = make_player(db_session)
+
+    assert player.photo_key is None
+    assert player.photo_url is None
+
+
+def test_a_stored_photo_key_becomes_a_url(db_session: Session) -> None:
+    """The column holds the store's filename; the URL is derived, never written down."""
+    player = make_player(db_session, photo_key="mBKcJ7Yh3QhBOTd3ffVXbw")
+
+    assert player.photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"

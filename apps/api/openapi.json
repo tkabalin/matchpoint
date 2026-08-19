@@ -121,6 +121,17 @@
             "title": "Id",
             "type": "string"
           },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -133,6 +144,7 @@
           "display_name",
           "default_surface",
           "default_scoring_system",
+          "photo_url",
           "created_at",
           "updated_at"
         ],
@@ -709,6 +721,17 @@
             ],
             "title": "Notes"
           },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -724,6 +747,7 @@
           "gender",
           "notes",
           "coach_id",
+          "photo_url",
           "created_at",
           "updated_at",
           "has_transfer_code"

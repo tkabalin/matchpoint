@@ -65,6 +65,10 @@ export type CoachRead = {
      */
     id: string;
     /**
+     * Photo Url
+     */
+    photo_url: string | null;
+    /**
      * Updated At
      */
     updated_at: string;
@@ -326,6 +330,10 @@ export type PlayerRead = {
      * Notes
      */
     notes: string | null;
+    /**
+     * Photo Url
+     */
+    photo_url: string | null;
     /**
      * Updated At
      */

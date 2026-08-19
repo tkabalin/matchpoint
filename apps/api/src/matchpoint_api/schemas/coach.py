@@ -106,5 +106,9 @@ class CoachRead(BaseModel):
     display_name: str
     default_surface: Surface | None
     default_scoring_system: ScoringSystem | None
+    # Read-only, and absent from every Create and Update schema: a photo is set
+    # by POST .../photo and cleared by DELETE .../photo, never by a PATCH body —
+    # a client cannot name a URL it does not own.
+    photo_url: str | None
     created_at: datetime
     updated_at: datetime

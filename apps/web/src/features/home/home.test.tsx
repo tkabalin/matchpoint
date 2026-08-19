@@ -22,6 +22,7 @@ const coach: CoachRead = {
   display_name: "Danny",
   default_surface: null,
   default_scoring_system: null,
+  photo_url: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };
@@ -37,6 +38,7 @@ const players: PlayerRead[] = [
     notes: null,
     coach_id: coach.id,
     has_transfer_code: false,
+    photo_url: null,
     created_at: "2026-08-11T09:00:00Z",
     updated_at: "2026-08-11T09:00:00Z",
   },
@@ -50,6 +52,7 @@ const players: PlayerRead[] = [
     notes: null,
     coach_id: coach.id,
     has_transfer_code: false,
+    photo_url: null,
     created_at: "2026-08-11T09:00:00Z",
     updated_at: "2026-08-11T09:00:00Z",
   },
