@@ -53,13 +53,17 @@ function stubFetch(routes: Record<string, () => Response>) {
   );
 }
 
-function renderRouteTreeAt(path: string) {
+async function renderRouteTreeAt(path: string) {
   const router = createRouter({
     routeTree,
     context: { queryClient: new QueryClient() },
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   render(<RouterProvider router={router} />);
+  // Mount the way main.tsx does, then await the router's own load rather than leaving
+  // the guard, any redirect and the lazy chunk inside the `findBy*` poll below, whose
+  // budget is the narrowest in the suite: docs/testing.md.
+  await router.load();
 }
 
 /**
@@ -95,7 +99,7 @@ test("/players renders the roster", async () => {
     "/api/players": () => Response.json([player]),
   });
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });
@@ -107,7 +111,7 @@ test("/players/$playerId renders that player's profile, not the roster", async (
     "/api/matches": () => Response.json([]),
   });
 
-  renderRouteTreeAt(`/players/${player.id}`);
+  await renderRouteTreeAt(`/players/${player.id}`);
 
   expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
   expect(screen.queryByRole("heading", { name: "Players" })).not.toBeInTheDocument();
@@ -118,7 +122,7 @@ test("redirects to sign-in on a confirmed 401, instead of rendering the protecte
     "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
   });
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
@@ -129,7 +133,7 @@ test("renders the protected route through a non-401 session-check failure", asyn
     "/api/players": () => Response.json([player]),
   });
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });
@@ -143,7 +147,7 @@ test("renders the protected route when the session check is rate-limited", async
     "/api/players": () => Response.json([player]),
   });
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
 });
@@ -156,7 +160,7 @@ test("renders a protected route from the persisted cache with no connection", as
   onlineManager.setOnline(false);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
   expect(await screen.findByText("Amahle Nkosi")).toBeInTheDocument();
@@ -168,7 +172,7 @@ test("a confirmed 401 leaves no persisted snapshot on the device", async () => {
     "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
   });
 
-  renderRouteTreeAt("/players");
+  await renderRouteTreeAt("/players");
 
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
   expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
