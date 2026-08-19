@@ -241,6 +241,10 @@ web-test:
   stage: test
   needs: []
   rules: *web-app-rules
+  # One at a time across pipelines. Vitest sizes its worker pool from the cores it
+  # can see, and the runner gives four jobs the same four cores, so two of these
+  # together halve each other's speed for no gain: docs/testing.md.
+  resource_group: web-test
   # Pull-only: web-lint pushes this cache under the same lockfile-derived key,
   # so re-archiving the store here would upload nothing new. cache: is a map, so
   # extends merges this in on top of .web-base's key and paths.
