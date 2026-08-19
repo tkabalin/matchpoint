@@ -463,9 +463,13 @@ smoke:
         fi
         sleep 3
       done
+      # The commit match above proves the API is up, not the web container;
+      # a 502 here can still just be it settling, so give it the same grace.
+      retry() { for i in 1 2 3; do "$@" && return 0; sleep 3; done; return 1; }
+
       # Caddy serves the SPA from the web container, built from the same
       # IMAGE_TAG the API just confirmed, so a 200 is all this has left to add.
-      curl -fsS -o /dev/null "$site/"
+      retry curl -fsS -o /dev/null "$site/"
       # A provider key that is present but wrong looks healthy until a coach
       # tries to sign up: /health cannot see it, and the test suite cannot
       # reach a provider by design. One real send per deploy catches it, and a
@@ -477,7 +481,7 @@ smoke:
       # (apps/api/src/matchpoint_api/csrf.py), which makes this the one place
       # the origin check is exercised through the real proxy chain: a 403 here
       # is that check answering Cloudflare and Caddy, not the key.
-      curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
+      retry curl -fsS -o /dev/null -X POST -H 'Content-Type: application/json' \
         -H "Origin: $site" \
         -d "{\"email\":\"delivered+$CI_PIPELINE_ID@resend.dev\"}" \
         "$site/api/auth/request-otp"
