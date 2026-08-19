@@ -10,7 +10,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -191,6 +191,52 @@ test("says so when the device could not be cleared", async () => {
 
   expect(
     await screen.findByText("Some of your data could not be cleared from this device."),
+  ).toBeInTheDocument();
+});
+
+test("retrying a failed purge clears the failure message once storage recovers", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  const removeItem = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    throw new Error("storage blocked");
+  });
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
+  await screen.findByText("Some of your data could not be cleared from this device.");
+
+  removeItem.mockRestore();
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+
+  await waitFor(() => {
+    expect(
+      screen.queryByText("Some of your data could not be cleared from this device."),
+    ).not.toBeInTheDocument();
+  });
+});
+
+test("a second failed retry leaves the failure dialog exactly as it was", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    throw new Error("storage blocked");
+  });
+  const user = userEvent.setup();
+  await renderSettings();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+  const dialog = await screen.findByRole("alertdialog");
+  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
+  await screen.findByText("Some of your data could not be cleared from this device.");
+
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+
+  expect(
+    await screen.findByText("Some of your data could not be cleared from this device."),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "You've been signed out." }),
   ).toBeInTheDocument();
 });
 

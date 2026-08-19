@@ -150,6 +150,16 @@ export function Settings() {
     await navigate({ to: "/" });
   }
 
+  async function handleRetryPurge() {
+    try {
+      await purgeLocalData(queryClient);
+      setPurgeFailed(false);
+    } catch {
+      // Still blocked. Leave the dialog exactly as it was rather than re-stating the
+      // same failure a second way.
+    }
+  }
+
   return (
     <div>
       <h1>Settings</h1>
@@ -191,6 +201,7 @@ export function Settings() {
             )}
           </AlertDialogHeader>
           <AlertDialogFooter>
+            {purgeFailed && <AlertDialogCancel onClick={handleRetryPurge}>Retry</AlertDialogCancel>}
             <AlertDialogAction onClick={handleAcknowledge}>OK</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
