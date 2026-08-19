@@ -18,7 +18,7 @@ export function PlayerActionSheet({
   open,
   onOpenChange,
 }: {
-  player: Pick<PlayerRead, "id" | "first_name" | "last_name"> | null;
+  player: Pick<PlayerRead, "id" | "first_name" | "last_name" | "photo_url"> | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
