@@ -105,7 +105,7 @@ test("cancel returns to the player profile", async () => {
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
-// Reachable by typing a url, or from a stale link after the player was archived.
+// Reachable by typing a url, or from a stale link after the player was deleted.
 // Before #78 this rendered the form headed "New match" with no name, offering to
 // start a match for a player the coach cannot see.
 test("says not found instead of an unnamed form when the player isn't the coach's", async () => {

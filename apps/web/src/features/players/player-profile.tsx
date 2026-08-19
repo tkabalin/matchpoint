@@ -88,22 +88,10 @@ export function PlayerProfile() {
           Start match
         </Link>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={player.archived_at !== null}
-          onClick={() => setEditing(true)}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
           <Pencil />
           Edit
         </Button>
-
-        {player.archived_at !== null && (
-          <p className="text-xs text-muted-foreground">
-            Editing is unavailable for an archived player.
-          </p>
-        )}
       </div>
 
       <EditPlayerSheet player={player} open={editing} onOpenChange={setEditing} />

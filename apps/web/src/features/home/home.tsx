@@ -54,7 +54,7 @@ export function Home() {
   const [adding, setAdding] = useState(false);
 
   const lastViewedPlayerId = getLastViewedPlayerId();
-  // No error branch on purpose: a stale id in localStorage (archived player, or a
+  // No error branch on purpose: a stale id in localStorage (deleted player, or a
   // different coach on a shared device) should quietly drop the card, not put a
   // "not found" on the home screen for something nobody asked to see (#78).
   const { data: lastViewedPlayer } = useQuery({

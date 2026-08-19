@@ -352,16 +352,3 @@ test("saving Edit with nothing changed just closes, no request sent", async () =
   );
   expect(patches).toEqual([]);
 });
-
-test("Edit is disabled for an archived player, with the reason shown", async () => {
-  stubFetch({
-    [`/api/players/${player.id}`]: () =>
-      Response.json({ ...player, archived_at: "2026-08-01T00:00:00Z" }),
-    "/api/matches": () => Response.json([]),
-  });
-  await renderPlayerProfile();
-  await screen.findByRole("heading", { name: "Amahle Nkosi" });
-
-  expect(screen.getByRole("button", { name: "Edit" })).toBeDisabled();
-  expect(screen.getByText("Editing is unavailable for an archived player.")).toBeInTheDocument();
-});
