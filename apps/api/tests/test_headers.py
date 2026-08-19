@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from fastapi.testclient import TestClient
 
+from matchpoint_api import photos
 from matchpoint_api.headers import DOCS_CSP, STRICT_CSP
 from matchpoint_api.main import create_app
-from tests.conftest import crashing_client
+from tests.conftest import crashing_client, image_bytes
 
 # The full set a JSON response must carry (docs/security.md). Asserted verbatim so a
 # weakened value fails, not just a missing header.
@@ -12,6 +15,21 @@ STRICT_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
+
+
+def test_a_stored_photo_carries_them_too(client: TestClient, media_root: Path) -> None:
+    # Served by a Mount rather than a route, so nothing about it goes through the
+    # routers — nosniff is what keeps the stored bytes rendering only as the image/webp
+    # the extension declares.
+    key = photos.store(image_bytes())
+
+    response = client.get(f"{photos.MEDIA_PATH}/{key}{photos.EXTENSION}")
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "image/webp"
+    assert response.headers["Cache-Control"] == photos.CACHE_CONTROL
+    for name, value in STRICT_HEADERS.items():
+        assert response.headers[name] == value
 
 
 def test_json_responses_carry_the_strict_headers(client: TestClient) -> None:

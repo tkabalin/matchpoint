@@ -13,6 +13,7 @@ from matchpoint_api.errors import unhandled_exception_response, validation_error
 from matchpoint_api.headers import SecurityHeadersMiddleware
 from matchpoint_api.logs import RequestLogMiddleware, configure_logging
 from matchpoint_api.mail import create_email_sender
+from matchpoint_api.photos import MEDIA_PATH, mount_media
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers import auth, coaches, matches, players
 
@@ -177,6 +178,11 @@ def create_app() -> FastAPI:
     app.include_router(coaches.router)
     app.include_router(players.router)
     app.include_router(matches.router)
+
+    # A Mount rather than a route, and so absent from the spec: only APIRoutes reach the
+    # generator, and a generated client function would invite constructing a photo URL
+    # instead of reading the one the resource it belongs to already carries.
+    app.mount(MEDIA_PATH, mount_media(), name="media")
 
     # A comment rather than a docstring: this route is in the spec, and a docstring
     # would put every word of it in the generated TypeScript client too.

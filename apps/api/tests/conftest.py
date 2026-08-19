@@ -1,3 +1,4 @@
+import io
 import os
 from collections.abc import Iterator
 from pathlib import Path
@@ -8,10 +9,11 @@ from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from PIL import Image
 from sqlalchemy import Engine, create_engine, make_url, text
 from sqlalchemy.orm import Session
 
-from matchpoint_api import rate_limit
+from matchpoint_api import photos, rate_limit
 from matchpoint_api.breach import BreachCheckError
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
@@ -167,8 +169,38 @@ def db_session(_test_engine: Engine) -> Iterator[Session]:
             transaction.rollback()
 
 
+@pytest.fixture(autouse=True)
+def media_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the photo store at a directory of this test's own.
+
+    Autouse, so a test that never mentions photos still cannot write into the tree —
+    `tests/__init__.py` pins the setting once for import time, and this narrows it per
+    test. `client` takes it explicitly rather than relying on autouse ordering, because
+    the app captures the directory when it mounts it.
+    """
+    root = tmp_path / "media"
+    monkeypatch.setattr(settings, "media_root", root)
+    return root
+
+
+def stored_photos(media_root: Path) -> list[Path]:
+    """Every photo currently on disk, for asserting that a replaced one was unlinked."""
+    return sorted(media_root.glob(f"*{photos.EXTENSION}"))
+
+
+def image_bytes(image_format: str = "PNG", size: tuple[int, int] = (64, 64)) -> bytes:
+    """A real, tiny image, since the store takes nothing else.
+
+    Here rather than in one test module because both router suites need it. Pillow is
+    an API dependency, so building one costs no dev dependency of its own.
+    """
+    buffer = io.BytesIO()
+    Image.new("RGB", size, (200, 30, 40)).save(buffer, image_format)
+    return buffer.getvalue()
+
+
 @pytest.fixture
-def client(request: pytest.FixtureRequest) -> Iterator[TestClient]:
+def client(request: pytest.FixtureRequest, media_root: Path) -> Iterator[TestClient]:
     """A test client whose routes share the requesting test's db_session.
 
     The session is resolved on first use rather than up front, so routes that never

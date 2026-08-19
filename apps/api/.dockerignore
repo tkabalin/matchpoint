@@ -7,3 +7,4 @@ tests/
 junit.xml
 .coverage
 htmlcov/
+media/

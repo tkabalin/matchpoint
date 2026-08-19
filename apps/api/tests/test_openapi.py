@@ -66,3 +66,14 @@ def test_main_writes_the_spec_file(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     main()
 
     assert target.read_text(encoding="utf-8") == spec_json()
+
+
+def test_the_media_mount_is_not_in_the_spec() -> None:
+    """Photos are served by a Mount, which the generator never sees, and that is right.
+
+    A client function for the media path would invite constructing a photo URL, where
+    the only correct one is the `photo_url` the resource it belongs to already carries.
+    """
+    paths = json.loads(spec_json())["paths"]
+
+    assert [path for path in paths if path.startswith("/media")] == []

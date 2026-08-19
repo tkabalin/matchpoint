@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # far faster than the coach those limits are sized for. Never below 1: this may
     # loosen a limit for a test run, never quietly tighten one on a deployed box.
     rate_limit_scale: float = Field(default=1.0, ge=1)
+    # Where uploaded photos are written (photos.py) and served from. Anchored to
+    # apps/api/ like env_file above, so a dev box needs no configuration; production
+    # points it at the Docker volume in infra/prod/compose.yml, which is the only
+    # thing keeping the files across a deploy.
+    media_root: Path = Path(__file__).parents[2] / "media"
 
 
 settings = Settings()

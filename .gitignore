@@ -42,6 +42,9 @@ __pycache__/
 # don't appear locally, where both tools use the usual per-user cache dirs.
 .uv-cache/
 .pyright-node/
+# Uploaded photos on a dev box (config.py's media_root default). In production these
+# live in a Docker volume, never in the tree.
+apps/api/media/
 
 # -----------------------------------------------------------------------------
 # Test reports and coverage (Vitest, pytest)

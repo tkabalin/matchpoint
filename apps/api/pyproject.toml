@@ -17,6 +17,13 @@ dependencies = [
     # imports it directly — a dependency we call is not one to inherit by accident.
     "httpx>=0.28",
     "structlog>=26.1.0",
+    # Decodes and re-encodes uploaded photos (photos.py). Wheels are prebuilt, so the
+    # runtime image needs no build toolchain for it.
+    "pillow>=12.3.0",
+    # Nothing imports it, but File() parts are unreadable without it: FastAPI raises at
+    # import when a route declares one and it is missing. Declared for httpx's reason
+    # above — a dependency the routes rely on is not one to inherit by accident.
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]
