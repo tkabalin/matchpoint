@@ -226,6 +226,25 @@ test("shows the signed-in coach's name once loaded", async () => {
   expect(await screen.findByText("Coach Danny")).toBeInTheDocument();
 });
 
+// The header Profile link starts as a generic icon (no coach known yet) and swaps
+// to the coach's own avatar once loaded — bigger and more recognisable than a
+// stand-in icon, per Jakob's Law (#179).
+test("the profile link shows the coach's initials once loaded", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  const profileLink = await screen.findByRole("link", { name: "Profile" });
+  expect(within(profileLink).getByText("D")).toBeInTheDocument();
+});
+
+test("the profile link falls back to a generic icon before the coach loads", async () => {
+  stubUnauthenticatedHome();
+  await renderHome();
+
+  const profileLink = screen.getByRole("link", { name: "Profile" });
+  expect(within(profileLink).queryByText(/^\w$/)).not.toBeInTheDocument();
+});
+
 test("shows no welcome-back line when the coach can't be loaded", async () => {
   stubUnauthenticatedHome();
   await renderHome();
@@ -247,6 +266,27 @@ test("shows no install nudge before the coach is known", async () => {
   await renderHome();
 
   expect(screen.queryByText("Install MatchPoint")).not.toBeInTheDocument();
+});
+
+// Same reasoning as the install nudge above: keyed on a signed-in coach with no
+// photo yet — sign-up can't offer a photo step itself (#179), so this is where a
+// coach who skipped one first gets the chance.
+test("shows the add-photo nudge for a signed-in coach with no photo", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  expect(await screen.findByText("Add a profile photo")).toBeInTheDocument();
+});
+
+test("shows no add-photo nudge once the coach has a photo", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ ...coach, photo_url: "/api/media/abc.webp" }),
+    "/api/players": () => Response.json(players),
+    "/api/matches": () => Response.json([]),
+  });
+  await renderHome();
+
+  expect(screen.queryByText("Add a profile photo")).not.toBeInTheDocument();
 });
 
 test("shows no results list until the user types", async () => {

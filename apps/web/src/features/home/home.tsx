@@ -10,10 +10,12 @@ import { Link } from "@tanstack/react-router";
 import { ChevronRight, Plus, Search, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 
+import { AddPhotoNudge } from "@/components/add-photo-nudge";
 import { AddPlayerSheet } from "@/components/add-player-sheet";
 import { BulletBar } from "@/components/bullet-bar";
 import { OutcomeSwatch } from "@/components/outcome-swatch";
 import { AppPage } from "@/components/page-shell";
+import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerActionSheet } from "@/components/player-action-sheet";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { buttonVariants } from "@/components/ui/button";
@@ -28,6 +30,7 @@ import {
   getPlayerOverviewOptions,
   listAttentionFlagsOptions,
 } from "@/lib/analytics/analytics-options";
+import { initialsFor } from "@/lib/coach-initials";
 import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
 import { cn } from "@/lib/utils";
 
@@ -79,13 +82,31 @@ export function Home() {
           {coach && <p className="text-sm text-muted-foreground">Welcome back</p>}
           <h1 className="text-xl font-bold">{coach ? `Coach ${coach.display_name}` : "Home"}</h1>
         </div>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex shrink-0 items-center gap-2">
+          {/* The coach's own avatar stands in for a generic icon once it's loaded —
+              bigger than Settings' icon-sm button to start with, since Jakob's Law
+              (every mainstream app's own-profile control) says the header's most
+              recognisable target is a face or initials, not chrome. Falls back to
+              the plain icon in its old button chrome while the coach is unknown. */}
           <Link
             to="/profile"
             aria-label="Profile"
-            className={buttonVariants({ variant: "outline", size: "icon-sm" })}
+            className={cn(
+              "rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/30",
+              !coach && buttonVariants({ variant: "outline", size: "icon-sm" }),
+            )}
           >
-            <UserRound />
+            {coach ? (
+              <PhotoAvatar
+                id={coach.id}
+                initials={initialsFor(coach.display_name)}
+                photoUrl={coach.photo_url}
+                size="md"
+                shape="circle"
+              />
+            ) : (
+              <UserRound />
+            )}
           </Link>
           <Link
             to="/settings"
@@ -98,6 +119,7 @@ export function Home() {
       </header>
 
       <InProgressBanner />
+      {coach && <AddPhotoNudge coach={coach} />}
       {coach && <InstallAppNudge />}
 
       <InputGroup>
