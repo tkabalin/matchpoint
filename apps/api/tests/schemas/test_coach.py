@@ -188,15 +188,13 @@ def test_a_preference_outside_its_enum_is_rejected(field: str, value: str) -> No
 def test_a_closure_carries_the_password_and_the_roster_waiver() -> None:
     """No email and no confirmation field: the session says whose account this is, and a
     typed confirmation would prove the form was filled in rather than who filled it in."""
-    assert set(CoachDelete.model_fields) == {"password", "delete_active_players"}
+    assert set(CoachDelete.model_fields) == {"password", "delete_players"}
 
 
-def test_a_closure_leaves_an_active_roster_alone_unless_asked() -> None:
+def test_a_closure_leaves_the_roster_alone_unless_asked() -> None:
     """The default is what makes the refusal the refusal: a body that says nothing about
     the roster must never be the one that clears it."""
-    assert (
-        CoachDelete.model_validate({"password": "a-good-password"}).delete_active_players is False
-    )
+    assert CoachDelete.model_validate({"password": "a-good-password"}).delete_players is False
 
 
 def test_a_closure_takes_the_ceiling_without_the_floor() -> None:

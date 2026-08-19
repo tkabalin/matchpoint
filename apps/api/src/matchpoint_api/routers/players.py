@@ -1,5 +1,4 @@
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach, hash_token, new_session_token
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Player, PlayerTransferCode
+from matchpoint_api.models import Match, Player, PlayerTransferCode
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
     PlayerCreate,
@@ -35,6 +34,10 @@ router = APIRouter(
 
 DbSession = Annotated[Session, Depends(get_db)]
 
+# One message for both routes that can destroy a player, the delete below and account
+# closure, which imports it: a live code means the same thing to each of them.
+TRANSFER_CODES_OUTSTANDING = "Outstanding transfer codes must be cancelled or redeemed first"
+
 
 def owned_player(
     db: Session, player_id: uuid.UUID, coach_id: uuid.UUID, *, for_update: bool = False
@@ -56,8 +59,8 @@ def owned_player(
 @router.post("", status_code=201, response_model=PlayerRead)
 def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Player:
     # PlayerCreate carries exactly the client-settable columns, which is what makes
-    # the splat safe: coach_id and archived_at are not on it and so cannot be set
-    # here. Ownership comes from the session instead, never from the body.
+    # the splat safe: coach_id is not on it and so cannot be set here. Ownership comes
+    # from the session instead, never from the body.
     player = Player(**data.model_dump(), coach_id=coach.id)
     db.add(player)
     db.commit()
@@ -65,46 +68,14 @@ def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Pla
 
 
 @router.get("", response_model=list[PlayerRead])
-def list_players(
-    db: DbSession, coach: CurrentCoach, include_archived: bool = False
-) -> list[Player]:
-    # Archived players are hidden from the roster but still readable by id, so a
-    # stored link or a match that references one does not break. The flag is what the
-    # restore screen lists from: without it they are reachable only by remembered id.
+def list_players(db: DbSession, coach: CurrentCoach) -> list[Player]:
     statement = select(Player).where(Player.coach_id == coach.id)
-    if not include_archived:
-        statement = statement.where(Player.archived_at.is_(None))
     return list(db.scalars(statement.order_by(Player.last_name, Player.first_name)))
 
 
 @router.get("/{player_id}", response_model=PlayerRead)
 def get_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
     return owned_player(db, player_id, coach.id)
-
-
-@router.post("/{player_id}/archive", response_model=PlayerRead)
-def archive_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    player = owned_player(db, player_id, coach.id, for_update=True)
-    # A second archive keeps the first timestamp: the offline client retries queued
-    # requests, and a retry is not a second departure from the roster.
-    if player.archived_at is None:
-        # Python's clock, as in the auth routes' computed expiries. clock_timestamp()
-        # belongs to the column defaults, where rows written in one transaction each
-        # need a value of their own.
-        player.archived_at = datetime.now(UTC)
-        db.commit()
-    return player
-
-
-@router.post("/{player_id}/restore", response_model=PlayerRead)
-def restore_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Player:
-    player = owned_player(db, player_id, coach.id, for_update=True)
-    # Restoring an active player is a no-op rather than a 409, for the reason archiving
-    # twice is: a retried request must neither error nor move the row.
-    if player.archived_at is not None:
-        player.archived_at = None
-        db.commit()
-    return player
 
 
 @router.patch("/{player_id}", response_model=PlayerRead)
@@ -117,6 +88,35 @@ def update_player(
     data.apply_to(player)
     db.commit()
     return player
+
+
+# Declared because the roster screen branches on it: an outstanding code is a state the
+# coach can clear, so the client offers to cancel it rather than reporting a failure.
+@router.delete(
+    "/{player_id}",
+    status_code=204,
+    responses={409: {"model": ErrorDetail, "description": TRANSFER_CODES_OUTSTANDING}},
+)
+def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
+    """Erase this player and every match recorded against them. Nothing undoes it.
+
+    No confirmation beyond the request itself. What the coach is about to lose is on the
+    screen in front of them, so confirming it belongs to the client rather than to a
+    second round trip taken courtside.
+    """
+    player = owned_player(db, player_id, coach.id, for_update=True)
+    # A live code is another coach's pending claim, which is why account closure refuses
+    # over one too. Agreeing with that refusal is what stops it being sidestepped a
+    # player at a time; `DELETE /players/{id}/transfer-code` is the way past it.
+    outstanding = select(PlayerTransferCode.id).where(PlayerTransferCode.player_id == player.id)
+    if db.scalar(select(outstanding.exists())):
+        raise HTTPException(status_code=409, detail=TRANSFER_CODES_OUTSTANDING)
+    # Children first, in one transaction, for the reason account closure gives: every
+    # foreign key here declares no `ondelete`, so a table added below players and left
+    # out of this list stops the delete outright rather than orphaning rows.
+    db.execute(delete(Match).where(Match.player_id == player.id))
+    db.delete(player)
+    db.commit()
 
 
 # Transferring a player (#173): players change coach as they grow up, and the roster is
@@ -135,9 +135,7 @@ def create_player_transfer_code(
     """Mint a code that hands this player, their notes and their matches, to another coach.
 
     Asking again replaces the previous code, which the storage decides rather than the
-    policy: only a hash is kept, so an earlier code can never be shown a second time. An
-    archived player transfers like any other, since a coach leaving is exactly when their
-    roster moves on.
+    policy: only a hash is kept, so an earlier code can never be shown a second time.
     """
     player = owned_player(db, player_id, coach.id, for_update=True)
     code = new_session_token()
@@ -214,10 +212,6 @@ def redeem_player_transfer_code(
         # not spend the one they are about to hand over.
         raise HTTPException(status_code=409, detail=ALREADY_OWNED)
     player.coach_id = coach.id
-    # Cleared, or a player archived on the way out would arrive already off the roster
-    # they are joining. Archiving says someone has left a roster, which is precisely what
-    # the transfer undoes.
-    player.archived_at = None
     db.delete(transfer)
     db.commit()
     return player

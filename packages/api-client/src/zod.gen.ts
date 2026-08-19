@@ -22,7 +22,7 @@ export const zCoachCreate = z.object({
  * CoachDelete
  */
 export const zCoachDelete = z.object({
-    delete_active_players: z.boolean().optional().default(false)
+    delete_players: z.boolean().optional().default(false)
 });
 
 /**
@@ -90,7 +90,6 @@ export const zPlayerCreate = z.object({
  * PlayerRead
  */
 export const zPlayerRead = z.object({
-    archived_at: z.iso.datetime().nullable(),
     coach_id: z.uuid(),
     created_at: z.iso.datetime(),
     date_of_birth: z.iso.date().nullable(),
@@ -273,7 +272,7 @@ export const zCoachCreateWritable = z.object({
  * CoachDelete
  */
 export const zCoachDeleteWritable = z.object({
-    delete_active_players: z.boolean().optional().default(false),
+    delete_players: z.boolean().optional().default(false),
     password: z.string().max(128)
 });
 
@@ -428,10 +427,6 @@ export const zUpdateMatchPath = z.object({
  */
 export const zUpdateMatchResponse = zMatchRead;
 
-export const zListPlayersQuery = z.object({
-    include_archived: z.boolean().optional().default(false)
-});
-
 /**
  * Response List Players
  *
@@ -453,6 +448,15 @@ export const zRedeemPlayerTransferCodeBody = zRedeemTransferCodeRequest;
  */
 export const zRedeemPlayerTransferCodeResponse = zPlayerRead;
 
+export const zDeletePlayerPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePlayerResponse = z.void();
+
 export const zGetPlayerPath = z.object({
     player_id: z.uuid()
 });
@@ -472,24 +476,6 @@ export const zUpdatePlayerPath = z.object({
  * Successful Response
  */
 export const zUpdatePlayerResponse = zPlayerRead;
-
-export const zArchivePlayerPath = z.object({
-    player_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zArchivePlayerResponse = zPlayerRead;
-
-export const zRestorePlayerPath = z.object({
-    player_id: z.uuid()
-});
-
-/**
- * Successful Response
- */
-export const zRestorePlayerResponse = zPlayerRead;
 
 export const zDeletePlayerTransferCodePath = z.object({
     player_id: z.uuid()

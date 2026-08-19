@@ -37,9 +37,9 @@ export type CoachCreate = {
  */
 export type CoachDelete = {
     /**
-     * Delete Active Players
+     * Delete Players
      */
-    delete_active_players?: boolean;
+    delete_players?: boolean;
 };
 
 /**
@@ -265,10 +265,6 @@ export type PlayerCreate = {
  */
 export type PlayerRead = {
     /**
-     * Archived At
-     */
-    archived_at: string | null;
-    /**
      * Coach Id
      */
     coach_id: string;
@@ -443,9 +439,9 @@ export type CoachCreateWritable = {
  */
 export type CoachDeleteWritable = {
     /**
-     * Delete Active Players
+     * Delete Players
      */
-    delete_active_players?: boolean;
+    delete_players?: boolean;
     /**
      * Password
      */
@@ -850,7 +846,7 @@ export type DeleteCurrentCoachErrors = {
      */
     403: ErrorDetail;
     /**
-     * Active players must be transferred or archived first, or Outstanding transfer codes must be cancelled or redeemed first
+     * Players must be transferred or deleted first, or Outstanding transfer codes must be cancelled or redeemed first
      */
     409: ErrorDetail;
     /**
@@ -1009,10 +1005,6 @@ export type CreateMatchErrors = {
      */
     401: ErrorDetail;
     /**
-     * Player is archived
-     */
-    409: ErrorDetail;
-    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -1150,12 +1142,7 @@ export type UpdateMatchResponse = UpdateMatchResponses[keyof UpdateMatchResponse
 export type ListPlayersData = {
     body?: never;
     path?: never;
-    query?: {
-        /**
-         * Include Archived
-         */
-        include_archived?: boolean;
-    };
+    query?: never;
     url: '/players';
 };
 
@@ -1164,10 +1151,6 @@ export type ListPlayersErrors = {
      * Not signed in
      */
     401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
     /**
      * Too many requests
      */
@@ -1261,6 +1244,48 @@ export type RedeemPlayerTransferCodeResponses = {
 
 export type RedeemPlayerTransferCodeResponse = RedeemPlayerTransferCodeResponses[keyof RedeemPlayerTransferCodeResponses];
 
+export type DeletePlayerData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}';
+};
+
+export type DeletePlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Outstanding transfer codes must be cancelled or redeemed first
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeletePlayerError = DeletePlayerErrors[keyof DeletePlayerErrors];
+
+export type DeletePlayerResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePlayerResponse = DeletePlayerResponses[keyof DeletePlayerResponses];
+
 export type GetPlayerData = {
     body?: never;
     path: {
@@ -1336,82 +1361,6 @@ export type UpdatePlayerResponses = {
 };
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
-
-export type ArchivePlayerData = {
-    body?: never;
-    path: {
-        /**
-         * Player Id
-         */
-        player_id: string;
-    };
-    query?: never;
-    url: '/players/{player_id}/archive';
-};
-
-export type ArchivePlayerErrors = {
-    /**
-     * Not signed in
-     */
-    401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Too many requests
-     */
-    429: ErrorDetail;
-};
-
-export type ArchivePlayerError = ArchivePlayerErrors[keyof ArchivePlayerErrors];
-
-export type ArchivePlayerResponses = {
-    /**
-     * Successful Response
-     */
-    200: PlayerRead;
-};
-
-export type ArchivePlayerResponse = ArchivePlayerResponses[keyof ArchivePlayerResponses];
-
-export type RestorePlayerData = {
-    body?: never;
-    path: {
-        /**
-         * Player Id
-         */
-        player_id: string;
-    };
-    query?: never;
-    url: '/players/{player_id}/restore';
-};
-
-export type RestorePlayerErrors = {
-    /**
-     * Not signed in
-     */
-    401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Too many requests
-     */
-    429: ErrorDetail;
-};
-
-export type RestorePlayerError = RestorePlayerErrors[keyof RestorePlayerErrors];
-
-export type RestorePlayerResponses = {
-    /**
-     * Successful Response
-     */
-    200: PlayerRead;
-};
-
-export type RestorePlayerResponse = RestorePlayerResponses[keyof RestorePlayerResponses];
 
 export type DeletePlayerTransferCodeData = {
     body?: never;

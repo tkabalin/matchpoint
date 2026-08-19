@@ -68,7 +68,6 @@ erDiagram
         varchar(6) gender "nullable: male, female, other"
         text notes "nullable: coach notes"
         uuid coach_id FK "the owning coach"
-        timestamptz archived_at "nullable: soft delete"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -120,7 +119,8 @@ redeems it becomes the owner: `players.coach_id` moves, and the matches follow, 
 reaches its owner through its player rather than a coach column of its own. One row per player, and
 redeeming deletes it. There is no `expires_at`, so a player can carry the code to a coach the
 current one never meets; the minting coach can delete the row to cancel it. A live code also refuses
-the minting coach's own account closure, since it is a claim another coach may still act on.
+both routes that would destroy the player, deleting them and closing the minting coach's account,
+since it is a claim another coach may still act on.
 
 ## Conventions
 
@@ -133,7 +133,7 @@ guarding a record.
 timestamp, so a batch of rows synced in one transaction would share a creation time — voiding any
 ordering that uses `created_at` to break a tie. Every table carries `created_at` and `updated_at`,
 both `timestamptz`. That is a column default; a timestamp a route computes for itself, a session
-expiry or an `archived_at`, comes from Python's clock.
+expiry, comes from Python's clock.
 
 **Enums are VARCHAR with a named CHECK constraint**, not native Postgres enums (`str_enum` in
 `models/types.py`). Postgres cannot remove a value from a native enum, so a migration adding one
@@ -142,45 +142,44 @@ the widths above look arbitrary.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** Postgres does not index a foreign
 key automatically. Leaving off `ondelete` means a delete that would orphan rows is refused outright
-rather than cascading through a roster and the match history hanging off it. The one route that does
-mean to take the children with it (closing an account, below) deletes each child table in turn
-itself, so the refusal stays in place as a backstop: a table added under `coaches` and left out of
-that list stops the delete loudly instead of being quietly missed.
+rather than cascading through a roster and the match history hanging off it. The routes that do mean
+to take the children with them (deleting a player, and closing an account) delete each child table
+in turn themselves, so the refusal stays in place as a backstop: a table added under `players` or
+`coaches` and left out of one of those lists stops the delete loudly instead of being quietly
+missed.
 
 **Optional unless the value is genuinely required.** Player and match setup happens courtside and
 has to be fast, so beyond the fields that identify a row there is little a coach must fill in.
 `coaches` is the exception — every column is NOT NULL, because all of them are collected at sign-up
 and a row missing any of them is not an account.
 
-**Deletion is soft where history depends on it.** A player with matches recorded against them cannot
-be removed without taking that history along, so `archived_at` takes them off the active roster
-while leaving them readable by id. Archiving stops at the roster: the matches recorded against a
-player stay listed and resolvable, since that history is what the soft delete exists to keep. A
-match is deleted outright, because a match entered by mistake is cleared away before anything is
-recorded against it. A table that comes to reference matches declares no `ondelete` like every other
-foreign key here, so Postgres refuses to delete a match once point data hangs off it.
+**Deletion is deletion, and the route owns the cascade.** No table carries a deleted flag: a row a
+coach asks to be rid of goes, and what hung off it goes with it. Deleting a player takes the matches
+recorded against them, in one transaction; deleting a match takes nothing further, a match entered
+by mistake being cleared away before anything is recorded against it. The route names each child
+table itself rather than leaning on the database, which is what the no-`ondelete` foreign keys are
+for: a table added under players or matches and left out of that list refuses the delete outright
+instead of being quietly missed. Nothing is recoverable afterwards, so the confirmation belongs to
+the client, where the coach can be shown what they are about to lose.
 
-**Closing a coach account is erasure, and takes their data with it.** `coaches` is the one table
-with no `archived_at`. Archiving exists so history a coach still depends on survives a row leaving
-the active roster, and when the coach themselves leaves there is nobody left whose analytics that
-history serves; a soft-deleted coach would just be their email, name and password hash sitting on a
-row nothing can reach, which is not what someone asking to be removed has asked for. So the closure
-deletes the coach and everything below them: their players, the matches recorded against those
-players, their sessions and any live reset code, in one transaction. Nothing keys on the address, so
-it is free for a fresh sign-up immediately, and no row survives to link the new account to the old
-one.
+**Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
+just be their email, name and password hash sitting on a row nothing can reach, which is not what
+someone asking to be removed has asked for. So the closure deletes the coach and everything below
+them: their players, the matches recorded against those players, their sessions and any live reset
+code, in one transaction. Nothing keys on the address, so it is free for a fresh sign-up
+immediately, and no row survives to link the new account to the old one.
 
-**A closure is refused while any player is still active.** Players move between coaches as they grow
-up, so a name still on the roster may be one another coach is about to take over, and erasing it
-with the account would take a history that was never only this coach's. Each player has to be
-cleared first, transferred away or archived, and the refusal is a status the closure form branches
-on. A coach who does mean to leave nothing behind says so on the closure request instead of
-archiving one by one, and the clearing and the delete then share a transaction, so there is no
-half-closed account to be stranded in. Being archived does not spare a player from the delete:
-archiving is a coach's own reversible tidying, closure is the coach leaving, and privacy wins over
-recoverability there. A live transfer code on any player, archived or not, refuses closure
-regardless of that waiver: the code is a claim another coach may still act on, not this coach's data
-to discard by asking to leave nothing behind. It must be cancelled or redeemed first.
+**A closure is refused while any player is still on the roster.** Players move between coaches as
+they grow up, so a name still on the roster may be one another coach is about to take over, and
+erasing it with the account would take a history that was never only this coach's. Each player has
+to be cleared first, transferred away or deleted, and the refusal is a status the closure form
+branches on. A coach who does mean to leave nothing behind says so on the closure request instead of
+deleting one by one, and the clearing and the delete then share a transaction, so there is no
+half-closed account to be stranded in. A live transfer code on any player refuses closure regardless
+of that waiver: the code is a claim another coach may still act on, not this coach's data to discard
+by asking to leave nothing behind. Deleting that player on its own is refused for the same reason,
+so the refusal cannot be walked past a player at a time. The code must be cancelled or redeemed
+first.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every

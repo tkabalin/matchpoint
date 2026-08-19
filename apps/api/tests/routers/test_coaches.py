@@ -918,7 +918,7 @@ def _stub_out_verification(monkeypatch: pytest.MonkeyPatch, *, answer: bool) -> 
 
 
 def test_closing_an_account_erases_the_coach(client: TestClient, db_session: Session) -> None:
-    """The row itself goes, rather than gaining an archived_at: an archived coach would
+    """The row itself goes, rather than being flagged as closed: a row left behind would
     keep the email, the display name and the password hash that closure exists to remove."""
     coach = _closable(client, db_session)
 
@@ -928,28 +928,7 @@ def test_closing_an_account_erases_the_coach(client: TestClient, db_session: Ses
     assert db_session.get(Coach, coach.id) is None
 
 
-def test_closing_an_account_takes_an_archived_roster_and_its_matches(
-    client: TestClient, db_session: Session
-) -> None:
-    """The closure a coach reaches by clearing the roster first, and what erasure means
-    once they do: being archived does not spare a player, because closure is privacy and
-    not tidying. The matches go through the players rather than directly, a match reaching
-    its owner only through the player it was recorded against."""
-    coach = _closable(client, db_session)
-    player = make_player(
-        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
-    )
-    match = make_match(db_session, player_id=player.id)
-    db_session.commit()
-
-    assert _close(client).status_code == 204
-
-    assert db_session.get(Coach, coach.id) is None
-    assert db_session.get(Player, player.id) is None
-    assert db_session.get(Match, match.id) is None
-
-
-def test_closing_an_account_is_refused_while_a_player_is_active(
+def test_closing_an_account_is_refused_while_a_player_remains(
     client: TestClient, db_session: Session
 ) -> None:
     """A name still on the roster may be one another coach is about to take over (#173),
@@ -962,7 +941,7 @@ def test_closing_an_account_is_refused_while_a_player_is_active(
     response = _close(client)
 
     assert response.status_code == 409
-    assert response.json() == {"detail": "Active players must be transferred or archived first"}
+    assert response.json() == {"detail": "Players must be transferred or deleted first"}
     assert db_session.get(Coach, coach.id) is not None
     assert db_session.get(Player, player.id) is not None
     assert client.get("/coaches/me").status_code == 200
@@ -982,11 +961,11 @@ def test_a_refusal_spends_none_of_the_wrong_guess_budget(
     for _ in range(6):
         assert _close(client).status_code == 409
 
-    assert _close(client, delete_active_players=True).status_code == 204
+    assert _close(client, delete_players=True).status_code == 204
     assert db_session.get(Coach, coach.id) is None
 
 
-def test_closing_an_account_may_take_the_active_roster_along(
+def test_closing_an_account_may_take_the_roster_along(
     client: TestClient, db_session: Session
 ) -> None:
     """The one-step closure for the coach who wants out: clearing the roster and erasing
@@ -1000,7 +979,7 @@ def test_closing_an_account_may_take_the_active_roster_along(
     session_row = make_coach_session(db_session, coach_id=coach.id)
     db_session.commit()
 
-    response = _close(client, delete_active_players=True)
+    response = _close(client, delete_players=True)
 
     assert response.status_code == 204
     assert db_session.get(Coach, coach.id) is None
@@ -1066,61 +1045,29 @@ def test_closing_an_account_deletes_a_live_reset_code(
     assert db_session.get(PasswordReset, reset.id) is None
 
 
-def test_closing_an_account_is_refused_while_a_transfer_code_is_outstanding(
+def test_a_transfer_code_survives_the_delete_players_waiver(
     client: TestClient, db_session: Session
 ) -> None:
-    """A live code is another coach's pending claim on the player (#173), so archiving
-    the player first is not enough: the code has to be cancelled or redeemed too."""
-    coach = _closable(client, db_session)
-    player = make_player(
-        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
-    )
-    code = make_player_transfer_code(db_session, player_id=player.id)
-    db_session.commit()
+    """A live code is another coach's pending claim on the player (#173), so the waiver
+    does not reach it: it is for a roster this coach owns outright, not a capability
+    another coach may already be about to redeem. It used to reach the cascade unchecked
+    and take a live code with it (b8c8c61); pinned so it stays refused.
 
-    response = _close(client)
-
-    assert response.status_code == 409
-    assert response.json() == {
-        "detail": "Outstanding transfer codes must be cancelled or redeemed first"
-    }
-    assert db_session.get(Coach, coach.id) is not None
-    assert db_session.get(Player, player.id) is not None
-    assert db_session.get(PlayerTransferCode, code.id) is not None
-
-
-def test_a_transfer_code_survives_the_delete_active_players_waiver(
-    client: TestClient, db_session: Session
-) -> None:
-    """The waiver is for a roster this coach owns outright, not a capability another
-    coach may already be about to redeem, so it does not reach this check."""
-    coach = _closable(client, db_session)
-    player = make_player(
-        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
-    )
-    code = make_player_transfer_code(db_session, player_id=player.id)
-    db_session.commit()
-
-    response = _close(client, delete_active_players=True)
-
-    assert response.status_code == 409
-    assert db_session.get(Coach, coach.id) is not None
-    assert db_session.get(PlayerTransferCode, code.id) is not None
-
-
-def test_a_transfer_code_survives_the_waiver_even_off_an_active_player(
-    client: TestClient, db_session: Session
-) -> None:
-    """The waiver used to reach the cascade unchecked and take an active player's live
-    code with it (b8c8c61) before this check existed; pinned so it stays refused."""
+    The waiver is what makes this the reachable case at all: without it the roster refusal
+    answers first, since a code can only hang off a player still on the roster. The body is
+    asserted exactly because the route declares the 409 as ErrorDetail.
+    """
     coach = _closable(client, db_session)
     player = make_player(db_session, coach_id=coach.id)
     code = make_player_transfer_code(db_session, player_id=player.id)
     db_session.commit()
 
-    response = _close(client, delete_active_players=True)
+    response = _close(client, delete_players=True)
 
     assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Outstanding transfer codes must be cancelled or redeemed first"
+    }
     assert db_session.get(Coach, coach.id) is not None
     assert db_session.get(Player, player.id) is not None
     assert db_session.get(PlayerTransferCode, code.id) is not None

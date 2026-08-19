@@ -16,12 +16,10 @@ class Coach(Base):
     coach row that is missing any of them is not an account anyone could sign in to. The
     two `default_*` preference columns are nullable, null meaning no preference held.
 
-    No `archived_at`, unlike Player: closing an account is erasure rather than
-    deactivation, so there is no deactivated state for a column to hold, and a sign-in
-    check reading one would guard a state no code can produce. `DELETE /coaches/me`
-    refuses while the coach still has an active player, then deletes this row and
-    everything under it; `docs/data-model.md` records why the soft-delete convention
-    stops at this one table.
+    There is no deactivated state: closing an account is erasure, so a column holding
+    one would guard a state no code can produce. `DELETE /coaches/me` refuses while the
+    coach still has a player on the roster, then deletes this row and everything under
+    it; `docs/data-model.md` records what the cascade covers.
     """
 
     __tablename__ = "coaches"

@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,8 +7,12 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import new_session_token
-from matchpoint_api.models import Coach, DominantHand, Player, PlayerTransferCode
-from matchpoint_api.routers.players import ALREADY_OWNED, UNKNOWN_TRANSFER_CODE
+from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode
+from matchpoint_api.routers.players import (
+    ALREADY_OWNED,
+    TRANSFER_CODES_OUTSTANDING,
+    UNKNOWN_TRANSFER_CODE,
+)
 from tests.factories import make_coach, make_match, make_player, sign_in
 
 NOTES_LIMIT = 2000
@@ -99,19 +103,15 @@ def test_create_player_without_optional_fields(client: TestClient) -> None:
     assert body["notes"] is None
 
 
-def test_create_player_cannot_set_coach_id_or_archived_at(
+def test_create_player_cannot_set_coach_id(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Neither field is on PlayerCreate, so RequestModel's extra="forbid" makes sending
-    one a 422: a client cannot hand a player to another coach or file one as already
-    archived."""
+    """coach_id is not on PlayerCreate, so RequestModel's extra="forbid" makes sending
+    it a 422: a client cannot hand a player to another coach."""
     other = make_coach(db_session)
     db_session.commit()
 
-    response = client.post(
-        "/players",
-        json=_payload(coach_id=str(other.id), archived_at="2020-01-01T00:00:00Z"),
-    )
+    response = client.post("/players", json=_payload(coach_id=str(other.id)))
 
     assert response.status_code == 422
     assert db_session.scalar(select(func.count()).select_from(Player)) == 0
@@ -263,69 +263,6 @@ def test_list_players_returns_all_sorted_by_last_then_first_name(
     ]
 
 
-@pytest.mark.parametrize("params", [{}, {"include_archived": "false"}])
-def test_list_players_omits_archived_players(
-    client: TestClient, db_session: Session, coach: Coach, params: dict[str, str]
-) -> None:
-    """Archiving is a soft delete, so the roster filters on it: by default, and when
-    exclusion is asked for explicitly."""
-    make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
-    make_player(
-        db_session,
-        first_name="Ash",
-        last_name="Barty",
-        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
-        coach_id=coach.id,
-    )
-    db_session.commit()
-
-    response = client.get("/players", params=params)
-
-    assert response.status_code == 200
-    assert [p["last_name"] for p in response.json()] == ["Swiatek"]
-
-
-def test_list_players_includes_archived_when_asked(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """What a roster screen offering restore lists from. The archived player sorts
-    first, so a filter still being applied shows up as a missing name, not a reorder."""
-    make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
-    make_player(
-        db_session,
-        first_name="Ash",
-        last_name="Barty",
-        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
-        coach_id=coach.id,
-    )
-    db_session.commit()
-
-    response = client.get("/players", params={"include_archived": "true"})
-
-    assert response.status_code == 200
-    assert [p["last_name"] for p in response.json()] == ["Barty", "Swiatek"]
-
-
-def test_list_players_including_archived_stays_within_the_caller(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """The flag widens which of the caller's players come back, never whose."""
-    make_player(db_session, first_name="Iga", last_name="Swiatek", coach_id=coach.id)
-    # No coach_id, so the factory mints the other coach itself.
-    make_player(
-        db_session,
-        first_name="Coco",
-        last_name="Gauff",
-        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
-    )
-    db_session.commit()
-
-    response = client.get("/players", params={"include_archived": "true"})
-
-    assert response.status_code == 200
-    assert [p["last_name"] for p in response.json()] == ["Swiatek"]
-
-
 def test_list_players_omits_another_coachs_players(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -350,23 +287,6 @@ def test_get_player_returns_one(client: TestClient, db_session: Session, coach: 
 
     assert response.status_code == 200
     assert response.json()["last_name"] == "Williams"
-
-
-def test_get_player_still_returns_an_archived_player(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Archived players drop off the roster but stay fetchable by id: a match already
-    references one, and a 404 there would break history rather than hide a name."""
-    archived_at = datetime(2022, 3, 23, tzinfo=UTC)
-    player = make_player(
-        db_session, first_name="Ash", last_name="Barty", archived_at=archived_at, coach_id=coach.id
-    )
-    db_session.commit()
-
-    response = client.get(f"/players/{player.id}")
-
-    assert response.status_code == 200
-    assert response.json()["archived_at"] is not None
 
 
 def test_get_player_of_another_coach_is_404(
@@ -494,23 +414,19 @@ def test_update_player_bumps_updated_at(
     assert datetime.fromisoformat(response.json()["updated_at"]) > before
 
 
-def test_update_player_rejects_coach_id_and_archived_at(
+def test_update_player_rejects_coach_id(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Neither field is on PlayerUpdate, so RequestModel's extra="forbid" makes sending
-    one a 422: a PATCH cannot hand a player to another coach or archive one."""
+    """coach_id is not on PlayerUpdate, so RequestModel's extra="forbid" makes sending
+    it a 422: a PATCH cannot hand a player to another coach."""
     other = make_coach(db_session)
     player = make_player(db_session, coach_id=coach.id)
     db_session.commit()
 
-    response = client.patch(
-        f"/players/{player.id}",
-        json={"coach_id": str(other.id), "archived_at": "2020-01-01T00:00:00Z"},
-    )
+    response = client.patch(f"/players/{player.id}", json={"coach_id": str(other.id)})
 
     assert response.status_code == 422
     assert player.coach_id == coach.id
-    assert player.archived_at is None
 
 
 def test_update_player_rejects_a_future_date_of_birth(
@@ -550,100 +466,95 @@ def test_update_player_unknown_id_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_archive_player_records_when_it_happened(
+def test_delete_player_takes_their_matches_with_them(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
+    """A hard delete, and the whole of it: the row goes, the matches recorded against it
+    go, and neither the roster nor the lookup has anything left to answer with."""
     player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
     db_session.commit()
 
-    response = client.post(f"/players/{player.id}/archive")
+    response = client.delete(f"/players/{player.id}")
 
-    assert response.status_code == 200
-    assert response.json()["archived_at"] is not None
-    assert player.archived_at is not None
-
-
-def test_archive_player_leaves_the_roster_not_the_lookup(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """The whole point of a soft delete: off the active roster, still resolvable by the
-    id a stored link or a recorded match holds."""
-    player = make_player(db_session, coach_id=coach.id)
-    db_session.commit()
-
-    client.post(f"/players/{player.id}/archive")
-
+    assert response.status_code == 204
+    assert db_session.get(Player, player.id) is None
+    assert db_session.get(Match, match.id) is None
     assert client.get("/players").json() == []
-    assert client.get(f"/players/{player.id}").status_code == 200
+    assert client.get(f"/players/{player.id}").status_code == 404
 
 
-def test_archiving_twice_keeps_the_first_timestamp(
+def test_delete_player_leaves_the_rest_of_the_roster_alone(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The offline client retries queued requests, so a repeat must answer 200 and
-    leave the row where it was — the timestamp records one departure, not the retry."""
+    """The cascade is scoped to the one player, which the coach-boundary test cannot
+    show: it never reaches the delete. A match statement missing its player_id clause
+    would clear the whole table and still pass every other test here."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(db_session, player_id=player.id)
+    kept = make_player(db_session, coach_id=coach.id)
+    kept_match = make_match(db_session, player_id=kept.id)
+    db_session.commit()
+
+    assert client.delete(f"/players/{player.id}").status_code == 204
+
+    assert db_session.get(Player, kept.id) is not None
+    assert db_session.get(Match, kept_match.id) is not None
+
+
+def test_delete_player_is_refused_while_a_transfer_code_is_outstanding(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A live code is another coach's pending claim, so the player is not this coach's
+    alone to erase (#173). The body is asserted exactly because the route declares the
+    409 as ErrorDetail for the roster screen to branch on."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    _mint(client, player.id)
+
+    response = client.delete(f"/players/{player.id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": TRANSFER_CODES_OUTSTANDING}
+    assert db_session.get(Player, player.id) is not None
+    assert db_session.get(Match, match.id) is not None
+
+
+def test_cancelling_the_code_clears_the_way_for_the_delete(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The way past the refusal, and the reason it costs the coach only one request:
+    the same coach who minted the code can withdraw it."""
     player = make_player(db_session, coach_id=coach.id)
     db_session.commit()
-    first = client.post(f"/players/{player.id}/archive")
+    _mint(client, player.id)
 
-    second = client.post(f"/players/{player.id}/archive")
+    assert client.delete(f"/players/{player.id}/transfer-code").status_code == 204
 
-    assert second.status_code == 200
-    assert second.json()["archived_at"] == first.json()["archived_at"]
+    assert client.delete(f"/players/{player.id}").status_code == 204
+    assert db_session.get(Player, player.id) is None
 
 
-def test_restore_player_returns_it_to_the_roster(
+def test_delete_player_leaves_another_coachs_roster_alone(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    player = make_player(
-        db_session,
-        first_name="Ash",
-        last_name="Barty",
-        archived_at=datetime(2022, 3, 23, tzinfo=UTC),
-        coach_id=coach.id,
-    )
+    """The write across the boundary: the same 404 the read gets, since a 403 would
+    confirm the id exists, and the row has to come through untouched."""
+    other_player = make_player(db_session)
+    other_match = make_match(db_session, player_id=other_player.id)
     db_session.commit()
 
-    response = client.post(f"/players/{player.id}/restore")
-
-    assert response.status_code == 200
-    assert response.json()["archived_at"] is None
-    assert [p["last_name"] for p in client.get("/players").json()] == ["Barty"]
-
-
-def test_restoring_an_active_player_is_a_no_op(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Idempotent for archiving's reason, and not a 409: a retry finding the row
-    already as it wants it has nothing to complain about."""
-    player = make_player(db_session, coach_id=coach.id)
-    db_session.commit()
-
-    response = client.post(f"/players/{player.id}/restore")
-
-    assert response.status_code == 200
-    assert response.json()["archived_at"] is None
-
-
-@pytest.mark.parametrize("action", ["archive", "restore"])
-def test_archive_and_restore_of_another_coachs_player_is_404(
-    client: TestClient, db_session: Session, coach: Coach, action: str
-) -> None:
-    """The write across the boundary: the same 404 the read gets, and the row untouched,
-    since a 403 would confirm the id exists."""
-    other_player = make_player(db_session, archived_at=datetime(2022, 3, 23, tzinfo=UTC))
-    db_session.commit()
-
-    response = client.post(f"/players/{other_player.id}/{action}")
+    response = client.delete(f"/players/{other_player.id}")
 
     assert response.status_code == 404
-    assert other_player.archived_at == datetime(2022, 3, 23, tzinfo=UTC)
+    assert db_session.get(Player, other_player.id) is not None
+    assert db_session.get(Match, other_match.id) is not None
 
 
-@pytest.mark.parametrize("action", ["archive", "restore"])
 @pytest.mark.usefixtures("coach")
-def test_archive_and_restore_of_an_unknown_player_is_404(client: TestClient, action: str) -> None:
-    response = client.post(f"/players/{uuid.uuid4()}/{action}")
+def test_delete_player_unknown_id_is_404(client: TestClient) -> None:
+    response = client.delete(f"/players/{uuid.uuid4()}")
 
     assert response.status_code == 404
 
@@ -655,8 +566,7 @@ def test_archive_and_restore_of_an_unknown_player_is_404(client: TestClient, act
         ("get", "/players"),
         ("get", f"/players/{uuid.UUID(int=0)}"),
         ("patch", f"/players/{uuid.UUID(int=0)}"),
-        ("post", f"/players/{uuid.UUID(int=0)}/archive"),
-        ("post", f"/players/{uuid.UUID(int=0)}/restore"),
+        ("delete", f"/players/{uuid.UUID(int=0)}"),
         ("post", f"/players/{uuid.UUID(int=0)}/transfer-code"),
         ("delete", f"/players/{uuid.UUID(int=0)}/transfer-code"),
         ("post", "/players/redeem-transfer-code"),
@@ -718,26 +628,6 @@ def test_a_pasted_code_may_carry_whitespace(
     response = client.post("/players/redeem-transfer-code", json={"code": f"  {code}\n"})
 
     assert response.status_code == 200
-
-
-def test_an_archived_player_transfers_and_arrives_on_the_roster(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """A coach closing their account is exactly when a roster moves on, so archiving
-    must not block the transfer, and the player arrives active, since being archived
-    said they had left the roster the transfer has just taken them off."""
-    player = make_player(
-        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
-    )
-    db_session.commit()
-    code = _mint(client, player.id)
-
-    sign_in(client, db_session, make_coach(db_session))
-    response = client.post("/players/redeem-transfer-code", json={"code": code})
-
-    assert response.status_code == 200
-    assert response.json()["archived_at"] is None
-    assert [p["id"] for p in client.get("/players").json()] == [str(player.id)]
 
 
 def test_minting_again_replaces_the_previous_code(

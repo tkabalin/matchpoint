@@ -38,8 +38,9 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.PrimaryKeyConstraint("id"),
-        # No ondelete, as on every foreign key here: a player is archived rather than
-        # deleted, and a row that survives its player would be a code for nothing.
+        # No ondelete, as on every foreign key here: a row that survives its player
+        # would be a code for nothing, so the route that deletes a player says what
+        # becomes of the code rather than the constraint deciding silently.
         sa.ForeignKeyConstraint(["player_id"], ["players.id"]),
         # One live code per player, which is what makes minting again a replacement,
         # and the index the upsert uses.

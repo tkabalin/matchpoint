@@ -49,15 +49,8 @@ def match_for_coach(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Ma
     return match
 
 
-# The 409 is declared because the roster screen branches on it: an archived player is a
-# state the coach can undo, so the client says restore them first rather than reporting
-# a failure. The 404 below stays undeclared, being nothing a caller can act on.
-@router.post(
-    "",
-    status_code=201,
-    response_model=MatchRead,
-    responses={409: {"model": ErrorDetail, "description": "Player is archived"}},
-)
+# The 404 below stays undeclared, being nothing a caller can act on.
+@router.post("", status_code=201, response_model=MatchRead)
 def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match:
     # Checked here rather than left to the FK constraint so the client gets an error
     # naming the problem instead of a 500 from an IntegrityError. Not 422: FastAPI
@@ -65,14 +58,12 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
     # generated TypeScript client unpacks it as one. Another coach's player gets the
     # same 404 as no player at all — recording a match against one would be a write
     # across the ownership boundary, and a 403 would confirm the id exists.
-    player = db.get(Player, data.player_id)
+    # Locked for the reason `owned_player` gives: DELETE /players/{id} can take the row
+    # between an unlocked check and the insert, and the foreign key would answer that
+    # with a 500 rather than the 404 below.
+    player = db.get(Player, data.player_id, with_for_update=True)
     if player is None or player.coach_id != coach.id:
         raise HTTPException(status_code=404, detail="Unknown player_id")
-    # 409 and not the 404 above: the coach can still read this player by id, so
-    # answering as though it did not exist would misname the problem. Archiving stops
-    # new matches; the ones already recorded stay listed and readable.
-    if player.archived_at is not None:
-        raise HTTPException(status_code=409, detail="Player is archived")
     values = data.model_dump()
     if values["id"] is None:
         values["id"] = uuid.uuid4()
@@ -137,7 +128,7 @@ def update_match(
 
 @router.delete("/{match_id}", status_code=204)
 def delete_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
-    # Hard-deleted rather than archived like a player: a match entered by mistake has no
+    # No cascade of its own, unlike deleting a player: a match entered by mistake has no
     # history hanging off it. A table that comes to reference matches declares no
     # ondelete, so Postgres refuses to delete a match with point data behind it.
     db.delete(match_for_coach(db, match_id, coach.id))

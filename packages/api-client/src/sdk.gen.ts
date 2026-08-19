@@ -2,7 +2,7 @@
 
 import type { Client, ClientMeta, Options as Options2, RequestResult, TDataShape } from './client';
 import { client } from './client.gen';
-import type { ArchivePlayerData, ArchivePlayerErrors, ArchivePlayerResponses, ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RestorePlayerData, RestorePlayerErrors, RestorePlayerResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -154,11 +154,11 @@ export const createCoach = <ThrowOnError extends boolean = false>(options: Optio
  *
  * Erase this coach and everything recorded under them, given their password.
  *
- * Refused with a 409 while any player is still on the active roster, so that someone
- * another coach is about to take over is not erased by an account closing: clear each
- * one first, by transfer or by archiving. `delete_active_players` waives that refusal
- * and takes the whole roster along, for the coach who means to leave nothing behind —
- * but not a live transfer code on any player, which refuses closure either way.
+ * Refused with a 409 while any player is still on the roster, so that someone another
+ * coach is about to take over is not erased by an account closing: clear each one
+ * first, by transfer or by deletion. `delete_players` waives that refusal and takes
+ * the whole roster along, for the coach who means to leave nothing behind, but not a
+ * live transfer code on any player, which refuses closure either way.
  */
 export const deleteCurrentCoach = <ThrowOnError extends boolean = false>(options: Options<DeleteCurrentCoachData, ThrowOnError>): RequestResult<DeleteCurrentCoachResponses, DeleteCurrentCoachErrors, ThrowOnError> => (options.client ?? client).delete<DeleteCurrentCoachResponses, DeleteCurrentCoachErrors, ThrowOnError>({
     url: '/coaches/me',
@@ -265,6 +265,17 @@ export const redeemPlayerTransferCode = <ThrowOnError extends boolean = false>(o
 });
 
 /**
+ * Delete Player
+ *
+ * Erase this player and every match recorded against them. Nothing undoes it.
+ *
+ * No confirmation beyond the request itself. What the coach is about to lose is on the
+ * screen in front of them, so confirming it belongs to the client rather than to a
+ * second round trip taken courtside.
+ */
+export const deletePlayer = <ThrowOnError extends boolean = false>(options: Options<DeletePlayerData, ThrowOnError>): RequestResult<DeletePlayerResponses, DeletePlayerErrors, ThrowOnError> => (options.client ?? client).delete<DeletePlayerResponses, DeletePlayerErrors, ThrowOnError>({ url: '/players/{player_id}', ...options });
+
+/**
  * Get Player
  */
 export const getPlayer = <ThrowOnError extends boolean = false>(options: Options<GetPlayerData, ThrowOnError>): RequestResult<GetPlayerResponses, GetPlayerErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerResponses, GetPlayerErrors, ThrowOnError>({ url: '/players/{player_id}', ...options });
@@ -280,16 +291,6 @@ export const updatePlayer = <ThrowOnError extends boolean = false>(options: Opti
         ...options.headers
     }
 });
-
-/**
- * Archive Player
- */
-export const archivePlayer = <ThrowOnError extends boolean = false>(options: Options<ArchivePlayerData, ThrowOnError>): RequestResult<ArchivePlayerResponses, ArchivePlayerErrors, ThrowOnError> => (options.client ?? client).post<ArchivePlayerResponses, ArchivePlayerErrors, ThrowOnError>({ url: '/players/{player_id}/archive', ...options });
-
-/**
- * Restore Player
- */
-export const restorePlayer = <ThrowOnError extends boolean = false>(options: Options<RestorePlayerData, ThrowOnError>): RequestResult<RestorePlayerResponses, RestorePlayerErrors, ThrowOnError> => (options.client ?? client).post<RestorePlayerResponses, RestorePlayerErrors, ThrowOnError>({ url: '/players/{player_id}/restore', ...options });
 
 /**
  * Delete Player Transfer Code
@@ -308,8 +309,6 @@ export const deletePlayerTransferCode = <ThrowOnError extends boolean = false>(o
  * Mint a code that hands this player, their notes and their matches, to another coach.
  *
  * Asking again replaces the previous code, which the storage decides rather than the
- * policy: only a hash is kept, so an earlier code can never be shown a second time. An
- * archived player transfers like any other, since a coach leaving is exactly when their
- * roster moves on.
+ * policy: only a hash is kept, so an earlier code can never be shown a second time.
  */
 export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(options: Options<CreatePlayerTransferCodeData, ThrowOnError>): RequestResult<CreatePlayerTransferCodeResponses, CreatePlayerTransferCodeErrors, ThrowOnError> => (options.client ?? client).post<CreatePlayerTransferCodeResponses, CreatePlayerTransferCodeErrors, ThrowOnError>({ url: '/players/{player_id}/transfer-code', ...options });

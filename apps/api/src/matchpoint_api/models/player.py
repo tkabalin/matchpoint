@@ -48,10 +48,6 @@ class Player(Base):
     # history along. Indexed because Postgres does not index a foreign key
     # automatically, and the roster query — one coach's players — filters on it.
     coach_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("coaches.id"), index=True)
-    # Soft deletion: a player who has matches recorded against them cannot be deleted
-    # outright without taking the match history along, so archiving is the only safe
-    # way to clear someone off an active roster.
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # clock_timestamp(), not now(): now() is the transaction timestamp, so a batch of
     # rows written in one transaction would all claim the same creation time.
     created_at: Mapped[datetime] = mapped_column(

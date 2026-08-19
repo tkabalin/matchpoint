@@ -73,7 +73,6 @@ def test_only_the_name_parts_and_the_owner_are_required(db_session: Session) -> 
     assert player.dominant_hand is None
     assert player.gender is None
     assert player.notes is None
-    assert player.archived_at is None
 
 
 def test_created_at_differs_between_rows_in_one_transaction(db_session: Session) -> None:

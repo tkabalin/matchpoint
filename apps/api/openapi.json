@@ -62,9 +62,9 @@
       "CoachDelete": {
         "additionalProperties": false,
         "properties": {
-          "delete_active_players": {
+          "delete_players": {
             "default": false,
-            "title": "Delete Active Players",
+            "title": "Delete Players",
             "type": "boolean"
           },
           "password": {
@@ -602,18 +602,6 @@
       },
       "PlayerRead": {
         "properties": {
-          "archived_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Archived At"
-          },
           "coach_id": {
             "format": "uuid",
             "title": "Coach Id",
@@ -695,7 +683,6 @@
           "gender",
           "notes",
           "coach_id",
-          "archived_at",
           "created_at",
           "updated_at"
         ],
@@ -1525,7 +1512,7 @@
     },
     "/coaches/me": {
       "delete": {
-        "description": "Erase this coach and everything recorded under them, given their password.\n\nRefused with a 409 while any player is still on the active roster, so that someone\nanother coach is about to take over is not erased by an account closing: clear each\none first, by transfer or by archiving. `delete_active_players` waives that refusal\nand takes the whole roster along, for the coach who means to leave nothing behind \u2014\nbut not a live transfer code on any player, which refuses closure either way.",
+        "description": "Erase this coach and everything recorded under them, given their password.\n\nRefused with a 409 while any player is still on the roster, so that someone another\ncoach is about to take over is not erased by an account closing: clear each one\nfirst, by transfer or by deletion. `delete_players` waives that refusal and takes\nthe whole roster along, for the coach who means to leave nothing behind, but not a\nlive transfer code on any player, which refuses closure either way.",
         "operationId": "delete_current_coach",
         "requestBody": {
           "content": {
@@ -1569,7 +1556,7 @@
                 }
               }
             },
-            "description": "Active players must be transferred or archived first, or Outstanding transfer codes must be cancelled or redeemed first"
+            "description": "Players must be transferred or deleted first, or Outstanding transfer codes must be cancelled or redeemed first"
           },
           "422": {
             "content": {
@@ -1824,16 +1811,6 @@
             },
             "description": "Not signed in"
           },
-          "409": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Player is archived"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -2052,18 +2029,6 @@
     "/players": {
       "get": {
         "operationId": "list_players",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "include_archived",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Include Archived",
-              "type": "boolean"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "content": {
@@ -2088,16 +2053,6 @@
               }
             },
             "description": "Not signed in"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           },
           "429": {
             "content": {
@@ -2258,6 +2213,71 @@
       }
     },
     "/players/{player_id}": {
+      "delete": {
+        "description": "Erase this player and every match recorded against them. Nothing undoes it.\n\nNo confirmation beyond the request itself. What the coach is about to lose is on the\nscreen in front of them, so confirming it belongs to the client rather than to a\nsecond round trip taken courtside.",
+        "operationId": "delete_player",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Outstanding transfer codes must be cancelled or redeemed first"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Player",
+        "tags": [
+          "players"
+        ]
+      },
       "get": {
         "operationId": "get_player",
         "parameters": [
@@ -2391,132 +2411,6 @@
         ]
       }
     },
-    "/players/{player_id}/archive": {
-      "post": {
-        "operationId": "archive_player",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "player_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Player Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlayerRead"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Not signed in"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Too many requests"
-          }
-        },
-        "summary": "Archive Player",
-        "tags": [
-          "players"
-        ]
-      }
-    },
-    "/players/{player_id}/restore": {
-      "post": {
-        "operationId": "restore_player",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "player_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Player Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PlayerRead"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Not signed in"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorDetail"
-                }
-              }
-            },
-            "description": "Too many requests"
-          }
-        },
-        "summary": "Restore Player",
-        "tags": [
-          "players"
-        ]
-      }
-    },
     "/players/{player_id}/transfer-code": {
       "delete": {
         "description": "Cancel an outstanding code, so a copy of it stops working.\n\nA code that never expires needs a way back, since handing one to the wrong person is\notherwise permanent. 204 whether or not one was outstanding, as logout is: the request\nasks for a state, and a player with no live code is already in it.",
@@ -2574,7 +2468,7 @@
         ]
       },
       "post": {
-        "description": "Mint a code that hands this player, their notes and their matches, to another coach.\n\nAsking again replaces the previous code, which the storage decides rather than the\npolicy: only a hash is kept, so an earlier code can never be shown a second time. An\narchived player transfers like any other, since a coach leaving is exactly when their\nroster moves on.",
+        "description": "Mint a code that hands this player, their notes and their matches, to another coach.\n\nAsking again replaces the previous code, which the storage decides rather than the\npolicy: only a hash is kept, so an earlier code can never be shown a second time.",
         "operationId": "create_player_transfer_code",
         "parameters": [
           {

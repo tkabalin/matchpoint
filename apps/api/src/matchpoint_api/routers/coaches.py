@@ -28,6 +28,7 @@ from matchpoint_api.models import (
 from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.routers.auth import INCORRECT_PASSWORD
+from matchpoint_api.routers.players import TRANSFER_CODES_OUTSTANDING
 from matchpoint_api.schemas.coach import CoachCreate, CoachDelete, CoachRead, CoachUpdate
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import hash_password, verify_password
@@ -39,8 +40,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 # Names the two ways out and no more. Which players are in the way is not in the body:
 # `ErrorDetail` carries one string, and the form holds the roster already, so it can name
 # them where a count folded into this message could not.
-ACTIVE_PLAYERS_REMAIN = "Active players must be transferred or archived first"
-TRANSFER_CODES_OUTSTANDING = "Outstanding transfer codes must be cancelled or redeemed first"
+PLAYERS_REMAIN = "Players must be transferred or deleted first"
 
 
 def limit_sign_up_rate(request: Request) -> None:
@@ -206,11 +206,10 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
     return coach
 
 
-# Closing an account is erasure, not the archiving every other table here does (#146):
-# an `archived_at` coach would leave the email, the name and the password hash on a row
-# nobody can reach, which is not what a coach asking to be removed has asked for. Why
-# the soft-delete convention stops at this one row, and what the cascade takes with it,
-# is in `docs/data-model.md`.
+# Closing an account erases the coach and everything below them (#146), rather than
+# leaving the email, the name and the password hash on a row nobody can reach, which is
+# not what a coach asking to be removed has asked for. What the cascade takes with it is
+# in `docs/data-model.md`.
 #
 # The password is demanded for change-password's reason, with more at stake: the cookie
 # proves this browser was signed in once, not that whoever holds it now is the coach, and
@@ -219,8 +218,7 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
 # Both the 403 and the 409 are declared because the form branches on each, the first
 # inline on the password field and the second on the roster. The 403's message is
 # change-password's, so a refused re-authentication reads the same wherever a coach meets
-# one. Two different roster states now answer the 409 — see the matrix by the transfer-
-# code check below — so its description names both.
+# one. Two different roster states answer the 409, so its description names both.
 @router.delete(
     "/me",
     status_code=204,
@@ -229,7 +227,7 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
         409: {
             "model": ErrorDetail,
-            "description": f"{ACTIVE_PLAYERS_REMAIN}, or {TRANSFER_CODES_OUTSTANDING}",
+            "description": f"{PLAYERS_REMAIN}, or {TRANSFER_CODES_OUTSTANDING}",
         },
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
@@ -243,11 +241,11 @@ def delete_current_coach(
 ) -> None:
     """Erase this coach and everything recorded under them, given their password.
 
-    Refused with a 409 while any player is still on the active roster, so that someone
-    another coach is about to take over is not erased by an account closing: clear each
-    one first, by transfer or by archiving. `delete_active_players` waives that refusal
-    and takes the whole roster along, for the coach who means to leave nothing behind —
-    but not a live transfer code on any player, which refuses closure either way.
+    Refused with a 409 while any player is still on the roster, so that someone another
+    coach is about to take over is not erased by an account closing: clear each one
+    first, by transfer or by deletion. `delete_players` waives that refusal and takes
+    the whole roster along, for the coach who means to leave nothing behind, but not a
+    live transfer code on any player, which refuses closure either way.
     """
     # In the handler rather than the decorator's dependencies, as change-password takes
     # its tiers: metering after the session resolves stops a stranger who can reach no
@@ -265,27 +263,14 @@ def delete_current_coach(
     # After the password and not before it: every answer this route gives past the 401
     # comes from a caller who has just re-authenticated, so no later answer has to argue
     # afresh about what it tells a stolen cookie.
-    #
-    # Archived players are not spared by the refusal having passed. Archiving is for a
-    # coach's own reversible tidying; closure is the coach leaving, and privacy beats
-    # recoverability there, so the delete below ignores `archived_at` entirely.
-    if not data.delete_active_players:
-        active = select(Player.id).where(Player.coach_id == coach.id, Player.archived_at.is_(None))
-        if db.scalar(select(active.exists())):
-            raise HTTPException(status_code=409, detail=ACTIVE_PLAYERS_REMAIN)
-    # Every combination of archived_at and a live transfer code, and what closure does
-    # with each (docs/data-model.md has the "why"):
-    #
-    #   archived_at | live code | outcome
-    #   ------------|-----------|----------------------------------------------------
-    #   NULL        | none      | 409 unless delete_active_players, then deleted
-    #   NULL        | live      | 409 either way (already caught above as "active")
-    #   set         | none      | deleted regardless of delete_active_players
-    #   set         | live      | 409 either way — the case this check exists for
-    #
+    if not data.delete_players:
+        remaining = select(Player.id).where(Player.coach_id == coach.id)
+        if db.scalar(select(remaining.exists())):
+            raise HTTPException(status_code=409, detail=PLAYERS_REMAIN)
     # Unconditional, unlike the check above: a live code is another coach's pending
     # claim on the player, not this coach's data to discard by asking to leave nothing
-    # behind.
+    # behind. DELETE /players/{id} refuses over one for the same reason, so the roster
+    # cannot be cleared past this check a player at a time either.
     outstanding_codes = (
         select(PlayerTransferCode.id)
         .join(Player, PlayerTransferCode.player_id == Player.id)
