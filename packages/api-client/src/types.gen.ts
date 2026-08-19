@@ -850,7 +850,7 @@ export type DeleteCurrentCoachErrors = {
      */
     403: ErrorDetail;
     /**
-     * Active players must be transferred or archived first
+     * Active players must be transferred or archived first, or Outstanding transfer codes must be cancelled or redeemed first
      */
     409: ErrorDetail;
     /**

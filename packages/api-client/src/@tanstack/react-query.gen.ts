@@ -208,8 +208,9 @@ export const createCoachMutation = (options?: Partial<Options<CreateCoachData>>)
  *
  * Refused with a 409 while any player is still on the active roster, so that someone
  * another coach is about to take over is not erased by an account closing: clear each
- * one first, by transfer or by archiving. `delete_active_players` waives the refusal and
- * takes the whole roster along, for the coach who means to leave nothing behind.
+ * one first, by transfer or by archiving. `delete_active_players` waives that refusal
+ * and takes the whole roster along, for the coach who means to leave nothing behind —
+ * but not a live transfer code on any player, which refuses closure either way.
  */
 export const deleteCurrentCoachMutation = (options?: Partial<Options<DeleteCurrentCoachData>>): UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> => {
     const mutationOptions: UseMutationOptions<DeleteCurrentCoachResponse, DeleteCurrentCoachError, Options<DeleteCurrentCoachData>> = {

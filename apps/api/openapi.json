@@ -1525,7 +1525,7 @@
     },
     "/coaches/me": {
       "delete": {
-        "description": "Erase this coach and everything recorded under them, given their password.\n\nRefused with a 409 while any player is still on the active roster, so that someone\nanother coach is about to take over is not erased by an account closing: clear each\none first, by transfer or by archiving. `delete_active_players` waives the refusal and\ntakes the whole roster along, for the coach who means to leave nothing behind.",
+        "description": "Erase this coach and everything recorded under them, given their password.\n\nRefused with a 409 while any player is still on the active roster, so that someone\nanother coach is about to take over is not erased by an account closing: clear each\none first, by transfer or by archiving. `delete_active_players` waives that refusal\nand takes the whole roster along, for the coach who means to leave nothing behind \u2014\nbut not a live transfer code on any player, which refuses closure either way.",
         "operationId": "delete_current_coach",
         "requestBody": {
           "content": {
@@ -1569,7 +1569,7 @@
                 }
               }
             },
-            "description": "Active players must be transferred or archived first"
+            "description": "Active players must be transferred or archived first, or Outstanding transfer codes must be cancelled or redeemed first"
           },
           "422": {
             "content": {

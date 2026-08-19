@@ -17,7 +17,14 @@ from matchpoint_api.auth import (
 from matchpoint_api.breach import BreachChecker
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach, EmailVerification, Match, PasswordReset, Player
+from matchpoint_api.models import (
+    Coach,
+    EmailVerification,
+    Match,
+    PasswordReset,
+    Player,
+    PlayerTransferCode,
+)
 from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.routers.auth import INCORRECT_PASSWORD
@@ -33,6 +40,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 # `ErrorDetail` carries one string, and the form holds the roster already, so it can name
 # them where a count folded into this message could not.
 ACTIVE_PLAYERS_REMAIN = "Active players must be transferred or archived first"
+TRANSFER_CODES_OUTSTANDING = "Outstanding transfer codes must be cancelled or redeemed first"
 
 
 def limit_sign_up_rate(request: Request) -> None:
@@ -211,14 +219,18 @@ def update_current_coach(data: CoachUpdate, db: DbSession, coach: CurrentCoach) 
 # Both the 403 and the 409 are declared because the form branches on each, the first
 # inline on the password field and the second on the roster. The 403's message is
 # change-password's, so a refused re-authentication reads the same wherever a coach meets
-# one.
+# one. Two different roster states now answer the 409 — see the matrix by the transfer-
+# code check below — so its description names both.
 @router.delete(
     "/me",
     status_code=204,
     responses={
         401: {"model": ErrorDetail, "description": "Not signed in"},
         403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
-        409: {"model": ErrorDetail, "description": ACTIVE_PLAYERS_REMAIN},
+        409: {
+            "model": ErrorDetail,
+            "description": f"{ACTIVE_PLAYERS_REMAIN}, or {TRANSFER_CODES_OUTSTANDING}",
+        },
         429: {"model": ErrorDetail, "description": "Too many requests"},
     },
 )
@@ -233,8 +245,9 @@ def delete_current_coach(
 
     Refused with a 409 while any player is still on the active roster, so that someone
     another coach is about to take over is not erased by an account closing: clear each
-    one first, by transfer or by archiving. `delete_active_players` waives the refusal and
-    takes the whole roster along, for the coach who means to leave nothing behind.
+    one first, by transfer or by archiving. `delete_active_players` waives that refusal
+    and takes the whole roster along, for the coach who means to leave nothing behind —
+    but not a live transfer code on any player, which refuses closure either way.
     """
     # In the handler rather than the decorator's dependencies, as change-password takes
     # its tiers: metering after the session resolves stops a stranger who can reach no
@@ -260,6 +273,26 @@ def delete_current_coach(
         active = select(Player.id).where(Player.coach_id == coach.id, Player.archived_at.is_(None))
         if db.scalar(select(active.exists())):
             raise HTTPException(status_code=409, detail=ACTIVE_PLAYERS_REMAIN)
+    # Every combination of archived_at and a live transfer code, and what closure does
+    # with each (docs/data-model.md has the "why"):
+    #
+    #   archived_at | live code | outcome
+    #   ------------|-----------|----------------------------------------------------
+    #   NULL        | none      | 409 unless delete_active_players, then deleted
+    #   NULL        | live      | 409 either way (already caught above as "active")
+    #   set         | none      | deleted regardless of delete_active_players
+    #   set         | live      | 409 either way — the case this check exists for
+    #
+    # Unconditional, unlike the check above: a live code is another coach's pending
+    # claim on the player, not this coach's data to discard by asking to leave nothing
+    # behind.
+    outstanding_codes = (
+        select(PlayerTransferCode.id)
+        .join(Player, PlayerTransferCode.player_id == Player.id)
+        .where(Player.coach_id == coach.id)
+    )
+    if db.scalar(select(outstanding_codes.exists())):
+        raise HTTPException(status_code=409, detail=TRANSFER_CODES_OUTSTANDING)
     # Children first, in one transaction, because every foreign key here declares no
     # `ondelete`, so a table added below the coach and left out of this list stops the
     # delete outright rather than being quietly missed. Nothing keys on the email

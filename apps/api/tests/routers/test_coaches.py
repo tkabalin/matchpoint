@@ -29,6 +29,7 @@ from matchpoint_api.models import (
     Match,
     PasswordReset,
     Player,
+    PlayerTransferCode,
 )
 from matchpoint_api.password_policy import BREACHED, COMMON, CONTEXT, REPEATED, SEQUENTIAL
 from matchpoint_api.security import hash_password, verify_password
@@ -44,6 +45,7 @@ from tests.factories import (
     make_match,
     make_password_reset,
     make_player,
+    make_player_transfer_code,
     sign_in,
     verify_email,
 )
@@ -1062,6 +1064,48 @@ def test_closing_an_account_deletes_a_live_reset_code(
     assert _close(client).status_code == 204
 
     assert db_session.get(PasswordReset, reset.id) is None
+
+
+def test_closing_an_account_is_refused_while_a_transfer_code_is_outstanding(
+    client: TestClient, db_session: Session
+) -> None:
+    """A live code is another coach's pending claim on the player (#173), so archiving
+    the player first is not enough: the code has to be cancelled or redeemed too."""
+    coach = _closable(client, db_session)
+    player = make_player(
+        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
+    )
+    code = make_player_transfer_code(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = _close(client)
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Outstanding transfer codes must be cancelled or redeemed first"
+    }
+    assert db_session.get(Coach, coach.id) is not None
+    assert db_session.get(Player, player.id) is not None
+    assert db_session.get(PlayerTransferCode, code.id) is not None
+
+
+def test_a_transfer_code_survives_the_delete_active_players_waiver(
+    client: TestClient, db_session: Session
+) -> None:
+    """The waiver is for a roster this coach owns outright, not a capability another
+    coach may already be about to redeem, so it does not reach this check."""
+    coach = _closable(client, db_session)
+    player = make_player(
+        db_session, coach_id=coach.id, archived_at=datetime(2022, 3, 23, tzinfo=UTC)
+    )
+    code = make_player_transfer_code(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = _close(client, delete_active_players=True)
+
+    assert response.status_code == 409
+    assert db_session.get(Coach, coach.id) is not None
+    assert db_session.get(PlayerTransferCode, code.id) is not None
 
 
 def test_the_email_can_sign_up_again_afterwards(client: TestClient, db_session: Session) -> None:

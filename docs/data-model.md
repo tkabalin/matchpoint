@@ -119,7 +119,8 @@ they cannot see. The current coach mints a code, hands it over out of band, and 
 redeems it becomes the owner: `players.coach_id` moves, and the matches follow, since a match
 reaches its owner through its player rather than a coach column of its own. One row per player, and
 redeeming deletes it. There is no `expires_at`, so a player can carry the code to a coach the
-current one never meets; the minting coach can delete the row to cancel it.
+current one never meets; the minting coach can delete the row to cancel it. A live code also refuses
+the minting coach's own account closure, since it is a claim another coach may still act on.
 
 ## Conventions
 
@@ -177,7 +178,9 @@ on. A coach who does mean to leave nothing behind says so on the closure request
 archiving one by one, and the clearing and the delete then share a transaction, so there is no
 half-closed account to be stranded in. Being archived does not spare a player from the delete:
 archiving is a coach's own reversible tidying, closure is the coach leaving, and privacy wins over
-recoverability there.
+recoverability there. A live transfer code on any player, archived or not, refuses closure
+regardless of that waiver: the code is a claim another coach may still act on, not this coach's data
+to discard by asking to leave nothing behind. It must be cancelled or redeemed first.
 
 **Lists come back whole, with no pagination.** At club scale these collections are tens of rows: one
 coach's roster, and the matches recorded against it. A page size would buy nothing and cost every
