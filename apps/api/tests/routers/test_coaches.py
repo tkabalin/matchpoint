@@ -31,6 +31,7 @@ from matchpoint_api.models import (
     CoachSession,
     EmailVerification,
     Match,
+    MatchSet,
     PasswordReset,
     Player,
     PlayerTransferCode,
@@ -49,6 +50,7 @@ from tests.factories import (
     make_coach,
     make_coach_session,
     make_match,
+    make_match_set,
     make_password_reset,
     make_player,
     make_player_transfer_code,
@@ -1132,11 +1134,13 @@ def test_closing_an_account_may_take_the_roster_along(
 ) -> None:
     """The one-step closure for the coach who wants out: clearing the roster and erasing
     the account share a transaction, so there is no half-closed account to be stranded in
-    between the two. Every table below the coach is checked, since each foreign key here
-    declares no ondelete and one left out of the delete list would refuse the whole thing."""
+    between the two. Every table below the coach is checked: one left out of the delete
+    list would refuse the whole thing, its foreign key declaring no ondelete, and the
+    derived set rows that do cascade would be a 500 here if that ever changed."""
     coach = _closable(client, db_session)
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
+    make_match_set(db_session, match_id=match.id)
     reset = make_password_reset(db_session, coach_id=coach.id)
     session_row = make_coach_session(db_session, coach_id=coach.id)
     db_session.commit()
@@ -1147,6 +1151,9 @@ def test_closing_an_account_may_take_the_roster_along(
     assert db_session.get(Coach, coach.id) is None
     assert db_session.get(Player, player.id) is None
     assert db_session.get(Match, match.id) is None
+    # Counted, not fetched by id: the cascade happens in the database, where the session
+    # cannot see it, so its own copy of the row would answer a get() as if it were there.
+    assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
     assert db_session.get(PasswordReset, reset.id) is None
     assert db_session.get(CoachSession, session_row.id) is None
     assert client.get("/coaches/me").status_code == 401

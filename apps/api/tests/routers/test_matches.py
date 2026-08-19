@@ -6,9 +6,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, func, select
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, Match, MatchResult, Surface
+from matchpoint_api.models import Coach, Match, MatchResult, MatchSet, Surface
 from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
-from tests.factories import make_coach, make_match, make_player, sign_in
+from tests.factories import make_coach, make_match, make_match_set, make_player, sign_in
 
 
 @pytest.fixture
@@ -851,6 +851,20 @@ def test_delete_match_removes_it(client: TestClient, db_session: Session, coach:
     assert client.get(f"/matches/{match.id}").status_code == 404
     assert client.get("/matches").json() == []
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_delete_match_takes_its_derived_sets_with_it(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Through the route, where the model test cannot reach: the route names no child
+    table of its own, so the cascade is the whole of what clears the set rows, and a
+    foreign key that refused them instead would answer 500 on any captured match."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_match_set(db_session, match_id=match.id)
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
 
 
 def test_delete_match_twice_is_404(client: TestClient, db_session: Session, coach: Coach) -> None:

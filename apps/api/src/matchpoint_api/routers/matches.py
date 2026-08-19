@@ -227,7 +227,7 @@ def release_capture(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
 @router.delete("/{match_id}", status_code=204)
 def delete_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
     # No cascade of its own, unlike deleting a player: a match entered by mistake has no
-    # history hanging off it. A table that comes to reference matches declares no
-    # ondelete, so Postgres refuses to delete a match with point data behind it.
+    # history hanging off it. Derived set rows follow the match out through their own
+    # ondelete; a points table declares none, so Postgres refuses that delete instead.
     db.delete(match_for_coach(db, match_id, coach.id))
     db.commit()

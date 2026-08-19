@@ -16,6 +16,7 @@ erDiagram
     coaches ||--o| password_resets : "resets password via"
     players ||--o| player_transfer_codes : "moves coach via"
     players ||--o{ matches : plays
+    matches ||--o{ match_sets : "is scored in"
 
     coaches {
         uuid id PK
@@ -96,6 +97,17 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+
+    match_sets {
+        uuid id PK
+        uuid match_id FK "the match, and the one foreign key that cascades on delete"
+        int set_number "the set's position in the match, from 1, unique per match"
+        int games_won_tracked
+        int games_won_opponent
+        varchar(8) winner "nullable while the set is in flight: tracked, opponent"
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
 
 A match carries metadata only. Point-level data — serves, rally outcomes, rally length — is captured
@@ -115,6 +127,14 @@ strand it rather than let it keep renewing.
 `scoring_system` names the system the match was played under and nothing more. What each name
 implies (deuce or sudden death at 40-40, how long a set runs, what settles the decider) belongs to
 the client that scores the match, so the database stores the label and never interprets it.
+
+`match_sets` is a cache the server derives rather than anything a client sends. Every captured point
+carries the set and game number the capture client stamped on it, so a set's score is a group-by
+over the points the server holds, recomputed for the whole match at the end of each ingest: a late,
+partial or duplicated batch lands on the same answer, and analytics read a handful of set rows
+instead of replaying points. `winner` is null while a set is in flight, since the client marks the
+point that closes a set and until one arrives the tally is only a score so far. A tiebreak needs no
+column of its own, being another game, so a 7-6 set stores 7-6.
 
 `default_surface` and `default_scoring_system` on `coaches` are match-setup defaults, not a separate
 preferences table: a coach has at most one value for each, so a join would buy nothing a column
@@ -149,7 +169,8 @@ coach's account, since it is a claim another coach may still act on.
 **UUID primary keys, not serials.** Capture happens offline, so a row is created on the client and
 reaches the server later; it needs an identity it can be given before any server sees it. That also
 keeps rows unenumerable, which matters for a table like `coaches` where an id is the only thing
-guarding a record.
+guarding a record. `match_sets` is the exception, and its id is the server's own: a derived row
+never exists on a device, so there is no offline identity to preserve.
 
 **Timestamps default to `clock_timestamp()`, not `now()`.** In Postgres `now()` is the _transaction_
 timestamp, so a batch of rows synced in one transaction would share a creation time — voiding any
@@ -163,12 +184,15 @@ could not honestly be rolled back. The column is sized to the longest permitted 
 the widths above look arbitrary.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** Postgres does not index a foreign
-key automatically. Leaving off `ondelete` means a delete that would orphan rows is refused outright
-rather than cascading through a roster and the match history hanging off it. The routes that do mean
-to take the children with them (deleting a player, and closing an account) delete each child table
-in turn themselves, so the refusal stays in place as a backstop: a table added under `players` or
-`coaches` and left out of one of those lists stops the delete loudly instead of being quietly
-missed.
+key automatically, so each key carries an index of its own unless it already leads one belonging to
+a unique constraint, as `player_transfer_codes.player_id` and `match_sets.match_id` do. Leaving off
+`ondelete` means a delete that would orphan rows is refused outright rather than cascading through a
+roster and the match history hanging off it. The routes that do mean to take the children with them
+(deleting a player, and closing an account) delete each child table in turn themselves, so the
+refusal stays in place as a backstop: a table added under `players` or `coaches` and left out of one
+of those lists stops the delete loudly instead of being quietly missed. `match_sets.match_id` is the
+one foreign key that cascades: the refusal exists to protect data a coach entered, and a derived row
+is not that, so it follows its match out rather than standing in the way of deleting one.
 
 **Optional unless the value is genuinely required.** Player and match setup happens courtside and
 has to be fast, so beyond the fields that identify a row there is little a coach must fill in.
@@ -177,12 +201,12 @@ and a row missing any of them is not an account.
 
 **Deletion is deletion, and the route owns the cascade.** No table carries a deleted flag: a row a
 coach asks to be rid of goes, and what hung off it goes with it. Deleting a player takes the matches
-recorded against them, in one transaction; deleting a match takes nothing further, a match entered
-by mistake being cleared away before anything is recorded against it. The route names each child
-table itself rather than leaning on the database, which is what the no-`ondelete` foreign keys are
-for: a table added under players or matches and left out of that list refuses the delete outright
-instead of being quietly missed. Nothing is recoverable afterwards, so the confirmation belongs to
-the client, where the coach can be shown what they are about to lose.
+recorded against them, in one transaction; deleting a match takes the set rows derived from its
+points, and those go through the cascade above rather than a line in the route. Otherwise the route
+names each child table itself rather than leaning on the database, which is what the no-`ondelete`
+foreign keys are for: a table added under players or matches and left out of that list refuses the
+delete outright instead of being quietly missed. Nothing is recoverable afterwards, so the
+confirmation belongs to the client, where the coach can be shown what they are about to lose.
 
 **Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
 just be their email, name and password hash sitting on a row nothing can reach, which is not what

@@ -13,8 +13,10 @@ paths:
   transaction, so a **new table hanging off `players` or `coaches`, or off anything already below
   them, extends that route's delete list**. The foreign keys declare no `ondelete`, so one left out
   makes the delete fail rather than orphan rows. Nothing else catches it; a route test that deletes
-  with the new table populated does. A points table under `matches` puts `DELETE /matches/{id}` in
-  the same position, and nothing catches the `IntegrityError` it would raise, so adding that table
+  with the new table populated does. `match_sets` is the single exception and not a precedent: it
+  holds a tally the server derives from a match's points, so it cascades with the match instead of
+  appearing in any delete list. A points table under `matches` puts `DELETE /matches/{id}` in the
+  same position, and nothing catches the `IntegrityError` it would raise, so adding that table
   includes choosing what the route does with the point data (`docs/data-model.md` records the
   policy).
 - A delete is refused where the row is not this coach's alone to destroy: a live transfer code is
@@ -51,9 +53,12 @@ paths:
 ## Foreign Keys Carry Their Index
 
 - `ForeignKey(...)` and `index=True` go together. Postgres does not index a foreign key
-  automatically, and every query that follows the relationship filters on it.
+  automatically, and every query that follows the relationship filters on it. The exception is a key
+  that already leads a unique constraint's index (`player_transfer_codes.player_id`,
+  `match_sets.match_id`), where a second index would only duplicate the first.
 - Declaring no `ondelete` is deliberate: Postgres then refuses to delete a parent that still has
-  children, rather than cascading into match history or orphaning rows.
+  children, rather than cascading into match history or orphaning rows. `match_sets` is the single
+  exception, for the reason above.
 
 ## Length Bounds Live on the Schema
 

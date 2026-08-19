@@ -121,9 +121,10 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     db.expire(player, ["has_transfer_code"])
     if player.has_transfer_code:
         raise HTTPException(status_code=409, detail=TRANSFER_CODES_OUTSTANDING)
-    # Children first, in one transaction, for the reason account closure gives: every
-    # foreign key here declares no `ondelete`, so a table added below players and left
-    # out of this list stops the delete outright rather than orphaning rows.
+    # Children first, in one transaction, for the reason account closure gives: a table
+    # added below players and left out of this list stops the delete outright rather than
+    # orphaning rows, no foreign key here declaring an `ondelete`. The derived set rows
+    # under a match are the one exception, and follow their match out on their own.
     photo_key = player.photo_key
     db.execute(delete(Match).where(Match.player_id == player.id))
     db.delete(player)

@@ -355,9 +355,10 @@ def delete_current_coach(
         select(Player.photo_key).where(Player.coach_id == coach.id).with_for_update()
     )
     photo_keys = [coach.photo_key, *(key for key in player_photo_keys if key is not None)]
-    # Children first, in one transaction, because every foreign key here declares no
-    # `ondelete`, so a table added below the coach and left out of this list stops the
-    # delete outright rather than being quietly missed. Nothing keys on the email
+    # Children first, in one transaction, because no foreign key here declares an
+    # `ondelete` bar the derived set rows, which follow their match out on their own, so a
+    # table added below the coach and left out of this list stops the delete outright
+    # rather than being quietly missed. Nothing keys on the email
     # (`email_verifications` cannot hold a registered address), so the address is free for
     # a fresh sign-up the moment this commits.
     db.execute(

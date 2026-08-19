@@ -27,6 +27,8 @@ from matchpoint_api.models import (
     CoachSession,
     EmailVerification,
     Match,
+    MatchSet,
+    MatchSide,
     PasswordReset,
     Player,
     PlayerTransferCode,
@@ -202,3 +204,22 @@ def make_match(session: Session, **overrides: Any) -> Match:
     session.add(match)
     session.flush()
     return match
+
+
+def make_match_set(session: Session, **overrides: Any) -> MatchSet:
+    if "match_id" not in overrides:
+        overrides["match_id"] = make_match(session).id
+    # A finished first set, 6-4 to the tracked player: a set still in flight is the
+    # exception, and a test about one passes winner=None with its own tally.
+    match_set = MatchSet(
+        **{
+            "set_number": 1,
+            "games_won_tracked": 6,
+            "games_won_opponent": 4,
+            "winner": MatchSide.TRACKED,
+        }
+        | overrides
+    )
+    session.add(match_set)
+    session.flush()
+    return match_set
