@@ -7,23 +7,21 @@
  * reusing that name here would shadow it for this whole module.
  *
  * Referenced by `matchId`, not embedded in `Match` — same reasoning as
- * `Point.gameId` (see point.ts): a MatchSet needs to survive being handled
- * on its own (outbox, sync), so it can't assume its parent Match is in
- * scope. That's also why `trackedPlayerId`/`opponentId` are threaded down
- * as MatchSet's own copies rather than looked up from Match — a flat
- * record needs them to validate `winner` by itself, the same reason
- * Point carries its own copies to validate `winner`/`server`.
+ * Point's own `matchId` (see point.ts): a MatchSet needs to survive being
+ * handled on its own (outbox, sync), so it can't assume its parent Match is
+ * in scope. That's also why `trackedPlayerId`/`opponentId` are threaded
+ * down as MatchSet's own copies rather than looked up from Match — a flat
+ * record needs them to validate `winner` by itself.
  *
  * TODO: this is a first pass — only `setNumber`, the game score, and the
  * tiebreak score (if any) are recorded here. Rule-resolution (tiebreak-at,
  * ad-scoring, ...) isn't built yet; it needs real numbers confirmed against
  * the brief/BBD first, same caveat as `maxSetsFor` in `state.ts`. `winner`
- * is stored, not derived, matching Point's `winner`/`server` — cross-field
- * tennis rules aren't re-checked here, same reasoning as Point.create (see
- * point.ts). Nor is setNumber checked for being sequential/within the
- * format's max — that's a cross-MatchSet check, which (like Point's
- * cross-field rules) belongs to whatever appends a new set, not to
- * validating one set in isolation.
+ * is stored, not derived — cross-field tennis rules aren't re-checked here,
+ * same reasoning as Point.create (see point.ts). Nor is setNumber checked
+ * for being sequential/within the format's max — that's a cross-MatchSet
+ * check, which (like Point's cross-field rules) belongs to whatever appends
+ * a new set, not to validating one set in isolation.
  */
 
 /**

@@ -89,14 +89,12 @@ export class Match {
   // the backend's free-text opponent_name (see the class doc comment above).
   readonly opponentName: string | null;
   readonly scoringSystem: ScoringSystem;
-  // Must equal trackedPlayerId or opponentId — checked in Match.create, same
-  // as Point.server (see point.ts). Not a "player" | "opponent" role label:
-  // one representation for "which of the two people" throughout the model.
-  // Its *purpose* still differs from Point.server, though — this is a seed
-  // for the match's serve-alternation pattern (who serves game N follows
-  // from this plus standard tennis rules), not a recorded fact about one
-  // already-played point. Reading this alone tells you who started the
-  // pattern, not who's serving right now.
+  // Must equal trackedPlayerId or opponentId — checked in Match.create. Kept
+  // as an id, not a TRACKED/OPPONENT-style role label like Point.server
+  // (see point.ts), because it's a seed for the match's serve-alternation
+  // pattern (who serves game N follows from this plus standard tennis
+  // rules), not a recorded fact about one already-played point — reading
+  // this alone tells you who started the pattern, not who's serving now.
   readonly firstServer: string;
   readonly surfaceType: SurfaceType;
   // Null for a normally-completed (or still in-progress) match. Set when

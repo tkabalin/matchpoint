@@ -87,7 +87,7 @@ export function maxSetsFor(scoringSystem: ScoringSystem): number {
 
 // Points needed to win a game outright — universal, not format-dependent (ad
 // vs no-ad only changes whether a 2-point lead is required once both sides
-// reach this many — see gameStateFor).
+// reach this many — see resolveGameWinner).
 const POINTS_TO_WIN_GAME = 4;
 
 export interface GameState {
@@ -98,20 +98,43 @@ export interface GameState {
 }
 
 /**
+ * The win-condition math a game's score resolves to — shared by gameStateFor's own
+ * batch tally and setStateFor's incremental one, so the ad/no-ad margin logic lives in
+ * exactly one place regardless of how the two points are counted up to it.
+ */
+function resolveGameWinner(
+  trackedPlayerPoints: number,
+  opponentPoints: number,
+  trackedPlayerId: string,
+  opponentId: string,
+  isAdScoring: boolean,
+): string | null {
+  const trackedPlayerLeads = trackedPlayerPoints - opponentPoints;
+  const marginNeeded = isAdScoring ? 2 : 1;
+  if (trackedPlayerPoints >= POINTS_TO_WIN_GAME && trackedPlayerLeads >= marginNeeded) {
+    return trackedPlayerId;
+  }
+  if (opponentPoints >= POINTS_TO_WIN_GAME && -trackedPlayerLeads >= marginNeeded) {
+    return opponentId;
+  }
+  return null;
+}
+
+/**
  * Derives a game's current score and, once decided, its winner — from the
  * game's Points alone, not a stored fact. No Game class exists (and isn't
  * planned): who served, the running score, and the winner are all one small
- * grouping/counting step away from Point[], the same relationship
- * Point.rallyLength already has to its own recorded shots.
+ * grouping/counting step away from Point[].
  *
  * `isAdScoring` is taken directly rather than a ScoringSystem — resolving
  * that is `isAdScoringFor`'s job, above, kept separate so this function
  * doesn't need to know ScoringSystem exists at all, just the one boolean
  * fact it actually needs.
  *
- * Assumes `points` is exactly one game's Points, in order, not extending
- * past the point (if any) that decided it — the same trust Point.create
- * places in whatever produced its input (see point.ts).
+ * Assumes `points` is exactly one game's Points, in `sequence` order, not
+ * extending past the point (if any) that decided it — a Point no longer
+ * carries a gameId to check that against, so this only verifies ordering
+ * (see point.ts's module doc comment for why gameId was dropped).
  */
 export function gameStateFor(
   points: readonly Point[],
@@ -119,27 +142,23 @@ export function gameStateFor(
   opponentId: string,
   isAdScoring: boolean,
 ): GameState {
-  const gameId = points[0]?.gameId;
+  let lastSequence = -Infinity;
   for (const point of points) {
-    if (point.gameId !== gameId) {
-      throw new Error("gameStateFor requires every point to share the same gameId");
+    if (point.sequence < lastSequence) {
+      throw new Error("gameStateFor requires points in non-decreasing sequence order");
     }
-    if (point.trackedPlayerId !== trackedPlayerId || point.opponentId !== opponentId) {
-      throw new Error("gameStateFor requires every point to match the given participants");
-    }
+    lastSequence = point.sequence;
   }
 
-  const trackedPlayerPoints = points.filter((point) => point.winner === trackedPlayerId).length;
-  const opponentPoints = points.filter((point) => point.winner === opponentId).length;
-
-  const trackedPlayerLeads = trackedPlayerPoints - opponentPoints;
-  const marginNeeded = isAdScoring ? 2 : 1;
-  let winner: string | null = null;
-  if (trackedPlayerPoints >= POINTS_TO_WIN_GAME && trackedPlayerLeads >= marginNeeded) {
-    winner = trackedPlayerId;
-  } else if (opponentPoints >= POINTS_TO_WIN_GAME && -trackedPlayerLeads >= marginNeeded) {
-    winner = opponentId;
-  }
+  const trackedPlayerPoints = points.filter((point) => point.won).length;
+  const opponentPoints = points.filter((point) => !point.won).length;
+  const winner = resolveGameWinner(
+    trackedPlayerPoints,
+    opponentPoints,
+    trackedPlayerId,
+    opponentId,
+    isAdScoring,
+  );
 
   return { trackedPlayerPoints, opponentPoints, winner };
 }
@@ -236,27 +255,29 @@ export interface SetState {
 
 /**
  * Derives a set's current score and, once decided, its winner — from the
- * set's Points alone, same relationship gameStateFor has to a game. Groups
- * the non-tiebreak points by gameId and runs gameStateFor on each to tally
- * completed games; separately tallies any tiebreak-flagged points into a
- * TiebreakScore.
+ * set's Points alone, same relationship gameStateFor has to a game. A Point
+ * carries no gameId and no tiebreak flag (see point.ts's module doc
+ * comment), so membership in a game — and whether the breaker has started —
+ * isn't a stored fact to group by. Instead this replays `points` in order,
+ * tracking a running per-game point tally and resolving it through the same
+ * resolveGameWinner gameStateFor uses, switching into the breaker once both
+ * sides' credited games reach `rules.tiebreakAt`.
  *
  * `isAdScoring` stays a standalone parameter, same decoupling reason
  * gameStateFor already has it rather than a ScoringSystem.
  *
- * Once both sides reach `rules.tiebreakAt` games, the winner isn't
- * decidable from games alone — it's decided by the breaker instead. A
- * normally-decided breaker set credits the winner an extra game (7-6),
+ * A normally-decided breaker set credits the winner an extra game (7-6),
  * tennis' own convention for how it's recorded. The gamesToWin: 0
- * degenerate case (match_tiebreak_10_points' decider) never credits a
- * game at all — trackedPlayerGames/opponentGames stay 0-0, since there's
- * no games phase to credit from. That's correct storage, but must never
- * reach the coach's screen rendered literally — see the field comment on
+ * degenerate case (match_tiebreak_10_points' decider) starts in the
+ * breaker immediately and never credits a game at all — trackedPlayerGames/
+ * opponentGames stay 0-0, since there's no games phase to credit from.
+ * That's correct storage, but must never reach the coach's screen rendered
+ * literally — see the field comment on
  * MatchSet.trackedPlayerGames/opponentGames for the display convention.
  *
- * Assumes `points` is exactly one set's Points, in order, not extending
- * past the point (if any) that decided it — same trust gameStateFor
- * places in its own input.
+ * Assumes `points` is exactly one set's Points, in `sequence` order, not
+ * extending past the point (if any) that decided it — same trust
+ * gameStateFor places in its own input.
  */
 export function setStateFor(
   points: readonly Point[],
@@ -265,56 +286,75 @@ export function setStateFor(
   isAdScoring: boolean,
   rules: SetRules,
 ): SetState {
-  for (const point of points) {
-    if (point.trackedPlayerId !== trackedPlayerId || point.opponentId !== opponentId) {
-      throw new Error("setStateFor requires every point to match the given participants");
-    }
-  }
-
-  const tiebreakPoints = points.filter((point) => point.isTiebreakPoint);
-  const regularPoints = points.filter((point) => !point.isTiebreakPoint);
-
-  // Group regular points by gameId, preserving first-seen order, and tally
-  // each completed game's winner via gameStateFor.
-  const gameIds: string[] = [];
-  const pointsByGame = new Map<string, Point[]>();
-  for (const point of regularPoints) {
-    let gamePoints = pointsByGame.get(point.gameId);
-    if (gamePoints === undefined) {
-      gamePoints = [];
-      gameIds.push(point.gameId);
-      pointsByGame.set(point.gameId, gamePoints);
-    }
-    gamePoints.push(point);
-  }
-
   let trackedPlayerGames = 0;
   let opponentGames = 0;
-  for (const gameId of gameIds) {
-    const gameState = gameStateFor(
-      pointsByGame.get(gameId) ?? [],
+  let currentGameTrackedPoints = 0;
+  let currentGameOpponentPoints = 0;
+  const tiebreakPoints: Point[] = [];
+  // match_tiebreak_10_points' decider has no games phase at all — straight to the breaker.
+  let inTiebreak = rules.gamesToWin === 0;
+
+  // Tally completed games from a running per-game point count — not a winner decided
+  // mid-walk, which would wrongly lock one in from an early lead ahead of games that
+  // still complete for the other side later in the same points array (see the final
+  // tally below, which decides the set's own winner exactly once).
+  let lastSequence = -Infinity;
+  for (const point of points) {
+    if (point.sequence < lastSequence) {
+      throw new Error("setStateFor requires points in non-decreasing sequence order");
+    }
+    lastSequence = point.sequence;
+
+    if (inTiebreak) {
+      tiebreakPoints.push(point);
+      continue;
+    }
+
+    if (point.won) {
+      currentGameTrackedPoints += 1;
+    } else {
+      currentGameOpponentPoints += 1;
+    }
+    const gameWinner = resolveGameWinner(
+      currentGameTrackedPoints,
+      currentGameOpponentPoints,
       trackedPlayerId,
       opponentId,
       isAdScoring,
     );
-    if (gameState.winner === trackedPlayerId) {
+    if (gameWinner === null) {
+      continue;
+    }
+
+    if (gameWinner === trackedPlayerId) {
       trackedPlayerGames += 1;
-    } else if (gameState.winner === opponentId) {
+    } else {
       opponentGames += 1;
     }
-    // Still in progress (winner: null) — don't count it either way.
+    currentGameTrackedPoints = 0;
+    currentGameOpponentPoints = 0;
+
+    if (
+      rules.tiebreakAt !== null &&
+      trackedPlayerGames === rules.tiebreakAt &&
+      opponentGames === rules.tiebreakAt
+    ) {
+      // Tied at the tiebreak threshold — the rest of the set is the breaker, not more games.
+      inTiebreak = true;
+    }
   }
 
   let tiebreak: TiebreakScore | null = null;
   if (tiebreakPoints.length > 0) {
     tiebreak = {
-      trackedPlayerPoints: tiebreakPoints.filter((point) => point.winner === trackedPlayerId)
-        .length,
-      opponentPoints: tiebreakPoints.filter((point) => point.winner === opponentId).length,
+      trackedPlayerPoints: tiebreakPoints.filter((point) => point.won).length,
+      opponentPoints: tiebreakPoints.filter((point) => !point.won).length,
       target: rules.tiebreakTarget,
     };
   }
 
+  // Second pass: decide the winner once, from the final tallies — same win-condition
+  // math gameStateFor uses for a game, one level up.
   let winner: string | null = null;
 
   if (rules.gamesToWin === 0) {
@@ -335,13 +375,8 @@ export function setStateFor(
     winner = trackedPlayerId;
   } else if (opponentGames >= rules.gamesToWin && -gamesLead >= 2) {
     winner = opponentId;
-  } else if (
-    rules.tiebreakAt !== null &&
-    trackedPlayerGames === rules.tiebreakAt &&
-    opponentGames === rules.tiebreakAt &&
-    tiebreak !== null
-  ) {
-    // Tied at the tiebreak threshold — decided by the breaker, not games.
+  } else if (tiebreak !== null) {
+    // Not decided by games alone — the breaker decides instead.
     const tiebreakLead = tiebreak.trackedPlayerPoints - tiebreak.opponentPoints;
     if (tiebreak.trackedPlayerPoints >= tiebreak.target && tiebreakLead >= 2) {
       winner = trackedPlayerId;

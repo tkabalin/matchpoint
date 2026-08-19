@@ -14,7 +14,6 @@ import {
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
-const GAME_ID = "game-1";
 const MATCH_ID = "4f1c2b4e-0000-4000-8000-000000000003";
 
 describe("maxSetsFor", () => {
@@ -148,22 +147,32 @@ describe("setRulesFor", () => {
   });
 });
 
+// Monotonically increasing across the whole file — gameStateFor/setStateFor only care
+// that points passed together are in non-decreasing sequence order, not about the
+// absolute values, so a single shared counter keeps every fixture trivially valid.
+let nextSequence = 0;
+
 /** A won point, minimal otherwise — override just the fields a test cares about. */
 function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {
+  const sequence = nextSequence;
+  nextSequence += 1;
   return Point.create({
     id: `point-${crypto.randomUUID()}`,
-    gameId: GAME_ID,
-    trackedPlayerId: TRACKED_ID,
-    opponentId: OPPONENT_ID,
-    serveNumber: "first",
-    outcome: winner === TRACKED_ID ? "win" : "loss",
-    isTiebreakPoint: false,
-    winner,
-    server: TRACKED_ID,
-    trackedPlayerShots: [],
-    opponentShots: null,
-    winBy: null,
-    lossBy: null,
+    matchId: MATCH_ID,
+    timestamp: 1_700_000_000_000 + sequence,
+    sequence,
+    server: "TRACKED",
+    serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+    returnOutcome: null,
+    won: winner === TRACKED_ID,
+    endReason: "FORCED",
+    unusualReason: null,
+    unusualNote: null,
+    wing: null,
+    shotType: null,
+    ballIn: true,
+    ballLocation: { half: "DEUCE", depth: "MID" },
+    rallyLengthBucket: null,
     ...overrides,
   });
 }
@@ -237,23 +246,9 @@ describe("gameStateFor", () => {
   });
 
   describe("consistency checks", () => {
-    test("rejects points from more than one game", () => {
-      const points = [pointWonBy(TRACKED_ID), pointWonBy(TRACKED_ID, { gameId: "game-2" })];
-      expect(() => gameStateFor(points, TRACKED_ID, OPPONENT_ID, true)).toThrow(/same gameId/);
-    });
-
-    test("rejects points that don't match the given participants", () => {
-      // Internally consistent Point (winner/server are its own trackedPlayerId), just
-      // for different participants than the ones passed to gameStateFor.
-      const points = [
-        pointWonBy("someone-else", {
-          trackedPlayerId: "someone-else",
-          server: "someone-else",
-        }),
-      ];
-      expect(() => gameStateFor(points, TRACKED_ID, OPPONENT_ID, true)).toThrow(
-        /match the given participants/,
-      );
+    test("rejects points given out of sequence order", () => {
+      const points = [pointWonBy(TRACKED_ID), pointWonBy(TRACKED_ID)].reverse();
+      expect(() => gameStateFor(points, TRACKED_ID, OPPONENT_ID, true)).toThrow(/sequence/);
     });
   });
 });
@@ -265,26 +260,9 @@ const LEGACY_DECIDER_RULES = { gamesToWin: 6, tiebreakAt: null, tiebreakTarget: 
 // match_tiebreak_10_points' decider — no games phase, straight to a 10-point breaker.
 const MATCH_TIEBREAK_RULES = { gamesToWin: 0, tiebreakAt: 0, tiebreakTarget: 10 };
 
-/** `count` clean 4-0 games, each with its own gameId, all won by `winner`. */
-function completedGames(winner: string, count: number, idPrefix: string) {
-  const points: Point[] = [];
-  for (let index = 0; index < count; index += 1) {
-    const gameId = `${idPrefix}-${index}`;
-    points.push(...Array.from({ length: 4 }, () => pointWonBy(winner, { gameId })));
-  }
-  return points;
-}
-
-/** Tiebreak-flagged points, `trackedPlayerWins` won by the tracked player, `opponentWins` by the opponent. */
-function tiebreakPointsFor(trackedPlayerWins: number, opponentWins: number) {
-  return [
-    ...Array.from({ length: trackedPlayerWins }, () =>
-      pointWonBy(TRACKED_ID, { isTiebreakPoint: true }),
-    ),
-    ...Array.from({ length: opponentWins }, () =>
-      pointWonBy(OPPONENT_ID, { isTiebreakPoint: true }),
-    ),
-  ];
+/** `count` clean 4-0 games in a row, all won by `winner`. */
+function completedGames(winner: string, count: number) {
+  return Array.from({ length: count * 4 }, () => pointWonBy(winner));
 }
 
 describe("setStateFor", () => {
@@ -299,10 +277,7 @@ describe("setStateFor", () => {
   });
 
   test("counts completed games for each side", () => {
-    const points = [
-      ...completedGames(TRACKED_ID, 3, "tracked"),
-      ...completedGames(OPPONENT_ID, 1, "opponent"),
-    ];
+    const points = [...completedGames(TRACKED_ID, 3), ...completedGames(OPPONENT_ID, 1)];
     const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
     expect(state.trackedPlayerGames).toBe(3);
     expect(state.opponentGames).toBe(1);
@@ -311,8 +286,8 @@ describe("setStateFor", () => {
 
   test("an in-progress game doesn't count toward either side", () => {
     const points = [
-      ...completedGames(TRACKED_ID, 5, "tracked"),
-      pointWonBy(TRACKED_ID, { gameId: "in-progress" }), // 1 point, no winner yet
+      ...completedGames(TRACKED_ID, 5),
+      pointWonBy(TRACKED_ID), // 1 point, no winner yet
     ];
     const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
     expect(state.trackedPlayerGames).toBe(5);
@@ -320,37 +295,25 @@ describe("setStateFor", () => {
 
   describe("traditional-shaped rules", () => {
     test("6-4 is a clean tracked-player win", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 4, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 6), ...completedGames(OPPONENT_ID, 4)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBe(TRACKED_ID);
     });
 
     test("6-5 is not a win yet — only a 1-game lead", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 5, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 6), ...completedGames(OPPONENT_ID, 5)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBeNull();
     });
 
     test("7-5 is a win", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 7, "tracked"),
-        ...completedGames(OPPONENT_ID, 5, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 7), ...completedGames(OPPONENT_ID, 5)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBe(TRACKED_ID);
     });
 
     test("6-6 with no tiebreak points yet is still in progress", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 6), ...completedGames(OPPONENT_ID, 6)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBeNull();
       expect(state.tiebreak).toBeNull();
@@ -358,9 +321,9 @@ describe("setStateFor", () => {
 
     test("6-6 decided by the breaker credits the winner an extra game — 7-6, tennis' convention", () => {
       const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-        ...tiebreakPointsFor(7, 5),
+        ...completedGames(TRACKED_ID, 6),
+        ...completedGames(OPPONENT_ID, 6),
+        ...pointsFor(7, 5),
       ];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBe(TRACKED_ID);
@@ -371,9 +334,9 @@ describe("setStateFor", () => {
 
     test("the opponent can win the breaker too", () => {
       const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-        ...tiebreakPointsFor(5, 7),
+        ...completedGames(TRACKED_ID, 6),
+        ...completedGames(OPPONENT_ID, 6),
+        ...pointsFor(5, 7),
       ];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBe(OPPONENT_ID);
@@ -383,9 +346,9 @@ describe("setStateFor", () => {
 
     test("a breaker still in progress (not yet at target, or no 2-clear lead) has no winner", () => {
       const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-        ...tiebreakPointsFor(6, 6),
+        ...completedGames(TRACKED_ID, 6),
+        ...completedGames(OPPONENT_ID, 6),
+        ...pointsFor(6, 6),
       ];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
       expect(state.winner).toBeNull();
@@ -394,20 +357,14 @@ describe("setStateFor", () => {
 
   describe("legacy's decider — no tiebreak at all", () => {
     test("6-6 is still in progress — no tiebreak triggers", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 6, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 6), ...completedGames(OPPONENT_ID, 6)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, LEGACY_DECIDER_RULES);
       expect(state.winner).toBeNull();
       expect(state.tiebreak).toBeNull();
     });
 
     test("8-6 is a win — play continues past 6-6 until a 2-game lead", () => {
-      const points = [
-        ...completedGames(TRACKED_ID, 8, "tracked"),
-        ...completedGames(OPPONENT_ID, 6, "opponent"),
-      ];
+      const points = [...completedGames(TRACKED_ID, 8), ...completedGames(OPPONENT_ID, 6)];
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, LEGACY_DECIDER_RULES);
       expect(state.winner).toBe(TRACKED_ID);
     });
@@ -415,7 +372,7 @@ describe("setStateFor", () => {
 
   describe("match_tiebreak_10_points' decider — no games phase", () => {
     test("decided purely by the breaker; games stay 0-0", () => {
-      const points = tiebreakPointsFor(10, 7);
+      const points = pointsFor(10, 7);
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, MATCH_TIEBREAK_RULES);
       expect(state.trackedPlayerGames).toBe(0);
       expect(state.opponentGames).toBe(0);
@@ -424,20 +381,9 @@ describe("setStateFor", () => {
     });
 
     test("no winner until the breaker itself is decided", () => {
-      const points = tiebreakPointsFor(8, 8);
+      const points = pointsFor(8, 8);
       const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, MATCH_TIEBREAK_RULES);
       expect(state.winner).toBeNull();
-    });
-  });
-
-  describe("consistency checks", () => {
-    test("rejects points that don't match the given participants", () => {
-      const points = [
-        pointWonBy("someone-else", { trackedPlayerId: "someone-else", server: "someone-else" }),
-      ];
-      expect(() => setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES)).toThrow(
-        /match the given participants/,
-      );
     });
   });
 });
