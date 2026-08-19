@@ -1108,6 +1108,24 @@ def test_a_transfer_code_survives_the_delete_active_players_waiver(
     assert db_session.get(PlayerTransferCode, code.id) is not None
 
 
+def test_a_transfer_code_survives_the_waiver_even_off_an_active_player(
+    client: TestClient, db_session: Session
+) -> None:
+    """The waiver used to reach the cascade unchecked and take an active player's live
+    code with it (b8c8c61) before this check existed; pinned so it stays refused."""
+    coach = _closable(client, db_session)
+    player = make_player(db_session, coach_id=coach.id)
+    code = make_player_transfer_code(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = _close(client, delete_active_players=True)
+
+    assert response.status_code == 409
+    assert db_session.get(Coach, coach.id) is not None
+    assert db_session.get(Player, player.id) is not None
+    assert db_session.get(PlayerTransferCode, code.id) is not None
+
+
 def test_the_email_can_sign_up_again_afterwards(client: TestClient, db_session: Session) -> None:
     """The erasure claim that matters for a coach asking to be removed: nothing of theirs
     is left holding the address, so the UNIQUE constraint no longer refuses it."""
