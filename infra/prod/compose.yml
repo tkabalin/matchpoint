@@ -65,6 +65,13 @@ services:
       # create an account at all.
       MATCHPOINT_EMAIL_SENDER: resend
       MATCHPOINT_RESEND_API_KEY: ${RESEND_API_KEY:?}
+      # Uploaded profile photos, on a volume rather than the container's writable
+      # layer, which every deploy throws away — and rows would still be naming the
+      # files it took with it. Mounted here and nowhere else: the API serves them
+      # itself, so Caddy never reads them.
+      MATCHPOINT_MEDIA_ROOT: /srv/media
+    volumes:
+      - media-data:/srv/media
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,3 +103,4 @@ services:
 volumes:
   postgres-data:
   caddy-data:
+  media-data:

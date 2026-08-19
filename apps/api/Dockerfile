@@ -21,9 +21,15 @@ WORKDIR /app
 COPY --from=build /app /app
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Drop to an unprivileged user. Nothing here is written at runtime, so leaving
-# /app owned by root means the process cannot rewrite its own code either.
-RUN useradd --system --uid 10001 app
+# Drop to an unprivileged user. Nothing in /app is written at runtime, so leaving
+# it owned by root means the process cannot rewrite its own code either.
+#
+# /srv/media is the one writable path, and is outside /app for exactly that reason:
+# it is where infra/prod/compose.yml mounts the photo volume. Docker seeds a fresh
+# named volume from the image's directory, ownership included, so this chown is what
+# makes the volume writable at all — and it only happens while the volume is empty.
+RUN useradd --system --uid 10001 app \
+    && install -d -o app -g app /srv/media
 USER app
 
 EXPOSE 8000

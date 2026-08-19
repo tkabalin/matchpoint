@@ -67,7 +67,10 @@ image's Alembic cannot read the revision the database is stamped with. `deploy.s
 refuses the deploy rather than failing halfway through it.
 
 If `compose.yml`, `deploy.sh`, or the certs change, they must be re-installed on the VPS by hand —
-the restricted SSH key deliberately cannot copy files.
+the restricted SSH key deliberately cannot copy files. Where the change adds a volume or a mount,
+re-install it **before** deploying the image that needs it: an API deployed without its mount writes
+into the container's own layer, which the next `up -d` discards, leaving rows naming files that are
+gone.
 
 ### Checking the web layer
 
@@ -86,7 +89,7 @@ path that exists only as a client-side route. A `404` there means refreshing the
 route inside the app is broken. On the middle one, HTML rather than JSON means the SPA is swallowing
 API paths instead of them reaching the API.
 
-## Database backups
+## Backups
 
 `backup.sh` writes a nightly gzipped `pg_dump` to `/opt/matchpoint/backups/` — outside the Docker
 volume — keeping the newest 14. VPS snapshots cover catastrophic loss; the logical dump is what
@@ -96,6 +99,11 @@ VPS snapshot captures the fresh dump:
 ```
 30 1 * * * /opt/matchpoint/backup.sh
 ```
+
+The dump covers the database and nothing else. Uploaded photos live in the `media-data` volume, so
+only the VPS snapshot carries them, and it is taken after the dump — a snapshot restore is
+internally consistent, where restoring a dump on its own brings back rows naming photos that are not
+there. The visible result is avatars falling back to initials, recoverable only by re-uploading.
 
 ## Operating the box by hand
 
@@ -119,6 +127,7 @@ cd /opt/matchpoint
 | Database shell               | `docker compose exec postgres psql -U matchpoint matchpoint` |
 | Schema revision the DB is at | `docker compose run --rm api alembic current`                |
 | Back up now, off the cron    | `./backup.sh`                                                |
+| Disk the photos are using    | `docker compose exec api du -sh /srv/media`                  |
 
 `deploy.sh` takes its tag from `SSH_ORIGINAL_COMMAND` because CI arrives through a forced command,
 so setting that variable by hand is the same entry point the pipeline uses — migration guard,
