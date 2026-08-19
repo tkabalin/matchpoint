@@ -1,21 +1,24 @@
 import type { MatchRead } from "@matchpoint/api-client";
 import { listMatchesOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRight } from "lucide-react";
 
 import { OutcomeSwatch } from "@/components/outcome-swatch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const SURFACE_LABEL: Record<string, string> = {
-  hard: "Hard",
-  clay: "Clay",
-  grass: "Grass",
-  carpet: "Carpet",
-};
+import { SURFACE_LABEL, formatPlayedOn } from "./match-format";
 
-export function MatchList() {
+export function MatchList({ onSelect }: { onSelect: (match: MatchRead) => void }) {
   const { data, isPending, isError } = useQuery(listMatchesOptions());
 
   if (isPending) {
@@ -50,20 +53,24 @@ export function MatchList() {
   return (
     <div className="flex flex-col gap-2">
       {data.map((match) => (
-        <MatchRow key={match.id} match={match} />
+        <MatchRow key={match.id} match={match} onSelect={onSelect} />
       ))}
     </div>
   );
 }
 
-function MatchRow({ match }: { match: MatchRead }) {
+function MatchRow({ match, onSelect }: { match: MatchRead; onSelect: (match: MatchRead) => void }) {
   const opponent = match.opponent_name ?? "Unknown opponent";
   const detail = [formatPlayedOn(match.played_on), match.surface && SURFACE_LABEL[match.surface]]
     .filter(Boolean)
     .join(" · ");
 
   return (
-    <Item variant="outline">
+    <Item
+      variant="outline"
+      render={<button type="button" onClick={() => onSelect(match)} />}
+      className="w-full text-left"
+    >
       <ItemMedia>
         {match.result ? (
           <OutcomeSwatch
@@ -81,16 +88,9 @@ function MatchRow({ match }: { match: MatchRead }) {
         <ItemTitle>{`vs ${opponent}`}</ItemTitle>
         <ItemDescription>{detail}</ItemDescription>
       </ItemContent>
+      <ItemActions>
+        <ChevronRight className="size-4 text-muted-foreground" />
+      </ItemActions>
     </Item>
   );
-}
-
-// `played_on` is a plain calendar date; `new Date(str)` would read it as UTC midnight
-// and show the previous day east of UTC. See .claude/rules/web.md.
-function formatPlayedOn(playedOn: string): string {
-  const [year, month, day] = playedOn.split("-").map(Number);
-  return new Date(year!, month! - 1, day!).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }

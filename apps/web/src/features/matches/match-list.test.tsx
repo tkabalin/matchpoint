@@ -1,6 +1,7 @@
 import type { MatchRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { MatchList } from "./match-list";
@@ -28,13 +29,14 @@ function stubFetch(response: () => Response) {
   );
 }
 
-function renderMatchList() {
+function renderMatchList({ onSelect = vi.fn() } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <MatchList />
+      <MatchList onSelect={onSelect} />
     </QueryClientProvider>,
   );
+  return { onSelect };
 }
 
 afterEach(() => {
@@ -80,4 +82,16 @@ test("reports a failed load instead of rendering an empty list", async () => {
   renderMatchList();
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not load matches.");
+});
+
+// Tapping raises the action sheet rather than navigating — there's no detail screen
+// today. The sheet itself is covered in matches-page.test.tsx, where it's rendered.
+test("tapping a match hands it to the caller instead of navigating", async () => {
+  stubFetch(() => Response.json([match]));
+  const user = userEvent.setup();
+  const { onSelect } = renderMatchList();
+
+  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
+
+  expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: match.id }));
 });
