@@ -9,6 +9,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerFormFields } from "@/components/player-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ import {
   playerFormValuesFrom,
   validatePlayerForm,
 } from "@/lib/player-form";
+import { usePlayerPhoto } from "@/lib/use-player-photo";
 
 type Step = "form" | "confirm-delete" | "delete-blocked";
 
@@ -61,6 +64,9 @@ export function EditPlayerSheet({
   const [values, setValues] = useState<PlayerFormValues>(() => playerFormValuesFrom(player));
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+  const { uploadPhoto, removePhoto, uploadingPhoto, removingPhoto, photoErrorText } =
+    usePlayerPhoto(player.id, () => setPickingPhoto(false));
 
   function reset() {
     // Back to the player's current values, not blank — this is the "ready for next
@@ -134,38 +140,97 @@ export function EditPlayerSheet({
   });
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
-        {step === "form" ? (
-          <>
-            <SheetHeader className="p-0">
-              <SheetTitle>Edit {player.first_name}</SheetTitle>
-            </SheetHeader>
+    <>
+      <Sheet
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) reset();
+          onOpenChange(next);
+        }}
+      >
+        <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
+          {step === "form" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Edit {player.first_name}</SheetTitle>
+              </SheetHeader>
 
-            <form
-              className="flex flex-col gap-4"
-              noValidate
-              onSubmit={(event) => {
-                event.preventDefault();
-                setError(null);
-                setShowErrors(true);
-                if (!isValid) return;
-                // Nothing changed — closing is the correct response to "Save", not a
-                // PATCH with an empty body.
-                if (!hasChanges) {
-                  onOpenChange(false);
-                  return;
-                }
-                save();
-              }}
-            >
-              <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
+              <button
+                type="button"
+                onClick={() => setPickingPhoto(true)}
+                aria-label={`Change ${player.first_name}'s photo`}
+                className="self-center rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              >
+                <PlayerAvatar player={player} size="lg" editable />
+              </button>
+
+              {photoErrorText && (
+                <Alert variant="destructive">
+                  <AlertDescription>{photoErrorText}</AlertDescription>
+                </Alert>
+              )}
+              {(uploadingPhoto || removingPhoto) && (
+                <p className="text-center text-sm text-muted-foreground" role="status">
+                  {uploadingPhoto ? "Uploading…" : "Removing…"}
+                </p>
+              )}
+
+              <form
+                className="flex flex-col gap-4"
+                noValidate
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setError(null);
+                  setShowErrors(true);
+                  if (!isValid) return;
+                  // Nothing changed — closing is the correct response to "Save", not a
+                  // PATCH with an empty body.
+                  if (!hasChanges) {
+                    onOpenChange(false);
+                    return;
+                  }
+                  save();
+                }}
+              >
+                <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
+
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button type="submit" disabled={isSaving} className="w-full">
+                  {isSaving ? "Saving…" : "Save changes"}
+                </Button>
+              </form>
+
+              <Separator />
+
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  // Known ahead of time from the player's own record — no point showing
+                  // the destructive confirm for a delete that's already going to refuse.
+                  setStep(player.has_transfer_code ? "delete-blocked" : "confirm-delete");
+                }}
+              >
+                Delete player
+              </Button>
+            </>
+          ) : step === "confirm-delete" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Delete {player.first_name}?</SheetTitle>
+              </SheetHeader>
+
+              <p className="text-sm text-muted-foreground">
+                This deletes {player.first_name} {player.last_name} and every match recorded against
+                them. This cannot be undone.
+              </p>
 
               {error && (
                 <Alert variant="destructive">
@@ -173,80 +238,52 @@ export function EditPlayerSheet({
                 </Alert>
               )}
 
-              <Button type="submit" disabled={isSaving} className="w-full">
-                {isSaving ? "Saving…" : "Save changes"}
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isDeleting}
+                className="w-full"
+                onClick={() => remove()}
+              >
+                {isDeleting ? "Deleting…" : "Delete player"}
               </Button>
-            </form>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isDeleting}
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep("form");
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Can't delete {player.first_name} yet</SheetTitle>
+              </SheetHeader>
 
-            <Separator />
+              <p className="text-sm text-muted-foreground">{TRANSFER_PENDING_MESSAGE}</p>
 
-            <Button
-              type="button"
-              variant="destructive"
-              className="w-full"
-              onClick={() => {
-                setError(null);
-                // Known ahead of time from the player's own record — no point showing
-                // the destructive confirm for a delete that's already going to refuse.
-                setStep(player.has_transfer_code ? "delete-blocked" : "confirm-delete");
-              }}
-            >
-              Delete player
-            </Button>
-          </>
-        ) : step === "confirm-delete" ? (
-          <>
-            <SheetHeader className="p-0">
-              <SheetTitle>Delete {player.first_name}?</SheetTitle>
-            </SheetHeader>
+              <Button type="button" className="w-full" onClick={() => setStep("form")}>
+                OK
+              </Button>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
-            <p className="text-sm text-muted-foreground">
-              This deletes {player.first_name} {player.last_name} and every match recorded against
-              them. This cannot be undone.
-            </p>
-
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={isDeleting}
-              className="w-full"
-              onClick={() => remove()}
-            >
-              {isDeleting ? "Deleting…" : "Delete player"}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={isDeleting}
-              className="w-full"
-              onClick={() => {
-                setError(null);
-                setStep("form");
-              }}
-            >
-              Cancel
-            </Button>
-          </>
-        ) : (
-          <>
-            <SheetHeader className="p-0">
-              <SheetTitle>Can't delete {player.first_name} yet</SheetTitle>
-            </SheetHeader>
-
-            <p className="text-sm text-muted-foreground">{TRANSFER_PENDING_MESSAGE}</p>
-
-            <Button type="button" className="w-full" onClick={() => setStep("form")}>
-              OK
-            </Button>
-          </>
-        )}
-      </SheetContent>
-    </Sheet>
+      <PhotoPickerSheet
+        open={pickingPhoto}
+        onOpenChange={setPickingPhoto}
+        title={`${player.first_name}'s photo`}
+        hasPhoto={player.photo_url !== null}
+        onChoose={uploadPhoto}
+        onRemove={removePhoto}
+      />
+    </>
   );
 }

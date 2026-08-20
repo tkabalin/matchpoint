@@ -48,6 +48,27 @@ test("renders the photo instead of initials once one is set", () => {
   expect(screen.queryByText("AN")).not.toBeInTheDocument();
 });
 
+test("shows no camera badge by default", () => {
+  const { container } = render(
+    <PlayerAvatar
+      player={{ id: "1", first_name: "Amahle", last_name: "Nkosi", photo_url: null }}
+    />,
+  );
+
+  expect(container.querySelector("svg")).not.toBeInTheDocument();
+});
+
+test("shows a camera badge when editable", () => {
+  const { container } = render(
+    <PlayerAvatar
+      player={{ id: "1", first_name: "Amahle", last_name: "Nkosi", photo_url: null }}
+      editable
+    />,
+  );
+
+  expect(container.querySelector("svg")).toBeInTheDocument();
+});
+
 test("falls back to initials if the photo fails to load", () => {
   render(
     <PlayerAvatar

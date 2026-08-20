@@ -1,12 +1,15 @@
-import { createPlayer } from "@matchpoint/api-client";
+import { createPlayer, uploadPlayerPhoto } from "@matchpoint/api-client";
 import { listPlayersQueryKey } from "@matchpoint/api-client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { PhotoAvatar } from "@/components/photo-avatar";
+import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
 import { PlayerFormFields } from "@/components/player-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { downscaleImage } from "@/lib/downscale-image";
 import { parseErrorMessage } from "@/lib/parse-error";
 import { BLANK_PLAYER_FORM, type PlayerFormValues, validatePlayerForm } from "@/lib/player-form";
 
@@ -29,11 +32,28 @@ export function AddPlayerSheet({
   const [values, setValues] = useState<PlayerFormValues>(BLANK_PLAYER_FORM);
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pickingPhoto, setPickingPhoto] = useState(false);
+  // The player has no id until createPlayer resolves, so a picked photo is held
+  // here rather than uploaded — PhotoPickerSheet's own doc comment anticipates
+  // exactly this case (#192). The preview is the picked File's own object URL,
+  // passed straight to PhotoAvatar's photoUrl like any other image source.
+  const [pendingPhoto, setPendingPhoto] = useState<File | null>(null);
+  const [pendingPhotoPreview, setPendingPhotoPreview] = useState<string | null>(null);
+
+  function setPendingPhotoFile(file: File | null) {
+    setPendingPhotoPreview((previous) => {
+      if (previous) URL.revokeObjectURL(previous);
+      return file ? URL.createObjectURL(file) : null;
+    });
+    setPendingPhoto(file);
+    setPickingPhoto(false);
+  }
 
   function reset() {
     setValues(BLANK_PLAYER_FORM);
     setShowErrors(false);
     setError(null);
+    setPendingPhotoFile(null);
   }
 
   function update<K extends keyof PlayerFormValues>(key: K, value: PlayerFormValues[K]) {
@@ -56,6 +76,17 @@ export function AddPlayerSheet({
         },
       });
       if (createError) throw createError;
+      // The player is created either way — a photo failure here (network blip, rate
+      // limit) is silently dropped rather than undoing or blocking the add. The
+      // coach can set it afterward from Edit player, which has the same picker.
+      if (pendingPhoto) {
+        try {
+          const downscaled = await downscaleImage(pendingPhoto);
+          await uploadPlayerPhoto({ path: { player_id: data.id }, body: { file: downscaled } });
+        } catch {
+          // Deliberately swallowed — see comment above.
+        }
+      }
       return data;
     },
     onSuccess: async () => {
@@ -69,43 +100,70 @@ export function AddPlayerSheet({
   });
 
   return (
-    <Sheet
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) reset();
-        onOpenChange(next);
-      }}
-    >
-      <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
-        <SheetHeader className="p-0">
-          <SheetTitle>Add a player</SheetTitle>
-        </SheetHeader>
+    <>
+      <Sheet
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) reset();
+          onOpenChange(next);
+        }}
+      >
+        <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
+          <SheetHeader className="p-0">
+            <SheetTitle>Add a player</SheetTitle>
+          </SheetHeader>
 
-        <form
-          className="flex flex-col gap-4"
-          noValidate
-          onSubmit={(event) => {
-            event.preventDefault();
-            setError(null);
-            // Errors stay hidden until the first submit, so the form doesn't scold
-            // the coach about fields they haven't reached yet.
-            setShowErrors(true);
-            if (isValid) mutate();
-          }}
-        >
-          <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
+          <button
+            type="button"
+            onClick={() => setPickingPhoto(true)}
+            aria-label="Add a player photo"
+            className="self-center rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+          >
+            <PhotoAvatar
+              id="new-player"
+              initials={`${values.firstName[0] ?? ""}${values.lastName[0] ?? ""}`.toUpperCase()}
+              photoUrl={pendingPhotoPreview}
+              shape="square"
+              size="lg"
+              editable
+            />
+          </button>
 
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+          <form
+            className="flex flex-col gap-4"
+            noValidate
+            onSubmit={(event) => {
+              event.preventDefault();
+              setError(null);
+              // Errors stay hidden until the first submit, so the form doesn't scold
+              // the coach about fields they haven't reached yet.
+              setShowErrors(true);
+              if (isValid) mutate();
+            }}
+          >
+            <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
 
-          <Button type="submit" disabled={isPending} className="w-full">
-            {isPending ? "Adding…" : "Add player"}
-          </Button>
-        </form>
-      </SheetContent>
-    </Sheet>
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <Button type="submit" disabled={isPending} className="w-full">
+              {isPending ? "Adding…" : "Add player"}
+            </Button>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      <PhotoPickerSheet
+        open={pickingPhoto}
+        onOpenChange={setPickingPhoto}
+        title="Player photo"
+        hasPhoto={pendingPhoto !== null}
+        onChoose={setPendingPhotoFile}
+        onRemove={() => setPendingPhotoFile(null)}
+      />
+    </>
   );
 }
