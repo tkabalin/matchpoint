@@ -26,6 +26,11 @@ authentication endpoints are built to this policy.
 - **Login:** one message for an unknown email and a wrong password; a dummy Argon2 verification, so
   response time does not answer what the body refuses to; a wrong-guess budget keyed on the
   submitted address whether or not an account lives there.
+- **Player login:** the same defences over the player's username, with a third case folded into the
+  same message and timing: a player whose coach has not minted a password yet answers exactly like a
+  wrong password, so the login form cannot say which of a club's players have been handed accounts.
+  A player username is derived from the player's name by construction, so the wrong-guess budget,
+  not the identifier's secrecy, is what the defence rests on.
 - **Password reset:** a uniform 202 whether or not the address holds an account, and one answer at
   each later step whether or not the address behind it does.
 - **Code redemption** (sign-up verification and reset codes): every failure collapses into one
@@ -55,7 +60,14 @@ recommends NFKC.
 
 A successful login checks `needs_rehash()` and re-hashes when the stored hash uses stale parameters.
 Login is the one moment where both the plaintext and a database session are available, so no offline
-migration script is needed.
+migration script is needed. Both logins: player passwords are stored and upgraded identically.
+
+**Player passwords are minted, not chosen, and Argon2-stored all the same.** A coach creating a
+player is shown a server-generated password once (twelve characters from an alphabet with the
+lookalike symbols removed, grouped for reading aloud), and only its Argon2 hash is kept; the same
+one-time-reveal shape as a transfer code, but hashed as a password because a player types it at
+login, where a transfer code is an unguessable 256-bit token. Regenerating it is the same mint over
+again. A player row that predates sign-ins holds NULL and cannot log in until its coach mints one.
 
 ## Password validation
 
@@ -66,9 +78,10 @@ bounds and nothing else is close to no password at all.
 **The policy.** Every newly chosen password, at sign-up, at a reset and at a change, is checked
 against the kind of list NIST SP 800-63B asks for, and refused with a 400 naming the reason. The
 only bound on length is 8-128 characters, applied to `CoachCreate.password`,
-`ResetPasswordRequest.new_password` and `ChangePasswordRequest.new_password`. Composition rules (a
-digit, a symbol, mixed case) are deliberately not part of it: the same standard advises against
-them, since they push people towards predictable substitutions rather than longer passwords.
+`ResetPasswordRequest.new_password` and the coach and player `ChangePasswordRequest.new_password`
+fields. Composition rules (a digit, a symbol, mixed case) are deliberately not part of it: the same
+standard advises against them, since they push people towards predictable substitutions rather than
+longer passwords.
 
 What the list covers. The first four are arithmetic over the submitted string
 (`password_policy.py`), and run first, so an obvious refusal costs no request:
@@ -126,6 +139,15 @@ with no way around it, where a miss now falls through to the corpus rather than 
 remains uncovered is a compromised password no public corpus has yet recorded, and the window in
 which the corpus is unreachable and every password it would have refused is accepted.
 
+**The minted player password deliberately skips the policy.** The rules above exist for human-chosen
+weaknesses, which a uniform draw from a CSPRNG cannot exhibit except by freak accident, and that
+accident would turn a player creation into a spurious 400; the breach corpus goes unasked for the
+same reason, since the string has never existed before. The policy applies in full the moment a
+player chooses a replacement at `POST /auth/player/change-password`, with the player's context words
+being their username and full name, there being no email. Players have no reset flow at all for that
+same reason: a forgotten password is a trip to the coach, whose regenerate endpoint is the recovery
+path.
+
 **MFA is deferred, not missing.** Phishing-resistant MFA (TOTP, hardware keys) is the strongest
 remaining guardrail NIST's guidance recommends, but enrollment, provisioning and a login-time
 challenge are more authentication hardening than this brief's club-scale coaching tool needs on top
@@ -156,6 +178,24 @@ Only abandoned sessions reach expiry.
 **Probabilistic garbage collection.** One in 50 authenticated requests sweeps all expired sessions.
 Abandoned sessions (closed tabs, re-logins from other devices) are never presented again, so
 per-request cleanup cannot reach them. This keeps the table bounded without a cron job.
+
+**Player sessions are the same mechanism in a second table.** A player login mints the same kind of
+token into `player_sessions`, carried in a cookie of its own name
+(`__Host-matchpoint_player_session` when Secure), with the same lifetime, halfway renewal and
+probabilistic sweep. A separate table and cookie rather than a principal column: the resolving
+dependencies join to different tables, a revocation scoped to one player can never reach a coach's
+logins by a bug in a WHERE, and a browser holding both cookies (a shared family device) has each
+renewed only by its own dependency. Renewals travel to the response on one state key per principal,
+so a route rotating or cancelling its own cookie cannot touch the other's.
+
+**Regenerating a player's password revokes their sessions.** The coach's regenerate endpoint is the
+recovery path and the takeover lever in one: minting over the old password ends every session it had
+open, which is exactly what a coach reaches for when a credential or a device is in the wrong hands.
+A player changing their own password ends every session too, the presented one included, and the
+calling device continues on a fresh one, as the coach's change does. Redeeming a transfer code
+deliberately revokes nothing: a transfer moves ownership between coaches, the player's own identity
+and credential are unchanged, and the new coach holds the regenerate lever if they want the player
+re-credentialed.
 
 **Password reset invalidates all sessions.** The purpose of a reset is that someone else may hold
 the old credential; leaving their sessions alive would defeat it.
@@ -294,6 +334,15 @@ would leave that deliberate starvation cheaper to mount than it was before the c
 the address instead would be worse, since behind the CDN it is an edge address the coach may be
 arriving on as well.
 
+**The player principal gets budgets of its own.** Player login spends login's three tiers at login's
+sizes in separate buckets, so a flood at one entry point cannot price the other principal out of
+signing in; the wrong-guess budget keys on the submitted username, charged only after a failed
+verification, exactly as login's does on the email. Authenticated player traffic spends a per-player
+ceiling charged in its own dependency, with a recovery budget carved out for the player's
+change-password on the coach carve-out's reasoning. Minting a player password (creation and
+regeneration, the two authenticated routes that pay an Argon2 hash per call) shares one per-coach
+arrival tier, so neither route is a way around the other's bound.
+
 **Unknown session tokens are charged after the lookup.** A cookie naming no session costs an indexed
 query against the sessions table on every route that authenticates, and the per-coach budget cannot
 meter it because no coach was found. A tier keyed on the caller's address is charged once the lookup
@@ -302,7 +351,8 @@ never consults the tier, so it can never refuse a signed-in coach. Behind the CD
 edge many callers share, so the tier is sized to bound abuse by orders of magnitude rather than to
 meter one caller. Draining it turns the 401 a caller with a dead cookie would have had into a 429,
 which a client deciding whether its session is over has to read as an unanswered question to retry
-rather than as a session still standing.
+rather than as a session still standing. Both principals' lookups charge this one tier: the cost
+they meter is the same indexed miss, and a second bucket would only hand junk cookies two budgets.
 
 ## Request size limits
 
@@ -473,6 +523,23 @@ means and why it is the trade worth making.
 **No coach list endpoint.** No route returns a coach other than the caller's own. A list route would
 be an open dump of every coach's email address. Pinned by a test asserting `GET /coaches`
 returns 404.
+
+**A player session reaches exactly its own player.** The player principal is lower-privilege by
+construction: it authenticates a player's own login, logout, change-password and
+`GET /auth/player/me`, and no route it reaches answers with a row belonging to anyone else. The
+self-view is trimmed to match, carrying none of the coach-facing fields: the coach's notes about the
+player stay the coach's, and the ownership and transfer plumbing stays coach workflow. Any route
+opened to this principal is held to the same two rules, the player's own rows and none of the
+coach's columns. A coach session is nobody to a player route and a player session nobody to a coach
+route, which the two distinct cookies enforce. Regenerating a player's password sits on the coach
+side of the line and answers the same 404 for another coach's player that every player route does.
+
+**Accepted residual channel: a minted username counts namesakes deployment-wide.** Usernames are
+unique across every coach, because the sign-in form has nothing but the username to look a player up
+by, so the number a new player is given tells the coach who created them how many players of that
+name already exist under other coaches. The count is the whole of it: no name, no id, no coach, and
+no way to ask again without creating another player. Numbering per coach instead would mean the
+login lookup needing a coach it has not got.
 
 ## Server-side request forgery
 
