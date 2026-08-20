@@ -121,6 +121,56 @@ def test_requiring_a_player_owner_refuses_orphans_rather_than_deleting_them(
         settings.database_url = original_url
 
 
+def test_the_username_backfill_numbers_existing_players_deterministically(
+    round_trip_url: str,
+) -> None:
+    """Players predating usernames get theirs minted by the revision itself, oldest
+    row first, with a frozen copy of the app's folding, so the same data always
+    backfills to the same usernames and namesakes never swap numbers."""
+    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    original_url = settings.database_url
+    settings.database_url = round_trip_url
+    engine = create_engine(round_trip_url)
+    try:
+        # A revision from before 2d16f09c42f3 added usernames: the only place a
+        # player the backfill must cover can be arranged.
+        command.upgrade(config, "f989e0ca10e9")
+        with engine.begin() as connection:
+            coach_id = connection.execute(
+                text(
+                    "INSERT INTO coaches (id, email, display_name, password_hash) "
+                    "VALUES (gen_random_uuid(), 'coach@example.com', 'Coach', 'not-a-hash') "
+                    "RETURNING id"
+                )
+            ).scalar()
+            for first_name, last_name in [
+                ("Sam", "Smith"),  # the elder namesake, so 001 by created_at
+                ("Seán", "O'Brien"),  # accents and punctuation fold away
+                ("Sam", "Smith"),
+                ("Bo", "Li"),  # short names pad to keep the prefix six wide
+            ]:
+                connection.execute(
+                    text(
+                        "INSERT INTO players (id, first_name, last_name, coach_id) "
+                        "VALUES (gen_random_uuid(), :first_name, :last_name, :coach_id)"
+                    ),
+                    {"first_name": first_name, "last_name": last_name, "coach_id": coach_id},
+                )
+
+        command.upgrade(config, "head")
+
+        with engine.begin() as connection:
+            usernames = (
+                connection.execute(text("SELECT username FROM players ORDER BY created_at, id"))
+                .scalars()
+                .all()
+            )
+        assert usernames == ["smtsam001", "obrsea001", "smtsam002", "lixbox001"]
+    finally:
+        engine.dispose()
+        settings.database_url = original_url
+
+
 def test_the_schema_at_head_matches_the_models(_test_engine: Engine) -> None:
     """Alembic's own autogenerate comparison, asserted rather than printed.
 

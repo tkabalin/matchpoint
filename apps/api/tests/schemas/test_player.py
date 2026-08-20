@@ -267,6 +267,7 @@ def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
         id=uuid.uuid4(),
         first_name="Test",
         last_name="Player",
+        username="plytes001",
         coach_id=uuid.uuid4(),
         photo_key="mBKcJ7Yh3QhBOTd3ffVXbw",
         created_at=datetime.now(UTC),
@@ -277,6 +278,15 @@ def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
     player.has_transfer_code = False
 
     assert PlayerRead.model_validate(player).photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"
+
+
+@pytest.mark.parametrize("schema", [PlayerCreate, PlayerUpdate])
+def test_neither_create_nor_update_accepts_a_username(schema: type[RequestModel]) -> None:
+    """The username is minted by the server and is who the player signs in as. Pinned so
+    that putting it on a request schema fails rather than quietly handing a client the
+    choice of someone's identifier."""
+    with pytest.raises(ValidationError):
+        schema.model_validate({"first_name": "A", "last_name": "B", "username": "chosen001"})
 
 
 @pytest.mark.parametrize("schema", [PlayerCreate, PlayerUpdate])

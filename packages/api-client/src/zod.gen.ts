@@ -204,7 +204,8 @@ export const zPlayerRead = z.object({
     last_name: z.string(),
     notes: z.string().nullable(),
     photo_url: z.string().nullable(),
-    updated_at: z.iso.datetime()
+    updated_at: z.iso.datetime(),
+    username: z.string()
 });
 
 /**

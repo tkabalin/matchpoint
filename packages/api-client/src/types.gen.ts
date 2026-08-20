@@ -438,6 +438,10 @@ export type PlayerRead = {
      * Updated At
      */
     updated_at: string;
+    /**
+     * Username
+     */
+    username: string;
 };
 
 /**

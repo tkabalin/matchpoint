@@ -185,7 +185,11 @@ def verify_reset_code(
 def make_player(session: Session, **overrides: Any) -> Player:
     if "coach_id" not in overrides:
         overrides["coach_id"] = make_coach(session).id
-    player = Player(**{"first_name": "Test", "last_name": "Player"} | overrides)
+    # Unique per call, since the column is. Six letters then digits, the shape
+    # next_username's max-suffix query parses, under a prefix no real name folds to.
+    username = f"tesfac{uuid.uuid4().int % 1_000_000_000:09d}"
+    defaults = {"first_name": "Test", "last_name": "Player", "username": username}
+    player = Player(**defaults | overrides)
     session.add(player)
     session.flush()
     return player

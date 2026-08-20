@@ -34,6 +34,11 @@ class Player(Base):
     # "van der Merwe" and "Alcaraz Garfia" both defeat splitting on the last space.
     first_name: Mapped[str] = mapped_column(String(100))
     last_name: Mapped[str] = mapped_column(String(100))
+    # The player's sign-in identifier, minted by the server (usernames.py) and never
+    # chosen by a client: six letters folded from the name plus a number from 001, the
+    # student-number shape. Always stored lowercase, so login can fold what was typed.
+    # String(20) leaves the number room the format can widen into past 999.
+    username: Mapped[str] = mapped_column(String(20), unique=True)
     # Everything past the name is nullable: player profiles must be quick to set
     # up, so nothing beyond the two name parts is required.
     date_of_birth: Mapped[date | None] = mapped_column(Date)

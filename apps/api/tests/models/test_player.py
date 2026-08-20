@@ -20,6 +20,7 @@ def test_player_round_trips(db_session: Session) -> None:
     player = Player(
         first_name="Serena",
         last_name="Williams",
+        username="wllser001",
         dominant_hand=DominantHand.RIGHT,
         gender=Gender.FEMALE,
         notes="Second serve sits up under pressure.",
@@ -32,6 +33,7 @@ def test_player_round_trips(db_session: Session) -> None:
     assert saved is not None
     assert saved.first_name == "Serena"
     assert saved.last_name == "Williams"
+    assert saved.username == "wllser001"
     assert saved.dominant_hand is DominantHand.RIGHT
     assert saved.gender is Gender.FEMALE
     assert saved.notes == "Second serve sits up under pressure."
@@ -46,7 +48,12 @@ def test_player_round_trips(db_session: Session) -> None:
 def test_committed_rows_do_not_leak_between_tests_a(db_session: Session) -> None:
     assert _player_count(db_session) == 0
     db_session.add(
-        Player(first_name="Iga", last_name="Swiatek", coach_id=make_coach(db_session).id)
+        Player(
+            first_name="Iga",
+            last_name="Swiatek",
+            username="swtiga001",
+            coach_id=make_coach(db_session).id,
+        )
     )
     db_session.commit()
     assert _player_count(db_session) == 1
@@ -55,7 +62,12 @@ def test_committed_rows_do_not_leak_between_tests_a(db_session: Session) -> None
 def test_committed_rows_do_not_leak_between_tests_b(db_session: Session) -> None:
     assert _player_count(db_session) == 0
     db_session.add(
-        Player(first_name="Carlos", last_name="Alcaraz", coach_id=make_coach(db_session).id)
+        Player(
+            first_name="Carlos",
+            last_name="Alcaraz",
+            username="alccar001",
+            coach_id=make_coach(db_session).id,
+        )
     )
     db_session.commit()
     assert _player_count(db_session) == 1
@@ -65,7 +77,12 @@ def test_only_the_name_parts_and_the_owner_are_required(db_session: Session) -> 
     """Profile setup has to be fast, so every column a coach could type is nullable
     past the two name parts. coach_id is required too, but costs nothing at the
     keyboard — the route fills it from the session, never from the form."""
-    player = Player(first_name="Iga", last_name="Swiatek", coach_id=make_coach(db_session).id)
+    player = Player(
+        first_name="Iga",
+        last_name="Swiatek",
+        username="swtiga001",
+        coach_id=make_coach(db_session).id,
+    )
     db_session.add(player)
     db_session.commit()
 
@@ -83,11 +100,13 @@ def test_created_at_differs_between_rows_in_one_transaction(db_session: Session)
     claim the same creation time.
     """
     coach = make_coach(db_session)
-    first = Player(first_name="Iga", last_name="Swiatek", coach_id=coach.id)
+    first = Player(first_name="Iga", last_name="Swiatek", username="swtiga001", coach_id=coach.id)
     db_session.add(first)
     db_session.commit()
 
-    second = Player(first_name="Carlos", last_name="Alcaraz", coach_id=coach.id)
+    second = Player(
+        first_name="Carlos", last_name="Alcaraz", username="alccar001", coach_id=coach.id
+    )
     db_session.add(second)
     db_session.commit()
 
@@ -95,7 +114,12 @@ def test_created_at_differs_between_rows_in_one_transaction(db_session: Session)
 
 
 def test_updated_at_advances_when_a_row_changes(db_session: Session) -> None:
-    player = Player(first_name="Serena", last_name="Williams", coach_id=make_coach(db_session).id)
+    player = Player(
+        first_name="Serena",
+        last_name="Williams",
+        username="wllser001",
+        coach_id=make_coach(db_session).id,
+    )
     db_session.add(player)
     db_session.commit()
     first_written = player.updated_at
@@ -159,6 +183,9 @@ def _insert_raw_player(session: Session, **columns: object) -> None:
         "id": uuid.uuid4(),
         "first_name": "Rafa",
         "last_name": "Nadal",
+        # Unique per call like the factory's, since most of these tests are about
+        # the other constraints.
+        "username": f"ndlraf{uuid.uuid4().int % 1_000_000_000:09d}",
         "dominant_hand": None,
         "gender": None,
     }
@@ -166,8 +193,9 @@ def _insert_raw_player(session: Session, **columns: object) -> None:
         values["coach_id"] = make_coach(session).id
     session.execute(
         text(
-            "INSERT INTO players (id, first_name, last_name, dominant_hand, gender, coach_id) "
-            "VALUES (:id, :first_name, :last_name, :dominant_hand, :gender, :coach_id)"
+            "INSERT INTO players (id, first_name, last_name, username, dominant_hand, gender, "
+            "coach_id) VALUES (:id, :first_name, :last_name, :username, :dominant_hand, :gender, "
+            ":coach_id)"
         ),
         values | columns,
     )
@@ -203,6 +231,30 @@ def test_database_rejects_a_name_over_the_column_width(db_session: Session, fiel
     would first surface as a 500 in production."""
     with pytest.raises(DataError):
         _insert_raw_player(db_session, **{field: "x" * 101})
+
+
+def test_database_requires_a_username(db_session: Session) -> None:
+    """The username is the player's sign-in identifier, minted by the server for every
+    row; the migration backfilled the ones that predate it, so none is ever null."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_player(db_session, username=None)
+
+
+def test_database_rejects_a_duplicate_username(db_session: Session) -> None:
+    """The unique constraint is what makes the create route's retry loop safe: two
+    concurrent creates of namesakes must leave one loser, never two owners of a name."""
+    _insert_raw_player(db_session, username="ndlraf001")
+
+    with pytest.raises(IntegrityError):
+        _insert_raw_player(db_session, username="ndlraf001")
+
+
+def test_database_rejects_a_username_over_the_column_width(db_session: Session) -> None:
+    """String(20) claims six letters plus room for the number to widen past 999.
+    Fourteen digits of namesakes is a bound nothing will meet; the test pins that the
+    width exists, not where it sits."""
+    with pytest.raises(DataError):
+        _insert_raw_player(db_session, username="ndlraf" + "1" * 15)
 
 
 def test_database_requires_an_owner(db_session: Session) -> None:

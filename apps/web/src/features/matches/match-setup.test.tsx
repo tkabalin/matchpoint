@@ -18,6 +18,7 @@ const player: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000001",
   first_name: "Amahle",
   last_name: "Nkosi",
+  username: "nksama001",
   date_of_birth: null,
   dominant_hand: null,
   gender: null,

@@ -19,6 +19,7 @@ const transferredPlayer: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000002",
   first_name: "Sipho",
   last_name: "Dlamini",
+  username: "dlmsip001",
   date_of_birth: null,
   dominant_hand: null,
   gender: null,

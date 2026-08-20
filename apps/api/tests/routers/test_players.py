@@ -5,12 +5,15 @@ from pathlib import Path
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.errors import NotNullViolation, UniqueViolation
 from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
 from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode, Point
+from matchpoint_api.routers import players as players_module
 from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
 from matchpoint_api.routers.players import (
     ALREADY_OWNED,
@@ -127,6 +130,82 @@ def test_create_player_cannot_set_coach_id(
 
     assert response.status_code == 422
     assert db_session.scalar(select(func.count()).select_from(Player)) == 0
+
+
+@pytest.mark.usefixtures("coach")
+def test_create_player_mints_the_username_and_numbers_namesakes(client: TestClient) -> None:
+    """The username is the player's sign-in identifier, so the coach learns it here:
+    the create response is the only place it is ever presented as new."""
+    first = client.post("/players", json=_payload())
+    second = client.post("/players", json=_payload())
+
+    assert first.json()["username"] == "wllser001"
+    assert second.json()["username"] == "wllser002"
+
+
+def test_create_player_numbers_past_usernames_minted_before_this_request(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The number comes off the table, not this request's memory: rows backfilled by
+    the migration or created by another coach count the same as this coach's own."""
+    make_player(db_session, username="wllser001", coach_id=make_coach(db_session).id)
+    db_session.commit()
+
+    response = client.post("/players", json=_payload())
+
+    assert response.json()["username"] == "wllser002"
+
+
+def test_create_player_retries_when_a_concurrent_create_takes_the_username(
+    client: TestClient, db_session: Session, coach: Coach, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two creates of namesakes can both compute the same number; the loser must mint
+    the next one rather than surface the collision. The race itself needs two
+    interleaved transactions, so the first computation is doctored to the taken value
+    and the second left to do what the loser's retry really does."""
+    make_player(db_session, username="wllser001")
+    db_session.commit()
+    real = players_module.next_username
+    minted = iter(["wllser001"])
+    monkeypatch.setattr(
+        players_module,
+        "next_username",
+        lambda db, first, last: next(minted, None) or real(db, first, last),
+    )
+
+    response = client.post("/players", json=_payload())
+
+    assert response.status_code == 201
+    assert response.json()["username"] == "wllser002"
+
+
+def test_create_player_gives_up_after_three_username_collisions(
+    client: TestClient, db_session: Session, coach: Coach, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bound exists so a bug that always computes a taken name cannot loop; past
+    it the violation surfaces as the server error it is, not as a 409 blaming the
+    coach's choice of name, and there was no choice."""
+    make_player(db_session, username="wllser001")
+    db_session.commit()
+    monkeypatch.setattr(players_module, "next_username", lambda db, first, last: "wllser001")
+
+    with pytest.raises(IntegrityError) as caught:
+        client.post("/players", json=_payload())
+
+    assert isinstance(caught.value.orig, UniqueViolation)
+
+
+def test_create_player_re_raises_an_integrity_error_that_is_not_the_username(
+    client: TestClient, db_session: Session, coach: Coach, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only the unique username is retried. Any other integrity failure is a bug, and
+    retrying it would run the same bug three times before surfacing it anyway."""
+    monkeypatch.setattr(players_module, "next_username", lambda db, first, last: None)
+
+    with pytest.raises(IntegrityError) as caught:
+        client.post("/players", json=_payload())
+
+    assert isinstance(caught.value.orig, NotNullViolation)
 
 
 @pytest.mark.usefixtures("coach")

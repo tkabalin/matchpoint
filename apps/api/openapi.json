@@ -889,12 +889,17 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "first_name",
           "last_name",
+          "username",
           "date_of_birth",
           "dominant_hand",
           "gender",

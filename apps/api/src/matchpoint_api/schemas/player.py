@@ -75,6 +75,10 @@ class PlayerRead(BaseModel):
     id: uuid.UUID
     first_name: str
     last_name: str
+    # Server-minted at creation and absent from Create and Update alike: it is the
+    # player's sign-in identifier, so the coach reads it here to hand it over, and a
+    # client choosing or changing one would be choosing who the player signs in as.
+    username: str
     date_of_birth: date | None
     dominant_hand: DominantHand | None
     gender: Gender | None

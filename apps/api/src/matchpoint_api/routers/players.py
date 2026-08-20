@@ -2,8 +2,10 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from psycopg.errors import UniqueViolation
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
@@ -18,6 +20,7 @@ from matchpoint_api.schemas.player import (
     PlayerUpdate,
     RedeemTransferCodeRequest,
 )
+from matchpoint_api.usernames import next_username
 
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
@@ -63,13 +66,33 @@ def owned_player(
 
 @router.post("", status_code=201, response_model=PlayerRead)
 def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Player:
-    # PlayerCreate carries exactly the client-settable columns, which is what makes
-    # the splat safe: coach_id is not on it and so cannot be set here. Ownership comes
-    # from the session instead, never from the body.
-    player = Player(**data.model_dump(), coach_id=coach.id)
-    db.add(player)
-    db.commit()
-    return player
+    # Two concurrent creates of namesakes can both read the same highest number and
+    # mint the same username; the unique constraint makes one the loser, which
+    # recomputes and retries. Three attempts, because each further round needs yet
+    # another simultaneous winner. On the last, the violation is re-raised: a 409
+    # would tell the coach the name is the problem, and it is not.
+    for attempt in range(3):
+        # PlayerCreate carries exactly the client-settable columns, which is what makes
+        # the splat safe: coach_id is not on it and so cannot be set here. Ownership
+        # comes from the session instead, never from the body.
+        player = Player(
+            **data.model_dump(),
+            coach_id=coach.id,
+            username=next_username(db, data.first_name, data.last_name),
+        )
+        db.add(player)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            # username is the one unique constraint a route-built row can trip, the id
+            # being minted server-side, so no constraint-name match is needed. Anything
+            # else is a bug this must not dress up as a retryable collision.
+            if not isinstance(exc.orig, UniqueViolation) or attempt == 2:
+                raise
+        else:
+            return player
+    raise AssertionError("unreachable: the last attempt re-raises")  # pragma: no cover
 
 
 @router.get("", response_model=list[PlayerRead])
