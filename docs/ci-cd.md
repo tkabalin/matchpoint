@@ -97,20 +97,25 @@ A green `main` pipeline continues into three more stages:
 1. **Build** — both images are built on the runner against the host Docker daemon (so the layer
    cache persists between runs), tagged with the commit short SHA, and uploaded as `docker save`
    tarballs to the project's generic package registry using the pipeline-scoped job token — no
-   stored registry secret. The GitLab container registry isn't used: its port is firewalled to
-   campus-internal traffic, so an off-campus runner or VPS can't reach it, while the package
-   registry rides the normal HTTPS port. That choice comes with the retention problem the container
-   registry would have solved: the generic registry has no cleanup policy of its own, so the
-   pipeline prunes it to the newest 10 image packages itself. The runner host's own tags need the
-   same treatment for the same reason a rolled VPS does — an immutable per-commit tag is never
-   dangling, so nothing reclaims it — and each build bounds its image to the newest few tags, which
-   is all the layer cache needs.
+   stored registry secret. The upload retries a few times on its own, since concurrent builds can
+   collide on the registry's find-or-create. The GitLab container registry isn't used: its port is
+   firewalled to campus-internal traffic, so an off-campus runner or VPS can't reach it, while the
+   package registry rides the normal HTTPS port. That choice comes with the retention problem the
+   container registry would have solved: the generic registry has no cleanup policy of its own, so
+   the pipeline prunes it to the newest 10 image packages itself, using a scoped access token whose
+   authority doesn't depend on who triggered the pipeline. The runner host's own tags need the same
+   treatment for the same reason a rolled VPS does: an immutable per-commit tag is never dangling,
+   so nothing reclaims it, and each build bounds its image to the newest few tags, which is all the
+   layer cache needs.
 2. **Deploy** — the pipeline SSHes to the VPS and hands over the SHA tag. The key it holds is bound
    to a forced command, so it can run `/opt/matchpoint/deploy.sh` and nothing else; the script
    downloads and `docker load`s the tarball for that SHA (using a read-only deploy token, skipping
    the download if the tag is already loaded locally), runs Alembic migrations as a one-shot (a
    failure aborts the deploy and leaves the previous containers running), brings the stack up, and
-   records the tag only once that has all worked.
+   records the tag only once that has all worked. A migration that could destructively affect
+   existing rows relies on a manual pre-deploy data check named in the MR's manual steps rather than
+   reconciling those rows inside the migration itself, which would tie a schema change to a one-off
+   cleanup it has no lasting reason to carry.
 3. **Verify** — the pipeline then asks production the way a browser would, over the public name and
    through Cloudflare: `/api/health` until it names the commit just deployed, then the app shell.
    `deploy.sh` returns when compose has _started_ the containers, which is a weaker claim than the
