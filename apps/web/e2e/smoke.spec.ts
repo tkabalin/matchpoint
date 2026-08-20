@@ -81,6 +81,19 @@ test.describe("signed in", () => {
   test("loads settings at /settings", async ({ page }) => {
     await page.goto("/settings");
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Sign Out" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sign Out", exact: true })).toBeVisible();
+  });
+
+  // Vitest's own settings tests build an in-memory route tree per file, so they
+  // never exercise the real file-based one in routeTree.gen.ts — this is the one
+  // check that would have caught #178's category routes resolving to an implicit
+  // layout route with no <Outlet/>, silently re-rendering the Settings root instead
+  // of navigating anywhere.
+  test("drills into a settings category and back", async ({ page }) => {
+    await page.goto("/settings");
+    await page.getByRole("link", { name: "Account & Security" }).click();
+    await expect(page.getByRole("heading", { name: "Account & Security" })).toBeVisible();
+    await page.getByRole("link", { name: "Back to settings" }).click();
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   });
 });
