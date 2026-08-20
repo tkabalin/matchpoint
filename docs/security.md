@@ -182,7 +182,9 @@ has a player on the roster, and the request can waive that refusal. The gate exi
 another coach is about to take over is not erased by accident, and the password is the whole of what
 stands between a stolen cookie and the erasure, waiver or not. The password is checked first for
 that reason, so nothing this route answers past the 401 reaches a caller who has not just proved who
-they are.
+they are. A live transfer code on any player refuses closure too, and that gate has no waiver: it is
+another coach's claim to redeem, not this coach's data to discard by asking to leave nothing behind
+(`docs/data-model.md`).
 
 **Deleting one player does not re-authenticate.** `DELETE /players/{id}` erases the player and their
 matches on the session alone. The password guards closure because closure destroys the credential
@@ -387,8 +389,12 @@ minting coach's to edit or clear beforehand, so the mint endpoint names them amo
 of 128 random bits. The alternative costs a session lookup and a database read per image, on pages
 that show a whole roster of them, to guard a cropped photograph rather than account data. What it
 does not do is expire: anyone handed a URL keeps it. Replacing or clearing a photo stores the new
-one under a new name and deletes the old file, so a URL that has been handed out dies with the photo
-it named rather than outliving it.
+one under a new name and deletes the old file after the row committing to the new one, so a URL that
+has been handed out dies with the photo it named rather than outliving it, except in the crash
+window between that commit and the unlink, the one case nothing here reclaims
+(`docs/data-model.md`). Serving checks only that the file exists, not that a row still names it, so
+a crash in that window leaves the old URL answering with a photo no row points to for as long as the
+file sits unremoved.
 
 **Re-encoding is the sanitiser.** Nothing that arrives is stored. Every upload is decoded and
 written out again at one fixed size, so the bytes served share nothing with the bytes submitted and
@@ -430,6 +436,10 @@ internals could reach a client instead: an exception message names tables, files
 Starlette's default 500 would carry whatever it says. A handler on `Exception` (`errors.py`) answers
 every one of them with the same static sentence, and attaches the request id that identifies the
 logged traceback, so a report is traceable by an id that discloses nothing.
+
+An exception this handler catches has already unwound past every ASGI middleware, including the one
+that stamps the security headers below, so it stamps that same header set itself rather than letting
+a crash answer with none of them. A crash is not a special case the headers skip.
 
 Declared error responses are unaffected: they are resolved before an exception reaches this handler.
 The one way past it is Starlette's debug mode, which is checked first and renders the traceback as a
