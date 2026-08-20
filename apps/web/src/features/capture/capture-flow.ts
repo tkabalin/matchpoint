@@ -180,14 +180,14 @@ function withServe(draft: PointDraft, attempt: ServeAttempt): PointDraft {
   return { ...draft, serves: [...draft.serves, attempt] };
 }
 
-// The two endings with no rally at all — the flow layer defaults rallyLengthBucket to
-// the shortest bucket here rather than asking, since there was nothing to ask about.
+// The endings with no rally at all — the flow layer defaults rallyLengthBucket to the
+// shortest bucket here rather than asking, since there was nothing to ask about.
 // Point.create itself never does this (see point.ts) — it's this module's rule, not a
 // stored invariant, and deliberately doesn't extend to UNUSUAL (see TAP_UNUSUAL_REASON).
 function readyDraft(
   draft: PointDraft,
   won: boolean,
-  endReason: "ACE" | "DOUBLE_FAULT",
+  endReason: "ACE" | "DOUBLE_FAULT" | "FORCED" | "MISTAKE",
 ): PointDraft {
   return { ...draft, won, endReason, rallyLengthBucket: "B1" };
 }
@@ -321,17 +321,16 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
         if (action.endReason === undefined) {
           throw new Error("TAP_RETURN requires endReason when the return errored");
         }
-        // Our player's return missed — the opponent wins the point. Contact was
-        // made (the return was attempted), so this still routes through shot detail
-        // and ball location like any other contact-ending point, not the no-rally
-        // shortcut ACE/DOUBLE_FAULT get.
-        const nextDraft: PointDraft = {
-          ...withServeIn,
-          returnOutcome: action.outcome,
-          won: false,
-          endReason: action.endReason,
-        };
-        return advance(state, { name: "SHOT_DETAIL" }, nextDraft);
+        // Our player's return missed — the opponent wins the point. returnOutcome
+        // already says where it went (net/wide/long), so this takes the same no-rally
+        // shortcut as ACE/DOUBLE_FAULT rather than asking shot detail and ball location
+        // for a fact already captured.
+        const nextDraft = readyDraft(
+          { ...withServeIn, returnOutcome: action.outcome },
+          false,
+          action.endReason,
+        );
+        return advance(state, { name: "READY" }, nextDraft);
       }
       throw invalidAction(action, step);
     }

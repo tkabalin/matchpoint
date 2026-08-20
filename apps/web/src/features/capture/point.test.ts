@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 
 import { Point } from "./point";
 
-// wing/shotType/ballIn/ballLocation must all be null on ACE/DOUBLE_FAULT/UNUSUAL points —
-// spread this into pointData()'s overrides for any test building one of those.
+// wing/shotType/ballIn/ballLocation must all be null on ACE/DOUBLE_FAULT/UNUSUAL points and
+// on return-error points — spread this into pointData()'s overrides for any test building one.
 const NO_CONTACT = { wing: null, shotType: null, ballIn: null, ballLocation: null };
 
 /** A minimal, valid raw Point payload — override just the fields a test cares about. */
@@ -37,6 +37,19 @@ function doubleFaultData(overrides: Record<string, unknown> = {}) {
       { number: 2, outcome: "FAULT", location: "LONG" },
     ],
     endReason: "DOUBLE_FAULT",
+    won: false,
+    ...NO_CONTACT,
+    ...overrides,
+  });
+}
+
+/** A minimal, valid return-error point payload — opponent served, our return missed. */
+function returnErrorData(overrides: Record<string, unknown> = {}) {
+  return pointData({
+    server: "OPPONENT",
+    serves: [{ number: 1, outcome: "IN", location: null }],
+    returnOutcome: "NET",
+    endReason: "MISTAKE",
     won: false,
     ...NO_CONTACT,
     ...overrides,
@@ -227,6 +240,16 @@ describe("Point.create structural validation", () => {
         ),
       ).toThrow(/returnOutcome/);
     });
+
+    test.each(["NET", "LONG", "WIDE"] as const)(
+      "accepts a %s returnOutcome — the point ends on the return, no contact fields",
+      (outcome) => {
+        const point = Point.create(returnErrorData({ returnOutcome: outcome }));
+        expect(point.returnOutcome).toBe(outcome);
+        expect(point.wing).toBeNull();
+        expect(point.ballLocation).toBeNull();
+      },
+    );
   });
 
   test("rejects a non-boolean won", () => {
@@ -320,6 +343,12 @@ describe("Point.create structural validation", () => {
         ).toThrow(/wing and shotType must be null/);
       },
     );
+
+    test("rejects a non-null wing/shotType on a return-error point", () => {
+      expect(() => Point.create(returnErrorData({ wing: "FOREHAND", shotType: "DRIVE" }))).toThrow(
+        /wing and shotType must be null/,
+      );
+    });
   });
 
   describe("ballIn / ballLocation", () => {
@@ -381,6 +410,12 @@ describe("Point.create structural validation", () => {
         ).toThrow(/ballIn and ballLocation must be null/);
       },
     );
+
+    test("rejects a non-null ballIn/ballLocation on a return-error point", () => {
+      expect(() => Point.create(returnErrorData({ ballIn: false, ballLocation: "NET" }))).toThrow(
+        /ballIn and ballLocation must be null/,
+      );
+    });
   });
 
   describe("rallyLengthBucket", () => {

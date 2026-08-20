@@ -20,9 +20,6 @@
 export type Server = "TRACKED" | "OPPONENT";
 export const SERVERS: readonly Server[] = ["TRACKED", "OPPONENT"];
 
-export type ReturnOutcome = "IN" | "ERROR_NET" | "ERROR_OUT";
-export const RETURN_OUTCOMES: readonly ReturnOutcome[] = ["IN", "ERROR_NET", "ERROR_OUT"];
-
 // FORCED covers what standard tennis calls a winner as well as a classic forced error —
 // the ball was unreachable either way. MISTAKE is a reachable ball missed anyway. The
 // line is drawn at reachability, not at racket contact.
@@ -73,6 +70,11 @@ export const SERVE_TARGETS: readonly ServeTarget[] = ["WIDE", "BODY", "T"];
 
 export type FailureMode = "NET" | "LONG" | "WIDE";
 export const FAILURE_MODES: readonly FailureMode[] = ["NET", "LONG", "WIDE"];
+
+// A missed return carries its own placement — no separate ballLocation capture, see
+// Point.create's isReturnError check below.
+export type ReturnOutcome = "IN" | FailureMode;
+export const RETURN_OUTCOMES: readonly ReturnOutcome[] = ["IN", ...FAILURE_MODES];
 
 export type CourtDepth = "SHORT" | "MID" | "DEEP";
 export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "MID", "DEEP"];
@@ -170,8 +172,8 @@ export class Point {
   // Unusual points only — null otherwise, and optional even on one.
   readonly unusualReason: UnusualReason | null;
   readonly unusualNote: string | null;
-  // Null when there was no contact, or on ACE / DOUBLE_FAULT / UNUSUAL. Describes
-  // whichever player hit last — see lastShotPlayer.
+  // Null on ACE / DOUBLE_FAULT / UNUSUAL (no contact) and on a return error (returnOutcome
+  // already describes it). Otherwise describes whichever player hit last — see lastShotPlayer.
   readonly wing: Wing | null;
   readonly shotType: ShotType | null;
   readonly ballIn: boolean | null;
@@ -331,13 +333,21 @@ export class Point {
     }
     const unusualNote = data.unusualNote as string | null;
 
-    // No contact happened for these three — nothing to describe.
+    // ACE/DOUBLE_FAULT/UNUSUAL never had a shot to describe. A missed return did have
+    // contact, but returnOutcome already says where it went — asking wing/shotType/
+    // ballLocation again would just recapture the same fact under a second name.
+    const isReturnError = returnOutcome !== null && returnOutcome !== "IN";
     const noContact =
-      endReason === "ACE" || endReason === "DOUBLE_FAULT" || endReason === "UNUSUAL";
+      endReason === "ACE" ||
+      endReason === "DOUBLE_FAULT" ||
+      endReason === "UNUSUAL" ||
+      isReturnError;
 
     if (noContact) {
       if (data.wing !== null || data.shotType !== null) {
-        throw new Error("wing and shotType must be null for ACE, DOUBLE_FAULT, and UNUSUAL points");
+        throw new Error(
+          "wing and shotType must be null for ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
+        );
       }
     } else {
       const wingSet = data.wing !== null;
@@ -358,7 +368,7 @@ export class Point {
     if (noContact) {
       if (data.ballIn !== null || data.ballLocation !== null) {
         throw new Error(
-          "ballIn and ballLocation must be null for ACE, DOUBLE_FAULT, and UNUSUAL points",
+          "ballIn and ballLocation must be null for ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
         );
       }
     } else if (typeof data.ballIn !== "boolean") {

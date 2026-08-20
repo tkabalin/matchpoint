@@ -141,21 +141,21 @@ describe("serve — opponent", () => {
     expect(state.draft.returnOutcome).toBeNull();
   });
 
-  test("return error → SHOT_DETAIL, not the no-rally shortcut — the return was contact", () => {
+  test("return error → READY, the no-rally shortcut — returnOutcome already says where it went", () => {
     const state = transition(startOpponent(), {
       type: "TAP_RETURN",
-      outcome: "ERROR_NET",
+      outcome: "NET",
       endReason: "MISTAKE",
     });
-    expect(state.step).toEqual({ name: "SHOT_DETAIL" });
-    expect(state.draft.returnOutcome).toBe("ERROR_NET");
+    expect(state.step).toEqual({ name: "READY" });
+    expect(state.draft.returnOutcome).toBe("NET");
     expect(state.draft.won).toBe(false);
     expect(state.draft.endReason).toBe("MISTAKE");
-    expect(state.draft.rallyLengthBucket).toBeNull(); // not auto-filled, unlike ACE/DOUBLE_FAULT
+    expect(state.draft.rallyLengthBucket).toBe("B1"); // auto-filled, same as ACE/DOUBLE_FAULT
   });
 
   test("rejects a return error with no endReason — forced vs mistake must be chosen", () => {
-    expect(() => transition(startOpponent(), { type: "TAP_RETURN", outcome: "ERROR_OUT" })).toThrow(
+    expect(() => transition(startOpponent(), { type: "TAP_RETURN", outcome: "WIDE" })).toThrow(
       /requires endReason/,
     );
   });
@@ -410,6 +410,22 @@ describe("commitDraft", () => {
     for (const draft of cases) {
       expect(() => commitDraft(draft, "point-1", 1_700_000_000_000)).not.toThrow();
     }
+  });
+
+  test("a return error reached via transition() commits — the no-rally shortcut is a real Point", () => {
+    const state = transition(startOpponent(), {
+      type: "TAP_RETURN",
+      outcome: "WIDE",
+      endReason: "FORCED",
+    });
+    expect(state.step).toEqual({ name: "READY" });
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    expect(point.returnOutcome).toBe("WIDE");
+    expect(point.won).toBe(false);
+    expect(point.endReason).toBe("FORCED");
+    expect(point.rallyLengthBucket).toBe("B1");
+    expect(point.wing).toBeNull();
+    expect(point.ballLocation).toBeNull();
   });
 
   test("a broken draft (READY reached with no endReason) throws via Point.create, not silently", () => {
