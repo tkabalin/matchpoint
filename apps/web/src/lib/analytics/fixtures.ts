@@ -35,8 +35,8 @@ export const PLAYER_OVERVIEW: PlayerOverview = {
   recentResults: ["win", "win", "loss", "win", "win"],
   holdPercentage: percent("Hold %", 72, "n=14", 68, 4),
   returnGamesWon: percent("Return games won %", 31, "n=14", 33, -2),
-  winnerToUnforced: {
-    label: "Winner : UE ratio",
+  forcedToUnforced: {
+    label: "Forced : Unforced ratio",
     value: 1.4,
     unit: "ratio",
     sampleSize: "n=14",
@@ -112,7 +112,7 @@ export const SERVE_STATS: ServeStats = {
 
 export const RALLY_STATS: RallyStats = {
   hero: {
-    label: "Winner : UE ratio",
+    label: "Forced : Unforced ratio",
     value: 1.4,
     unit: "ratio",
     sampleSize: "n=14",
@@ -132,18 +132,18 @@ export const RALLY_STATS: RallyStats = {
     { label: "Forehand", value: 9, secondaryValue: 3, max: 20 },
   ],
   outcomeMix: [
-    { label: "You", winners: 42, forcedErrors: 18, unforcedErrors: 40 },
-    { label: "Opponents", winners: 35, forcedErrors: 15, unforcedErrors: 50 },
+    { label: "You", forced: 60, unforcedErrors: 40 },
+    { label: "Opponents", forced: 50, unforcedErrors: 50 },
   ],
   errorsUnderPressure: percent("Errors under pressure (BP)", 44, "n=9", 29, 15, false),
   errorsOverall: percent("Errors overall", 29, "n=112", null, null, false),
+  // The four stored shot types (#175): wing x type is what capture keeps, smash
+  // folded into volley, so the radar has no overhead or slice axis to draw (#206).
   shotFrequency: [
-    { shot: "Forehand", share: 0.58 },
-    { shot: "Backhand", share: 0.42 },
+    { shot: "Drive", share: 0.58 },
     { shot: "Volley", share: 0.22 },
-    { shot: "Overhead", share: 0.09 },
-    { shot: "Slice", share: 0.31 },
     { shot: "Drop shot", share: 0.06 },
+    { shot: "Lob", share: 0.14 },
   ],
 };
 
@@ -162,7 +162,7 @@ export function trendStatsFor(window: TrendWindow): TrendStats {
       percent("Hold %", 72, n, 68, 4),
       percent("Return games won %", 31, n, 33, -2),
       {
-        label: "Winner:UE ratio",
+        label: "Forced:Unforced ratio",
         value: 1.4,
         unit: "ratio",
         sampleSize: n,
@@ -248,7 +248,7 @@ export const HEAD_TO_HEAD_DETAIL: HeadToHeadDetail = {
     { label: "BP conv", first: 32, last: 48 },
     // Scaled onto the same 0–100 axis as the other two so one chart can carry all
     // three: the underlying ratio runs 1.0 → 1.6 on a 0–3 scale.
-    { label: "W:UE", first: 33, last: 53 },
+    { label: "F:UE", first: 33, last: 53 },
   ],
   lossPatterns: [
     { label: "Late-set fade", value: 1, max: 1 },

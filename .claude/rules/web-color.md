@@ -123,8 +123,8 @@ categorical distinction on the dashboard that isn't a point outcome.
 
 ### Per-chart assignment
 
-- **Shot-type radar** — single color per series, not per axis. The five shot types (forehand,
-  backhand, volley, overhead, serve) are axis labels only, never separate colors.
+- **Shot-type radar** — single color per series, not per axis. The four stored shot types (drive,
+  volley, drop shot, lob: #175's final list) are axis labels only, never separate colors.
   - Single player view: one neutral/nav color.
   - H2H overlay (player vs. opponent): two colors, one per player, from the safe non-outcome set
     (e.g. blue vs. violet).
@@ -132,8 +132,8 @@ categorical distinction on the dashboard that isn't a point outcome.
   neutral. No categorical color needed.
 - **Trends — journal correlation panel** (binary tag comparison) — 2 colors from the safe
   non-outcome set (e.g. yellow vs. violet).
-- **H2H — slope graph** (hold %, BP-conversion %, winner:UE — 3 lines) — 3 colors from the safe
-  non-outcome set (e.g. yellow, indigo, violet). Avoid blue here specifically — nav chrome is
+- **H2H — slope graph** (hold %, BP-conversion %, forced:unforced — 3 lines) — 3 colors from the
+  safe non-outcome set (e.g. yellow, indigo, violet). Avoid blue here specifically — nav chrome is
   visible on this screen.
 - **H2H — segmented control** (aggregate vs. per-match) — active state uses nav blue, inactive uses
   neutral gray. No categorical color needed.

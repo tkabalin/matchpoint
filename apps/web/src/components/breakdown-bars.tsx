@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * A labelled quantity per row, drawn against a ceiling shared across the group —
- * winners by shot type, how losses arrive, and so on.
+ * points won by final shot, how losses arrive, and so on.
  *
  * A shared ceiling rather than per-row normalisation is the whole point: rows are
  * there to be compared with each other, and scaling each to its own width would

@@ -53,7 +53,7 @@ export function OverviewTab({
         <BulletBar {...metricToBullet(data.returnGamesWon)} />
       </DrillDown>
       <DrillDown onClick={() => onOpenTab("rally")}>
-        <BulletBar {...metricToBullet(data.winnerToUnforced)} />
+        <BulletBar {...metricToBullet(data.forcedToUnforced)} />
       </DrillDown>
 
       <StatCard title="Win/loss record">

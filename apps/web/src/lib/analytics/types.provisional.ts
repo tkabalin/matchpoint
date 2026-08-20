@@ -60,7 +60,7 @@ export interface PlayerOverview {
   recentResults: MatchOutcome[];
   holdPercentage: Metric;
   returnGamesWon: Metric;
-  winnerToUnforced: Metric;
+  forcedToUnforced: Metric;
   seasonRecord: WinLossRecord;
   allTimeRecord: WinLossRecord;
   highlights: Highlight[];
@@ -73,10 +73,12 @@ export interface ServeStats {
   returning: { hero: Metric; coachNote: string; metrics: Metric[]; breakdown: BreakdownRow[] };
 }
 
+// One `forced` figure, not winners plus forced errors: capture deliberately records
+// no distinction between a clean winner and a forced error (#175), so a split here
+// would bake in numbers no point can ever supply (#206).
 export interface OutcomeMix {
   label: string;
-  winners: number;
-  forcedErrors: number;
+  forced: number;
   unforcedErrors: number;
 }
 

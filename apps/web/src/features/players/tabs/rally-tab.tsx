@@ -10,9 +10,8 @@ import { getRallyStatsOptions } from "@/lib/analytics/analytics-options";
 import { metricToBullet } from "@/lib/analytics/format";
 
 const OUTCOME_LEGEND = [
-  { pattern: "win" as const, label: "Winner" },
-  { pattern: "forced" as const, label: "Forced err" },
-  { pattern: "unforced" as const, label: "Unforced err" },
+  { pattern: "forced" as const, label: "Forced" },
+  { pattern: "unforced" as const, label: "Unforced" },
 ];
 
 export function RallyTab({ playerId }: { playerId: string }) {
@@ -26,11 +25,13 @@ export function RallyTab({ playerId }: { playerId: string }) {
         <BulletBar {...metricToBullet(data.hero, { hero: true, coachNote: data.coachNote })} />
       </StatCard>
 
-      <StatCard title="Winners by shot type" note="Scoped to point-ending shot, not full rally log">
+      {/* Whose-shot rule (#175): on a win the stored shot is the player's own, on a
+          loss the opponent's, so these two cards describe different people's shots. */}
+      <StatCard title="Points won, by final shot" note="Your last shot on points you won">
         <BreakdownBars rows={data.winnersByShot} pattern="win" />
       </StatCard>
 
-      <StatCard title="Errors by shot type">
+      <StatCard title="Points lost, by opponent's shot" note="What beat you, or drew the error">
         <BreakdownBars
           rows={data.errorsByShot}
           pattern="unforced"
@@ -49,12 +50,7 @@ export function RallyTab({ playerId }: { playerId: string }) {
             <OutcomeStack
               className="mt-1"
               segments={[
-                { pattern: "win", weight: mix.winners, label: `${mix.winners}% winners` },
-                {
-                  pattern: "forced",
-                  weight: mix.forcedErrors,
-                  label: `${mix.forcedErrors}% forced errors`,
-                },
+                { pattern: "forced", weight: mix.forced, label: `${mix.forced}% forced` },
                 {
                   pattern: "unforced",
                   weight: mix.unforcedErrors,
