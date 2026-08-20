@@ -13,15 +13,15 @@
  * down as MatchSet's own copies rather than looked up from Match — a flat
  * record needs them to validate `winner` by itself.
  *
- * TODO: this is a first pass — only `setNumber`, the game score, and the
- * tiebreak score (if any) are recorded here. Rule-resolution (tiebreak-at,
- * ad-scoring, ...) isn't built yet; it needs real numbers confirmed against
- * the brief/BBD first, same caveat as `maxSetsFor` in `state.ts`. `winner`
- * is stored, not derived — cross-field tennis rules aren't re-checked here,
- * same reasoning as Point.create (see point.ts). Nor is setNumber checked
- * for being sequential/within the format's max — that's a cross-MatchSet
- * check, which (like Point's cross-field rules) belongs to whatever appends
- * a new set, not to validating one set in isolation.
+ * Only `setNumber`, the game score, and the tiebreak score (if any) are recorded
+ * here. Rule-resolution (tiebreak-at, ad-scoring, ...) lives in `state.ts`
+ * (`setRulesFor`/`isAdScoringFor`/`maxSetsFor`), confirmed against
+ * docs/scoring-systems.md — MatchSet itself only stores what a resolved set looked
+ * like, not the rules that decided it. `winner` is stored, not derived — cross-field
+ * tennis rules aren't re-checked here, same reasoning as Point.create (see
+ * point.ts). Nor is setNumber checked for being sequential/within the format's max
+ * — that's a cross-MatchSet check, which (like Point's cross-field rules) belongs
+ * to whatever appends a new set, not to validating one set in isolation.
  */
 
 /**

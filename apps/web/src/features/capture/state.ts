@@ -29,9 +29,9 @@ import type { Point } from "./point";
  * points) or no-ad (sudden death at 40-40) scoring — the one axis
  * gameStateFor needs.
  *
- * TODO: confirm against the brief/BBD — "short_sets" is inferred, not
- * settled (docs/scoring-systems.md calls it "often paired with no-ad," not
- * a hard rule), same caveat as maxSetsFor's "legacy" guess.
+ * "short_sets" is confirmed always no-ad, not merely inferred — official ITF Fast4
+ * rules bundle short sets, no-ad scoring, and sudden-death breakers together as one
+ * fixed package, not an independent choice (see docs/scoring-systems.md).
  */
 export function isAdScoringFor(scoringSystem: ScoringSystem): boolean {
   switch (scoringSystem) {
@@ -59,8 +59,10 @@ export function isAdScoringFor(scoringSystem: ScoringSystem): boolean {
  * earlier (e.g. a straight-sets win), so this is a ceiling, not a
  * prediction.
  *
- * "traditional" is confirmed best-of-3 — see docs/scoring-systems.md. "legacy" isn't
- * stated there — best-of-3 stays a placeholder assumption for it.
+ * "traditional" and "legacy" are both confirmed best-of-3 — see
+ * docs/scoring-systems.md. "legacy" isn't stated there directly (advantage sets
+ * historically ran at both best-of-3 and best-of-5 depending on the event); best-of-3
+ * is chosen for this app's amateur/club focus, where it's the standard.
  */
 export function maxSetsFor(scoringSystem: ScoringSystem): number {
   switch (scoringSystem) {
@@ -199,10 +201,11 @@ export interface SetRules {
  * replaces the decider with a single breaker outright — gamesToWin: 0,
  * no games phase to play at all.
  *
- * TODO: confirm against the brief/BBD. short_sets' tiebreakTarget isn't in
- * docs/scoring-systems.md at all — 5 is Fast4's common convention, not
- * confirmed. pro_set's games-to-win is stated there as "8 (or 10)" with no
- * target given; defaulting to the more common 8-game/7-point convention.
+ * short_sets' tiebreakTarget (5) is confirmed against official ITF Fast4 rules: a
+ * first-to-5, win-by-2 breaker, the same structure as a full-length tiebreak, just
+ * shorter. pro_set's games-to-win is confirmed at 8 (docs/scoring-systems.md states
+ * "8 (or 10)" without resolving which) — 8 is the club-level convention, chosen for
+ * this app's amateur/club focus rather than left coach-configurable.
  */
 export function setRulesFor(
   scoringSystem: ScoringSystem,

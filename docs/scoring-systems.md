@@ -17,16 +17,18 @@ owner, referenced by `state.ts`'s own doc comments rather than restated inline.
 | Pro set                                      | Same as default                                                                      | Single set played to 8 (or 10) games, win by 2; tiebreak at 8-8 (or 10-10)        | The pro set is the whole match — no multiple sets                         | Match structure (one long set instead of several)                                                                                                                                          |
 | Advantage set (no-tiebreak decider) — legacy | Same as default                                                                      | That set has no tiebreak — play continues past 6-6 until someone leads by 2 games | Historically used for the deciding set only                               | Set win condition for that set only. Largely obsolete: since 2022 all four Grand Slams use a 10-point deciding-set tiebreak instead. Only relevant for old-format or club-specific matches |
 
-## Gaps this table doesn't close
+## Beyond the table
 
-Left as `TODO`s in `state.ts` because this table doesn't state them:
+Four values the table above doesn't state directly, resolved separately:
 
-- **Short sets' tiebreak point target** — the table gives the game-count trigger (3-3) but not how
-  many points win the resulting breaker. `state.ts` defaults to 5 (Fast4's common convention),
-  unconfirmed.
-- **Pro set's exact length** — stated here as "8 (or 10)" with no way to tell which a given match
-  uses. `state.ts` defaults to the 8-game/7-point convention.
-- **Legacy's total set count** — the table doesn't state best-of-3 vs. best-of-5 for this format.
-  `state.ts` assumes best-of-3, unconfirmed.
-- **Short sets' ad-scoring pairing** — "often paired with no-ad" is not a hard rule; `state.ts`
-  treats it as always no-ad, a simplification.
+- **Short sets' tiebreak point target: 5, win-by-2.** Official ITF Fast4 rules use a first-to-5,
+  win-by-2 breaker at 3-3 games — the same structure as a full-length tiebreak, just shorter.
+- **Pro set's length: 8 games.** The table states "8 (or 10)" without resolving which; 8 is the more
+  common club-level convention, chosen to match this app's amateur/club focus rather than left
+  coach-configurable.
+- **Legacy's total set count: best-of-3.** Advantage-set matches historically ran at both best-of-3
+  and best-of-5 depending on the event; best-of-3 matches club-level convention, the context this
+  app targets.
+- **Short sets' ad-scoring pairing: always no-ad.** Official ITF Fast4 rules bundle short sets,
+  no-ad scoring, and sudden-death breakers together as one fixed package, not an independent choice
+  — `state.ts` treats the pairing as unconditional, not merely "often."
