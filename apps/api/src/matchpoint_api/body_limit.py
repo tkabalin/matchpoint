@@ -14,8 +14,9 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 # Sized from the largest legitimate body this API will ever take: a batch of points
-# from a full three-set match, ~400 points at ~250 bytes of JSON each, so ~100 KB.
-# This is ten times that. Same figure as the Caddyfile's `max_size`.
+# from a full three-set match, ~400 points at ~660 bytes of JSON each, so ~260 KB.
+# Nearly four times that, and the same figure as the Caddyfile's `max_size`. The
+# per-point figure is measured against `schemas/point.py`, which caps a batch itself.
 MAX_REQUEST_BODY_BYTES = 1_000_000
 
 DETAIL = "Request body too large"

@@ -264,3 +264,37 @@ def make_point(session: Session, **overrides: Any) -> Point:
     session.add(point)
     session.flush()
     return point
+
+
+def point_payload(**overrides: Any) -> dict[str, Any]:
+    """One point as the ingest endpoint receives it: JSON, not a row.
+
+    Here rather than in a test module because the schema tests and the route tests
+    both need it, and a point carries enough required fields that spelling them out
+    per test would bury what each one is actually varying. A tracked-player serve
+    landing in the deuce box, won on a forehand drive that stayed in.
+    """
+    return {
+        "id": str(uuid.uuid4()),
+        "sequence": 0,
+        "server": "tracked",
+        "won": True,
+        "serve1_outcome": "in",
+        "serve1_box": "deuce",
+        "serve1_target": "t",
+        "end_reason": "forced",
+        "wing": "forehand",
+        "shot_type": "drive",
+        "ball_in": True,
+        "ball_half": "ad",
+        "ball_depth": "deep",
+        "set_number": 1,
+        "game_number": 1,
+        "in_tiebreak": False,
+        "is_break_point": False,
+        "is_game_point": False,
+        "is_game_end": False,
+        "is_set_point": False,
+        "is_set_end": False,
+        "is_match_point": False,
+    } | overrides
