@@ -32,6 +32,18 @@ export default defineConfig({
       url: "http://localhost:5173",
       reuseExistingServer: !process.env.CI,
     },
+    {
+      // The production build, for the offline project below: `vite dev` never
+      // registers a service worker, so the offline shell only exists here.
+      // --strictPort because a drifted port would silently retarget the specs.
+      command: "pnpm run build && pnpm run preview -- --strictPort --port 4173",
+      url: "http://localhost:4173",
+      // Never reused, unlike Vite above: reuse would skip the build as well as the
+      // server, so a preview left over from an older checkout would serve a stale
+      // service worker to the one project that exists to exercise it.
+      reuseExistingServer: false,
+      timeout: 180_000,
+    },
   ],
   use: {
     baseURL: "http://localhost:5173",
@@ -49,15 +61,28 @@ export default defineConfig({
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
       dependencies: ["setup"],
+      testIgnore: /offline\.spec\.ts/,
     },
     {
       name: "mobile-chromium",
       use: { ...devices["Pixel 7"] },
       dependencies: ["setup"],
+      testIgnore: /offline\.spec\.ts/,
     },
     {
       name: "mobile-webkit",
       use: { ...devices["iPhone 15"] },
+      dependencies: ["setup"],
+      testIgnore: /offline\.spec\.ts/,
+    },
+    // The offline suite runs against the production build (port 4173), the only
+    // place the service worker exists, and only in Chromium: the offline shell is
+    // one implementation, and setOffline emulation is most faithful there. The
+    // setup coach's cookie is host-scoped, so the session works on this port too.
+    {
+      name: "offline-chromium",
+      testMatch: /offline\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:4173" },
       dependencies: ["setup"],
     },
   ],
