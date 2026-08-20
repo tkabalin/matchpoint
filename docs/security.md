@@ -177,6 +177,14 @@ cannot lock the coach out of closing the account. The arrival tiers are charged 
 every metered route here, so a flood delays a closure without preventing one. Every session goes
 with the rows, and the cookie the request arrived on is cleared.
 
+**The closure asks for the password a screen early.** `POST /coaches/me/verify-password` checks a
+password against the signed-in coach's hash and answers 204 or 403 having touched nothing, so the
+form can refuse a typo where it was typed rather than at the final warning. It authorises nothing:
+the closure verifies the password again on its own request, so the 204 is an answer and not a token
+to spend at the next one. It also spends the closure's rate-limit tiers rather than tiers of its
+own, wrong-guess budget included, so a stolen session's hunt for the password stays bounded once
+across both screens instead of once per screen.
+
 **The roster refusal is not one of these defences.** The closure also refuses while the coach still
 has a player on the roster, and the request can waive that refusal. The gate exists so a player
 another coach is about to take over is not erased by accident, and the password is the whole of what
