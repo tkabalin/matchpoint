@@ -268,6 +268,17 @@ confirmation belongs to the client, where the coach can be shown what they are a
 single match is the one exception to that last sentence: deleting one with points already recorded
 against it is refused outright rather than taking them with it, for the reason given above `points`.
 
+**A match being captured is not deleted out from under the device capturing it.** A delete that
+ignored the claim would leave that device recording into a match that no longer exists, with every
+point it has queued offline unable to land and nothing to tell the coach why. So the delete is
+refused while a live claim stands, and the request names the asking device so the holder can still
+delete the match it is capturing: backing out of capture does not release a claim, and the device
+that took one is the likeliest to be clearing away a match set up wrongly. Releasing the claim is
+the way through from any other device, and a lapsed one already counts as free. Unlike the
+transfer-code refusal below, this one stops at the single match: a capture claim is this coach's own
+device holding their own data, so deleting the player or closing the account takes the match along
+rather than waiting out a device that may never come back.
+
 **Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
 just be their email, name and password hash sitting on a row nothing can reach, which is not what
 someone asking to be removed has asked for. So the closure deletes the coach and everything below
