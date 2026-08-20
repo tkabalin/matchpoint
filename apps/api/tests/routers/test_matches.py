@@ -452,6 +452,26 @@ def test_create_match_rejects_a_malformed_id(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+@pytest.mark.usefixtures("coach")
+@pytest.mark.parametrize(
+    "match_id",
+    [uuid.UUID(int=0), uuid.uuid1(), uuid.uuid5(uuid.NAMESPACE_DNS, "matchpoint")],
+    ids=["nil", "v1", "v5"],
+)
+def test_create_match_rejects_an_id_the_client_could_not_have_minted(
+    client: TestClient, db_session: Session, match_id: uuid.UUID
+) -> None:
+    """Syntactically valid UUIDs of the wrong version: the client only ever mints
+    version 4 (crypto.randomUUID), so these are caller bugs, not syncing matches."""
+    response = client.post(
+        "/matches",
+        json={"id": str(match_id), "player_id": str(uuid.uuid4()), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 422
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
 def test_list_matches_newest_first(client: TestClient, db_session: Session, coach: Coach) -> None:
     player = make_player(db_session, coach_id=coach.id)
     older = make_match(db_session, player_id=player.id, played_on=date(2026, 7, 1))

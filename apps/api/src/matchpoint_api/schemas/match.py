@@ -38,11 +38,27 @@ def _reject_implausible_played_on(value: date) -> date:
 PlayedOn = Annotated[date, AfterValidator(_reject_implausible_played_on)]
 
 
+def _reject_non_v4_id(value: uuid.UUID) -> uuid.UUID:
+    """Only accept the one shape the client mints.
+
+    Match ids come from crypto.randomUUID, which produces version 4 and nothing
+    else, so any other version (the nil UUID included) is a caller bug rather
+    than a match coming in to sync. Server-side only, as PlayedOn's bounds are:
+    the spec keeps `format: uuid`, so the generated client does not change.
+    """
+    if value.version != 4:
+        raise ValueError("match id must be a version-4 UUID")
+    return value
+
+
+ClientMatchId = Annotated[uuid.UUID, AfterValidator(_reject_non_v4_id)]
+
+
 class MatchCreate(RequestModel):
     # Client-assigned: a match is created offline and syncs later, so it needs an
     # identity before any server sees it, and a retried sync needs that id to name the
     # row an interrupted attempt may already have written. Server-minted when absent.
-    id: uuid.UUID | None = None
+    id: ClientMatchId | None = None
     player_id: uuid.UUID
     opponent_name: ShortText | None = None
     played_on: PlayedOn
