@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { getDeviceId } from "@/lib/device-id";
 import { parseErrorMessage } from "@/lib/parse-error";
 import { SURFACE_LABEL } from "@/lib/tennis-labels";
 
@@ -39,7 +40,13 @@ export function MatchActionSheet({
   const { mutate: remove, isPending: isDeleting } = useMutation({
     mutationFn: async () => {
       if (!match) return;
-      const { error: deleteError } = await deleteMatch({ path: { match_id: match.id } });
+      // Naming this device lets the server tell "someone else is capturing this" from
+      // "you are", and only refuse the first. Backing out of capture leaves the claim
+      // standing, so without it this phone would be refused its own half-set-up match.
+      const { error: deleteError } = await deleteMatch({
+        path: { match_id: match.id },
+        query: { device_id: getDeviceId() },
+      });
       if (deleteError) throw deleteError;
     },
     onSuccess: async () => {

@@ -12,6 +12,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { getDeviceId } from "@/lib/device-id";
+
 import { MatchesPage } from "./matches-page";
 
 const match: MatchRead = {
@@ -186,4 +188,55 @@ test("a failed delete says so and keeps the match", async () => {
   // The sheet stays open on the confirm step rather than closing on a failure — a
   // closed sheet would be the visible sign the match was gone.
   expect(screen.getByRole("heading", { name: "Delete this match?" })).toBeInTheDocument();
+});
+
+test("the delete names this device, so its own capture claim cannot block it", async () => {
+  const sentDeviceIds: (string | null)[] = [];
+  stubFetch({
+    "/api/matches": () => Response.json([match]),
+    [`/api/matches/${match.id}`]: (input) => {
+      if (input.method === "DELETE") {
+        sentDeviceIds.push(new URL(input.url).searchParams.get("device_id"));
+        return new Response(null, { status: 204 });
+      }
+      return Response.json([match]);
+    },
+  });
+  const user = userEvent.setup();
+  renderMatchesPage();
+
+  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
+  await screen.findByRole("heading", { name: "vs T. Naidoo" });
+  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await screen.findByRole("heading", { name: "Delete this match?" });
+  await user.click(screen.getByRole("button", { name: "Delete match" }));
+
+  await waitFor(() => expect(sentDeviceIds).toEqual([getDeviceId()]));
+});
+
+test("a match being captured on another device says so", async () => {
+  stubFetch({
+    "/api/matches": () => Response.json([match]),
+    [`/api/matches/${match.id}`]: (input) => {
+      if (input.method === "DELETE") {
+        // The server's own wording, rendered as it stands: the refusal names a
+        // situation only the server can see, so local copy for it would go stale.
+        return Response.json(
+          { detail: "Match is being captured on another device" },
+          { status: 409 },
+        );
+      }
+      return Response.json([match]);
+    },
+  });
+  const user = userEvent.setup();
+  renderMatchesPage();
+
+  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
+  await screen.findByRole("heading", { name: "vs T. Naidoo" });
+  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await screen.findByRole("heading", { name: "Delete this match?" });
+  await user.click(screen.getByRole("button", { name: "Delete match" }));
+
+  expect(await screen.findByText("Match is being captured on another device")).toBeInTheDocument();
 });
