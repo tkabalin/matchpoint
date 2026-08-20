@@ -212,6 +212,23 @@
         "title": "CoachUpdate",
         "type": "object"
       },
+      "CoachVerifyPassword": {
+        "additionalProperties": false,
+        "properties": {
+          "password": {
+            "format": "password",
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password"
+        ],
+        "title": "CoachVerifyPassword",
+        "type": "object"
+      },
       "DominantHand": {
         "enum": [
           "right",
@@ -1884,6 +1901,71 @@
           }
         },
         "summary": "Upload Coach Photo",
+        "tags": [
+          "coaches"
+        ]
+      }
+    },
+    "/coaches/me/verify-password": {
+      "post": {
+        "description": "Answer whether this is the signed-in coach's password, changing nothing.",
+        "operationId": "verify_coach_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoachVerifyPassword"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Incorrect password"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Verify Coach Password",
         "tags": [
           "coaches"
         ]

@@ -30,7 +30,13 @@ from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.routers.auth import INCORRECT_PASSWORD
 from matchpoint_api.routers.players import TRANSFER_CODES_OUTSTANDING
-from matchpoint_api.schemas.coach import CoachCreate, CoachDelete, CoachRead, CoachUpdate
+from matchpoint_api.schemas.coach import (
+    CoachCreate,
+    CoachDelete,
+    CoachRead,
+    CoachUpdate,
+    CoachVerifyPassword,
+)
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.security import hash_password, verify_password
 
@@ -266,6 +272,39 @@ def delete_coach_photo(coach: CurrentCoach, db: DbSession) -> Coach:
     if coach.photo_key is not None:
         photos.replace_key(db, coach, None)
     return coach
+
+
+# The closure's password step, asked one screen ahead of the confirmation so a coach who
+# mistypes hears about it where they typed it rather than at the warning (#207). It proves
+# nothing for later: the closure re-verifies, and this route writes nothing, so a 204 here
+# is an answer about a password and never an authorisation to spend at the next request.
+@router.post(
+    "/me/verify-password",
+    status_code=204,
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+def verify_coach_password(data: CoachVerifyPassword, coach: CurrentCoach, request: Request) -> None:
+    """Answer whether this is the signed-in coach's password, changing nothing."""
+    # The closure's own tiers rather than a set of this route's, because the two are one
+    # flow's two steps: a budget apiece would hand a stolen session five wrong guesses
+    # per screen where the point of the budget is to bound the hunt at five in total.
+    #
+    # In the handler and not the decorator's dependencies, as the closure takes them:
+    # metering after the session resolves stops a stranger who can reach no hash at all
+    # from draining the shared bucket.
+    per_ip: RateLimiter = request.app.state.close_account_per_ip_limit
+    total: RateLimiter = request.app.state.close_account_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+    if not verify_password(data.password.get_secret_value(), coach.password_hash):
+        # Charged only for a wrong guess, so the coach who knows their own password is
+        # never refused by this tier however hard someone else is guessing.
+        per_coach: RateLimiter = request.app.state.close_account_per_coach_limit
+        per_coach.take(str(coach.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
 
 
 # Closing an account erases the coach and everything below them (#146), rather than

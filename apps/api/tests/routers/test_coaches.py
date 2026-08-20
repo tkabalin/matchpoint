@@ -1428,6 +1428,132 @@ def test_closing_an_account_has_a_total_bound_no_address_escapes(
     assert _close(latecomer).status_code == 429
 
 
+# --- Verifying the password: POST /coaches/me/verify-password ---
+
+
+def _verify(client: TestClient, password: str = CLOSE_PASSWORD) -> httpx2.Response:
+    return client.post("/coaches/me/verify-password", json={"password": password})
+
+
+def test_the_right_password_verifies_and_leaves_the_account_alone(
+    client: TestClient, db_session: Session
+) -> None:
+    """The whole endpoint: an answer about a password, and no state to show for it. The
+    stored hash is asserted unchanged because login rehashes at its own verification and
+    this route deliberately does not."""
+    coach = _closable(client, db_session)
+    stored = coach.password_hash
+
+    response = _verify(client)
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert db_session.get(Coach, coach.id) is not None
+    assert coach.password_hash == stored
+    assert client.get("/coaches/me").status_code == 200
+
+
+def test_a_wrong_password_is_refused(client: TestClient, db_session: Session) -> None:
+    """The point of the route: the closure's 403, one screen earlier. The body is asserted
+    exactly because the route declares it as ErrorDetail for the form to show inline, and
+    it reads identically to the closure's so a coach meets one refusal, not two."""
+    _closable(client, db_session)
+
+    response = _verify(client, password="not-the-password")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+
+
+def test_verifying_needs_a_session(client: TestClient) -> None:
+    """There is no password to check without a coach to check it against: the 401 is
+    current_coach's, which is why a wrong password answers 403 instead."""
+    response = _verify(client)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_a_rejected_verification_echoes_no_password(
+    client: TestClient, db_session: Session
+) -> None:
+    """errors.py redacts `password` wherever it appears, this body included. A session is
+    arranged because the dependency's 401 would otherwise answer before validation ran."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    response = _verify(client, password="x" * 129)
+
+    assert response.status_code == 422
+    assert "x" * 129 not in response.text
+
+
+@pytest.mark.usefixtures("clock")
+def test_wrong_guesses_here_spend_the_closure_s_budget(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Why this route takes the closure's tiers rather than its own: the two are one
+    flow's two steps, so a stolen session gets five wrong guesses at the password in
+    total (burst 5), not five on each screen that asks for it."""
+    _closable(client, db_session)
+    _stub_out_verification(monkeypatch, answer=False)
+    for _ in range(5):
+        assert _verify(client, password="wrong").status_code == 403
+
+    refused = _verify(client, password="wrong")
+
+    assert refused.status_code == 429
+    # The per-coach tier's quote (30 s a token), which is what says the shared budget is
+    # the tier that refused: the arrival tiers are ten deep against six requests.
+    assert int(refused.headers["Retry-After"]) > 6
+    assert _close(client, password="wrong").status_code == 429
+
+
+@pytest.mark.usefixtures("clock")
+def test_a_correct_password_still_verifies_while_someone_guesses(
+    client: TestClient, db_session: Session
+) -> None:
+    """The other half of the closure's budget carried over: the coach holding the real
+    password still gets their answer while someone else is guessing at it."""
+    _closable(client, db_session)
+    for _ in range(5):
+        assert _verify(client, password="wrong").status_code == 403
+    assert _verify(client, password="wrong").status_code == 429
+
+    assert _verify(client).status_code == 204
+
+
+@pytest.mark.usefixtures("clock")
+def test_verifications_and_closures_share_one_arrival_budget(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The arrival tier this route's Argon2 run needs, shared with the closure for the
+    wrong-guess budget's reason: correct passwords are what drain it, and the wrong-guess
+    tier deliberately never charges those, so nothing else here bounds the hashing."""
+    _closable(client, db_session)
+    _stub_out_verification(monkeypatch, answer=True)
+    for _ in range(10):
+        assert _verify(client).status_code == 204
+
+    refused = _close(client)
+
+    assert refused.status_code == 429
+    assert refused.json() == {"detail": "Too many requests"}
+
+
+def test_an_unauthenticated_flood_spends_none_of_that_budget(
+    client: TestClient, db_session: Session
+) -> None:
+    """Why the tiers are taken in the handler and not the decorator's dependencies: ahead
+    of the session check, a stranger who can reach no hash at all would drain the shared
+    bucket and stand between every coach and their own account closure."""
+    for _ in range(20):
+        assert _verify(client).status_code == 401
+
+    _closable(client, db_session)
+
+    assert _verify(client).status_code == 204
+
+
 def test_coaches_are_not_listable(client: TestClient) -> None:
     """No list route on purpose: it would be an unauthenticated dump of every coach's
     email address. Pinned so that adding one is a deliberate act, taken together with

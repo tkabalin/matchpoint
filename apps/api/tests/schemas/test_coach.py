@@ -24,6 +24,7 @@ from matchpoint_api.schemas.coach import (
     CoachDelete,
     CoachRead,
     CoachUpdate,
+    CoachVerifyPassword,
 )
 
 
@@ -207,6 +208,13 @@ def test_a_closure_takes_the_ceiling_without_the_floor() -> None:
 
     with pytest.raises(ValidationError):
         CoachDelete.model_validate({"password": "x" * (PASSWORD_MAX_LENGTH + 1)})
+
+
+def test_verifying_a_password_carries_nothing_else() -> None:
+    """The closure's body minus the waiver: this step answers whether the password is
+    right and does nothing with it, so a roster flag on it would be a field the route
+    reads nowhere and a client could believe in."""
+    assert set(CoachVerifyPassword.model_fields) == {"password"}
 
 
 def test_a_closure_password_is_not_in_the_repr() -> None:

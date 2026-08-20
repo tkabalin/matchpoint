@@ -107,6 +107,16 @@ export type CoachUpdate = {
 };
 
 /**
+ * CoachVerifyPassword
+ */
+export type CoachVerifyPassword = {
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
  * DominantHand
  */
 export type DominantHand = 'right' | 'left';
@@ -1057,6 +1067,43 @@ export type UploadCoachPhotoResponses = {
 };
 
 export type UploadCoachPhotoResponse = UploadCoachPhotoResponses[keyof UploadCoachPhotoResponses];
+
+export type VerifyCoachPasswordData = {
+    body: CoachVerifyPassword;
+    path?: never;
+    query?: never;
+    url: '/coaches/me/verify-password';
+};
+
+export type VerifyCoachPasswordErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Incorrect password
+     */
+    403: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type VerifyCoachPasswordError = VerifyCoachPasswordErrors[keyof VerifyCoachPasswordErrors];
+
+export type VerifyCoachPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type VerifyCoachPasswordResponse = VerifyCoachPasswordResponses[keyof VerifyCoachPasswordResponses];
 
 export type HealthData = {
     body?: never;

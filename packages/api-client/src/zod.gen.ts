@@ -40,6 +40,13 @@ export const zCoachDelete = z.object({
 });
 
 /**
+ * CoachVerifyPassword
+ */
+export const zCoachVerifyPassword = z.object({
+    password: z.string().max(128)
+});
+
+/**
  * DominantHand
  */
 export const zDominantHand = z.enum(['right', 'left']);
@@ -420,6 +427,13 @@ export const zUploadCoachPhotoBody = zBodyUploadCoachPhoto;
  * Successful Response
  */
 export const zUploadCoachPhotoResponse = zCoachRead;
+
+export const zVerifyCoachPasswordBody = zCoachVerifyPassword;
+
+/**
+ * Successful Response
+ */
+export const zVerifyCoachPasswordResponse = z.void();
 
 /**
  * Response Health

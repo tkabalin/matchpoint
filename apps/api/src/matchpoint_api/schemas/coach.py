@@ -95,6 +95,16 @@ class CoachDelete(RequestModel):
     delete_players: bool = False
 
 
+# The step before that one in the same flow (#207), which is why it carries the password
+# and nothing else: it answers whether the password is right and does nothing with it, so
+# `delete_players` has no meaning here. CoachDelete is left standing on its own rather than
+# subclassed off this, since a body that grew a field would grow it for both.
+class CoachVerifyPassword(RequestModel):
+    # Named and annotated as CoachDelete names it, so one flow's two steps send the same
+    # field, already redacted from a 422 body under that name.
+    password: Password
+
+
 # password_hash is absent, and belongs nowhere else either. `response_model` filters a
 # response down to the fields declared here, so this omission is what keeps the hash from
 # following a Coach row out of any route that returns one.
