@@ -1,5 +1,10 @@
 import type { PlayerRead } from "@matchpoint/api-client";
-import { deletePlayer, updatePlayer } from "@matchpoint/api-client";
+import {
+  createPlayerTransferCode,
+  deletePlayer,
+  deletePlayerTransferCode,
+  updatePlayer,
+} from "@matchpoint/api-client";
 import {
   getPlayerQueryKey,
   listMatchesQueryKey,
@@ -7,6 +12,7 @@ import {
 } from "@matchpoint/api-client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
 import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
@@ -14,25 +20,61 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerFormFields } from "@/components/player-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getErrorStatus } from "@/lib/error-status";
-import { parseErrorMessage } from "@/lib/parse-error";
+import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import {
   buildPlayerUpdateBody,
   type PlayerFormValues,
   playerFormValuesFrom,
   validatePlayerForm,
 } from "@/lib/player-form";
+import { useCountdown } from "@/lib/use-countdown";
 import { usePlayerPhoto } from "@/lib/use-player-photo";
 
-type Step = "form" | "confirm-delete" | "delete-blocked";
+type Step =
+  | "form"
+  | "confirm-delete"
+  | "delete-blocked"
+  | "transfer-explain"
+  | "transfer-code"
+  | "transfer-pending";
 
 // Same wording whether caught ahead of time from PlayerRead.has_transfer_code (below)
 // or from the delete request's own 409 — the flag can go stale between a roster read
 // and the delete, so both paths land on one message rather than two.
 const TRANSFER_PENDING_MESSAGE =
   "This player has a transfer code waiting to be used. It has to be cancelled or used before you can delete them.";
+
+/** A read-only code plus a copy button — the only place in the app that needs
+ * clipboard access, so it stays local rather than becoming a shared component. */
+function CopyCodeField({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2">
+      <Input readOnly value={code} aria-label="Transfer code" className="font-mono" />
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        aria-label={copied ? "Copied" : "Copy code"}
+        onClick={async () => {
+          await navigator.clipboard.writeText(code);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }}
+      >
+        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
+      </Button>
+      <span className="sr-only" role="status">
+        {copied ? "Copied to clipboard" : ""}
+      </span>
+    </div>
+  );
+}
 
 /**
  * Editing an existing player. Same field set and validation as `AddPlayerSheet`
@@ -48,6 +90,10 @@ const TRANSFER_PENDING_MESSAGE =
  * rather than stacking an AlertDialog on top: both Sheet and AlertDialog portal to the
  * body and Base UI marks background content inert, so nesting one in the other is a
  * real risk the step swap avoids for free.
+ *
+ * Transferring (#185) lives here too, above Delete — both are "this player leaves my
+ * roster" actions, but transfer is reversible (cancelable) where delete isn't, so it
+ * gets the lighter `outline` treatment and sits above delete's `destructive` one.
  */
 export function EditPlayerSheet({
   player,
@@ -65,6 +111,10 @@ export function EditPlayerSheet({
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickingPhoto, setPickingPhoto] = useState(false);
+  const [mintedCode, setMintedCode] = useState<string | null>(null);
+  const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
+  const retryCountdown = useCountdown(retryAfterSeconds);
+  const waitingToRetry = retryCountdown !== null && retryCountdown > 0;
   const { uploadPhoto, removePhoto, uploadingPhoto, removingPhoto, photoErrorText } =
     usePlayerPhoto(player.id, () => setPickingPhoto(false));
 
@@ -75,6 +125,7 @@ export function EditPlayerSheet({
     setValues(playerFormValuesFrom(player));
     setShowErrors(false);
     setError(null);
+    setMintedCode(null);
   }
 
   function update<K extends keyof PlayerFormValues>(key: K, value: PlayerFormValues[K]) {
@@ -84,6 +135,15 @@ export function EditPlayerSheet({
   const { isValid } = validatePlayerForm(values);
   const body = buildPlayerUpdateBody(player, values);
   const hasChanges = Object.keys(body).length > 0;
+
+  async function invalidatePlayer() {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: getPlayerQueryKey({ path: { player_id: player.id } }),
+      }),
+      queryClient.invalidateQueries({ queryKey: listPlayersQueryKey() }),
+    ]);
+  }
 
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: async () => {
@@ -95,12 +155,7 @@ export function EditPlayerSheet({
       return data;
     },
     onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: getPlayerQueryKey({ path: { player_id: player.id } }),
-        }),
-        queryClient.invalidateQueries({ queryKey: listPlayersQueryKey() }),
-      ]);
+      await invalidatePlayer();
       reset();
       onOpenChange(false);
     },
@@ -129,8 +184,6 @@ export function EditPlayerSheet({
       await navigate({ to: "/players" });
     },
     onError: (mutationError) => {
-      // Minting and cancelling a transfer code are #185's scope, not this sheet's —
-      // so the 409 only explains the refusal, with nothing here to act on it.
       if (getErrorStatus(mutationError) === 409) {
         setStep("delete-blocked");
         return;
@@ -138,6 +191,50 @@ export function EditPlayerSheet({
       setError(parseErrorMessage(mutationError, "Could not delete that player."));
     },
   });
+
+  const { mutate: mintTransferCode, isPending: isMinting } = useMutation({
+    mutationFn: async () => {
+      const {
+        data,
+        error: mintError,
+        response,
+      } = await createPlayerTransferCode({
+        path: { player_id: player.id },
+      });
+      if (response?.status === 429) setRetryAfterSeconds(getRetryAfterSeconds(response));
+      if (mintError) throw mintError;
+      return data;
+    },
+    onSuccess: async (data) => {
+      await invalidatePlayer();
+      setError(null);
+      setMintedCode(data.code);
+      setStep("transfer-code");
+    },
+    onError: (mutationError) => {
+      setError(parseErrorMessage(mutationError, "Could not generate a transfer code."));
+    },
+  });
+
+  const { mutate: cancelTransferCode, isPending: isCancelling } = useMutation({
+    mutationFn: async () => {
+      const { error: cancelError } = await deletePlayerTransferCode({
+        path: { player_id: player.id },
+      });
+      if (cancelError) throw cancelError;
+    },
+    onSuccess: async () => {
+      await invalidatePlayer();
+      setError(null);
+      setStep("form");
+    },
+    onError: (mutationError) => {
+      setError(parseErrorMessage(mutationError, "Could not cancel that transfer."));
+    },
+  });
+
+  const mintErrorText =
+    error && waitingToRetry ? `${error} Try again in ${retryCountdown}s.` : error;
 
   return (
     <>
@@ -209,6 +306,18 @@ export function EditPlayerSheet({
 
               <Button
                 type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep(player.has_transfer_code ? "transfer-pending" : "transfer-explain");
+                }}
+              >
+                {player.has_transfer_code ? "Manage transfer code" : "Transfer to another coach"}
+              </Button>
+
+              <Button
+                type="button"
                 variant="destructive"
                 className="w-full"
                 onClick={() => {
@@ -260,7 +369,7 @@ export function EditPlayerSheet({
                 Cancel
               </Button>
             </>
-          ) : (
+          ) : step === "delete-blocked" ? (
             <>
               <SheetHeader className="p-0">
                 <SheetTitle>Can't delete {player.first_name} yet</SheetTitle>
@@ -270,6 +379,105 @@ export function EditPlayerSheet({
 
               <Button type="button" className="w-full" onClick={() => setStep("form")}>
                 OK
+              </Button>
+            </>
+          ) : step === "transfer-explain" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Transfer {player.first_name}?</SheetTitle>
+              </SheetHeader>
+
+              <p className="text-sm text-muted-foreground">
+                {player.first_name}, their notes, and their match history move to another coach's
+                roster. You'll get a one-time code to hand over yourself — it won't be shown again,
+                but you can cancel it any time before it's used. While it's outstanding, this player
+                can't be deleted and your account can't be closed.
+              </p>
+
+              {mintErrorText && (
+                <Alert variant="destructive">
+                  <AlertDescription>{mintErrorText}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                type="button"
+                disabled={isMinting || waitingToRetry}
+                className="w-full"
+                onClick={() => mintTransferCode()}
+              >
+                {isMinting ? "Generating…" : "Generate code"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isMinting}
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep("form");
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : step === "transfer-code" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Give this code to the other coach</SheetTitle>
+              </SheetHeader>
+
+              <p className="text-sm text-muted-foreground">
+                This is the only time it's shown — copy it now.
+              </p>
+
+              {mintedCode && <CopyCodeField code={mintedCode} />}
+
+              <Button
+                type="button"
+                className="w-full"
+                onClick={() => {
+                  reset();
+                  onOpenChange(false);
+                }}
+              >
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Transfer pending</SheetTitle>
+              </SheetHeader>
+
+              <p className="text-sm text-muted-foreground">
+                A transfer code for {player.first_name} is outstanding. It can't be shown again — if
+                it's lost, cancel it and generate a new one.
+              </p>
+
+              {mintErrorText && (
+                <Alert variant="destructive">
+                  <AlertDescription>{mintErrorText}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isCancelling}
+                className="w-full"
+                onClick={() => cancelTransferCode()}
+              >
+                {isCancelling ? "Cancelling…" : "Cancel transfer"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isMinting || waitingToRetry}
+                className="w-full text-muted-foreground"
+                onClick={() => mintTransferCode()}
+              >
+                {isMinting ? "Generating…" : "Generate a new code instead"}
               </Button>
             </>
           )}

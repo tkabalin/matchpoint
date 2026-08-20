@@ -1,5 +1,5 @@
 import type { PlayerRead } from "@matchpoint/api-client";
-import { Plus, Search } from "lucide-react";
+import { KeyRound, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
 import { AddPlayerSheet } from "@/components/add-player-sheet";
@@ -9,15 +9,29 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 
 import { PlayerList } from "./player-list";
+import { RedeemTransferCodeSheet } from "./redeem-transfer-code-sheet";
 
 export function PlayersPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PlayerRead | null>(null);
   const [adding, setAdding] = useState(false);
+  const [redeeming, setRedeeming] = useState(false);
 
   return (
     <AppPage>
-      <PageHeader title="Players" />
+      <PageHeader
+        title="Players"
+        trailing={
+          <Button
+            variant="outline"
+            size="icon-sm"
+            aria-label="Redeem transfer code"
+            onClick={() => setRedeeming(true)}
+          >
+            <KeyRound />
+          </Button>
+        }
+      />
 
       <InputGroup>
         <InputGroupAddon>
@@ -45,6 +59,7 @@ export function PlayersPage() {
       </Button>
 
       <AddPlayerSheet open={adding} onOpenChange={setAdding} />
+      <RedeemTransferCodeSheet open={redeeming} onOpenChange={setRedeeming} />
 
       <PlayerActionSheet
         player={selected}

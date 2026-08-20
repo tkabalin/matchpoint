@@ -133,3 +133,58 @@ test("no Remove photo option when there is no photo to remove", async () => {
   expect(await screen.findByRole("button", { name: "Choose photo" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
 });
+
+test("generating a transfer code shows it once, with a copy button", async () => {
+  // jsdom implements no Clipboard API at all, so navigator.clipboard is normally
+  // undefined — defining it directly (rather than vi.stubGlobal("navigator", ...))
+  // is what actually takes, since navigator itself isn't reassignable in jsdom.
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  stubFetch({
+    [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "ABCD1234" }),
+  });
+  const user = userEvent.setup();
+  renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
+  await user.click(await screen.findByRole("button", { name: "Generate code" }));
+
+  expect(await screen.findByLabelText("Transfer code")).toHaveValue("ABCD1234");
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  await user.click(screen.getByRole("button", { name: "Copy code" }));
+  await screen.findByRole("button", { name: "Copied" });
+  expect(writeText).toHaveBeenCalledWith("ABCD1234");
+});
+
+test("shows 'Manage transfer code' and lets the coach cancel a pending one", async () => {
+  const pending = { ...player, has_transfer_code: true };
+  let current: PlayerRead = pending;
+  stubFetch({
+    [`GET /api/players/${player.id}`]: () => Response.json(current),
+    [`DELETE /api/players/${player.id}/transfer-code`]: () => {
+      current = player;
+      return new Response(null, { status: 204 });
+    },
+  });
+  const user = userEvent.setup();
+  renderWithOwnedQuery(pending);
+
+  await user.click(await screen.findByRole("button", { name: "Manage transfer code" }));
+  await user.click(await screen.findByRole("button", { name: "Cancel transfer" }));
+
+  expect(
+    await screen.findByRole("button", { name: "Transfer to another coach" }),
+  ).toBeInTheDocument();
+});
+
+test("generating a new code while one is pending", async () => {
+  const user = userEvent.setup();
+  stubFetch({
+    [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "FRESH9999" }),
+  });
+  renderSheet({ ...player, has_transfer_code: true });
+
+  await user.click(screen.getByRole("button", { name: "Manage transfer code" }));
+  await user.click(await screen.findByRole("button", { name: "Generate a new code instead" }));
+
+  expect(await screen.findByLabelText("Transfer code")).toHaveValue("FRESH9999");
+});
