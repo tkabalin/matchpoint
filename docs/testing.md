@@ -78,6 +78,22 @@ output cannot be edited without the generator's input changing first.
   Specs that need to be signed in adopt it with `test.use({ storageState })`; the rest run signed
   out, which is how the route guard's redirect gets covered too.
 
+#### Offline and service-worker behaviour
+
+Capture has to keep working with no connection, and the service worker is what makes that possible,
+so it gets a layer split of its own rather than one level covering it:
+
+- The reload-while-offline flow is an e2e spec run against a **production build** (`vite preview`),
+  Chromium only. `vite dev` never registers a service worker, so the step it exists to cover,
+  reloading mid-match with the network down, cannot run under it.
+- The drain engine (replaying the offline outbox back into requests) is unit-tested against the
+  generated Zod schemas rather than hand-rolled fixtures, for the reason § Contract checks against
+  the API gives.
+- `navigator.locks` is stubbed in `test-setup.ts` for everything that only needs a lock to exist;
+  the real Locks API is exercised once, by a two-tab e2e spec.
+- Behaviour specific to an installed iOS PWA stays a manual pass before a demo: nothing in CI runs
+  on an installed PWA on real iOS.
+
 #### A live API by default
 
 Specs run against a real API, and `page.route` mocking is reserved for failure paths a healthy
@@ -136,8 +152,18 @@ legitimate for genuine third-party dependencies should MatchPoint ever acquire o
 
 CI runs the same commands as `scripts/check.sh` in verify mode, plus the Playwright suite. Both apps
 collect coverage and emit JUnit reports, so merge requests are annotated with failures and a
-coverage figure. Coverage is informational — there is no enforced threshold; review judges whether
-behaviour is adequately tested.
+coverage figure. `apps/api` is kept at 100% statement and branch coverage. `apps/web` reports the
+same figures with no such target: a route shell or a generated file can sit far below it while still
+being exercised through what imports it.
+
+### Coverage doesn't prove a test can fail
+
+A percentage says a line ran, not that the assertion wrapped around it would catch a real
+regression. A handful of tests are checked by mutation instead: break the thing under test on
+purpose (stub a migration's `downgrade()` to `pass`, add a column the model doesn't know about) and
+confirm the test meant to catch that does. This runs by hand where coverage alone can't justify a
+test's existence: a guard whose branch coverage doesn't move is still worth keeping if disabling the
+guard breaks it.
 
 ### Timing on a shared runner
 
