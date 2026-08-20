@@ -507,15 +507,7 @@ export function matchStateFor(
 //
 // Everything above answers "what's the score of one game/set" given exactly that
 // game's or set's Points already sliced out. Nothing yet turns a whole match's flat,
-// ordered Point[] into that slicing — these three functions close that gap.
-//
-// TODO: deuce vs ad court isn't derived anywhere yet — which service box is in
-// play alternates by point number within the game (point 1 deuce, 2 ad, 3 deuce, ...,
-// same rule through deuce/advantage under ad scoring), purely arithmetic from how
-// many points have been played in the current game so far. Worth adding once
-// there's a caller for it (analytics on serve placement needs it — "wide" points
-// from the deuce and ad courts go in opposite physical directions, so lumping them
-// together silently mixes two different tendencies).
+// ordered Point[] into that slicing — these four functions close that gap.
 
 export interface MatchSetsState {
   completedSets: MatchSet[];
