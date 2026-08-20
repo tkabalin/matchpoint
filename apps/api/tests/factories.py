@@ -34,6 +34,7 @@ from matchpoint_api.models import (
     MatchSide,
     PasswordReset,
     Player,
+    PlayerSession,
     PlayerTransferCode,
     Point,
     ServeOutcome,
@@ -193,6 +194,23 @@ def make_player(session: Session, **overrides: Any) -> Player:
     session.add(player)
     session.flush()
     return player
+
+
+def make_player_session(session: Session, **overrides: Any) -> PlayerSession:
+    if "player_id" not in overrides:
+        overrides["player_id"] = make_player(session).id
+    # Defaults as make_coach_session's: a unique real-shaped hash, and an expiry far
+    # enough out that a session never dies mid-test.
+    player_session = PlayerSession(
+        **{
+            "token_hash": hashlib.sha256(uuid.uuid4().bytes).hexdigest(),
+            "expires_at": datetime.now(UTC) + timedelta(days=30),
+        }
+        | overrides
+    )
+    session.add(player_session)
+    session.flush()
+    return player_session
 
 
 def make_player_transfer_code(session: Session, **overrides: Any) -> PlayerTransferCode:

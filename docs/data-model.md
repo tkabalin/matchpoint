@@ -14,6 +14,7 @@ erDiagram
     coaches ||--o{ players : owns
     coaches ||--o{ coach_sessions : "signs in as"
     coaches ||--o| password_resets : "resets password via"
+    players ||--o{ player_sessions : "signs in as"
     players ||--o| player_transfer_codes : "moves coach via"
     players ||--o{ matches : plays
     matches ||--o{ match_sets : "is scored in"
@@ -74,6 +75,15 @@ erDiagram
         text notes "nullable: coach notes"
         text photo_key "nullable: the profile photo's filename, served from /api/media"
         uuid coach_id FK "the owning coach"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    player_sessions {
+        uuid id PK
+        uuid player_id FK "the signed-in player"
+        varchar(64) token_hash UK "sha-256 of the cookie token, never the token"
+        timestamptz expires_at "a deadline slid forward on use"
         timestamptz created_at
         timestamptz updated_at
     }

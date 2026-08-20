@@ -34,6 +34,7 @@ MIGRATED_TABLES = frozenset(
         "email_verifications",
         "password_resets",
         "players",
+        "player_sessions",
         "player_transfer_codes",
         "matches",
         "match_sets",

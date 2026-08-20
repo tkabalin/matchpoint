@@ -6,6 +6,7 @@ from matchpoint_api.models.match import Match, MatchResult, ScoringSystem, Surfa
 from matchpoint_api.models.match_set import MatchSet, MatchSide
 from matchpoint_api.models.password_reset import PasswordReset
 from matchpoint_api.models.player import DominantHand, Gender, Player
+from matchpoint_api.models.player_session import PlayerSession
 from matchpoint_api.models.player_transfer_code import PlayerTransferCode
 from matchpoint_api.models.point import (
     CourtDepth,
@@ -39,6 +40,7 @@ __all__ = [
     "MatchSide",
     "PasswordReset",
     "Player",
+    "PlayerSession",
     "PlayerTransferCode",
     "Point",
     "RallyBucket",

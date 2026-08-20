@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api import photos
 from matchpoint_api.auth import CurrentCoach, hash_token, new_player_password, new_session_token
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Match, Player, PlayerTransferCode, Point
+from matchpoint_api.models import Match, Player, PlayerSession, PlayerTransferCode, Point
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
@@ -180,6 +180,9 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     their_matches = select(Match.id).where(Match.player_id == player.id)
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
     db.execute(delete(Match).where(Match.player_id == player.id))
+    # Their logins go with them: a session row authenticating a deleted player is a
+    # foreign-key refusal waiting at the flush, and a credential nobody should hold.
+    db.execute(delete(PlayerSession).where(PlayerSession.player_id == player.id))
     db.delete(player)
     db.commit()
     # After the commit, as everywhere else a row and a file change together: the row is

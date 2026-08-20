@@ -12,7 +12,15 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
-from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode, Point
+from matchpoint_api.models import (
+    Coach,
+    DominantHand,
+    Match,
+    Player,
+    PlayerSession,
+    PlayerTransferCode,
+    Point,
+)
 from matchpoint_api.routers import players as players_module
 from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
 from matchpoint_api.routers.players import (
@@ -26,6 +34,7 @@ from tests.factories import (
     make_coach,
     make_match,
     make_player,
+    make_player_session,
     make_player_transfer_code,
     make_point,
     sign_in,
@@ -622,9 +631,11 @@ def test_delete_player_takes_their_matches_with_them(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     """A hard delete, and the whole of it: the row goes, the matches recorded against it
-    go, and neither the roster nor the lookup has anything left to answer with."""
+    go, the sessions the player could still sign in on go, and neither the roster nor
+    the lookup has anything left to answer with."""
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
+    player_session = make_player_session(db_session, player_id=player.id)
     db_session.commit()
 
     response = client.delete(f"/players/{player.id}")
@@ -632,6 +643,7 @@ def test_delete_player_takes_their_matches_with_them(
     assert response.status_code == 204
     assert db_session.get(Player, player.id) is None
     assert db_session.get(Match, match.id) is None
+    assert db_session.get(PlayerSession, player_session.id) is None
     assert client.get("/players").json() == []
     assert client.get(f"/players/{player.id}").status_code == 404
 
