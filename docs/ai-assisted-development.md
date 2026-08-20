@@ -125,6 +125,15 @@ invariant rests on review rather than on tooling — as the no-hand-edits rule f
 client does — the rule states that, so a passing pipeline is never mistaken for proof that the
 convention held.
 
+## Sorting work before it's delegated
+
+Every issue is labelled at filing with one of three triage labels, which say how it should be worked
+rather than what it's about:
+
+- `ai-hands-off`: an agent can take it end to end, no input needed.
+- `ai-high-touch`: the programmer works through it closely with the AI, rather than handing it off.
+- `awaiting-decision`: it's parked on an open question, along with anything it blocks.
+
 ## Tooling: MCP servers and skills
 
 **`.mcp.json`** configures a single MCP server, `shadcn`, invoked through the workspace
