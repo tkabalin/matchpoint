@@ -25,6 +25,7 @@ from matchpoint_api.models import (
     PasswordReset,
     Player,
     PlayerTransferCode,
+    Point,
 )
 from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
@@ -397,14 +398,14 @@ def delete_current_coach(
     # Children first, in one transaction, because no foreign key here declares an
     # `ondelete` bar the derived set rows, which follow their match out on their own, so a
     # table added below the coach and left out of this list stops the delete outright
-    # rather than being quietly missed. Nothing keys on the email
+    # rather than being quietly missed; points go with the account here, where
+    # `DELETE /matches/{id}` refuses over them instead. Nothing keys on the email
     # (`email_verifications` cannot hold a registered address), so the address is free for
     # a fresh sign-up the moment this commits.
-    db.execute(
-        delete(Match).where(
-            Match.player_id.in_(select(Player.id).where(Player.coach_id == coach.id))
-        )
-    )
+    their_players = select(Player.id).where(Player.coach_id == coach.id)
+    their_matches = select(Match.id).where(Match.player_id.in_(their_players))
+    db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
+    db.execute(delete(Match).where(Match.player_id.in_(their_players)))
     db.execute(delete(Player).where(Player.coach_id == coach.id))
     db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
     revoke_sessions(db, coach.id)

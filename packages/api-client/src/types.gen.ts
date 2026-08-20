@@ -1216,6 +1216,10 @@ export type DeleteMatchErrors = {
      */
     401: ErrorDetail;
     /**
+     * Match has recorded points
+     */
+    409: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;

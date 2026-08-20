@@ -2155,6 +2155,16 @@
             },
             "description": "Not signed in"
           },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match has recorded points"
+          },
           "422": {
             "content": {
               "application/json": {

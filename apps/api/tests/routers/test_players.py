@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
-from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode
+from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode, Point
 from matchpoint_api.routers.players import (
     ALREADY_OWNED,
     TRANSFER_CODES_OUTSTANDING,
@@ -22,6 +22,7 @@ from tests.factories import (
     make_match,
     make_player,
     make_player_transfer_code,
+    make_point,
     sign_in,
 )
 
@@ -492,6 +493,25 @@ def test_delete_player_takes_their_matches_with_them(
     assert db_session.get(Match, match.id) is None
     assert client.get("/players").json() == []
     assert client.get(f"/players/{player.id}").status_code == 404
+
+
+def test_delete_player_takes_their_matches_points_with_them(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The points a match's own delete route would refuse over go with the player
+    instead: this delete means to take the whole roster history, and a foreign key
+    that refused them here would stop the player delete outright rather than being
+    quietly missed."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    point = make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(Match, match.id) is None
+    assert db_session.get(Point, point.id) is None
 
 
 def test_delete_player_leaves_the_rest_of_the_roster_alone(

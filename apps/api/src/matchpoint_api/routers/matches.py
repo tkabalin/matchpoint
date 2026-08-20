@@ -3,8 +3,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from psycopg.errors import ForeignKeyViolation
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach
@@ -38,6 +40,10 @@ router = APIRouter(
 )
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+# Named so delete_match's route test can assert the body exactly, the way the
+# transfer-code refusal on the player routes does.
+MATCH_HAS_POINTS = "Match has recorded points"
 
 # How long a capture claim stands without being renewed. Claiming again renews it, so
 # this only bounds how long a device that has gone quiet keeps the match to itself: it
@@ -224,10 +230,28 @@ def release_capture(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
         db.commit()
 
 
-@router.delete("/{match_id}", status_code=204)
+# The 409 is declared because the client branches on it: a match with points recorded
+# cannot be cleared away and re-entered the way an empty one can, so the coach is told
+# why rather than left to read a generic failure.
+@router.delete(
+    "/{match_id}",
+    status_code=204,
+    responses={409: {"model": ErrorDetail, "description": MATCH_HAS_POINTS}},
+)
 def delete_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
-    # No cascade of its own, unlike deleting a player: a match entered by mistake has no
-    # history hanging off it. Derived set rows follow the match out through their own
-    # ondelete; a points table declares none, so Postgres refuses that delete instead.
+    # Derived set rows follow the match out through their own ondelete; the points
+    # table declares none, so a match with real capture history refuses the delete
+    # instead of losing it. Deleting the player, or closing the account, is the only
+    # way past a match that has points recorded against it.
     db.delete(match_for_coach(db, match_id, coach.id))
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        # Narrows the type for Pyright, and keeps any other integrity failure out of a
+        # 409 about points. `points` is the only inbound key that refuses rather than
+        # cascading, so a second one has to narrow further than the violation class.
+        if isinstance(exc.orig, ForeignKeyViolation):
+            raise HTTPException(status_code=409, detail=MATCH_HAS_POINTS) from exc
+        raise
     db.commit()

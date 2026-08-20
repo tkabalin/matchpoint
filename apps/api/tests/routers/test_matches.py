@@ -3,12 +3,14 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.errors import UniqueViolation
 from sqlalchemy import event, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, Match, MatchResult, MatchSet, Surface
-from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
-from tests.factories import make_coach, make_match, make_match_set, make_player, sign_in
+from matchpoint_api.models import Coach, Match, MatchResult, MatchSet, Point, Surface
+from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL, MATCH_HAS_POINTS
+from tests.factories import make_coach, make_match, make_match_set, make_player, make_point, sign_in
 
 
 @pytest.fixture
@@ -865,6 +867,53 @@ def test_delete_match_takes_its_derived_sets_with_it(
 
     assert client.delete(f"/matches/{match.id}").status_code == 204
     assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
+
+
+def test_delete_match_with_points_recorded_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The one child table `delete_match` cannot cascade or clear itself: a coach's
+    captured history has to survive a delete a stray tap could reach. The body is
+    asserted exactly because the route declares the 409 as ErrorDetail for a form to
+    branch on."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    point = make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": MATCH_HAS_POINTS}
+    assert db_session.get(Match, match.id) is not None
+    assert db_session.get(Point, point.id) is not None
+
+
+def test_an_integrity_error_that_is_not_from_points_is_not_absorbed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Only a foreign-key violation from points becomes the 409 above; any other
+    integrity failure is a bug and stays a server error, since answering "has
+    points" would send whoever hit it looking in the wrong place.
+
+    Reaching that arm needs no row under points at all, so it is engineered instead:
+    a `before_flush` hook rides in a second, unrelated row (a duplicate coach email)
+    the moment the route's own flush is about to run, which is what actually raises
+    here and confirms the route's `except` only narrows on the one violation it means
+    to catch.
+    """
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    other_coach = make_coach(db_session)
+    db_session.commit()
+
+    @event.listens_for(db_session, "before_flush")
+    def _sabotage(session: Session, _context: object, _instances: object) -> None:
+        if any(isinstance(deleted, Match) for deleted in session.deleted):
+            session.add(Coach(email=other_coach.email, display_name="Duplicate", password_hash="x"))
+
+    with pytest.raises(IntegrityError) as caught:
+        client.delete(f"/matches/{match.id}")
+
+    assert isinstance(caught.value.orig, UniqueViolation)
 
 
 def test_delete_match_twice_is_404(client: TestClient, db_session: Session, coach: Coach) -> None:

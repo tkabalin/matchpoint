@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api import photos
 from matchpoint_api.auth import CurrentCoach, hash_token, new_session_token
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Match, Player, PlayerTransferCode
+from matchpoint_api.models import Match, Player, PlayerTransferCode, Point
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
     PlayerCreate,
@@ -124,8 +124,11 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     # Children first, in one transaction, for the reason account closure gives: a table
     # added below players and left out of this list stops the delete outright rather than
     # orphaning rows, no foreign key here declaring an `ondelete`. The derived set rows
-    # under a match are the one exception, and follow their match out on their own.
+    # under a match are the one exception, and follow their match out on their own; points
+    # go with the player here, where `DELETE /matches/{id}` refuses over them instead.
     photo_key = player.photo_key
+    their_matches = select(Match.id).where(Match.player_id == player.id)
+    db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
     db.execute(delete(Match).where(Match.player_id == player.id))
     db.delete(player)
     db.commit()
