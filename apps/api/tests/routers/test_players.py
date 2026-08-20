@@ -20,7 +20,8 @@ from matchpoint_api.routers.players import (
     TRANSFER_CODES_OUTSTANDING,
     UNKNOWN_TRANSFER_CODE,
 )
-from tests.conftest import image_bytes, stored_photos
+from matchpoint_api.security import verify_password
+from tests.conftest import Clock, breach_every_password, image_bytes, stored_photos
 from tests.factories import (
     make_coach,
     make_match,
@@ -154,6 +155,66 @@ def test_create_player_numbers_past_usernames_minted_before_this_request(
     response = client.post("/players", json=_payload())
 
     assert response.json()["username"] == "wllser002"
+
+
+def test_create_player_returns_a_one_time_password_and_stores_only_its_hash(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The response is the only place the password ever appears: the row keeps an
+    Argon2 hash, so nothing can show it a second time."""
+    response = client.post("/players", json=_payload())
+
+    password = response.json()["password"]
+    saved = db_session.get(Player, uuid.UUID(response.json()["id"]))
+    assert saved is not None
+    assert saved.password_hash is not None
+    assert saved.password_hash.startswith("$argon2")
+    assert password not in saved.password_hash
+    assert verify_password(password, saved.password_hash)
+
+
+def test_the_password_never_appears_on_a_read(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """PlayerRead has no password field at all, so the list and the profile cannot
+    leak one however the row was minted."""
+    created = client.post("/players", json=_payload()).json()
+
+    fetched = client.get(f"/players/{created['id']}").json()
+    listed = client.get("/players").json()
+
+    assert "password" not in fetched
+    assert all("password" not in player for player in listed)
+
+
+@pytest.mark.usefixtures("coach")
+def test_the_minted_password_never_meets_the_policy(client: TestClient) -> None:
+    """A uniform draw cannot fail rules built for human choices, so the policy and the
+    breach corpus are deliberately never consulted: a corpus that refuses everything
+    must not be able to refuse a create."""
+    breach_every_password(client)
+
+    assert client.post("/players", json=_payload()).status_code == 201
+
+
+def test_creates_beyond_the_minting_burst_are_refused(
+    client: TestClient,
+    db_session: Session,
+    coach: Coach,
+    monkeypatch: pytest.MonkeyPatch,
+    clock: Clock,
+) -> None:
+    """Every create now pays an Argon2 hash, so arrivals are metered like photo
+    uploads. The burst is sized past any club roster, which is the point of it:
+    hashing is stubbed to keep the drain cheap, since the tier is what is under test."""
+    monkeypatch.setattr(players_module, "hash_password", lambda password: "$argon2-stub")
+    for _ in range(60):
+        assert client.post("/players", json=_payload()).status_code == 201
+
+    refused = client.post("/players", json=_payload())
+
+    assert refused.status_code == 429
+    assert refused.headers["Retry-After"].isdigit()
 
 
 def test_create_player_retries_when_a_concurrent_create_takes_the_username(

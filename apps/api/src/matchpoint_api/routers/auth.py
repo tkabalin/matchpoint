@@ -475,7 +475,7 @@ def set_password(
     check_password(
         new_password,
         email=coach.email,
-        display_name=coach.display_name,
+        names=[coach.display_name],
         breach_checker=breach_checker,
     )
     coach.password_hash = hash_password(new_password)

@@ -55,7 +55,7 @@ class _Recording:
 
 
 def _reason(password: str, email: str = EMAIL, display_name: str = DISPLAY_NAME) -> str | None:
-    return rejection_reason(password, email=email, display_name=display_name)
+    return rejection_reason(password, email=email, names=[display_name])
 
 
 def _check(password: str, checker: BreachChecker | None = None) -> None:
@@ -64,7 +64,7 @@ def _check(password: str, checker: BreachChecker | None = None) -> None:
     check_password(
         password,
         email=EMAIL,
-        display_name=DISPLAY_NAME,
+        names=[DISPLAY_NAME],
         breach_checker=checker or AllowAllBreachChecker(),
     )
 
@@ -142,6 +142,20 @@ def test_an_ordinary_password_is_accepted(password: str) -> None:
     first case is why the blocklist matches whole passwords: `a-good-password` contains a
     listed word, and refusing it would break every sign-up in this suite."""
     assert _reason(password) is None
+
+
+def test_a_player_password_carrying_their_own_words_is_refused() -> None:
+    """A player has no email, so their context arrives as names alone: the generated
+    username and the full name joined up are both worth refusing, since both are what
+    someone who knows the player would guess first."""
+    player_names = ["kbltho001", "Thomas Kabalin"]
+
+    assert rejection_reason("my-kbltho001-pw", email=None, names=player_names) == CONTEXT
+    assert rejection_reason("thomaskabalin99x", email=None, names=player_names) == CONTEXT
+
+
+def test_no_email_contributes_no_words() -> None:
+    assert rejection_reason("the-alpine-jonquil", email=None, names=["Coach Mike"]) is None
 
 
 def test_a_short_name_is_not_matched_as_a_substring() -> None:

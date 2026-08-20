@@ -98,6 +98,18 @@ class PlayerRead(BaseModel):
     has_transfer_code: bool
 
 
+class PlayerCreatedRead(PlayerRead):
+    """The created player, plus the one password their sign-in starts from.
+
+    Shown here and never again: only a hash is stored, so the coach copies the
+    username and password out of this response and hands them over out of band.
+    """
+
+    # Plain str, not SecretStr, for PlayerTransferCodeRead's reason: this is the one
+    # response that must carry the password itself.
+    password: str
+
+
 class RedeemTransferCodeRequest(RequestModel):
     # SecretStr for the reason the OTP is one: the code is a live credential, and naming
     # it in errors.py's SECRET_FIELDS is what keeps it out of a 422's echoed input.

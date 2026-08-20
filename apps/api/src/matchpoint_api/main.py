@@ -157,6 +157,17 @@ def create_app() -> FastAPI:
     app.state.photo_upload_per_ip_limit = RateLimiter(per_minute=20, burst=20)
     app.state.photo_upload_total_limit = RateLimiter(per_minute=60, burst=20)
 
+    # Minting a player password, at creation and regeneration alike: each call is one
+    # Argon2 hash, so photo upload's shape (a per-coach arrival rate taken in the
+    # handler, once the coach has resolved). Sized off a squad rather than off sign-up,
+    # whose sizes these were: the caller here is a coach we can name and revoke, and a
+    # roster entered in one sitting is what the brief asks to be quick. The wider tiers
+    # are multiples of the per-coach one, so one honest roster cannot refuse a second
+    # coach, and the total still holds Argon2 to about a sixth of the single vCPU.
+    app.state.player_password_per_coach_limit = RateLimiter(per_minute=30, burst=60)
+    app.state.player_password_per_ip_limit = RateLimiter(per_minute=60, burst=120)
+    app.state.player_password_total_limit = RateLimiter(per_minute=60, burst=120)
+
     # Every authenticated route: one budget per coach, charged in auth.current_coach.
     # The burst clears an outbox flushing two three-set matches of individually-posted
     # points (~250 each); the sustained rate is far above human use. An estimate until

@@ -102,6 +102,25 @@ def new_session_token() -> str:
     return secrets.token_urlsafe(32)
 
 
+def new_player_password() -> str:
+    """A fresh player password from the CSPRNG: xxxx-xxxx-xxxx, typed once then changed.
+
+    The alphabet is lowercase letters and digits with the lookalikes removed (l, o,
+    0, 1), because the coach hands this over out of band, read aloud or copied onto
+    paper. 32 symbols is five bits a character, sixty bits a password: far past any
+    online budget the rate limits leave open, and Argon2 (security.py) makes an
+    offline sweep of a stolen hash pay per guess.
+
+    It deliberately never meets password_policy.py: those rules catch human-chosen
+    weaknesses, a uniform draw cannot fail them except by freak accident, and that
+    accident would turn a create into a spurious 400. The breach corpus goes unasked
+    for the same reason, saving a network request per created player.
+    """
+    alphabet = "abcdefghijkmnpqrstuvwxyz23456789"
+    groups = ("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(3))
+    return "-".join(groups)
+
+
 def hash_token(token: str) -> str:
     """The stored form of a token: SHA-256 hex, exactly the width of the column.
 

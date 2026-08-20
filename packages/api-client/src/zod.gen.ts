@@ -190,6 +190,31 @@ export const zPlayerCreate = z.object({
 });
 
 /**
+ * PlayerCreatedRead
+ *
+ * The created player, plus the one password their sign-in starts from.
+ *
+ * Shown here and never again: only a hash is stored, so the coach copies the
+ * username and password out of this response and hands them over out of band.
+ */
+export const zPlayerCreatedRead = z.object({
+    coach_id: z.uuid(),
+    created_at: z.iso.datetime(),
+    date_of_birth: z.iso.date().nullable(),
+    dominant_hand: zDominantHand.nullable(),
+    first_name: z.string(),
+    gender: zGender.nullable(),
+    has_transfer_code: z.boolean(),
+    id: z.uuid(),
+    last_name: z.string(),
+    notes: z.string().nullable(),
+    password: z.string(),
+    photo_url: z.string().nullable(),
+    updated_at: z.iso.datetime(),
+    username: z.string()
+});
+
+/**
  * PlayerRead
  */
 export const zPlayerRead = z.object({
@@ -796,7 +821,7 @@ export const zCreatePlayerBody = zPlayerCreate;
 /**
  * Successful Response
  */
-export const zCreatePlayerResponse = zPlayerRead;
+export const zCreatePlayerResponse = zPlayerCreatedRead;
 
 export const zRedeemPlayerTransferCodeBody = zRedeemTransferCodeRequest;
 

@@ -67,6 +67,7 @@ erDiagram
         varchar(100) first_name
         varchar(100) last_name
         varchar(20) username UK "the sign-in identifier, minted by the server from the name"
+        text password_hash "nullable: argon2 of the coach-minted password; null cannot sign in"
         date date_of_birth "nullable"
         varchar(5) dominant_hand "nullable: right, left"
         varchar(6) gender "nullable: male, female, other"

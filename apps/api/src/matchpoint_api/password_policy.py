@@ -25,6 +25,7 @@ import itertools
 import logging
 import re
 from collections import Counter
+from collections.abc import Sequence
 
 from fastapi import HTTPException
 
@@ -120,21 +121,26 @@ def _longest_sequence(password: str) -> int:
     return longest
 
 
-def _context_words(email: str, display_name: str) -> set[str]:
-    """The coach's own words, as the substrings worth refusing.
+def _context_words(email: str | None, names: Sequence[str]) -> set[str]:
+    """The account's own words, as the substrings worth refusing.
 
     The email's local part and the pieces of it, so `mike.smith@` contributes `smith`
-    as well; the display name's words, and the whole name joined up. The domain stays
-    out: it names a mail provider far more often than a coach, and `gmail` inside a
-    password gives away nothing about who chose it.
+    as well; each name's words, and that name joined up. The domain stays out: it
+    names a mail provider far more often than a coach, and `gmail` inside a password
+    gives away nothing about who chose it. `email` is None for a player, who has no
+    address; their username and full name arrive through `names` instead.
     """
-    local_part = email.partition("@")[0]
-    words = re.split(r"[\W_]+", display_name)
-    candidates = {local_part, *re.split(r"[\W_]+", local_part), *words, "".join(words)}
+    candidates: set[str] = set()
+    if email is not None:
+        local_part = email.partition("@")[0]
+        candidates |= {local_part, *re.split(r"[\W_]+", local_part)}
+    for name in names:
+        words = re.split(r"[\W_]+", name)
+        candidates |= {*words, "".join(words)}
     return {normalise(word).casefold() for word in candidates if len(word) >= CONTEXT_MIN_LENGTH}
 
 
-def rejection_reason(password: str, *, email: str, display_name: str) -> str | None:
+def rejection_reason(password: str, *, email: str | None, names: Sequence[str]) -> str | None:
     """Why the local rules refuse this password, or None if they don't.
 
     The first matching rule is the one reported, since a password failing two of them
@@ -154,7 +160,7 @@ def rejection_reason(password: str, *, email: str, display_name: str) -> str | N
         return REPEATED
     if _longest_sequence(folded) >= SEQUENCE_LIMIT:
         return SEQUENTIAL
-    if any(word in folded for word in _context_words(email, display_name)):
+    if any(word in folded for word in _context_words(email, names)):
         return CONTEXT
     return None
 
@@ -185,7 +191,7 @@ def _breach_reason(password: str, breach_checker: BreachChecker) -> str | None:
 
 
 def check_password(
-    password: str, *, email: str, display_name: str, breach_checker: BreachChecker
+    password: str, *, email: str | None, names: Sequence[str], breach_checker: BreachChecker
 ) -> None:
     """Raise the 400 that refuses a password this policy will not accept.
 
@@ -200,7 +206,7 @@ def check_password(
     # prefix for a password that was never going to be accepted. It also keeps the four
     # local reasons deterministic: `aaaaaaaa` is in the corpus too, and a coach should
     # hear REPEATED for it whatever the network did.
-    reason = rejection_reason(password, email=email, display_name=display_name)
+    reason = rejection_reason(password, email=email, names=names)
     if reason is None:
         reason = _breach_reason(password, breach_checker)
     if reason is not None:

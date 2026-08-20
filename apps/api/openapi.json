@@ -802,6 +802,123 @@
         "title": "PlayerCreate",
         "type": "object"
       },
+      "PlayerCreatedRead": {
+        "description": "The created player, plus the one password their sign-in starts from.\n\nShown here and never again: only a hash is stored, so the coach copies the\nusername and password out of this response and hands them over out of band.",
+        "properties": {
+          "coach_id": {
+            "format": "uuid",
+            "title": "Coach Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "date_of_birth": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Of Birth"
+          },
+          "dominant_hand": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DominantHand"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "first_name": {
+            "title": "First Name",
+            "type": "string"
+          },
+          "gender": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Gender"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "has_transfer_code": {
+            "title": "Has Transfer Code",
+            "type": "boolean"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_name": {
+            "title": "Last Name",
+            "type": "string"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "photo_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Photo Url"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "first_name",
+          "last_name",
+          "username",
+          "date_of_birth",
+          "dominant_hand",
+          "gender",
+          "notes",
+          "coach_id",
+          "photo_url",
+          "created_at",
+          "updated_at",
+          "has_transfer_code",
+          "password"
+        ],
+        "title": "PlayerCreatedRead",
+        "type": "object"
+      },
       "PlayerRead": {
         "properties": {
           "coach_id": {
@@ -3482,7 +3599,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PlayerRead"
+                  "$ref": "#/components/schemas/PlayerCreatedRead"
                 }
               }
             },

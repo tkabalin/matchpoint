@@ -39,6 +39,11 @@ class Player(Base):
     # student-number shape. Always stored lowercase, so login can fold what was typed.
     # String(20) leaves the number room the format can widen into past 999.
     username: Mapped[str] = mapped_column(String(20), unique=True)
+    # Argon2 of the password the coach was shown once (auth.new_player_password), or
+    # NULL for a row that predates player sign-in and has not had one minted since.
+    # Argon2 rather than hash_token's plain digest: a player types this at login, so
+    # it is a guessable secret, not a 256-bit token.
+    password_hash: Mapped[str | None] = mapped_column(Text)
     # Everything past the name is nullable: player profiles must be quick to set
     # up, so nothing beyond the two name parts is required.
     date_of_birth: Mapped[date | None] = mapped_column(Date)

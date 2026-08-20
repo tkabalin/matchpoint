@@ -129,7 +129,7 @@ def create_coach(data: CoachCreate, db: DbSession, request: Request) -> Coach:
     check_password(
         data.password.get_secret_value(),
         email=data.email,
-        display_name=data.display_name,
+        names=[data.display_name],
         breach_checker=breach_checker,
     )
     # One statement is the validity check, the email match and the consumption, so single-use

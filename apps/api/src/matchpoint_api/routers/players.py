@@ -9,17 +9,20 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
-from matchpoint_api.auth import CurrentCoach, hash_token, new_session_token
+from matchpoint_api.auth import CurrentCoach, hash_token, new_player_password, new_session_token
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Match, Player, PlayerTransferCode, Point
+from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
     PlayerCreate,
+    PlayerCreatedRead,
     PlayerRead,
     PlayerTransferCodeRead,
     PlayerUpdate,
     RedeemTransferCodeRequest,
 )
+from matchpoint_api.security import hash_password
 from matchpoint_api.usernames import next_username
 
 # The 401 is declared once at the router because every route here requires a signed-in
@@ -64,8 +67,30 @@ def owned_player(
     return player
 
 
-@router.post("", status_code=201, response_model=PlayerRead)
-def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Player:
+def limit_player_password_rate(request: Request, coach_id: uuid.UUID) -> None:
+    """Meter the minting of a player password, or refuse it having spent nothing.
+
+    Called from the handler rather than the decorator's `dependencies`, for
+    photos.py's reason: there is no coach to key on until the current coach has
+    resolved. Shared by creation and regeneration, the two routes that pay an Argon2
+    hash, so the two cannot come to disagree about which buckets a mint spends from.
+    """
+    per_coach: RateLimiter = request.app.state.player_password_per_coach_limit
+    per_ip: RateLimiter = request.app.state.player_password_per_ip_limit
+    total: RateLimiter = request.app.state.player_password_total_limit
+    take_all((per_coach, str(coach_id)), (per_ip, client_key(request)), (total, "total"))
+
+
+@router.post("", status_code=201, response_model=PlayerCreatedRead)
+def create_player(
+    data: PlayerCreate, db: DbSession, coach: CurrentCoach, request: Request
+) -> PlayerCreatedRead:
+    limit_player_password_rate(request, coach.id)
+    # Minted and hashed before the insert loop, so a username retry never pays a
+    # second hash. The plaintext exists only in this frame and the response: the row
+    # keeps the Argon2, and nothing can show the password again.
+    password = new_player_password()
+    password_hash = hash_password(password)
     # Two concurrent creates of namesakes can both read the same highest number and
     # mint the same username; the unique constraint makes one the loser, which
     # recomputes and retries. Three attempts, because each further round needs yet
@@ -79,6 +104,7 @@ def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Pla
             **data.model_dump(),
             coach_id=coach.id,
             username=next_username(db, data.first_name, data.last_name),
+            password_hash=password_hash,
         )
         db.add(player)
         try:
@@ -91,7 +117,9 @@ def create_player(data: PlayerCreate, db: DbSession, coach: CurrentCoach) -> Pla
             if not isinstance(exc.orig, UniqueViolation) or attempt == 2:
                 raise
         else:
-            return player
+            return PlayerCreatedRead(
+                **PlayerRead.model_validate(player).model_dump(), password=password
+            )
     raise AssertionError("unreachable: the last attempt re-raises")  # pragma: no cover
 
 

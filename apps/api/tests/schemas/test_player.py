@@ -17,6 +17,7 @@ from matchpoint_api.schemas.player import (
     MAX_AGE_YEARS,
     TRANSFER_CODE_MAX_LENGTH,
     PlayerCreate,
+    PlayerCreatedRead,
     PlayerRead,
     PlayerUpdate,
     RedeemTransferCodeRequest,
@@ -278,6 +279,34 @@ def test_a_read_carries_the_photo_url_derived_from_the_key() -> None:
     player.has_transfer_code = False
 
     assert PlayerRead.model_validate(player).photo_url == "/api/media/mBKcJ7Yh3QhBOTd3ffVXbw.webp"
+
+
+def test_a_created_player_carries_the_password_in_the_clear() -> None:
+    """PlayerCreatedRead is the one response allowed to carry the password, so it is
+    a plain str rather than a SecretStr, which would serialise as asterisks. PlayerRead
+    itself has no password field, which is what keeps it off every other response."""
+    now = datetime.now(UTC)
+    created = PlayerCreatedRead.model_validate(
+        {
+            "id": uuid.uuid4(),
+            "first_name": "Test",
+            "last_name": "Player",
+            "username": "plytes001",
+            "date_of_birth": None,
+            "dominant_hand": None,
+            "gender": None,
+            "notes": None,
+            "coach_id": uuid.uuid4(),
+            "photo_url": None,
+            "created_at": now,
+            "updated_at": now,
+            "has_transfer_code": False,
+            "password": "abcd-efgh-jkmn",
+        }
+    )
+
+    assert created.model_dump()["password"] == "abcd-efgh-jkmn"
+    assert "password" not in PlayerRead.model_fields
 
 
 @pytest.mark.parametrize("schema", [PlayerCreate, PlayerUpdate])

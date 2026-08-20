@@ -393,6 +393,67 @@ export type PlayerCreate = {
 };
 
 /**
+ * PlayerCreatedRead
+ *
+ * The created player, plus the one password their sign-in starts from.
+ *
+ * Shown here and never again: only a hash is stored, so the coach copies the
+ * username and password out of this response and hands them over out of band.
+ */
+export type PlayerCreatedRead = {
+    /**
+     * Coach Id
+     */
+    coach_id: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string | null;
+    dominant_hand: DominantHand | null;
+    /**
+     * First Name
+     */
+    first_name: string;
+    gender: Gender | null;
+    /**
+     * Has Transfer Code
+     */
+    has_transfer_code: boolean;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Last Name
+     */
+    last_name: string;
+    /**
+     * Notes
+     */
+    notes: string | null;
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Photo Url
+     */
+    photo_url: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * PlayerRead
  */
 export type PlayerRead = {
@@ -1875,7 +1936,7 @@ export type CreatePlayerResponses = {
     /**
      * Successful Response
      */
-    201: PlayerRead;
+    201: PlayerCreatedRead;
 };
 
 export type CreatePlayerResponse = CreatePlayerResponses[keyof CreatePlayerResponses];
