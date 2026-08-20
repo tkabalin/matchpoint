@@ -13,6 +13,7 @@ import {
   matchSetsFor,
   matchStateFor,
   maxSetsFor,
+  nextBoxFor,
   nextServerFor,
   setRulesFor,
   setStateFor,
@@ -279,6 +280,7 @@ describe("setStateFor", () => {
       opponentGames: 0,
       tiebreak: null,
       winner: null,
+      currentGamePoints: 0,
     });
   });
 
@@ -297,6 +299,35 @@ describe("setStateFor", () => {
     ];
     const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
     expect(state.trackedPlayerGames).toBe(5);
+  });
+
+  describe("currentGamePoints", () => {
+    test("0 right after a completed game — a fresh boundary, no game started yet", () => {
+      const points = completedGames(TRACKED_ID, 2);
+      const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
+      expect(state.currentGamePoints).toBe(0);
+    });
+
+    test("counts points already played in the current, not-yet-decided game", () => {
+      const points = [
+        ...completedGames(TRACKED_ID, 2),
+        pointWonBy(TRACKED_ID),
+        pointWonBy(OPPONENT_ID),
+      ];
+      const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
+      expect(state.currentGamePoints).toBe(2);
+      expect(state.trackedPlayerGames).toBe(2); // the 2 loose points don't complete a 3rd game
+    });
+
+    test("0 mid-tiebreak — no regular game is in progress once the breaker starts", () => {
+      const points = [
+        ...completedGames(TRACKED_ID, 6),
+        ...completedGames(OPPONENT_ID, 6),
+        ...pointsFor(3, 2),
+      ];
+      const state = setStateFor(points, TRACKED_ID, OPPONENT_ID, true, TRADITIONAL_RULES);
+      expect(state.currentGamePoints).toBe(0);
+    });
   });
 
   describe("traditional-shaped rules", () => {
@@ -557,7 +588,10 @@ describe("isTiebreakFor", () => {
     (trackedPlayerGames, opponentGames, expected) => {
       const rules = setRulesFor("traditional", 1, 3);
       expect(
-        isTiebreakFor({ trackedPlayerGames, opponentGames, tiebreak: null, winner: null }, rules),
+        isTiebreakFor(
+          { trackedPlayerGames, opponentGames, tiebreak: null, winner: null, currentGamePoints: 0 },
+          rules,
+        ),
       ).toBe(expected);
     },
   );
@@ -566,7 +600,13 @@ describe("isTiebreakFor", () => {
     const rules = setRulesFor("legacy", 3, 3);
     expect(
       isTiebreakFor(
-        { trackedPlayerGames: 10, opponentGames: 10, tiebreak: null, winner: null },
+        {
+          trackedPlayerGames: 10,
+          opponentGames: 10,
+          tiebreak: null,
+          winner: null,
+          currentGamePoints: 0,
+        },
         rules,
       ),
     ).toBe(false);
@@ -576,7 +616,13 @@ describe("isTiebreakFor", () => {
     const rules = setRulesFor("match_tiebreak_10_points", 3, 3);
     expect(
       isTiebreakFor(
-        { trackedPlayerGames: 0, opponentGames: 0, tiebreak: null, winner: null },
+        {
+          trackedPlayerGames: 0,
+          opponentGames: 0,
+          tiebreak: null,
+          winner: null,
+          currentGamePoints: 0,
+        },
         rules,
       ),
     ).toBe(true);
@@ -587,7 +633,13 @@ describe("isTiebreakFor", () => {
     // next point still has to follow tiebreak serving rules the instant games-all
     // is reached. This is the exact subtlety nextServerFor depends on.
     const rules = setRulesFor("traditional", 1, 3);
-    const state = { trackedPlayerGames: 6, opponentGames: 6, tiebreak: null, winner: null };
+    const state = {
+      trackedPlayerGames: 6,
+      opponentGames: 6,
+      tiebreak: null,
+      winner: null,
+      currentGamePoints: 0,
+    };
     expect(state.tiebreak).toBeNull();
     expect(isTiebreakFor(state, rules)).toBe(true);
   });
@@ -599,7 +651,13 @@ describe("matchSetsFor", () => {
     expect(result.completedSets).toEqual([]);
     expect(result.currentSet).toEqual({
       setNumber: 1,
-      state: { trackedPlayerGames: 0, opponentGames: 0, tiebreak: null, winner: null },
+      state: {
+        trackedPlayerGames: 0,
+        opponentGames: 0,
+        tiebreak: null,
+        winner: null,
+        currentGamePoints: 0,
+      },
     });
   });
 
@@ -626,7 +684,13 @@ describe("matchSetsFor", () => {
     expect(result.completedSets).toHaveLength(1);
     expect(result.currentSet).toEqual({
       setNumber: 2,
-      state: { trackedPlayerGames: 1, opponentGames: 0, tiebreak: null, winner: null },
+      state: {
+        trackedPlayerGames: 1,
+        opponentGames: 0,
+        tiebreak: null,
+        winner: null,
+        currentGamePoints: 0,
+      },
     });
   });
 
@@ -656,7 +720,13 @@ describe("matchSetsFor", () => {
     expect(result.completedSets).toHaveLength(2);
     expect(result.currentSet).toEqual({
       setNumber: 3,
-      state: { trackedPlayerGames: 3, opponentGames: 5, tiebreak: null, winner: null },
+      state: {
+        trackedPlayerGames: 3,
+        opponentGames: 5,
+        tiebreak: null,
+        winner: null,
+        currentGamePoints: 0,
+      },
     });
   });
 
@@ -772,7 +842,13 @@ describe("nextServerFor", () => {
       completedSets,
       currentSet: {
         setNumber: completedSets.length + 1,
-        state: { trackedPlayerGames, opponentGames, tiebreak: null, winner: null },
+        state: {
+          trackedPlayerGames,
+          opponentGames,
+          tiebreak: null,
+          winner: null,
+          currentGamePoints: 0,
+        },
       },
     };
   }
@@ -861,6 +937,7 @@ describe("nextServerFor", () => {
                 ? null
                 : { trackedPlayerPoints: pointsPlayed, opponentPoints: 0, target: 7 },
             winner: null,
+            currentGamePoints: 0,
           },
         },
       };
@@ -975,6 +1052,75 @@ describe("nextServerFor", () => {
     expect(nextServerFor(liveSets, "traditional", TRACKED_ID, TRACKED_ID, OPPONENT_ID)).toBe(
       OPPONENT_ID,
     );
+  });
+});
+
+describe("nextBoxFor", () => {
+  test("a brand-new match (no current set at all) is game 1, point 1 — always deuce", () => {
+    const liveSets = { completedSets: [], currentSet: null };
+    expect(nextBoxFor(liveSets, "traditional")).toBe("DEUCE");
+  });
+
+  describe("regular game — alternates by points played so far this game", () => {
+    test.each([
+      [0, "DEUCE"],
+      [1, "AD"],
+      [2, "DEUCE"],
+      [3, "AD"],
+      [4, "DEUCE"],
+    ] as const)("%i points played -> %s", (currentGamePoints, expected) => {
+      const liveSets = {
+        completedSets: [],
+        currentSet: {
+          setNumber: 1,
+          state: {
+            trackedPlayerGames: 0,
+            opponentGames: 0,
+            tiebreak: null,
+            winner: null,
+            currentGamePoints,
+          },
+        },
+      };
+      expect(nextBoxFor(liveSets, "traditional")).toBe(expected);
+    });
+  });
+
+  describe("mid-tiebreak — alternates by points played so far in the breaker instead", () => {
+    test.each([
+      [0, "DEUCE"],
+      [1, "AD"],
+      [2, "DEUCE"],
+      [3, "AD"],
+    ] as const)("%i breaker points played -> %s", (pointsPlayed, expected) => {
+      const liveSets = {
+        completedSets: [],
+        currentSet: {
+          setNumber: 1,
+          state: {
+            trackedPlayerGames: 6,
+            opponentGames: 6,
+            tiebreak:
+              pointsPlayed === 0
+                ? null
+                : { trackedPlayerPoints: pointsPlayed, opponentPoints: 0, target: 7 },
+            winner: null,
+            currentGamePoints: 0,
+          },
+        },
+      };
+      // Zero breaker points played yet is still correctly "in the breaker" — the
+      // same subtlety isTiebreakFor's own tests cover (tiebreak stays null until a
+      // breaker point exists, but the rule already applies).
+      expect(nextBoxFor(liveSets, "traditional")).toBe(expected);
+    });
+  });
+
+  test("composes with matchSetsFor end to end: 3 points into a fresh match's first game", () => {
+    const points = Array.from({ length: 3 }, () => pointWonBy(TRACKED_ID));
+    const liveSets = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(liveSets.currentSet?.state.currentGamePoints).toBe(3);
+    expect(nextBoxFor(liveSets, "traditional")).toBe("AD");
   });
 });
 

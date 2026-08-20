@@ -91,7 +91,13 @@ describe("nextServerRoleFor", () => {
       completedSets: [],
       currentSet: {
         setNumber: 1,
-        state: { trackedPlayerGames: 0, opponentGames: 0, tiebreak: null, winner: null },
+        state: {
+          trackedPlayerGames: 0,
+          opponentGames: 0,
+          tiebreak: null,
+          winner: null,
+          currentGamePoints: 0,
+        },
       },
     };
     // 0 games completed, firstServer = trackedPlayerId -> tracked serves.
@@ -104,7 +110,13 @@ describe("nextServerRoleFor", () => {
       completedSets: [],
       currentSet: {
         setNumber: 1,
-        state: { trackedPlayerGames: 1, opponentGames: 0, tiebreak: null, winner: null },
+        state: {
+          trackedPlayerGames: 1,
+          opponentGames: 0,
+          tiebreak: null,
+          winner: null,
+          currentGamePoints: 0,
+        },
       },
     };
     // 1 game completed -> odd -> flips from firstServer (tracked) to the opponent.

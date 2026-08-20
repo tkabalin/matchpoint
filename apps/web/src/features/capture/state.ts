@@ -14,7 +14,7 @@
 import type { Match, ScoringSystem } from "./match";
 import { MatchSet } from "./match-set";
 import type { TiebreakScore } from "./match-set";
-import type { Point } from "./point";
+import type { CourtSide, Point } from "./point";
 
 // --- ScoringSystem-derived rules ---------------------------------------------
 //
@@ -267,6 +267,12 @@ export interface SetState {
   tiebreak: TiebreakScore | null;
   // trackedPlayerId, opponentId, or null while the set is still in progress.
   winner: string | null;
+  // Points played in the current, not-yet-decided game — 0 whenever no game is in
+  // progress (a fresh set, a game that just completed, or mid-tiebreak, where
+  // `tiebreak`'s own point counts are the equivalent fact instead). Exposes what
+  // setStateFor's own walk already tracks internally and otherwise discards —
+  // deuceOrAdFor needs it to know how far into the current game a point sits.
+  currentGamePoints: number;
 }
 
 /**
@@ -390,7 +396,13 @@ export function setStateFor(
         winner = opponentId;
       }
     }
-    return { trackedPlayerGames, opponentGames, tiebreak, winner };
+    return {
+      trackedPlayerGames,
+      opponentGames,
+      tiebreak,
+      winner,
+      currentGamePoints: currentGameTrackedPoints + currentGameOpponentPoints,
+    };
   }
 
   const gamesLead = trackedPlayerGames - opponentGames;
@@ -410,7 +422,13 @@ export function setStateFor(
     }
   }
 
-  return { trackedPlayerGames, opponentGames, tiebreak, winner };
+  return {
+    trackedPlayerGames,
+    opponentGames,
+    tiebreak,
+    winner,
+    currentGamePoints: currentGameTrackedPoints + currentGameOpponentPoints,
+  };
 }
 
 // --- Match state ----------------------------------------------------------------
@@ -688,6 +706,43 @@ export function nextServerFor(
   return firstServerServesNext
     ? tiebreakFirstServer
     : otherIdOf(tiebreakFirstServer, trackedPlayerId, opponentId);
+}
+
+// Deuce court on an even count of points played so far (0, 2, 4, ... -> deuce; 1, 3,
+// 5, ... -> ad) — the standard tennis service-position pattern, unconditional even
+// through extended deuce in ad scoring, and identical inside a tiebreak (service
+// position still alternates by points played, just within the breaker instead of a
+// game).
+function boxFor(pointsPlayed: number): CourtSide {
+  return pointsPlayed % 2 === 0 ? "DEUCE" : "AD";
+}
+
+/**
+ * Which service box the next point is served from. Never a fact to record — fully
+ * determined by how many points have already been played in the current game (or,
+ * mid-tiebreak, the breaker so far), the same way `ServeZone`/`CourtZone`'s `box`/
+ * `half` fields are themselves recorded facts about a point already played, not
+ * derived ones (see point.ts). A fresh, not-yet-started set (no current set at all)
+ * is game 1, point 1: always the deuce court.
+ */
+export function nextBoxFor(liveSets: MatchSetsState, scoringSystem: ScoringSystem): CourtSide {
+  if (liveSets.currentSet === null) {
+    return boxFor(0);
+  }
+
+  const { setNumber, state } = liveSets.currentSet;
+  const maxSets = maxSetsFor(scoringSystem);
+  const rules = setRulesFor(scoringSystem, setNumber, maxSets);
+
+  if (isTiebreakFor(state, rules)) {
+    const pointsPlayed =
+      state.tiebreak === null
+        ? 0
+        : state.tiebreak.trackedPlayerPoints + state.tiebreak.opponentPoints;
+    return boxFor(pointsPlayed);
+  }
+
+  return boxFor(state.currentGamePoints);
 }
 
 /**
