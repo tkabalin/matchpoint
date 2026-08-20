@@ -37,7 +37,7 @@ def test_match_set_round_trips_with_match(db_session: Session) -> None:
 
 def test_a_set_in_flight_has_a_tally_and_no_winner(db_session: Session) -> None:
     """The newest set of a match being captured is unfinished until a point stamped
-    `ends_set` arrives, so the tally has to stand on its own without a result."""
+    `is_set_end` arrives, so the tally has to stand on its own without a result."""
     match_set = make_match_set(db_session, games_won_tracked=3, games_won_opponent=2, winner=None)
     db_session.commit()
 

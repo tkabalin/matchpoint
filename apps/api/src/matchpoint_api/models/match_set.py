@@ -47,7 +47,7 @@ class MatchSet(Base):
     set_number: Mapped[int]
     games_won_tracked: Mapped[int]
     games_won_opponent: Mapped[int]
-    # Null while the set is in flight: the client stamps `ends_set` on the point that
+    # Null while the set is in flight: the client stamps `is_set_end` on the point that
     # closes a set, and until one arrives the tally is a score so far, not a result.
     winner: Mapped[MatchSide | None] = mapped_column(str_enum(MatchSide, "set_winner"))
     # clock_timestamp() rather than now(), as everywhere in the schema.
