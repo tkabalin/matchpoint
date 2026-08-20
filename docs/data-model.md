@@ -107,11 +107,21 @@ A match's lifecycle is read off the row rather than stored: it is in progress wh
 null, and complete once a result is recorded. The two `capture_claim_` columns are the exception,
 the one piece of state capture genuinely adds, and they are one fact under a CHECK: which device is
 capturing the match, and when that claim lapses if the device stops renewing it. Capture is
-single-writer per match, so a second device is refused while a live claim stands.
+single-writer per match, so a second device is refused while a live claim stands. The device id is
+not a foreign key to `coach_sessions`: a session can rotate under a live capture, a password change
+or a fresh login on the same device, without ending it, and keying the claim to the session would
+strand it rather than let it keep renewing.
 
 `scoring_system` names the system the match was played under and nothing more. What each name
 implies (deuce or sudden death at 40-40, how long a set runs, what settles the decider) belongs to
 the client that scores the match, so the database stores the label and never interprets it.
+
+`default_surface` and `default_scoring_system` on `coaches` are match-setup defaults, not a separate
+preferences table: a coach has at most one value for each, so a join would buy nothing a column
+doesn't already give. The server never applies them itself: a match created offline has to keep
+`MatchCreate`'s distinction between a field left absent and one set to null, and substituting a
+default server-side would erase that distinction before it reaches storage. The client reads the
+defaults once at setup and fills the field in, or doesn't.
 
 `email_verifications` stands alone by design: it holds addresses proving themselves at sign-up,
 before any coach row exists to reference. A row is either an unanswered code or a proven
@@ -128,9 +138,11 @@ they cannot see. The current coach mints a code, hands it over out of band, and 
 redeems it becomes the owner: `players.coach_id` moves, and the matches follow, since a match
 reaches its owner through its player rather than a coach column of its own. One row per player, and
 redeeming deletes it. There is no `expires_at`, so a player can carry the code to a coach the
-current one never meets; the minting coach can delete the row to cancel it. A live code also refuses
-both routes that would destroy the player, deleting them and closing the minting coach's account,
-since it is a claim another coach may still act on.
+current one never meets; the minting coach can delete the row to cancel it. Minting again while a
+code is already live replaces the row outright rather than adding a second one: the old code's hash
+is gone, so it can never be redeemed, which is what the unique-per-player constraint is for. A live
+code also refuses both routes that would destroy the player, deleting them and closing the minting
+coach's account, since it is a claim another coach may still act on.
 
 ## Conventions
 
