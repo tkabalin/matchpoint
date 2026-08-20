@@ -17,6 +17,18 @@ export const zBodyUploadPlayerPhoto = z.object({
 });
 
 /**
+ * BreakdownRow
+ *
+ * A labelled count in a horizontal bar list.
+ */
+export const zBreakdownRow = z.object({
+    label: z.string(),
+    max: z.int(),
+    secondary_value: z.int().nullish(),
+    value: z.int()
+});
+
+/**
  * ChangePasswordRequest
  */
 export const zChangePasswordRequest = z.object({
@@ -47,6 +59,16 @@ export const zCoachVerifyPassword = z.object({
 });
 
 /**
+ * CorrelationPoint
+ *
+ * One match on the unforced-errors vs games-lost scatter.
+ */
+export const zCorrelationPoint = z.object({
+    games_lost: z.int(),
+    unforced_errors: z.int()
+});
+
+/**
  * CourtDepth
  */
 export const zCourtDepth = z.enum([
@@ -61,6 +83,16 @@ export const zCourtDepth = z.enum([
  * One half of the court: a service box, or the far court on the final ball.
  */
 export const zCourtSide = z.enum(['deuce', 'ad']);
+
+/**
+ * DistributionBucket
+ *
+ * One histogram bar: how many of the window's matches fell in this range.
+ */
+export const zDistributionBucket = z.object({
+    bucket: z.string(),
+    matches: z.int()
+});
 
 /**
  * DominantHand
@@ -171,10 +203,53 @@ export const zMatchSetRead = z.object({
 });
 
 /**
+ * MetricUnit
+ *
+ * How a metric's value is scaled, so the client can label and cap it.
+ */
+export const zMetricUnit = z.enum([
+    'percent',
+    'ratio',
+    'per_set',
+    'per_match'
+]);
+
+/**
+ * Metric
+ *
+ * One number a coach is shown, with everything needed to judge it.
+ */
+export const zMetric = z.object({
+    baseline: z.number().nullable(),
+    delta: z.number().nullable(),
+    display: z.string().nullish(),
+    higher_is_better: z.boolean(),
+    label: z.string(),
+    max: z.number(),
+    sample_size: z.string(),
+    unit: zMetricUnit,
+    value: z.number()
+});
+
+/**
  * OtpRequest
  */
 export const zOtpRequest = z.object({
     email: z.email().max(254)
+});
+
+/**
+ * OutcomeMixRow
+ *
+ * How the points one side decided split between their forcing shots and errors.
+ *
+ * Percentages of the rally-ended points that side's own last shot settled. A clean
+ * winner counts as forced: capture records no distinction between the two (#175).
+ */
+export const zOutcomeMixRow = z.object({
+    forced: z.number(),
+    label: z.string(),
+    unforced: z.number()
 });
 
 /**
@@ -363,6 +438,27 @@ export const zServeOutcome = z.enum([
 ]);
 
 /**
+ * ServeSideStats
+ *
+ * One side of the serve tab, serving or returning.
+ */
+export const zServeSideStats = z.object({
+    breakdown: z.array(zBreakdownRow),
+    hero: zMetric.nullable(),
+    metrics: z.array(zMetric)
+});
+
+/**
+ * ServeStats
+ *
+ * The serve tab, both sides in one payload.
+ */
+export const zServeStats = z.object({
+    returning: zServeSideStats,
+    serving: zServeSideStats
+});
+
+/**
  * ServeTarget
  *
  * Where a landed serve was aimed, coarse enough for a coach to call live.
@@ -372,6 +468,35 @@ export const zServeTarget = z.enum([
     'body',
     't'
 ]);
+
+/**
+ * ShotShare
+ *
+ * One radar axis: a shot type's share of the player's point-winning shots.
+ */
+export const zShotShare = z.object({
+    share: z.number(),
+    shot: z.string()
+});
+
+/**
+ * RallyStats
+ *
+ * The rally tab: how points end once the ball is in play.
+ *
+ * The stored shot is the last successful one, so `won_by_shot` describes the
+ * player's own point-winning shots and `lost_by_shot` the opponent's shots the
+ * player lost points on, never the player's own misses (#175).
+ */
+export const zRallyStats = z.object({
+    errors_overall: zMetric.nullable(),
+    errors_under_pressure: zMetric.nullable(),
+    hero: zMetric.nullable(),
+    lost_by_shot: z.array(zBreakdownRow),
+    outcome_mix: z.array(zOutcomeMixRow),
+    shot_frequency: z.array(zShotShare),
+    won_by_shot: z.array(zBreakdownRow)
+});
 
 /**
  * ShotType
@@ -384,6 +509,17 @@ export const zShotType = z.enum([
     'dropshot',
     'lob'
 ]);
+
+/**
+ * SlopeLine
+ *
+ * One metric's first-two vs last-two meeting average, drawn as a slope line.
+ */
+export const zSlopeLine = z.object({
+    first: z.number(),
+    label: z.string(),
+    last: z.number()
+});
 
 /**
  * Surface
@@ -461,6 +597,29 @@ export const zMatchUpdate = z.object({
 });
 
 /**
+ * TrendStats
+ *
+ * The trends tab, computed over the requested window of recent matches.
+ */
+export const zTrendStats = z.object({
+    correlation: z.array(zCorrelationPoint),
+    distribution: z.array(zDistributionBucket),
+    distribution_label: z.string(),
+    metrics: z.array(zMetric)
+});
+
+/**
+ * TrendWindow
+ *
+ * Which slice of a player's most recent matches a trends query covers.
+ */
+export const zTrendWindow = z.enum([
+    'last5',
+    'last10',
+    'season'
+]);
+
+/**
  * UnusualReason
  *
  * Why an UNUSUAL point ended, set only alongside that EndReason.
@@ -505,6 +664,65 @@ export const zVerifyOtpRequest = z.object({
  */
 export const zVerifyResetCodeRequest = z.object({
     email: z.email().max(254)
+});
+
+/**
+ * WinLossRecord
+ *
+ * Wins and losses, counted over matches with a recorded result.
+ */
+export const zWinLossRecord = z.object({
+    losses: z.int(),
+    wins: z.int()
+});
+
+/**
+ * HeadToHeadDetail
+ *
+ * The full matchup view against one opponent.
+ */
+export const zHeadToHeadDetail = z.object({
+    hero: zMetric,
+    loss_patterns: z.array(zBreakdownRow),
+    meetings: z.int(),
+    opponent_key: z.string(),
+    opponent_name: z.string(),
+    record: zWinLossRecord,
+    results: z.array(zMatchResult),
+    shot_frequency: z.array(zShotShare),
+    slope: z.array(zSlopeLine).nullable(),
+    their_serve: z.array(zMetric),
+    win_rate: z.number().nullable(),
+    won_by_shot: z.array(zBreakdownRow),
+    your_serve: z.array(zMetric)
+});
+
+/**
+ * HeadToHeadSummary
+ *
+ * One opponent row on the head-to-head list.
+ */
+export const zHeadToHeadSummary = z.object({
+    meetings: z.int(),
+    opponent_key: z.string(),
+    opponent_name: z.string(),
+    record: zWinLossRecord,
+    win_rate: z.number().nullable()
+});
+
+/**
+ * PlayerOverview
+ *
+ * The overview tab: headline metrics and the win/loss record.
+ */
+export const zPlayerOverview = z.object({
+    all_time_record: zWinLossRecord,
+    forced_to_unforced: zMetric.nullable(),
+    form: zMetric.nullable(),
+    hold_percentage: zMetric.nullable(),
+    recent_results: z.array(zMatchResult),
+    return_games_won: zMetric.nullable(),
+    season_record: zWinLossRecord
 });
 
 /**
@@ -933,6 +1151,70 @@ export const zUpdatePlayerPath = z.object({
  * Successful Response
  */
 export const zUpdatePlayerResponse = zPlayerRead;
+
+export const zListHeadToHeadPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Response List Head To Head
+ *
+ * Successful Response
+ */
+export const zListHeadToHeadResponse = z.array(zHeadToHeadSummary);
+
+export const zGetHeadToHeadPath = z.object({
+    player_id: z.uuid()
+});
+
+export const zGetHeadToHeadQuery = z.object({
+    opponent: z.string()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetHeadToHeadResponse = zHeadToHeadDetail;
+
+export const zGetPlayerOverviewPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetPlayerOverviewResponse = zPlayerOverview;
+
+export const zGetRallyStatsPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetRallyStatsResponse = zRallyStats;
+
+export const zGetServeStatsPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zGetServeStatsResponse = zServeStats;
+
+export const zGetTrendStatsPath = z.object({
+    player_id: z.uuid()
+});
+
+export const zGetTrendStatsQuery = z.object({
+    window: zTrendWindow
+});
+
+/**
+ * Successful Response
+ */
+export const zGetTrendStatsResponse = zTrendStats;
 
 export const zRegeneratePlayerPasswordPath = z.object({
     player_id: z.uuid()

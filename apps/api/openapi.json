@@ -29,6 +29,41 @@
         "title": "Body_upload_player_photo",
         "type": "object"
       },
+      "BreakdownRow": {
+        "description": "A labelled count in a horizontal bar list.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max": {
+            "title": "Max",
+            "type": "integer"
+          },
+          "secondary_value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Value"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "max"
+        ],
+        "title": "BreakdownRow",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -229,6 +264,25 @@
         "title": "CoachVerifyPassword",
         "type": "object"
       },
+      "CorrelationPoint": {
+        "description": "One match on the unforced-errors vs games-lost scatter.",
+        "properties": {
+          "games_lost": {
+            "title": "Games Lost",
+            "type": "integer"
+          },
+          "unforced_errors": {
+            "title": "Unforced Errors",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "unforced_errors",
+          "games_lost"
+        ],
+        "title": "CorrelationPoint",
+        "type": "object"
+      },
       "CourtDepth": {
         "enum": [
           "short",
@@ -246,6 +300,25 @@
         ],
         "title": "CourtSide",
         "type": "string"
+      },
+      "DistributionBucket": {
+        "description": "One histogram bar: how many of the window's matches fell in this range.",
+        "properties": {
+          "bucket": {
+            "title": "Bucket",
+            "type": "string"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bucket",
+          "matches"
+        ],
+        "title": "DistributionBucket",
+        "type": "object"
       },
       "DominantHand": {
         "enum": [
@@ -326,6 +399,153 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HeadToHeadDetail": {
+        "description": "The full matchup view against one opponent.",
+        "properties": {
+          "hero": {
+            "$ref": "#/components/schemas/Metric"
+          },
+          "loss_patterns": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Loss Patterns",
+            "type": "array"
+          },
+          "meetings": {
+            "title": "Meetings",
+            "type": "integer"
+          },
+          "opponent_key": {
+            "title": "Opponent Key",
+            "type": "string"
+          },
+          "opponent_name": {
+            "title": "Opponent Name",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/WinLossRecord"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/MatchResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "shot_frequency": {
+            "items": {
+              "$ref": "#/components/schemas/ShotShare"
+            },
+            "title": "Shot Frequency",
+            "type": "array"
+          },
+          "slope": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SlopeLine"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slope"
+          },
+          "their_serve": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Their Serve",
+            "type": "array"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          },
+          "won_by_shot": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Won By Shot",
+            "type": "array"
+          },
+          "your_serve": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Your Serve",
+            "type": "array"
+          }
+        },
+        "required": [
+          "opponent_key",
+          "opponent_name",
+          "meetings",
+          "record",
+          "win_rate",
+          "hero",
+          "results",
+          "slope",
+          "loss_patterns",
+          "your_serve",
+          "their_serve",
+          "won_by_shot",
+          "shot_frequency"
+        ],
+        "title": "HeadToHeadDetail",
+        "type": "object"
+      },
+      "HeadToHeadSummary": {
+        "description": "One opponent row on the head-to-head list.",
+        "properties": {
+          "meetings": {
+            "title": "Meetings",
+            "type": "integer"
+          },
+          "opponent_key": {
+            "title": "Opponent Key",
+            "type": "string"
+          },
+          "opponent_name": {
+            "title": "Opponent Name",
+            "type": "string"
+          },
+          "record": {
+            "$ref": "#/components/schemas/WinLossRecord"
+          },
+          "win_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Win Rate"
+          }
+        },
+        "required": [
+          "opponent_key",
+          "opponent_name",
+          "meetings",
+          "record",
+          "win_rate"
+        ],
+        "title": "HeadToHeadSummary",
         "type": "object"
       },
       "LoginRequest": {
@@ -718,6 +938,90 @@
         "title": "MatchUpdate",
         "type": "object"
       },
+      "Metric": {
+        "description": "One number a coach is shown, with everything needed to judge it.",
+        "properties": {
+          "baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline"
+          },
+          "delta": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delta"
+          },
+          "display": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display"
+          },
+          "higher_is_better": {
+            "title": "Higher Is Better",
+            "type": "boolean"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "sample_size": {
+            "title": "Sample Size",
+            "type": "string"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/MetricUnit"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "unit",
+          "sample_size",
+          "baseline",
+          "delta",
+          "max",
+          "higher_is_better"
+        ],
+        "title": "Metric",
+        "type": "object"
+      },
+      "MetricUnit": {
+        "description": "How a metric's value is scaled, so the client can label and cap it.",
+        "enum": [
+          "percent",
+          "ratio",
+          "per_set",
+          "per_match"
+        ],
+        "title": "MetricUnit",
+        "type": "string"
+      },
       "OtpRequest": {
         "additionalProperties": false,
         "properties": {
@@ -732,6 +1036,30 @@
           "email"
         ],
         "title": "OtpRequest",
+        "type": "object"
+      },
+      "OutcomeMixRow": {
+        "description": "How the points one side decided split between their forcing shots and errors.\n\nPercentages of the rally-ended points that side's own last shot settled. A clean\nwinner counts as forced: capture records no distinction between the two (#175).",
+        "properties": {
+          "forced": {
+            "title": "Forced",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "unforced": {
+            "title": "Unforced",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "forced",
+          "unforced"
+        ],
+        "title": "OutcomeMixRow",
         "type": "object"
       },
       "PlayerChangePasswordRequest": {
@@ -966,6 +1294,75 @@
           "password"
         ],
         "title": "PlayerLoginRequest",
+        "type": "object"
+      },
+      "PlayerOverview": {
+        "description": "The overview tab: headline metrics and the win/loss record.",
+        "properties": {
+          "all_time_record": {
+            "$ref": "#/components/schemas/WinLossRecord"
+          },
+          "forced_to_unforced": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "form": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hold_percentage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recent_results": {
+            "items": {
+              "$ref": "#/components/schemas/MatchResult"
+            },
+            "title": "Recent Results",
+            "type": "array"
+          },
+          "return_games_won": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "season_record": {
+            "$ref": "#/components/schemas/WinLossRecord"
+          }
+        },
+        "required": [
+          "form",
+          "recent_results",
+          "hold_percentage",
+          "return_games_won",
+          "forced_to_unforced",
+          "season_record",
+          "all_time_record"
+        ],
+        "title": "PlayerOverview",
         "type": "object"
       },
       "PlayerPasswordRead": {
@@ -1842,6 +2239,80 @@
         "title": "RallyBucket",
         "type": "string"
       },
+      "RallyStats": {
+        "description": "The rally tab: how points end once the ball is in play.\n\nThe stored shot is the last successful one, so `won_by_shot` describes the\nplayer's own point-winning shots and `lost_by_shot` the opponent's shots the\nplayer lost points on, never the player's own misses (#175).",
+        "properties": {
+          "errors_overall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "errors_under_pressure": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "hero": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lost_by_shot": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Lost By Shot",
+            "type": "array"
+          },
+          "outcome_mix": {
+            "items": {
+              "$ref": "#/components/schemas/OutcomeMixRow"
+            },
+            "title": "Outcome Mix",
+            "type": "array"
+          },
+          "shot_frequency": {
+            "items": {
+              "$ref": "#/components/schemas/ShotShare"
+            },
+            "title": "Shot Frequency",
+            "type": "array"
+          },
+          "won_by_shot": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Won By Shot",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hero",
+          "won_by_shot",
+          "lost_by_shot",
+          "outcome_mix",
+          "errors_under_pressure",
+          "errors_overall",
+          "shot_frequency"
+        ],
+        "title": "RallyStats",
+        "type": "object"
+      },
       "RedeemTransferCodeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1920,6 +2391,59 @@
         "title": "ServeOutcome",
         "type": "string"
       },
+      "ServeSideStats": {
+        "description": "One side of the serve tab, serving or returning.",
+        "properties": {
+          "breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Breakdown",
+            "type": "array"
+          },
+          "hero": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Metric"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hero",
+          "metrics",
+          "breakdown"
+        ],
+        "title": "ServeSideStats",
+        "type": "object"
+      },
+      "ServeStats": {
+        "description": "The serve tab, both sides in one payload.",
+        "properties": {
+          "returning": {
+            "$ref": "#/components/schemas/ServeSideStats"
+          },
+          "serving": {
+            "$ref": "#/components/schemas/ServeSideStats"
+          }
+        },
+        "required": [
+          "serving",
+          "returning"
+        ],
+        "title": "ServeStats",
+        "type": "object"
+      },
       "ServeTarget": {
         "description": "Where a landed serve was aimed, coarse enough for a coach to call live.",
         "enum": [
@@ -1929,6 +2453,25 @@
         ],
         "title": "ServeTarget",
         "type": "string"
+      },
+      "ShotShare": {
+        "description": "One radar axis: a shot type's share of the player's point-winning shots.",
+        "properties": {
+          "share": {
+            "title": "Share",
+            "type": "number"
+          },
+          "shot": {
+            "title": "Shot",
+            "type": "string"
+          }
+        },
+        "required": [
+          "shot",
+          "share"
+        ],
+        "title": "ShotShare",
+        "type": "object"
       },
       "ShotType": {
         "description": "The last successful shot of the point.",
@@ -1941,6 +2484,30 @@
         "title": "ShotType",
         "type": "string"
       },
+      "SlopeLine": {
+        "description": "One metric's first-two vs last-two meeting average, drawn as a slope line.",
+        "properties": {
+          "first": {
+            "title": "First",
+            "type": "number"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last": {
+            "title": "Last",
+            "type": "number"
+          }
+        },
+        "required": [
+          "label",
+          "first",
+          "last"
+        ],
+        "title": "SlopeLine",
+        "type": "object"
+      },
       "Surface": {
         "enum": [
           "hard",
@@ -1949,6 +2516,54 @@
           "carpet"
         ],
         "title": "Surface",
+        "type": "string"
+      },
+      "TrendStats": {
+        "description": "The trends tab, computed over the requested window of recent matches.",
+        "properties": {
+          "correlation": {
+            "items": {
+              "$ref": "#/components/schemas/CorrelationPoint"
+            },
+            "title": "Correlation",
+            "type": "array"
+          },
+          "distribution": {
+            "items": {
+              "$ref": "#/components/schemas/DistributionBucket"
+            },
+            "title": "Distribution",
+            "type": "array"
+          },
+          "distribution_label": {
+            "title": "Distribution Label",
+            "type": "string"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/Metric"
+            },
+            "title": "Metrics",
+            "type": "array"
+          }
+        },
+        "required": [
+          "metrics",
+          "distribution_label",
+          "distribution",
+          "correlation"
+        ],
+        "title": "TrendStats",
+        "type": "object"
+      },
+      "TrendWindow": {
+        "description": "Which slice of a player's most recent matches a trends query covers.",
+        "enum": [
+          "last5",
+          "last10",
+          "season"
+        ],
+        "title": "TrendWindow",
         "type": "string"
       },
       "UnusualReason": {
@@ -2053,6 +2668,25 @@
           "otp"
         ],
         "title": "VerifyResetCodeRequest",
+        "type": "object"
+      },
+      "WinLossRecord": {
+        "description": "Wins and losses, counted over matches with a recorded result.",
+        "properties": {
+          "losses": {
+            "title": "Losses",
+            "type": "integer"
+          },
+          "wins": {
+            "title": "Wins",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "wins",
+          "losses"
+        ],
+        "title": "WinLossRecord",
         "type": "object"
       },
       "Wing": {
@@ -4269,6 +4903,411 @@
         "summary": "Update Player",
         "tags": [
           "players"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/head-to-head": {
+      "get": {
+        "description": "Every opponent this player has a resulted match against, most-met first.",
+        "operationId": "list_head_to_head",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/HeadToHeadSummary"
+                  },
+                  "title": "Response List Head To Head",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Head To Head",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/head-to-head/detail": {
+      "get": {
+        "description": "The full matchup view against one opponent, named by the list's key.",
+        "operationId": "get_head_to_head",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "opponent",
+            "required": true,
+            "schema": {
+              "title": "Opponent",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadToHeadDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Head To Head",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/overview": {
+      "get": {
+        "description": "The overview tab: form, the headline rates, and the win/loss record.",
+        "operationId": "get_player_overview",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Player Overview",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/rally": {
+      "get": {
+        "description": "The rally tab: how points end once the ball is in play.",
+        "operationId": "get_rally_stats",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RallyStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Rally Stats",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/serve": {
+      "get": {
+        "description": "The serve tab, both sides at once so toggling costs no second request.",
+        "operationId": "get_serve_stats",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServeStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Serve Stats",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/analytics/trends": {
+      "get": {
+        "description": "The trends tab: the window's metrics against all time, plus the two charts.\n\nBaselines are the same metric over every match; deltas compare the window before\nthis one, so they exist only for the counted windows, never for the season.",
+        "operationId": "get_trend_stats",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "window",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/TrendWindow"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrendStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Trend Stats",
+        "tags": [
+          "analytics"
         ]
       }
     },

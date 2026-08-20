@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetHeadToHeadData, GetHeadToHeadErrors, GetHeadToHeadResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerOverviewData, GetPlayerOverviewErrors, GetPlayerOverviewResponses, GetPlayerResponses, GetRallyStatsData, GetRallyStatsErrors, GetRallyStatsResponses, GetServeStatsData, GetServeStatsErrors, GetServeStatsResponses, GetTrendStatsData, GetTrendStatsErrors, GetTrendStatsResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListHeadToHeadData, ListHeadToHeadErrors, ListHeadToHeadResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -429,6 +429,51 @@ export const updatePlayer = <ThrowOnError extends boolean = false>(options: Opti
         ...options.headers
     }
 });
+
+/**
+ * List Head To Head
+ *
+ * Every opponent this player has a resulted match against, most-met first.
+ */
+export const listHeadToHead = <ThrowOnError extends boolean = false>(options: Options<ListHeadToHeadData, ThrowOnError>): RequestResult<ListHeadToHeadResponses, ListHeadToHeadErrors, ThrowOnError> => (options.client ?? client).get<ListHeadToHeadResponses, ListHeadToHeadErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/head-to-head', ...options });
+
+/**
+ * Get Head To Head
+ *
+ * The full matchup view against one opponent, named by the list's key.
+ */
+export const getHeadToHead = <ThrowOnError extends boolean = false>(options: Options<GetHeadToHeadData, ThrowOnError>): RequestResult<GetHeadToHeadResponses, GetHeadToHeadErrors, ThrowOnError> => (options.client ?? client).get<GetHeadToHeadResponses, GetHeadToHeadErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/head-to-head/detail', ...options });
+
+/**
+ * Get Player Overview
+ *
+ * The overview tab: form, the headline rates, and the win/loss record.
+ */
+export const getPlayerOverview = <ThrowOnError extends boolean = false>(options: Options<GetPlayerOverviewData, ThrowOnError>): RequestResult<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/overview', ...options });
+
+/**
+ * Get Rally Stats
+ *
+ * The rally tab: how points end once the ball is in play.
+ */
+export const getRallyStats = <ThrowOnError extends boolean = false>(options: Options<GetRallyStatsData, ThrowOnError>): RequestResult<GetRallyStatsResponses, GetRallyStatsErrors, ThrowOnError> => (options.client ?? client).get<GetRallyStatsResponses, GetRallyStatsErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/rally', ...options });
+
+/**
+ * Get Serve Stats
+ *
+ * The serve tab, both sides at once so toggling costs no second request.
+ */
+export const getServeStats = <ThrowOnError extends boolean = false>(options: Options<GetServeStatsData, ThrowOnError>): RequestResult<GetServeStatsResponses, GetServeStatsErrors, ThrowOnError> => (options.client ?? client).get<GetServeStatsResponses, GetServeStatsErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/serve', ...options });
+
+/**
+ * Get Trend Stats
+ *
+ * The trends tab: the window's metrics against all time, plus the two charts.
+ *
+ * Baselines are the same metric over every match; deltas compare the window before
+ * this one, so they exist only for the counted windows, never for the season.
+ */
+export const getTrendStats = <ThrowOnError extends boolean = false>(options: Options<GetTrendStatsData, ThrowOnError>): RequestResult<GetTrendStatsResponses, GetTrendStatsErrors, ThrowOnError> => (options.client ?? client).get<GetTrendStatsResponses, GetTrendStatsErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/trends', ...options });
 
 /**
  * Regenerate Player Password

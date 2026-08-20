@@ -25,6 +25,30 @@ export type BodyUploadPlayerPhoto = {
 };
 
 /**
+ * BreakdownRow
+ *
+ * A labelled count in a horizontal bar list.
+ */
+export type BreakdownRow = {
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Max
+     */
+    max: number;
+    /**
+     * Secondary Value
+     */
+    secondary_value?: number | null;
+    /**
+     * Value
+     */
+    value: number;
+};
+
+/**
  * ChangePasswordRequest
  */
 export type ChangePasswordRequest = {
@@ -117,6 +141,22 @@ export type CoachVerifyPassword = {
 };
 
 /**
+ * CorrelationPoint
+ *
+ * One match on the unforced-errors vs games-lost scatter.
+ */
+export type CorrelationPoint = {
+    /**
+     * Games Lost
+     */
+    games_lost: number;
+    /**
+     * Unforced Errors
+     */
+    unforced_errors: number;
+};
+
+/**
  * CourtDepth
  */
 export type CourtDepth = 'short' | 'mid' | 'deep';
@@ -127,6 +167,22 @@ export type CourtDepth = 'short' | 'mid' | 'deep';
  * One half of the court: a service box, or the far court on the final ball.
  */
 export type CourtSide = 'deuce' | 'ad';
+
+/**
+ * DistributionBucket
+ *
+ * One histogram bar: how many of the window's matches fell in this range.
+ */
+export type DistributionBucket = {
+    /**
+     * Bucket
+     */
+    bucket: string;
+    /**
+     * Matches
+     */
+    matches: number;
+};
 
 /**
  * DominantHand
@@ -180,6 +236,85 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
+};
+
+/**
+ * HeadToHeadDetail
+ *
+ * The full matchup view against one opponent.
+ */
+export type HeadToHeadDetail = {
+    hero: Metric;
+    /**
+     * Loss Patterns
+     */
+    loss_patterns: Array<BreakdownRow>;
+    /**
+     * Meetings
+     */
+    meetings: number;
+    /**
+     * Opponent Key
+     */
+    opponent_key: string;
+    /**
+     * Opponent Name
+     */
+    opponent_name: string;
+    record: WinLossRecord;
+    /**
+     * Results
+     */
+    results: Array<MatchResult>;
+    /**
+     * Shot Frequency
+     */
+    shot_frequency: Array<ShotShare>;
+    /**
+     * Slope
+     */
+    slope: Array<SlopeLine> | null;
+    /**
+     * Their Serve
+     */
+    their_serve: Array<Metric>;
+    /**
+     * Win Rate
+     */
+    win_rate: number | null;
+    /**
+     * Won By Shot
+     */
+    won_by_shot: Array<BreakdownRow>;
+    /**
+     * Your Serve
+     */
+    your_serve: Array<Metric>;
+};
+
+/**
+ * HeadToHeadSummary
+ *
+ * One opponent row on the head-to-head list.
+ */
+export type HeadToHeadSummary = {
+    /**
+     * Meetings
+     */
+    meetings: number;
+    /**
+     * Opponent Key
+     */
+    opponent_key: string;
+    /**
+     * Opponent Name
+     */
+    opponent_name: string;
+    record: WinLossRecord;
+    /**
+     * Win Rate
+     */
+    win_rate: number | null;
 };
 
 /**
@@ -359,6 +494,54 @@ export type MatchUpdate = {
 };
 
 /**
+ * Metric
+ *
+ * One number a coach is shown, with everything needed to judge it.
+ */
+export type Metric = {
+    /**
+     * Baseline
+     */
+    baseline: number | null;
+    /**
+     * Delta
+     */
+    delta: number | null;
+    /**
+     * Display
+     */
+    display?: string | null;
+    /**
+     * Higher Is Better
+     */
+    higher_is_better: boolean;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Max
+     */
+    max: number;
+    /**
+     * Sample Size
+     */
+    sample_size: string;
+    unit: MetricUnit;
+    /**
+     * Value
+     */
+    value: number;
+};
+
+/**
+ * MetricUnit
+ *
+ * How a metric's value is scaled, so the client can label and cap it.
+ */
+export type MetricUnit = 'percent' | 'ratio' | 'per_set' | 'per_match';
+
+/**
  * OtpRequest
  */
 export type OtpRequest = {
@@ -366,6 +549,29 @@ export type OtpRequest = {
      * Email
      */
     email: string;
+};
+
+/**
+ * OutcomeMixRow
+ *
+ * How the points one side decided split between their forcing shots and errors.
+ *
+ * Percentages of the rally-ended points that side's own last shot settled. A clean
+ * winner counts as forced: capture records no distinction between the two (#175).
+ */
+export type OutcomeMixRow = {
+    /**
+     * Forced
+     */
+    forced: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Unforced
+     */
+    unforced: number;
 };
 
 /**
@@ -475,6 +681,24 @@ export type PlayerLoginRequest = {
      * Username
      */
     username: string;
+};
+
+/**
+ * PlayerOverview
+ *
+ * The overview tab: headline metrics and the win/loss record.
+ */
+export type PlayerOverview = {
+    all_time_record: WinLossRecord;
+    forced_to_unforced: Metric | null;
+    form: Metric | null;
+    hold_percentage: Metric | null;
+    /**
+     * Recent Results
+     */
+    recent_results: Array<MatchResult>;
+    return_games_won: Metric | null;
+    season_record: WinLossRecord;
 };
 
 /**
@@ -829,6 +1053,37 @@ export type PointRead = {
 export type RallyBucket = 'b1' | 'b2' | 'b3' | 'b4';
 
 /**
+ * RallyStats
+ *
+ * The rally tab: how points end once the ball is in play.
+ *
+ * The stored shot is the last successful one, so `won_by_shot` describes the
+ * player's own point-winning shots and `lost_by_shot` the opponent's shots the
+ * player lost points on, never the player's own misses (#175).
+ */
+export type RallyStats = {
+    errors_overall: Metric | null;
+    errors_under_pressure: Metric | null;
+    hero: Metric | null;
+    /**
+     * Lost By Shot
+     */
+    lost_by_shot: Array<BreakdownRow>;
+    /**
+     * Outcome Mix
+     */
+    outcome_mix: Array<OutcomeMixRow>;
+    /**
+     * Shot Frequency
+     */
+    shot_frequency: Array<ShotShare>;
+    /**
+     * Won By Shot
+     */
+    won_by_shot: Array<BreakdownRow>;
+};
+
+/**
  * RedeemTransferCodeRequest
  */
 export type RedeemTransferCodeRequest = {
@@ -870,11 +1125,54 @@ export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'womens_grand_sl
 export type ServeOutcome = 'in' | 'fault' | 'ace';
 
 /**
+ * ServeSideStats
+ *
+ * One side of the serve tab, serving or returning.
+ */
+export type ServeSideStats = {
+    /**
+     * Breakdown
+     */
+    breakdown: Array<BreakdownRow>;
+    hero: Metric | null;
+    /**
+     * Metrics
+     */
+    metrics: Array<Metric>;
+};
+
+/**
+ * ServeStats
+ *
+ * The serve tab, both sides in one payload.
+ */
+export type ServeStats = {
+    returning: ServeSideStats;
+    serving: ServeSideStats;
+};
+
+/**
  * ServeTarget
  *
  * Where a landed serve was aimed, coarse enough for a coach to call live.
  */
 export type ServeTarget = 'wide' | 'body' | 't';
+
+/**
+ * ShotShare
+ *
+ * One radar axis: a shot type's share of the player's point-winning shots.
+ */
+export type ShotShare = {
+    /**
+     * Share
+     */
+    share: number;
+    /**
+     * Shot
+     */
+    shot: string;
+};
 
 /**
  * ShotType
@@ -884,9 +1182,60 @@ export type ServeTarget = 'wide' | 'body' | 't';
 export type ShotType = 'drive' | 'volley' | 'dropshot' | 'lob';
 
 /**
+ * SlopeLine
+ *
+ * One metric's first-two vs last-two meeting average, drawn as a slope line.
+ */
+export type SlopeLine = {
+    /**
+     * First
+     */
+    first: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Last
+     */
+    last: number;
+};
+
+/**
  * Surface
  */
 export type Surface = 'hard' | 'clay' | 'grass' | 'carpet';
+
+/**
+ * TrendStats
+ *
+ * The trends tab, computed over the requested window of recent matches.
+ */
+export type TrendStats = {
+    /**
+     * Correlation
+     */
+    correlation: Array<CorrelationPoint>;
+    /**
+     * Distribution
+     */
+    distribution: Array<DistributionBucket>;
+    /**
+     * Distribution Label
+     */
+    distribution_label: string;
+    /**
+     * Metrics
+     */
+    metrics: Array<Metric>;
+};
+
+/**
+ * TrendWindow
+ *
+ * Which slice of a player's most recent matches a trends query covers.
+ */
+export type TrendWindow = 'last5' | 'last10' | 'season';
 
 /**
  * UnusualReason
@@ -941,6 +1290,22 @@ export type VerifyResetCodeRequest = {
      * Email
      */
     email: string;
+};
+
+/**
+ * WinLossRecord
+ *
+ * Wins and losses, counted over matches with a recorded result.
+ */
+export type WinLossRecord = {
+    /**
+     * Losses
+     */
+    losses: number;
+    /**
+     * Wins
+     */
+    wins: number;
 };
 
 /**
@@ -2314,6 +2679,243 @@ export type UpdatePlayerResponses = {
 };
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
+
+export type ListHeadToHeadData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/analytics/head-to-head';
+};
+
+export type ListHeadToHeadErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListHeadToHeadError = ListHeadToHeadErrors[keyof ListHeadToHeadErrors];
+
+export type ListHeadToHeadResponses = {
+    /**
+     * Response List Head To Head
+     *
+     * Successful Response
+     */
+    200: Array<HeadToHeadSummary>;
+};
+
+export type ListHeadToHeadResponse = ListHeadToHeadResponses[keyof ListHeadToHeadResponses];
+
+export type GetHeadToHeadData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query: {
+        /**
+         * Opponent
+         */
+        opponent: string;
+    };
+    url: '/players/{player_id}/analytics/head-to-head/detail';
+};
+
+export type GetHeadToHeadErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetHeadToHeadError = GetHeadToHeadErrors[keyof GetHeadToHeadErrors];
+
+export type GetHeadToHeadResponses = {
+    /**
+     * Successful Response
+     */
+    200: HeadToHeadDetail;
+};
+
+export type GetHeadToHeadResponse = GetHeadToHeadResponses[keyof GetHeadToHeadResponses];
+
+export type GetPlayerOverviewData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/analytics/overview';
+};
+
+export type GetPlayerOverviewErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetPlayerOverviewError = GetPlayerOverviewErrors[keyof GetPlayerOverviewErrors];
+
+export type GetPlayerOverviewResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerOverview;
+};
+
+export type GetPlayerOverviewResponse = GetPlayerOverviewResponses[keyof GetPlayerOverviewResponses];
+
+export type GetRallyStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/analytics/rally';
+};
+
+export type GetRallyStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetRallyStatsError = GetRallyStatsErrors[keyof GetRallyStatsErrors];
+
+export type GetRallyStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: RallyStats;
+};
+
+export type GetRallyStatsResponse = GetRallyStatsResponses[keyof GetRallyStatsResponses];
+
+export type GetServeStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/analytics/serve';
+};
+
+export type GetServeStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetServeStatsError = GetServeStatsErrors[keyof GetServeStatsErrors];
+
+export type GetServeStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ServeStats;
+};
+
+export type GetServeStatsResponse = GetServeStatsResponses[keyof GetServeStatsResponses];
+
+export type GetTrendStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query: {
+        window: TrendWindow;
+    };
+    url: '/players/{player_id}/analytics/trends';
+};
+
+export type GetTrendStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetTrendStatsError = GetTrendStatsErrors[keyof GetTrendStatsErrors];
+
+export type GetTrendStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: TrendStats;
+};
+
+export type GetTrendStatsResponse = GetTrendStatsResponses[keyof GetTrendStatsResponses];
 
 export type RegeneratePlayerPasswordData = {
     body?: never;

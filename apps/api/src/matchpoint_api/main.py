@@ -15,7 +15,7 @@ from matchpoint_api.logs import RequestLogMiddleware, configure_logging
 from matchpoint_api.mail import create_email_sender
 from matchpoint_api.photos import MEDIA_PATH, mount_media
 from matchpoint_api.rate_limit import RateLimiter
-from matchpoint_api.routers import auth, coaches, matches, player_auth, players
+from matchpoint_api.routers import analytics, auth, coaches, matches, player_auth, players
 
 
 def operation_id(route: APIRoute) -> str:
@@ -221,6 +221,7 @@ def create_app() -> FastAPI:
     app.include_router(player_auth.router)
     app.include_router(coaches.router)
     app.include_router(players.router)
+    app.include_router(analytics.router)
     app.include_router(matches.router)
 
     # A Mount rather than a route, and so absent from the spec: only APIRoutes reach the
