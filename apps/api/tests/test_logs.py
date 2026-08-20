@@ -23,7 +23,9 @@ from tests.factories import (
     make_coach,
     make_email_verification,
     make_password_reset,
+    make_player,
     sign_in,
+    sign_in_player,
 )
 
 
@@ -91,6 +93,21 @@ def test_an_authenticated_request_logs_the_coach_id(
 
     [line] = _request_lines(capfd)
     assert line["coach_id"] == str(coach.id)
+
+
+def test_an_authenticated_player_request_logs_the_player_id(
+    client: TestClient, db_session: Session, capfd: pytest.CaptureFixture[str]
+) -> None:
+    """The second principal gets its own field, so a production question about a
+    player's traffic is a filter over player_id, never a guess from paths."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+
+    assert client.get("/auth/player/me").status_code == 200
+
+    [line] = _request_lines(capfd)
+    assert line["player_id"] == str(player.id)
+    assert "coach_id" not in line
 
 
 def test_a_response_no_route_saw_is_logged_too(

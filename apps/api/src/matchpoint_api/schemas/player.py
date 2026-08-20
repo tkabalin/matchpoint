@@ -98,6 +98,27 @@ class PlayerRead(BaseModel):
     has_transfer_code: bool
 
 
+class PlayerSelfRead(BaseModel):
+    """A player's own profile, as the player-facing routes answer with it."""
+
+    # Deliberately narrower than PlayerRead: no notes (the coach's private notes about
+    # the player, whose candour depends on them staying private), no coach_id and no
+    # has_transfer_code (coach workflow). A field can be added later without breaking
+    # a client; taking one back cannot.
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    username: str
+    first_name: str
+    last_name: str
+    date_of_birth: date | None
+    dominant_hand: DominantHand | None
+    gender: Gender | None
+    photo_url: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
 class PlayerCreatedRead(PlayerRead):
     """The created player, plus the one password their sign-in starts from.
 

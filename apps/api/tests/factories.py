@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import (
+    PLAYER_SESSION_COOKIE,
     RESET_COOKIE,
     SESSION_COOKIE,
     VERIFICATION_COOKIE,
@@ -101,6 +102,24 @@ def sign_in(
     )
     db_session.commit()
     client.cookies.set(SESSION_COOKIE, token)
+    return session_row
+
+
+def sign_in_player(
+    client: TestClient, db_session: Session, player: Player, **session_overrides: Any
+) -> PlayerSession:
+    """Give the client a live player session, arranged rather than logged in.
+
+    sign_in for the other principal, bypassing POST /auth/player/login for the same
+    two reasons: the tests using this are not about the login route, and a real login
+    pays an Argon2 verification per test.
+    """
+    token = new_session_token()
+    session_row = make_player_session(
+        db_session, player_id=player.id, token_hash=hash_token(token), **session_overrides
+    )
+    db_session.commit()
+    client.cookies.set(PLAYER_SESSION_COOKIE, token)
     return session_row
 
 

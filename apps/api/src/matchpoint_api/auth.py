@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Coach, CoachSession
+from matchpoint_api.models import Coach, CoachSession, Player, PlayerSession
 from matchpoint_api.rate_limit import RateLimiter, client_key
 
 # The `__Host-` prefix binds the cookie to one host: a browser refuses it unless it is
@@ -71,6 +71,17 @@ RESET_COOKIE = (
     "__Host-matchpoint_password_reset"
     if settings.session_cookie_secure
     else "matchpoint_password_reset"
+)
+
+# The player-session cookie: the same conditional prefix and flags, a name of its own.
+# A fourth cookie rather than a reuse because it proves a different principal at a
+# lesser privilege, and a value that could be mistaken for the coach login must not
+# exist. The two can sit in one browser side by side, each resolved only by its own
+# dependency.
+PLAYER_SESSION_COOKIE = (
+    "__Host-matchpoint_player_session"
+    if settings.session_cookie_secure
+    else "matchpoint_player_session"
 )
 
 # How long an emailed code is answerable, and then how long the answered proof holds.
@@ -208,6 +219,23 @@ def set_reset_cookie(response: Response, token: str) -> None:
     )
 
 
+def set_player_session_cookie(response: Response, token: str) -> None:
+    """Hand the player's token to the browser, flagged exactly as the coach's is.
+
+    Its own setter for the reason each of the others has one: the flags are shared,
+    the name is not, and the name is the whole difference between a player's session
+    and a coach's. Re-sent on renewal, as set_session_cookie is.
+    """
+    response.set_cookie(
+        PLAYER_SESSION_COOKIE,
+        token,
+        max_age=int(SESSION_LIFETIME.total_seconds()),
+        httponly=True,
+        secure=settings.session_cookie_secure,
+        samesite="lax",
+    )
+
+
 def send_renewed_session(request: Request, response: Response) -> None:
     """Write the renewal this request left behind, if it left one.
 
@@ -215,10 +243,17 @@ def send_renewed_session(request: Request, response: Response) -> None:
     wrapping it share, so the dependency below can leave the token here for us. Called
     from the middleware and from the unhandled-exception handler, the one response the
     middleware never gets to see (`main.py`).
+
+    One state key per principal, and a route must only ever write its own: separate
+    keys keep a coach route's cancellation (setting the key to None, as account
+    closure does) from ever touching a player renewal, or the reverse.
     """
     token = getattr(request.state, "renewed_session_token", None)
     if token is not None:
         set_session_cookie(response, token)
+    player_token = getattr(request.state, "renewed_player_session_token", None)
+    if player_token is not None:
+        set_player_session_cookie(response, player_token)
 
 
 class SessionRenewalMiddleware(BaseHTTPMiddleware):
@@ -264,6 +299,15 @@ def credential_is_current(db: Session, coach: Coach, verified_hash: str) -> bool
     """
     stored = db.scalar(select(Coach.password_hash).where(Coach.id == coach.id).with_for_update())
     return stored == verified_hash
+
+
+def revoke_player_sessions(db: Session, player_id: uuid.UUID) -> None:
+    """Delete every session this player holds: revoke_sessions for the other principal.
+
+    All of them for the same stolen-copy reason, and no commit for the same
+    ride-with-what-prompted-it reason.
+    """
+    db.execute(delete(PlayerSession).where(PlayerSession.player_id == player_id))
 
 
 def _unauthenticated() -> HTTPException:
@@ -374,5 +418,51 @@ def recovery_coach(request: Request, db: Annotated[Session, Depends(get_db)]) ->
     return _authenticated_coach(request, db, request.app.state.recovery_per_coach_limit)
 
 
+def _authenticated_player(request: Request, db: Session, limiter: RateLimiter) -> Player:
+    """The player whose session cookie authenticates this request, or a 401.
+
+    _authenticated_coach over again against the player tables. Every choice in it
+    (the cookie read off request.cookies, the joined load, delete-by-hash for an
+    expired row, renewal from the halfway mark, the probabilistic sweep) is argued
+    there and holds unchanged here.
+    """
+    token = request.cookies.get(PLAYER_SESSION_COOKIE)
+    if token is None:
+        raise _unauthenticated()
+    token_hash = hash_token(token)
+    row = db.execute(
+        select(PlayerSession, Player)
+        .join(Player, PlayerSession.player_id == Player.id)
+        .where(PlayerSession.token_hash == token_hash)
+    ).first()
+    if row is None:
+        # The same per-address bucket the coach lookup charges: the cost is the same
+        # indexed miss, and a second bucket would only hand junk cookies two budgets.
+        _reject_unknown_token(request)
+    session, player = row
+    now = datetime.now(UTC)
+    if session.expires_at <= now:
+        db.execute(delete(PlayerSession).where(PlayerSession.token_hash == token_hash))
+        db.commit()
+        raise _unauthenticated()
+    limiter.take(str(player.id))
+    if session.expires_at - now < SESSION_LIFETIME / 2:
+        session.expires_at = now + SESSION_LIFETIME
+        db.commit()
+        request.state.renewed_player_session_token = token
+    if secrets.randbelow(SESSION_GC_DENOMINATOR) == 0:
+        db.execute(delete(PlayerSession).where(PlayerSession.expires_at <= now))
+        db.commit()
+    # The request line's player_id (logs.py), the counterpart of log_coach_id above.
+    request.state.log_player_id = player.id
+    return player
+
+
+def current_player(request: Request, db: Annotated[Session, Depends(get_db)]) -> Player:
+    """Authenticate this request against the budget every ordinary player route shares."""
+    return _authenticated_player(request, db, request.app.state.authenticated_per_player_limit)
+
+
 CurrentCoach = Annotated[Coach, Depends(current_coach)]
 RecoveryCoach = Annotated[Coach, Depends(recovery_coach)]
+CurrentPlayer = Annotated[Player, Depends(current_player)]

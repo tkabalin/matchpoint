@@ -182,5 +182,10 @@ class RequestLogMiddleware(BaseHTTPMiddleware):
         coach_id = getattr(request.state, "log_coach_id", None)
         if coach_id is not None:
             fields["coach_id"] = str(coach_id)
+        # One principal per request in practice, but stamped independently: a line
+        # names whichever the resolving dependency proved, under its own field.
+        player_id = getattr(request.state, "log_player_id", None)
+        if player_id is not None:
+            fields["player_id"] = str(player_id)
         log = logger.error if status >= 500 else logger.info
         log("request", exc_info=exc_info, **fields)

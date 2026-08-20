@@ -1,0 +1,520 @@
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from argon2 import PasswordHasher
+from fastapi.testclient import TestClient
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from matchpoint_api.auth import (
+    PLAYER_SESSION_COOKIE,
+    SESSION_COOKIE,
+    SESSION_LIFETIME,
+    hash_token,
+    new_session_token,
+)
+from matchpoint_api.models import CoachSession, Player, PlayerSession
+from matchpoint_api.security import DUMMY_HASH, hash_password
+from tests.conftest import ORIGIN_HEADERS
+from tests.factories import (
+    make_coach,
+    make_player,
+    make_player_session,
+    sign_in,
+    sign_in_player,
+)
+
+PLAYER_PASSWORD = "abcd-efgh-jkmn"
+# Hashed once for the whole module: a real Argon2 run per test would put most of the
+# file's runtime into arranging rows that are not what any of these tests are about.
+PLAYER_HASH = hash_password(PLAYER_PASSWORD)
+PLAYER_LOGIN = {"username": "kbltho001", "password": PLAYER_PASSWORD}
+
+
+def _enrolled(db_session: Session, **overrides: object) -> Player:
+    """A player whose stored hash PLAYER_LOGIN really verifies against."""
+    defaults: dict[str, object] = {
+        "first_name": "Thomas",
+        "last_name": "Kabalin",
+        "username": "kbltho001",
+        "password_hash": PLAYER_HASH,
+    }
+    player = make_player(db_session, **defaults | overrides)
+    db_session.commit()
+    return player
+
+
+# --- POST /auth/player/login ---
+
+
+def test_a_player_login_returns_their_own_profile_and_sets_the_player_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    _enrolled(db_session)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["username"] == "kbltho001"
+    assert body["first_name"] == "Thomas"
+    assert client.cookies.get(PLAYER_SESSION_COOKIE)
+    assert not client.cookies.get(SESSION_COOKIE)
+
+
+def test_the_login_response_is_the_trimmed_self_view(
+    client: TestClient, db_session: Session
+) -> None:
+    """PlayerSelfRead, not PlayerRead: the coach's notes about the player are the
+    coach's, and the ownership plumbing is coach workflow. Their absence here is what
+    the whole schema exists for, so it is pinned field by field."""
+    _enrolled(db_session, notes="Second serve sits up under pressure.")
+
+    body = client.post("/auth/player/login", json=PLAYER_LOGIN).json()
+
+    assert "notes" not in body
+    assert "coach_id" not in body
+    assert "has_transfer_code" not in body
+    assert "password_hash" not in body
+    assert "Second serve" not in str(body)
+
+
+def test_the_player_cookie_is_locked_down(client: TestClient, db_session: Session) -> None:
+    """The coach cookie's flags over again, on a name of its own: `__Host-` binds it to
+    this host, and the distinct name is what keeps a player session from ever being
+    read as a coach login."""
+    _enrolled(db_session)
+
+    header = client.post("/auth/player/login", json=PLAYER_LOGIN).headers["set-cookie"]
+
+    assert PLAYER_SESSION_COOKIE == "__Host-matchpoint_player_session"
+    assert header.startswith(f"{PLAYER_SESSION_COOKIE}=")
+    assert "httponly" in header.lower()
+    assert "secure" in header.lower()
+    assert "path=/" in header.lower()
+    assert "domain=" not in header.lower()
+    assert "samesite=lax" in header.lower()
+    assert f"max-age={int(SESSION_LIFETIME.total_seconds())}" in header.lower()
+
+
+def test_a_player_login_stores_the_hash_of_the_token_and_never_the_token(
+    client: TestClient, db_session: Session
+) -> None:
+    _enrolled(db_session)
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+    token = client.cookies[PLAYER_SESSION_COOKIE]
+
+    session_row = db_session.scalars(select(PlayerSession)).one()
+    assert session_row.token_hash == hash_token(token)
+    assert token not in session_row.token_hash
+
+
+def test_a_wrong_password_is_rejected_without_a_session(
+    client: TestClient, db_session: Session
+) -> None:
+    _enrolled(db_session)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN | {"password": "wrong-wrong"})
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect username or password"}
+    assert "set-cookie" not in response.headers
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 0
+
+
+def test_an_unknown_username_answers_exactly_like_a_wrong_password(
+    client: TestClient, db_session: Session
+) -> None:
+    """The response half of the enumeration defence, with higher stakes than email's:
+    usernames are derived from names, so anyone who knows a player can guess theirs."""
+    _enrolled(db_session)
+
+    unknown = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": "ghost01"})
+    wrong = client.post("/auth/player/login", json=PLAYER_LOGIN | {"password": "wrong-wrong"})
+
+    assert unknown.status_code == wrong.status_code == 401
+    assert unknown.json() == wrong.json()
+
+
+def test_a_player_with_no_password_yet_answers_exactly_like_a_wrong_password(
+    client: TestClient, db_session: Session
+) -> None:
+    """Every backfilled row is NULL until its coach mints a password, so 'no credential
+    yet' must be indistinguishable from 'wrong password': anything else would let the
+    login page say which of a club's players have been handed accounts."""
+    make_player(db_session, username="ndlraf001")
+    db_session.commit()
+
+    bare = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": "ndlraf001"})
+
+    assert bare.status_code == 401
+    assert bare.json() == {"detail": "Incorrect username or password"}
+
+
+@pytest.mark.parametrize("username", ["ghost01", "ndlraf001"])
+def test_a_miss_still_burns_a_verification(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch, username: str
+) -> None:
+    """The timing half, for both kinds of miss: an unknown username and a row with no
+    hash must each cost the Argon2 run a live credential costs. Pinned by spying on
+    the route's verify_password rather than a stopwatch, as login's test does."""
+    make_player(db_session, username="ndlraf001")
+    db_session.commit()
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "matchpoint_api.routers.player_auth.verify_password",
+        lambda password, password_hash: (calls.append((password, password_hash)), False)[1],
+    )
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": username})
+
+    assert response.status_code == 401
+    assert calls == [(PLAYER_PASSWORD, DUMMY_HASH)]
+
+
+def test_a_mixed_case_username_finds_the_account(client: TestClient, db_session: Session) -> None:
+    """Usernames are stored lowercase, and this one is typed off a piece of paper: the
+    route's fold is what makes KBLTHO001 the same account."""
+    _enrolled(db_session)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": "KBLTHO001"})
+
+    assert response.status_code == 200
+
+
+def test_a_stale_hash_is_upgraded_on_player_login(client: TestClient, db_session: Session) -> None:
+    """Login's parameter-upgrade path holds for the player credential too: the minted
+    password lives for years on a fridge magnet, so the one moment plaintext is in
+    hand has to carry old rows forward."""
+    stale_hash = PasswordHasher(time_cost=1, memory_cost=8, parallelism=1).hash(PLAYER_PASSWORD)
+    player = _enrolled(db_session, password_hash=stale_hash)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    assert response.status_code == 200
+    refreshed = db_session.get(Player, player.id)
+    assert refreshed is not None
+    assert refreshed.password_hash is not None
+    assert refreshed.password_hash != stale_hash
+    assert "m=65536,t=3,p=1" in refreshed.password_hash
+
+
+def test_logging_in_clears_only_the_player_s_own_expired_sessions(
+    client: TestClient, db_session: Session
+) -> None:
+    """Login's sweep, scoped the same way: the signing-in player's dead rows go, and
+    another player's are not this login's to touch."""
+    player = _enrolled(db_session)
+    make_player_session(
+        db_session, player_id=player.id, expires_at=datetime.now(UTC) - timedelta(seconds=1)
+    )
+    other = make_player_session(db_session, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    db_session.commit()
+
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    remaining = set(db_session.scalars(select(PlayerSession.id)))
+    assert other.id in remaining
+    assert len(remaining) == 2  # the other player's dead row, and the fresh login
+
+
+def _stub_out_verification(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fail every verification without running Argon2, exactly as the login tests do:
+    a failed verification is what the wrong-guess budget counts, so stubbing charges
+    every bucket as a wrong password would."""
+    monkeypatch.setattr("matchpoint_api.routers.player_auth.verify_password", lambda *_: False)
+
+
+def test_wrong_guesses_beyond_the_account_burst_are_refused(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The per-username budget at its burst (5). No player row exists: the bucket keys
+    on the submitted username either way, so the 429 discloses nothing about which
+    usernames hold accounts, exactly as login's does for emails."""
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        assert client.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 401
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}
+
+
+def test_the_account_bucket_folds_case(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The bucket key folds as the row lookup folds, or every casing of KBLTHO001
+    would mint a fresh budget."""
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        attempt = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": "KBLTHO001"})
+        assert attempt.status_code == 401
+
+    assert client.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 429
+
+
+def test_a_correct_password_is_never_refused_by_the_wrong_guess_budget(
+    client: TestClient, db_session: Session
+) -> None:
+    """Charged only after a failed verification, so the budget cannot become a lockout
+    lever: more correct logins than the burst still all land."""
+    _enrolled(db_session)
+
+    for _ in range(6):
+        assert client.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 200
+
+
+def test_cycling_usernames_does_not_escape_the_address_burst(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-account alone would hand five free tries per invented username; the
+    per-address tier bounds the arrivals themselves, at login's sizes (burst 20)."""
+    _stub_out_verification(monkeypatch)
+    for n in range(20):
+        attempt = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": f"gst{n:03d}"})
+        assert attempt.status_code == 401
+
+    refused = client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": "gst999"})
+
+    assert refused.status_code == 429
+
+
+@pytest.mark.usefixtures("clock")
+def test_player_login_has_a_total_bound_no_address_escapes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The shared bucket is what bounds a guessing run spread across edge addresses,
+    for the same Cloudflare reason login's total tier exists."""
+    _stub_out_verification(monkeypatch)
+    for address in ("203.0.113.1", "203.0.113.2"):
+        from_address = TestClient(client.app, headers=ORIGIN_HEADERS, client=(address, 50000))
+        for n in range(10):
+            body = PLAYER_LOGIN | {"username": f"gst{address[-1]}{n:02d}"}
+            assert from_address.post("/auth/player/login", json=body).status_code == 401
+
+    latecomer = TestClient(client.app, headers=ORIGIN_HEADERS, client=("203.0.113.3", 50000))
+
+    assert latecomer.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 429
+
+
+def test_a_player_login_flood_spends_none_of_the_coach_login_budget(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The buckets are separate on purpose: draining the player entry point from an
+    address must leave a coach at the same address able to sign in."""
+    make_coach(db_session, email="mike@example.com", password_hash=PLAYER_HASH)
+    db_session.commit()
+    _stub_out_verification(monkeypatch)
+    for n in range(20):
+        client.post("/auth/player/login", json=PLAYER_LOGIN | {"username": f"gst{n:03d}"})
+    assert client.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 429
+
+    coach_login = client.post(
+        "/auth/login", json={"email": "mike@example.com", "password": PLAYER_PASSWORD}
+    )
+
+    assert coach_login.status_code == 200
+
+
+# --- GET /auth/player/me ---
+
+
+def test_me_returns_the_trimmed_profile(client: TestClient, db_session: Session) -> None:
+    player = make_player(
+        db_session, username="ndlraf001", notes="Runs around the backhand too early."
+    )
+    sign_in_player(client, db_session, player)
+
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["username"] == "ndlraf001"
+    assert "notes" not in body
+    assert "coach_id" not in body
+    assert "has_transfer_code" not in body
+
+
+def test_me_needs_a_player_session(client: TestClient) -> None:
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_a_coach_session_does_not_authenticate_a_player_route(
+    client: TestClient, db_session: Session
+) -> None:
+    """The boundary the two cookie names exist for: a signed-in coach is still nobody
+    to the player dependency, so the lesser principal's routes cannot be reached with
+    the greater principal's credential, nor the reverse be assumed."""
+    sign_in(client, db_session, make_coach(db_session))
+
+    assert client.get("/auth/player/me").status_code == 401
+
+
+def test_a_forged_player_cookie_is_refused(client: TestClient, db_session: Session) -> None:
+    client.cookies.set(PLAYER_SESSION_COOKIE, new_session_token())
+
+    assert client.get("/auth/player/me").status_code == 401
+
+
+def test_an_expired_player_session_is_refused_and_deleted(
+    client: TestClient, db_session: Session
+) -> None:
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 401
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 0
+
+
+def test_a_session_past_halfway_is_renewed_with_a_fresh_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    """The coach renewal over again through the second state key: the row's deadline
+    moves and the browser is handed the new one under the player cookie's own name,
+    so an active player never reaches expiry courtside."""
+    player = make_player(db_session)
+    session_row = sign_in_player(
+        client, db_session, player, expires_at=datetime.now(UTC) + timedelta(days=5)
+    )
+    old_deadline = session_row.expires_at
+
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 200
+    db_session.expire(session_row)
+    assert session_row.expires_at > old_deadline
+    header = response.headers["set-cookie"]
+    assert header.startswith(f"{PLAYER_SESSION_COOKIE}=")
+
+
+def test_a_fresh_session_is_not_renewed(client: TestClient, db_session: Session) -> None:
+    """Renewal from the halfway mark only, so reads do not pay a write per request."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 200
+    assert "set-cookie" not in response.headers
+
+
+def test_a_gc_roll_hit_sweeps_expired_player_sessions(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The probabilistic sweep, forced to hit: rows abandoned by players who never
+    return are somebody's to delete, and this is the only somebody."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    expired = make_player_session(db_session, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    live = make_player_session(db_session)
+    db_session.commit()
+
+    monkeypatch.setattr("matchpoint_api.auth.secrets.randbelow", lambda _: 0)
+    assert client.get("/auth/player/me").status_code == 200
+
+    assert db_session.get(PlayerSession, expired.id) is None
+    assert db_session.get(PlayerSession, live.id) is not None
+
+
+def test_a_missed_gc_roll_leaves_expired_player_sessions_alone(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    expired = make_player_session(db_session, expires_at=datetime.now(UTC) - timedelta(seconds=1))
+    db_session.commit()
+
+    monkeypatch.setattr("matchpoint_api.auth.secrets.randbelow", lambda _: 1)
+    assert client.get("/auth/player/me").status_code == 200
+
+    assert db_session.get(PlayerSession, expired.id) is not None
+
+
+@pytest.mark.usefixtures("clock")
+def test_requests_beyond_the_per_player_budget_are_refused(
+    client: TestClient, db_session: Session
+) -> None:
+    """The per-player counterpart of the per-coach ceiling, at its own burst (60):
+    one budget across everything a player session can reach."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    for _ in range(60):
+        assert client.get("/auth/player/me").status_code == 200
+
+    response = client.get("/auth/player/me")
+
+    assert response.status_code == 429
+
+
+# --- POST /auth/player/logout ---
+
+
+def test_logging_out_revokes_the_session_and_clears_the_player_cookie(
+    client: TestClient, db_session: Session
+) -> None:
+    _enrolled(db_session)
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    response = client.post("/auth/player/logout")
+
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 0
+    assert "max-age=0" in response.headers["set-cookie"].lower()
+    assert not client.cookies.get(PLAYER_SESSION_COOKIE)
+
+
+def test_logging_out_only_ends_the_presented_session(
+    client: TestClient, db_session: Session
+) -> None:
+    _enrolled(db_session)
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+    other_device_token = client.cookies[PLAYER_SESSION_COOKIE]
+    client.cookies.clear()
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    client.post("/auth/player/logout")
+
+    remaining = db_session.scalars(select(PlayerSession)).one()
+    assert remaining.token_hash == hash_token(other_device_token)
+
+
+def test_logging_out_signed_out_is_still_a_204(client: TestClient) -> None:
+    assert client.post("/auth/player/logout").status_code == 204
+
+
+def test_logging_out_with_a_forged_cookie_revokes_nothing(
+    client: TestClient, db_session: Session
+) -> None:
+    """logout's forged-cookie promise: a token hashing to no row deletes no row, or
+    this would be revocation as a service against other players' sessions."""
+    player = make_player(db_session)
+    make_player_session(db_session, player_id=player.id)
+    db_session.commit()
+    client.cookies.set(PLAYER_SESSION_COOKIE, new_session_token())
+
+    response = client.post("/auth/player/logout")
+
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 1
+
+
+def test_a_player_logout_leaves_a_coach_session_on_the_same_browser_alone(
+    client: TestClient, db_session: Session
+) -> None:
+    """The two principals can share a family tablet: signing the player out must not
+    touch the coach's cookie or row, which their separate names are for."""
+    coach = make_coach(db_session)
+    sign_in(client, db_session, coach)
+    player = make_player(db_session, coach_id=coach.id)
+    sign_in_player(client, db_session, player)
+
+    response = client.post("/auth/player/logout")
+
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 1
+    assert client.cookies.get(SESSION_COOKIE)
+    assert client.get("/coaches/me").status_code == 200

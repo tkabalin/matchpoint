@@ -454,6 +454,16 @@ export type PlayerCreatedRead = {
 };
 
 /**
+ * PlayerLoginRequest
+ */
+export type PlayerLoginRequest = {
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * PlayerRead
  */
 export type PlayerRead = {
@@ -491,6 +501,48 @@ export type PlayerRead = {
      * Notes
      */
     notes: string | null;
+    /**
+     * Photo Url
+     */
+    photo_url: string | null;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
+ * PlayerSelfRead
+ *
+ * A player's own profile, as the player-facing routes answer with it.
+ */
+export type PlayerSelfRead = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Date Of Birth
+     */
+    date_of_birth: string | null;
+    dominant_hand: DominantHand | null;
+    /**
+     * First Name
+     */
+    first_name: string;
+    gender: Gender | null;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Last Name
+     */
+    last_name: string;
     /**
      * Photo Url
      */
@@ -913,6 +965,20 @@ export type LoginRequestWritable = {
 };
 
 /**
+ * PlayerLoginRequest
+ */
+export type PlayerLoginRequestWritable = {
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * ResetPasswordRequest
  */
 export type ResetPasswordRequestWritable = {
@@ -1074,6 +1140,84 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type PlayerLoginData = {
+    body: PlayerLoginRequestWritable;
+    path?: never;
+    query?: never;
+    url: '/auth/player/login';
+};
+
+export type PlayerLoginErrors = {
+    /**
+     * Incorrect username or password
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many login attempts
+     */
+    429: ErrorDetail;
+};
+
+export type PlayerLoginError = PlayerLoginErrors[keyof PlayerLoginErrors];
+
+export type PlayerLoginResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerSelfRead;
+};
+
+export type PlayerLoginResponse = PlayerLoginResponses[keyof PlayerLoginResponses];
+
+export type PlayerLogoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/player/logout';
+};
+
+export type PlayerLogoutResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type PlayerLogoutResponse = PlayerLogoutResponses[keyof PlayerLogoutResponses];
+
+export type GetCurrentPlayerData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/player/me';
+};
+
+export type GetCurrentPlayerErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetCurrentPlayerError = GetCurrentPlayerErrors[keyof GetCurrentPlayerErrors];
+
+export type GetCurrentPlayerResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerSelfRead;
+};
+
+export type GetCurrentPlayerResponse = GetCurrentPlayerResponses[keyof GetCurrentPlayerResponses];
 
 export type RequestOtpData = {
     body: OtpRequest;

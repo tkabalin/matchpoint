@@ -215,6 +215,13 @@ export const zPlayerCreatedRead = z.object({
 });
 
 /**
+ * PlayerLoginRequest
+ */
+export const zPlayerLoginRequest = z.object({
+    username: z.string().max(20)
+});
+
+/**
  * PlayerRead
  */
 export const zPlayerRead = z.object({
@@ -228,6 +235,24 @@ export const zPlayerRead = z.object({
     id: z.uuid(),
     last_name: z.string(),
     notes: z.string().nullable(),
+    photo_url: z.string().nullable(),
+    updated_at: z.iso.datetime(),
+    username: z.string()
+});
+
+/**
+ * PlayerSelfRead
+ *
+ * A player's own profile, as the player-facing routes answer with it.
+ */
+export const zPlayerSelfRead = z.object({
+    created_at: z.iso.datetime(),
+    date_of_birth: z.iso.date().nullable(),
+    dominant_hand: zDominantHand.nullable(),
+    first_name: z.string(),
+    gender: zGender.nullable(),
+    id: z.uuid(),
+    last_name: z.string(),
     photo_url: z.string().nullable(),
     updated_at: z.iso.datetime(),
     username: z.string()
@@ -600,6 +625,14 @@ export const zLoginRequestWritable = z.object({
 });
 
 /**
+ * PlayerLoginRequest
+ */
+export const zPlayerLoginRequestWritable = z.object({
+    password: z.string().max(128),
+    username: z.string().max(20)
+});
+
+/**
  * ResetPasswordRequest
  */
 export const zResetPasswordRequestWritable = z.object({
@@ -643,6 +676,23 @@ export const zLoginResponse = zCoachRead;
  * Successful Response
  */
 export const zLogoutResponse = z.void();
+
+export const zPlayerLoginBody = zPlayerLoginRequestWritable;
+
+/**
+ * Successful Response
+ */
+export const zPlayerLoginResponse = zPlayerSelfRead;
+
+/**
+ * Successful Response
+ */
+export const zPlayerLogoutResponse = z.void();
+
+/**
+ * Successful Response
+ */
+export const zGetCurrentPlayerResponse = zPlayerSelfRead;
 
 export const zRequestOtpBody = zOtpRequest;
 

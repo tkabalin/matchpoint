@@ -14,6 +14,13 @@ from matchpoint_api.schemas.types import RequestModel
 # log in, byte for byte.
 _Email = Annotated[EmailStr, StringConstraints(strip_whitespace=True, max_length=EMAIL_MAX_LENGTH)]
 
+# The username the server minted for a player (usernames.py, String(20) on the row):
+# stripped like the email, ceiling only. No floor and no format rule, for the reason
+# login's password has no floor: the credential to accept is whatever create once
+# handed out, and a malformed username is simply a wrong one (401), not a bad request.
+USERNAME_MAX_LENGTH = 20
+_Username = Annotated[str, StringConstraints(strip_whitespace=True, max_length=USERNAME_MAX_LENGTH)]
+
 # One annotation for both bodies that answer a code, so their generated-client contracts
 # cannot drift apart. SecretStr as a password is: the code is a live credential, and
 # listing it in errors.py's SECRET_FIELDS is what keeps it out of a 422's echoed input.
@@ -25,6 +32,11 @@ _Otp = Annotated[SecretStr, Field(min_length=OTP_LENGTH, max_length=OTP_LENGTH)]
 
 class LoginRequest(RequestModel):
     email: _Email
+    password: Password
+
+
+class PlayerLoginRequest(RequestModel):
+    username: _Username
     password: Password
 
 

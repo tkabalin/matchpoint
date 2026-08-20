@@ -15,7 +15,7 @@ from matchpoint_api.logs import RequestLogMiddleware, configure_logging
 from matchpoint_api.mail import create_email_sender
 from matchpoint_api.photos import MEDIA_PATH, mount_media
 from matchpoint_api.rate_limit import RateLimiter
-from matchpoint_api.routers import auth, coaches, matches, players
+from matchpoint_api.routers import auth, coaches, matches, player_auth, players
 
 
 def operation_id(route: APIRoute) -> str:
@@ -157,6 +157,14 @@ def create_app() -> FastAPI:
     app.state.photo_upload_per_ip_limit = RateLimiter(per_minute=20, burst=20)
     app.state.photo_upload_total_limit = RateLimiter(per_minute=60, burst=20)
 
+    # Player login: login's three tiers at login's sizes, in buckets of their own so a
+    # flood at one entry point cannot price the other principal out of signing in. The
+    # per-account key is the submitted username, a wrong-guess budget charged only
+    # after a failed verification (routers/player_auth.py).
+    app.state.player_login_per_account_limit = RateLimiter(per_minute=2, burst=5)
+    app.state.player_login_per_ip_limit = RateLimiter(per_minute=10, burst=20)
+    app.state.player_login_total_limit = RateLimiter(per_minute=120, burst=20)
+
     # Minting a player password, at creation and regeneration alike: each call is one
     # Argon2 hash, so photo upload's shape (a per-coach arrival rate taken in the
     # handler, once the coach has resolved). Sized off a squad rather than off sign-up,
@@ -180,6 +188,11 @@ def create_app() -> FastAPI:
     # here would make the denial this carve-out prevents cheaper to mount than it was.
     app.state.recovery_per_coach_limit = RateLimiter(per_minute=120, burst=60)
 
+    # The player principal's copy of the budget above, at the coach's sustained rate
+    # with a smaller burst: a player reads their own stats and has no point outbox to
+    # flush, which was the whole argument for 600.
+    app.state.authenticated_per_player_limit = RateLimiter(per_minute=120, burst=60)
+
     # A cookie naming no session, charged after the lookup it cost (auth.py). The key is
     # a Cloudflare edge address many coaches share, and every device still presenting a
     # revoked cookie charges it, so this bounds abuse by orders of magnitude rather than
@@ -196,6 +209,7 @@ def create_app() -> FastAPI:
     app.state.breach_checker = create_breach_checker()
 
     app.include_router(auth.router)
+    app.include_router(player_auth.router)
     app.include_router(coaches.router)
     app.include_router(players.router)
     app.include_router(matches.router)
