@@ -7,6 +7,7 @@ import { registerSW } from "virtual:pwa-register";
 
 import "@/app.css";
 import { UpdatePrompt } from "@/features/pwa/update-prompt";
+import { registerFlushTriggers } from "@/features/sync/flush-triggers";
 import { QUERY_CACHE_MAX_AGE_MS } from "@/lib/query-persist";
 import { routeTree } from "@/routeTree.gen";
 
@@ -30,8 +31,12 @@ registerErrorStatusInterceptor();
 // gcTime matches the persisted maxAge (see query-persist.ts): a query dropped from
 // memory is absent from the next save, so Query's 5-minute default would cut the
 // persisted cache down to whatever happened to be on screen recently.
+// networkMode offlineFirst app-wide: the default mode *pauses* a fetch whenever
+// the browser claims to be offline, leaving screens on a spinner that can never
+// resolve, and navigator.onLine says "offline" wrongly often enough. Attempting
+// the request and failing over to the persisted cache is this app's whole model.
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { gcTime: QUERY_CACHE_MAX_AGE_MS } },
+  defaultOptions: { queries: { gcTime: QUERY_CACHE_MAX_AGE_MS, networkMode: "offlineFirst" } },
 });
 const router = createRouter({ routeTree, context: { queryClient } });
 
@@ -49,6 +54,11 @@ createRoot(rootElement).render(
     <RouterProvider router={router} />
   </StrictMode>,
 );
+
+// Module scope rather than a React effect: StrictMode double-invokes effects,
+// and the sync layer must exist exactly once for the life of the tab. The call
+// itself is the app-launch flush of whatever survived the last visit.
+registerFlushTriggers();
 
 // Registered here rather than anywhere under src/app.tsx so no test has to stand up a
 // service worker that jsdom does not implement. The prompt gets its own root for the same

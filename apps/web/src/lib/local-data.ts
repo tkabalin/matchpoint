@@ -64,3 +64,13 @@ export async function purgeIfCoachChanged(
 export function recordOwnerIfUnknown(coachId: string): void {
   if (localStorage.getItem(OWNER_KEY) === null) localStorage.setItem(OWNER_KEY, coachId);
 }
+
+/**
+ * Whose data this device holds, or null before any coach has been recorded. The
+ * sync layer's triggers fire with no coach in hand (a window event, a timer), and
+ * everything in the outbox is the owner's by the purge rules above, so this is
+ * the id a drain runs for.
+ */
+export function getRecordedOwner(): string | null {
+  return localStorage.getItem(OWNER_KEY);
+}
