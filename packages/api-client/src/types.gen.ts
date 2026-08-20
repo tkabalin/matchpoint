@@ -117,9 +117,28 @@ export type CoachVerifyPassword = {
 };
 
 /**
+ * CourtDepth
+ */
+export type CourtDepth = 'short' | 'mid' | 'deep';
+
+/**
+ * CourtSide
+ *
+ * One half of the court: a service box, or the far court on the final ball.
+ */
+export type CourtSide = 'deuce' | 'ad';
+
+/**
  * DominantHand
  */
 export type DominantHand = 'right' | 'left';
+
+/**
+ * EndReason
+ *
+ * Why the point ended.
+ */
+export type EndReason = 'forced' | 'mistake' | 'ace' | 'double_fault' | 'unusual';
 
 /**
  * ErrorDetail
@@ -130,6 +149,13 @@ export type ErrorDetail = {
      */
     detail: string;
 };
+
+/**
+ * FailureMode
+ *
+ * How a ball that was in play went out.
+ */
+export type FailureMode = 'net' | 'long' | 'wide';
 
 /**
  * ForgotPasswordRequest
@@ -266,6 +292,50 @@ export type MatchRead = {
  * Whether the tracked player won, from their side and never the opponent's.
  */
 export type MatchResult = 'win' | 'loss';
+
+/**
+ * MatchSetRead
+ *
+ * One set's game score, as the server counts it off the match's points.
+ */
+export type MatchSetRead = {
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Games Won Opponent
+     */
+    games_won_opponent: number;
+    /**
+     * Games Won Tracked
+     */
+    games_won_tracked: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Match Id
+     */
+    match_id: string;
+    /**
+     * Set Number
+     */
+    set_number: number;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+    winner: MatchSide | null;
+};
+
+/**
+ * MatchSide
+ *
+ * One side of a match, the coach's tracked player or their opponent.
+ */
+export type MatchSide = 'tracked' | 'opponent';
 
 /**
  * MatchUpdate
@@ -407,6 +477,120 @@ export type PlayerUpdate = {
 };
 
 /**
+ * PointBatch
+ *
+ * One flush of a device's capture outbox, for one match.
+ *
+ * Ingestion is all-or-nothing: the batch lands whole or nothing in it does, so a
+ * flush is one thing for the sync layer to acknowledge or park. Re-sending a point
+ * already stored is a no-op rather than an error, which is what makes a retried
+ * flush safe.
+ */
+export type PointBatch = {
+    /**
+     * Device Id
+     */
+    device_id: string;
+    /**
+     * Points
+     */
+    points: Array<PointCreate>;
+};
+
+/**
+ * PointCreate
+ *
+ * One captured point, exactly as the capture client's scoring engine stamped it.
+ *
+ * Validated for shape alone, never for tennis-logic coherence: the client that
+ * scored the match is the only rulebook, so a stamp the server disagrees with is
+ * still stored as sent.
+ */
+export type PointCreate = {
+    ball_depth?: CourtDepth | null;
+    ball_half?: CourtSide | null;
+    /**
+     * Ball In
+     */
+    ball_in?: boolean | null;
+    ball_out_mode?: FailureMode | null;
+    end_reason: EndReason;
+    /**
+     * Game Number
+     */
+    game_number: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * In Tiebreak
+     */
+    in_tiebreak: boolean;
+    /**
+     * Is Break Point
+     */
+    is_break_point: boolean;
+    /**
+     * Is Game End
+     */
+    is_game_end: boolean;
+    /**
+     * Is Game Point
+     */
+    is_game_point: boolean;
+    /**
+     * Is Match Point
+     */
+    is_match_point: boolean;
+    /**
+     * Is Set End
+     */
+    is_set_end: boolean;
+    /**
+     * Is Set Point
+     */
+    is_set_point: boolean;
+    /**
+     * Note
+     */
+    note?: string | null;
+    rally_length_bucket?: RallyBucket | null;
+    return_outcome?: ReturnOutcome | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    serve1_box?: CourtSide | null;
+    serve1_fault_mode?: FailureMode | null;
+    serve1_outcome: ServeOutcome;
+    serve1_target?: ServeTarget | null;
+    serve2_box?: CourtSide | null;
+    serve2_fault_mode?: FailureMode | null;
+    serve2_outcome?: ServeOutcome | null;
+    serve2_target?: ServeTarget | null;
+    server: MatchSide;
+    /**
+     * Set Number
+     */
+    set_number: number;
+    shot_type?: ShotType | null;
+    unusual_reason?: UnusualReason | null;
+    wing?: Wing | null;
+    /**
+     * Won
+     */
+    won: boolean;
+};
+
+/**
+ * RallyBucket
+ *
+ * A coarse rally-length bucket.
+ */
+export type RallyBucket = 'b1' | 'b2' | 'b3' | 'b4';
+
+/**
  * RedeemTransferCodeRequest
  */
 export type RedeemTransferCodeRequest = {
@@ -427,6 +611,13 @@ export type ResetPasswordRequest = {
 };
 
 /**
+ * ReturnOutcome
+ *
+ * The return's outcome, set only on a point the opponent served.
+ */
+export type ReturnOutcome = 'in' | 'net' | 'long' | 'wide';
+
+/**
  * ScoringSystem
  *
  * The scoring system the match is played under.
@@ -434,9 +625,37 @@ export type ResetPasswordRequest = {
 export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'womens_grand_slam' | 'no_ad_scoring' | 'match_tiebreak_10_points' | 'short_sets' | 'pro_set' | 'legacy';
 
 /**
+ * ServeOutcome
+ *
+ * How a single serve attempt landed.
+ */
+export type ServeOutcome = 'in' | 'fault' | 'ace';
+
+/**
+ * ServeTarget
+ *
+ * Where a landed serve was aimed, coarse enough for a coach to call live.
+ */
+export type ServeTarget = 'wide' | 'body' | 't';
+
+/**
+ * ShotType
+ *
+ * The last successful shot of the point.
+ */
+export type ShotType = 'drive' | 'volley' | 'dropshot' | 'lob';
+
+/**
  * Surface
  */
 export type Surface = 'hard' | 'clay' | 'grass' | 'carpet';
+
+/**
+ * UnusualReason
+ *
+ * Why an UNUSUAL point ended, set only alongside that EndReason.
+ */
+export type UnusualReason = 'net_touch' | 'ball_hit_player' | 'reached_over' | 'double_hit' | 'hindrance' | 'point_penalty' | 'other';
 
 /**
  * ValidationError
@@ -485,6 +704,11 @@ export type VerifyResetCodeRequest = {
      */
     email: string;
 };
+
+/**
+ * Wing
+ */
+export type Wing = 'forehand' | 'backhand';
 
 /**
  * CoachCreate
@@ -1399,6 +1623,50 @@ export type ReleaseCaptureResponses = {
 };
 
 export type ReleaseCaptureResponse = ReleaseCaptureResponses[keyof ReleaseCaptureResponses];
+
+export type IngestPointsData = {
+    body: PointBatch;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/points';
+};
+
+export type IngestPointsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Points cannot be ingested
+     */
+    409: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type IngestPointsError = IngestPointsErrors[keyof IngestPointsErrors];
+
+export type IngestPointsResponses = {
+    /**
+     * Response Ingest Points
+     *
+     * Successful Response
+     */
+    200: Array<MatchSetRead>;
+};
+
+export type IngestPointsResponse = IngestPointsResponses[keyof IngestPointsResponses];
 
 export type ListPlayersData = {
     body?: never;

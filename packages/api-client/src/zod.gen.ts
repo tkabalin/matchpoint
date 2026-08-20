@@ -47,9 +47,38 @@ export const zCoachVerifyPassword = z.object({
 });
 
 /**
+ * CourtDepth
+ */
+export const zCourtDepth = z.enum([
+    'short',
+    'mid',
+    'deep'
+]);
+
+/**
+ * CourtSide
+ *
+ * One half of the court: a service box, or the far court on the final ball.
+ */
+export const zCourtSide = z.enum(['deuce', 'ad']);
+
+/**
  * DominantHand
  */
 export const zDominantHand = z.enum(['right', 'left']);
+
+/**
+ * EndReason
+ *
+ * Why the point ended.
+ */
+export const zEndReason = z.enum([
+    'forced',
+    'mistake',
+    'ace',
+    'double_fault',
+    'unusual'
+]);
 
 /**
  * ErrorDetail
@@ -57,6 +86,17 @@ export const zDominantHand = z.enum(['right', 'left']);
 export const zErrorDetail = z.object({
     detail: z.string()
 });
+
+/**
+ * FailureMode
+ *
+ * How a ball that was in play went out.
+ */
+export const zFailureMode = z.enum([
+    'net',
+    'long',
+    'wide'
+]);
 
 /**
  * ForgotPasswordRequest
@@ -106,6 +146,29 @@ export const zMatchCaptureRead = z.object({
  * Whether the tracked player won, from their side and never the opponent's.
  */
 export const zMatchResult = z.enum(['win', 'loss']);
+
+/**
+ * MatchSide
+ *
+ * One side of a match, the coach's tracked player or their opponent.
+ */
+export const zMatchSide = z.enum(['tracked', 'opponent']);
+
+/**
+ * MatchSetRead
+ *
+ * One set's game score, as the server counts it off the match's points.
+ */
+export const zMatchSetRead = z.object({
+    created_at: z.iso.datetime(),
+    games_won_opponent: z.int(),
+    games_won_tracked: z.int(),
+    id: z.uuid(),
+    match_id: z.uuid(),
+    set_number: z.int(),
+    updated_at: z.iso.datetime(),
+    winner: zMatchSide.nullable()
+});
 
 /**
  * OtpRequest
@@ -166,6 +229,18 @@ export const zPlayerUpdate = z.object({
 });
 
 /**
+ * RallyBucket
+ *
+ * A coarse rally-length bucket.
+ */
+export const zRallyBucket = z.enum([
+    'b1',
+    'b2',
+    'b3',
+    'b4'
+]);
+
+/**
  * RedeemTransferCodeRequest
  */
 export const zRedeemTransferCodeRequest = z.object({
@@ -178,6 +253,18 @@ export const zRedeemTransferCodeRequest = z.object({
 export const zResetPasswordRequest = z.object({
     email: z.email().max(254)
 });
+
+/**
+ * ReturnOutcome
+ *
+ * The return's outcome, set only on a point the opponent served.
+ */
+export const zReturnOutcome = z.enum([
+    'in',
+    'net',
+    'long',
+    'wide'
+]);
 
 /**
  * ScoringSystem
@@ -193,6 +280,40 @@ export const zScoringSystem = z.enum([
     'short_sets',
     'pro_set',
     'legacy'
+]);
+
+/**
+ * ServeOutcome
+ *
+ * How a single serve attempt landed.
+ */
+export const zServeOutcome = z.enum([
+    'in',
+    'fault',
+    'ace'
+]);
+
+/**
+ * ServeTarget
+ *
+ * Where a landed serve was aimed, coarse enough for a coach to call live.
+ */
+export const zServeTarget = z.enum([
+    'wide',
+    'body',
+    't'
+]);
+
+/**
+ * ShotType
+ *
+ * The last successful shot of the point.
+ */
+export const zShotType = z.enum([
+    'drive',
+    'volley',
+    'dropshot',
+    'lob'
 ]);
 
 /**
@@ -271,6 +392,21 @@ export const zMatchUpdate = z.object({
 });
 
 /**
+ * UnusualReason
+ *
+ * Why an UNUSUAL point ended, set only alongside that EndReason.
+ */
+export const zUnusualReason = z.enum([
+    'net_touch',
+    'ball_hit_player',
+    'reached_over',
+    'double_hit',
+    'hindrance',
+    'point_penalty',
+    'other'
+]);
+
+/**
  * ValidationError
  */
 export const zValidationError = z.object({
@@ -300,6 +436,70 @@ export const zVerifyOtpRequest = z.object({
  */
 export const zVerifyResetCodeRequest = z.object({
     email: z.email().max(254)
+});
+
+/**
+ * Wing
+ */
+export const zWing = z.enum(['forehand', 'backhand']);
+
+/**
+ * PointCreate
+ *
+ * One captured point, exactly as the capture client's scoring engine stamped it.
+ *
+ * Validated for shape alone, never for tennis-logic coherence: the client that
+ * scored the match is the only rulebook, so a stamp the server disagrees with is
+ * still stored as sent.
+ */
+export const zPointCreate = z.object({
+    ball_depth: zCourtDepth.nullish(),
+    ball_half: zCourtSide.nullish(),
+    ball_in: z.boolean().nullish(),
+    ball_out_mode: zFailureMode.nullish(),
+    end_reason: zEndReason,
+    game_number: z.int().gte(1).lte(2147483647),
+    id: z.uuid(),
+    in_tiebreak: z.boolean(),
+    is_break_point: z.boolean(),
+    is_game_end: z.boolean(),
+    is_game_point: z.boolean(),
+    is_match_point: z.boolean(),
+    is_set_end: z.boolean(),
+    is_set_point: z.boolean(),
+    note: z.string().min(1).max(2000).nullish(),
+    rally_length_bucket: zRallyBucket.nullish(),
+    return_outcome: zReturnOutcome.nullish(),
+    sequence: z.int().gte(0).lte(2147483647),
+    serve1_box: zCourtSide.nullish(),
+    serve1_fault_mode: zFailureMode.nullish(),
+    serve1_outcome: zServeOutcome,
+    serve1_target: zServeTarget.nullish(),
+    serve2_box: zCourtSide.nullish(),
+    serve2_fault_mode: zFailureMode.nullish(),
+    serve2_outcome: zServeOutcome.nullish(),
+    serve2_target: zServeTarget.nullish(),
+    server: zMatchSide,
+    set_number: z.int().gte(1).lte(2147483647),
+    shot_type: zShotType.nullish(),
+    unusual_reason: zUnusualReason.nullish(),
+    wing: zWing.nullish(),
+    won: z.boolean()
+});
+
+/**
+ * PointBatch
+ *
+ * One flush of a device's capture outbox, for one match.
+ *
+ * Ingestion is all-or-nothing: the batch lands whole or nothing in it does, so a
+ * flush is one thing for the sync layer to acknowledge or park. Re-sending a point
+ * already stored is a no-op rather than an error, which is what makes a retried
+ * flush safe.
+ */
+export const zPointBatch = z.object({
+    device_id: z.uuid(),
+    points: z.array(zPointCreate).min(1).max(500)
 });
 
 /**
@@ -508,6 +708,19 @@ export const zReleaseCapturePath = z.object({
  * Successful Response
  */
 export const zReleaseCaptureResponse = z.void();
+
+export const zIngestPointsBody = zPointBatch;
+
+export const zIngestPointsPath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Response Ingest Points
+ *
+ * Successful Response
+ */
+export const zIngestPointsResponse = z.array(zMatchSetRead);
 
 /**
  * Response List Players

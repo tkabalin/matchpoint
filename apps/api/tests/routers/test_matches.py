@@ -1,16 +1,41 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
+from typing import Any
 
+import httpx2
 import pytest
 from fastapi.testclient import TestClient
-from psycopg.errors import UniqueViolation
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Coach, Match, MatchResult, MatchSet, Point, Surface
-from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL, MATCH_HAS_POINTS
-from tests.factories import make_coach, make_match, make_match_set, make_player, make_point, sign_in
+from matchpoint_api.models import (
+    Coach,
+    Match,
+    MatchResult,
+    MatchSet,
+    MatchSide,
+    Point,
+    RallyBucket,
+    ReturnOutcome,
+    Surface,
+)
+from matchpoint_api.routers.matches import (
+    CAPTURE_CLAIM_TTL,
+    MATCH_HAS_POINTS,
+    POINT_IN_ANOTHER_MATCH,
+    POINT_SEQUENCE_TAKEN,
+)
+from tests.factories import (
+    make_coach,
+    make_match,
+    make_match_set,
+    make_player,
+    make_point,
+    point_payload,
+    sign_in,
+)
 
 
 @pytest.fixture
@@ -1206,12 +1231,388 @@ def test_recording_the_result_releases_the_capture_claim(
     assert saved.capture_claim_expires_at is None
 
 
+def _ingest(
+    client: TestClient,
+    match: Match,
+    points: list[dict[str, Any]],
+    device_id: uuid.UUID | None = None,
+) -> httpx2.Response:
+    body = {"device_id": str(device_id or uuid.uuid4()), "points": points}
+    return client.post(f"/matches/{match.id}/points", json=body)
+
+
+def _points_of(session: Session) -> list[int]:
+    return list(session.scalars(select(Point.sequence).order_by(Point.sequence)))
+
+
+def _without_updated_at(sets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{key: value for key, value in row.items() if key != "updated_at"} for row in sets]
+
+
+def test_ingest_points_stores_the_batch_and_answers_with_the_derived_sets(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One flush, two sets: the points land as sent and the set rows are counted off
+    them, since nothing else in the request says what the score is."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = _ingest(
+        client,
+        match,
+        [
+            point_payload(sequence=0, won=True, is_game_end=True),
+            point_payload(sequence=1, won=False, is_game_end=True, is_set_end=True),
+            point_payload(sequence=2, won=True, set_number=2, is_game_end=True),
+        ],
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["set_number"] for row in body] == [1, 2]
+    assert body[0]["match_id"] == str(match.id)
+    assert body[0]["games_won_tracked"] == 1
+    assert body[0]["games_won_opponent"] == 1
+    assert body[0]["winner"] == "opponent"
+    assert body[1]["games_won_tracked"] == 1
+    assert body[1]["winner"] is None
+    assert _points_of(db_session) == [0, 1, 2]
+
+
+def test_ingest_stores_every_field_the_client_stamped(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The columns the batch reaches are the ones the schema names, so a field wired to
+    the wrong one is only visible on the row."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = point_payload(
+        sequence=4,
+        server="opponent",
+        serve1_box=None,
+        serve1_target=None,
+        return_outcome="in",
+        note="Second serve too short again.",
+        rally_length_bucket="b3",
+        set_number=2,
+        game_number=7,
+        in_tiebreak=True,
+        is_break_point=True,
+    )
+
+    assert _ingest(client, match, [payload]).status_code == 200
+
+    saved = db_session.get(Point, uuid.UUID(payload["id"]))
+    assert saved is not None
+    assert saved.match_id == match.id
+    assert saved.server is MatchSide.OPPONENT
+    assert saved.return_outcome is ReturnOutcome.IN
+    assert saved.note == "Second serve too short again."
+    assert saved.rally_length_bucket is RallyBucket.B3
+    assert saved.set_number == 2
+    assert saved.game_number == 7
+    assert saved.in_tiebreak is True
+    assert saved.is_break_point is True
+
+
+def test_ingesting_the_same_batch_again_lands_on_the_same_answer(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """What makes a retry after a dropped connection safe: the flush that may already
+    have been applied answers the same way rather than failing on its own writes.
+
+    `updated_at` is the exception, and reads as when the tally was last recomputed
+    rather than when it last changed: the recompute rewrites the row unconditionally,
+    and comparing the old tally to skip a write would cost a read to save nothing.
+    """
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    points = [point_payload(sequence=index, is_game_end=True) for index in range(3)]
+
+    first = _ingest(client, match, points)
+    second = _ingest(client, match, points)
+
+    assert second.status_code == 200
+    assert _without_updated_at(second.json()) == _without_updated_at(first.json())
+    assert second.json()[0]["updated_at"] > first.json()[0]["updated_at"]
+    assert _points_of(db_session) == [0, 1, 2]
+
+
+def test_a_repeated_point_keeps_the_stored_version(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A point is immutable once ingested, so a second body under the same id is the
+    point we already hold, whatever it says."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = point_payload(won=True)
+
+    assert _ingest(client, match, [payload]).status_code == 200
+    assert _ingest(client, match, [payload | {"won": False}]).status_code == 200
+
+    saved = db_session.get(Point, uuid.UUID(payload["id"]))
+    assert saved is not None
+    assert saved.won is True
+
+
+def test_an_overlapping_batch_converges(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A drain that re-sends from further back than it needed to: the overlap is
+    ignored and the new points land, so the match ends up with the union."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    points = [point_payload(sequence=index, is_game_end=True) for index in range(4)]
+
+    assert _ingest(client, match, points[:3]).status_code == 200
+    response = _ingest(client, match, points[1:])
+
+    assert response.status_code == 200
+    assert response.json()[0]["games_won_tracked"] == 4
+    assert _points_of(db_session) == [0, 1, 2, 3]
+
+
+def test_ingest_recomputes_the_sets_a_late_batch_changes(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The recompute reads every point of the match, not just the batch, which is what
+    lets a set row that was a score so far become a result."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    first = _ingest(client, match, [point_payload(sequence=0, is_game_end=True)]).json()
+    assert first[0]["games_won_tracked"] == 1
+    assert first[0]["winner"] is None
+
+    second = _ingest(
+        client, match, [point_payload(sequence=1, is_game_end=True, is_set_end=True)]
+    ).json()
+
+    assert second[0]["id"] == first[0]["id"]
+    assert second[0]["games_won_tracked"] == 2
+    assert second[0]["winner"] == "tracked"
+    assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 1
+
+
+def test_ingest_into_a_completed_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A recorded result locks the match (#108). Declared as a 409 because the sync
+    layer has to tell a batch that will never be accepted from one to retry."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = _ingest(client, match, [point_payload()])
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Match is completed"}
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
+
+
+def test_a_sequence_already_held_by_a_different_point_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two devices capturing one match, which is what the claim exists to prevent and
+    the unique constraint catches when it fails to. The batch is refused whole: there
+    are no per-item results to report one bad point through, and the rest of it is not
+    quietly kept."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_point(db_session, match_id=match.id, sequence=1)
+    db_session.commit()
+
+    response = _ingest(client, match, [point_payload(sequence=0), point_payload(sequence=1)])
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": POINT_SEQUENCE_TAKEN}
+    assert _points_of(db_session) == [1]
+
+
+def test_a_point_already_stored_against_another_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Insert-or-ignore on the id alone cannot tell "the point we already hold" from
+    "a point of another match", and taking the second for the first would drop it and
+    answer 200, which is the one thing this endpoint must never do with a point."""
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    elsewhere = make_point(db_session, match_id=make_match(db_session, player_id=player_id).id)
+    db_session.commit()
+
+    response = _ingest(
+        client, match, [point_payload(id=str(elsewhere.id)), point_payload(sequence=1)]
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": POINT_IN_ANOTHER_MATCH}
+    # The rest of the batch went with it, and the stored point stayed where it was.
+    assert _points_of(db_session) == [elsewhere.sequence]
+    assert elsewhere.match_id != match.id
+
+
+def test_one_invalid_point_rejects_the_whole_batch(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Validation runs over the body before any of it reaches a row, so a batch with
+    one bad point inserts none of the good ones."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = _ingest(
+        client,
+        match,
+        [point_payload(sequence=0), point_payload(sequence=1, serve1_box=None)],
+    )
+
+    assert response.status_code == 422
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
+
+
+def test_an_empty_batch_is_refused(client: TestClient, db_session: Session, coach: Coach) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert _ingest(client, match, []).status_code == 422
+
+
+def test_a_flush_from_the_claim_holder_renews_the_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Flushing is evidence the device is still capturing, so it renews the claim the
+    way claiming again does, which is the only renewal a device that has been offline
+    can reach."""
+    device_id = uuid.uuid4()
+    stale = datetime.now(UTC) + timedelta(minutes=5)
+    match = _claimed_match(db_session, coach, device_id, capture_claim_expires_at=stale)
+    db_session.commit()
+
+    assert _ingest(client, match, [point_payload()], device_id).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == device_id
+    assert saved.capture_claim_expires_at is not None
+    assert saved.capture_claim_expires_at > stale
+
+
+def test_a_flush_from_another_device_is_still_ingested(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The claim is not a gate on ingestion. A device capturing offline cannot renew,
+    so by flush time its claim may have lapsed and another device taken the match on;
+    refusing then would strand points that were genuinely played."""
+    holder = uuid.uuid4()
+    expires_at = datetime.now(UTC) + timedelta(minutes=5)
+    match = _claimed_match(db_session, coach, holder, capture_claim_expires_at=expires_at)
+    db_session.commit()
+
+    assert _ingest(client, match, [point_payload()], uuid.uuid4()).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == holder
+    assert saved.capture_claim_expires_at == expires_at
+    assert _points_of(db_session) == [0]
+
+
+def test_a_flush_does_not_claim_a_match_nobody_holds(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Renewing a claim and taking one are different things: claiming is the capture
+    route's job, and a backlog flushed hours later must not seize a free match."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert _ingest(client, match, [point_payload()]).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id is None
+    assert saved.capture_claim_expires_at is None
+
+
+def test_a_flush_does_not_revive_the_lapsed_claim_it_once_held(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A lapsed claim counts as free, so the device that let it lapse renews nothing:
+    another device may have taken the match on since."""
+    device_id = uuid.uuid4()
+    lapsed = datetime.now(UTC) - timedelta(minutes=1)
+    match = _claimed_match(db_session, coach, device_id, capture_claim_expires_at=lapsed)
+    db_session.commit()
+
+    assert _ingest(client, match, [point_payload()], device_id).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_expires_at == lapsed
+
+
+def test_ingest_into_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The ownership 404 the other match routes give, and no point of theirs is
+    written: a match reachable across the boundary would be one a stranger can add
+    history to."""
+    other_match = make_match(db_session)
+    db_session.commit()
+
+    response = _ingest(client, other_match, [point_payload()])
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
+
+
+@pytest.mark.usefixtures("coach")
+def test_ingest_into_an_unknown_match_is_404(client: TestClient) -> None:
+    response = client.post(
+        f"/matches/{uuid.uuid4()}/points",
+        json={"device_id": str(uuid.uuid4()), "points": [point_payload()]},
+    )
+
+    assert response.status_code == 404
+
+
+def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Only a unique violation becomes the 409 above; any other integrity failure is a
+    bug and stays a server error, since answering "that sequence is taken" would send
+    whoever hit it looking in the wrong place.
+
+    Engineered the way the delete route's twin is, there being no body that reaches
+    this arm: a `before_flush` hook rides in an unrelated row with a dangling foreign
+    key just as the route's own write is about to run.
+    """
+    device_id = uuid.uuid4()
+    match = _claimed_match(db_session, coach, device_id)
+    db_session.commit()
+
+    @event.listens_for(db_session, "before_flush")
+    def _sabotage(session: Session, _context: object, _instances: object) -> None:
+        if any(isinstance(dirty, Match) for dirty in session.dirty):
+            session.add(Match(player_id=uuid.uuid4(), played_on=date(2026, 8, 1)))
+
+    with pytest.raises(IntegrityError) as caught:
+        _ingest(client, match, [point_payload()], device_id)
+
+    assert isinstance(caught.value.orig, ForeignKeyViolation)
+
+
 @pytest.mark.parametrize(
     ("method", "suffix", "body"),
     [
         ("post", "/capture", {"device_id": str(uuid.UUID(int=1))}),
         ("post", "/capture/release", None),
         ("patch", "", {"result": "win"}),
+        (
+            "post",
+            "/points",
+            {"device_id": str(uuid.UUID(int=1)), "points": [point_payload()]},
+        ),
     ],
 )
 def test_the_routes_that_write_the_claim_lock_the_match_row(
@@ -1257,6 +1658,7 @@ def test_the_routes_that_write_the_claim_lock_the_match_row(
         ("delete", f"/matches/{uuid.UUID(int=0)}"),
         ("post", f"/matches/{uuid.UUID(int=0)}/capture"),
         ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/points"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:

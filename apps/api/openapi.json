@@ -229,12 +229,42 @@
         "title": "CoachVerifyPassword",
         "type": "object"
       },
+      "CourtDepth": {
+        "enum": [
+          "short",
+          "mid",
+          "deep"
+        ],
+        "title": "CourtDepth",
+        "type": "string"
+      },
+      "CourtSide": {
+        "description": "One half of the court: a service box, or the far court on the final ball.",
+        "enum": [
+          "deuce",
+          "ad"
+        ],
+        "title": "CourtSide",
+        "type": "string"
+      },
       "DominantHand": {
         "enum": [
           "right",
           "left"
         ],
         "title": "DominantHand",
+        "type": "string"
+      },
+      "EndReason": {
+        "description": "Why the point ended.",
+        "enum": [
+          "forced",
+          "mistake",
+          "ace",
+          "double_fault",
+          "unusual"
+        ],
+        "title": "EndReason",
         "type": "string"
       },
       "ErrorDetail": {
@@ -249,6 +279,16 @@
         ],
         "title": "ErrorDetail",
         "type": "object"
+      },
+      "FailureMode": {
+        "description": "How a ball that was in play went out.",
+        "enum": [
+          "net",
+          "long",
+          "wide"
+        ],
+        "title": "FailureMode",
+        "type": "string"
       },
       "ForgotPasswordRequest": {
         "additionalProperties": false,
@@ -540,6 +580,74 @@
           "loss"
         ],
         "title": "MatchResult",
+        "type": "string"
+      },
+      "MatchSetRead": {
+        "description": "One set's game score, as the server counts it off the match's points.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "games_won_opponent": {
+            "title": "Games Won Opponent",
+            "type": "integer"
+          },
+          "games_won_tracked": {
+            "title": "Games Won Tracked",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "set_number": {
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "match_id",
+          "set_number",
+          "games_won_tracked",
+          "games_won_opponent",
+          "winner",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "MatchSetRead",
+        "type": "object"
+      },
+      "MatchSide": {
+        "description": "One side of a match, the coach's tracked player or their opponent.",
+        "enum": [
+          "tracked",
+          "opponent"
+        ],
+        "title": "MatchSide",
         "type": "string"
       },
       "MatchUpdate": {
@@ -878,6 +986,306 @@
         "title": "PlayerUpdate",
         "type": "object"
       },
+      "PointBatch": {
+        "additionalProperties": false,
+        "description": "One flush of a device's capture outbox, for one match.\n\nIngestion is all-or-nothing: the batch lands whole or nothing in it does, so a\nflush is one thing for the sync layer to acknowledge or park. Re-sending a point\nalready stored is a no-op rather than an error, which is what makes a retried\nflush safe.",
+        "properties": {
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/PointCreate"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "device_id",
+          "points"
+        ],
+        "title": "PointBatch",
+        "type": "object"
+      },
+      "PointCreate": {
+        "additionalProperties": false,
+        "description": "One captured point, exactly as the capture client's scoring engine stamped it.\n\nValidated for shape alone, never for tennis-logic coherence: the client that\nscored the match is the only rulebook, so a stamp the server disagrees with is\nstill stored as sent.",
+        "properties": {
+          "ball_depth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtDepth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ball_half": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ball_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ball In"
+          },
+          "ball_out_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_reason": {
+            "$ref": "#/components/schemas/EndReason"
+          },
+          "game_number": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Game Number",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "in_tiebreak": {
+            "title": "In Tiebreak",
+            "type": "boolean"
+          },
+          "is_break_point": {
+            "title": "Is Break Point",
+            "type": "boolean"
+          },
+          "is_game_end": {
+            "title": "Is Game End",
+            "type": "boolean"
+          },
+          "is_game_point": {
+            "title": "Is Game Point",
+            "type": "boolean"
+          },
+          "is_match_point": {
+            "title": "Is Match Point",
+            "type": "boolean"
+          },
+          "is_set_end": {
+            "title": "Is Set End",
+            "type": "boolean"
+          },
+          "is_set_point": {
+            "title": "Is Set Point",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "rally_length_bucket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RallyBucket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "return_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "serve1_box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve1_fault_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve1_outcome": {
+            "$ref": "#/components/schemas/ServeOutcome"
+          },
+          "serve1_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_fault_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server": {
+            "$ref": "#/components/schemas/MatchSide"
+          },
+          "set_number": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "shot_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unusual_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnusualReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Wing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "won": {
+            "title": "Won",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "server",
+          "won",
+          "serve1_outcome",
+          "end_reason",
+          "set_number",
+          "game_number",
+          "in_tiebreak",
+          "is_break_point",
+          "is_game_point",
+          "is_game_end",
+          "is_set_point",
+          "is_set_end",
+          "is_match_point"
+        ],
+        "title": "PointCreate",
+        "type": "object"
+      },
+      "RallyBucket": {
+        "description": "A coarse rally-length bucket.",
+        "enum": [
+          "b1",
+          "b2",
+          "b3",
+          "b4"
+        ],
+        "title": "RallyBucket",
+        "type": "string"
+      },
       "RedeemTransferCodeRequest": {
         "additionalProperties": false,
         "properties": {
@@ -920,6 +1328,17 @@
         "title": "ResetPasswordRequest",
         "type": "object"
       },
+      "ReturnOutcome": {
+        "description": "The return's outcome, set only on a point the opponent served.",
+        "enum": [
+          "in",
+          "net",
+          "long",
+          "wide"
+        ],
+        "title": "ReturnOutcome",
+        "type": "string"
+      },
       "ScoringSystem": {
         "description": "The scoring system the match is played under.",
         "enum": [
@@ -935,6 +1354,37 @@
         "title": "ScoringSystem",
         "type": "string"
       },
+      "ServeOutcome": {
+        "description": "How a single serve attempt landed.",
+        "enum": [
+          "in",
+          "fault",
+          "ace"
+        ],
+        "title": "ServeOutcome",
+        "type": "string"
+      },
+      "ServeTarget": {
+        "description": "Where a landed serve was aimed, coarse enough for a coach to call live.",
+        "enum": [
+          "wide",
+          "body",
+          "t"
+        ],
+        "title": "ServeTarget",
+        "type": "string"
+      },
+      "ShotType": {
+        "description": "The last successful shot of the point.",
+        "enum": [
+          "drive",
+          "volley",
+          "dropshot",
+          "lob"
+        ],
+        "title": "ShotType",
+        "type": "string"
+      },
       "Surface": {
         "enum": [
           "hard",
@@ -943,6 +1393,20 @@
           "carpet"
         ],
         "title": "Surface",
+        "type": "string"
+      },
+      "UnusualReason": {
+        "description": "Why an UNUSUAL point ended, set only alongside that EndReason.",
+        "enum": [
+          "net_touch",
+          "ball_hit_player",
+          "reached_over",
+          "double_hit",
+          "hindrance",
+          "point_penalty",
+          "other"
+        ],
+        "title": "UnusualReason",
         "type": "string"
       },
       "ValidationError": {
@@ -1034,6 +1498,14 @@
         ],
         "title": "VerifyResetCodeRequest",
         "type": "object"
+      },
+      "Wing": {
+        "enum": [
+          "forehand",
+          "backhand"
+        ],
+        "title": "Wing",
+        "type": "string"
       }
     }
   },
@@ -2470,6 +2942,94 @@
           }
         },
         "summary": "Release Capture",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/{match_id}/points": {
+      "post": {
+        "description": "Ingest one flush of captured points, answering with the match's set scores.\n\nAll or nothing: the batch lands whole or none of it does, and a point already\nstored is left as it is rather than rewritten, so a retried or overlapping flush\nconverges instead of failing. `points` carries the batch's own ceiling, and the\n1 MB request body limit is the real bound, which a batch of points carrying long\nnotes reaches sooner.",
+        "operationId": "ingest_points",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PointBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchSetRead"
+                  },
+                  "title": "Response Ingest Points",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Points cannot be ingested"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Ingest Points",
         "tags": [
           "matches"
         ]

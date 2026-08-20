@@ -4,7 +4,7 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from matchpoint_api.models import MatchResult, ScoringSystem, Surface
+from matchpoint_api.models import MatchResult, MatchSide, ScoringSystem, Surface
 from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText, UpdateModel
 
 # Room to back-fill a season or two of matches, while still bracketing a wrong
@@ -79,6 +79,24 @@ class MatchCaptureRead(BaseModel):
 
     device_id: uuid.UUID
     expires_at: datetime
+
+
+# Derived from the match's points rather than sent by anyone, so there is no
+# MatchSetCreate to pair this with.
+class MatchSetRead(BaseModel):
+    """One set's game score, as the server counts it off the match's points."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    match_id: uuid.UUID
+    set_number: int
+    games_won_tracked: int
+    games_won_opponent: int
+    # Null while the set is in flight, no point having closed it yet.
+    winner: MatchSide | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class MatchRead(BaseModel):

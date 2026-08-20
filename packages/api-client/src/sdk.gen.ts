@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetMatchData, GetMatchErrors, GetMatchResponses, GetPlayerData, GetPlayerErrors, GetPlayerResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -286,6 +286,26 @@ export const claimCapture = <ThrowOnError extends boolean = false>(options: Opti
  * Free a match for capture on another device.
  */
 export const releaseCapture = <ThrowOnError extends boolean = false>(options: Options<ReleaseCaptureData, ThrowOnError>): RequestResult<ReleaseCaptureResponses, ReleaseCaptureErrors, ThrowOnError> => (options.client ?? client).post<ReleaseCaptureResponses, ReleaseCaptureErrors, ThrowOnError>({ url: '/matches/{match_id}/capture/release', ...options });
+
+/**
+ * Ingest Points
+ *
+ * Ingest one flush of captured points, answering with the match's set scores.
+ *
+ * All or nothing: the batch lands whole or none of it does, and a point already
+ * stored is left as it is rather than rewritten, so a retried or overlapping flush
+ * converges instead of failing. `points` carries the batch's own ceiling, and the
+ * 1 MB request body limit is the real bound, which a batch of points carrying long
+ * notes reaches sooner.
+ */
+export const ingestPoints = <ThrowOnError extends boolean = false>(options: Options<IngestPointsData, ThrowOnError>): RequestResult<IngestPointsResponses, IngestPointsErrors, ThrowOnError> => (options.client ?? client).post<IngestPointsResponses, IngestPointsErrors, ThrowOnError>({
+    url: '/matches/{match_id}/points',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * List Players

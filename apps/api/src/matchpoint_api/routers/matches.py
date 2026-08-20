@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from psycopg.errors import ForeignKeyViolation
+from psycopg.errors import ForeignKeyViolation, UniqueViolation
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
@@ -11,15 +11,18 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Match, Player
+from matchpoint_api.match_sets import recompute_match_sets
+from matchpoint_api.models import Match, MatchSet, Player, Point
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.match import (
     MatchCaptureClaim,
     MatchCaptureRead,
     MatchCreate,
     MatchRead,
+    MatchSetRead,
     MatchUpdate,
 )
+from matchpoint_api.schemas.point import PointBatch
 
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
@@ -41,9 +44,11 @@ router = APIRouter(
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-# Named so delete_match's route test can assert the body exactly, the way the
-# transfer-code refusal on the player routes does.
+# Named so a route test can assert the body exactly, the way the transfer-code refusal
+# on the player routes does.
 MATCH_HAS_POINTS = "Match has recorded points"
+POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
+POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
 
 # How long a capture claim stands without being renewed. Claiming again renews it, so
 # this only bounds how long a device that has gone quiet keeps the match to itself: it
@@ -228,6 +233,71 @@ def release_capture(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
         match.capture_claim_device_id = None
         match.capture_claim_expires_at = None
         db.commit()
+
+
+# One 409 covering every refusal below, as on the capture claim: whichever it is, this
+# batch will never be ingestable, so the sync layer parks it instead of retrying, and it
+# can read that off the status without parsing the sentence.
+@router.post(
+    "/{match_id}/points",
+    response_model=list[MatchSetRead],
+    responses={409: {"model": ErrorDetail, "description": "Points cannot be ingested"}},
+)
+def ingest_points(
+    match_id: uuid.UUID, data: PointBatch, db: DbSession, coach: CurrentCoach
+) -> list[MatchSet]:
+    """Ingest one flush of captured points, answering with the match's set scores.
+
+    All or nothing: the batch lands whole or none of it does, and a point already
+    stored is left as it is rather than rewritten, so a retried or overlapping flush
+    converges instead of failing. `points` carries the batch's own ceiling, and the
+    1 MB request body limit is the real bound, which a batch of points carrying long
+    notes reaches sooner.
+    """
+    # Locked because this reads the result and the claim and then writes points
+    # against them, and because delete_match deletes the points and then the match:
+    # unlocked, a batch could land under a delete that had already checked for points.
+    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    if match.result is not None:
+        raise HTTPException(status_code=409, detail="Match is completed")
+    # A flush is evidence the holder is still capturing, so it renews the claim as
+    # claiming again does. Any other device's batch is still ingested: a device
+    # capturing offline cannot renew, and refusing the backlog of a claim that lapsed
+    # while it was away would strand points that were genuinely played.
+    if capture_holder(match) == data.device_id:
+        match.capture_claim_expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
+    try:
+        # One statement, and DO NOTHING on the client's own id: a point is immutable
+        # once ingested, so a repeat is the point we already hold, whatever the second
+        # body says about it. No follow-up read needs the row, which is what create_match
+        # takes a lock through DO UPDATE for.
+        db.execute(
+            insert(Point)
+            .values([{"match_id": match.id, **point.model_dump()} for point in data.points])
+            .on_conflict_do_nothing(index_elements=[Point.id])
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        # A different point already holds that sequence, which two devices capturing one
+        # match produce, and no retry will clear. The whole batch is refused: there are
+        # no per-item results to report a single bad point through.
+        if isinstance(exc.orig, UniqueViolation):
+            raise HTTPException(status_code=409, detail=POINT_SEQUENCE_TAKEN) from exc
+        raise
+    # An id already stored against another match takes that DO NOTHING branch, so
+    # without this the point is dropped and the flush still answers 200. Read after the
+    # insert rather than before, which is what closes the gap a concurrent flush leaves.
+    stray = db.scalar(
+        select(Point.id).where(
+            Point.id.in_([point.id for point in data.points]), Point.match_id != match.id
+        )
+    )
+    if stray is not None:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=POINT_IN_ANOTHER_MATCH)
+    sets = recompute_match_sets(db, match.id)
+    db.commit()
+    return sets
 
 
 # The 409 is declared because the client branches on it: a match with points recorded
