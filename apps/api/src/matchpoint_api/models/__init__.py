@@ -6,12 +6,30 @@ from matchpoint_api.models.match_set import MatchSet, MatchSide
 from matchpoint_api.models.password_reset import PasswordReset
 from matchpoint_api.models.player import DominantHand, Gender, Player
 from matchpoint_api.models.player_transfer_code import PlayerTransferCode
+from matchpoint_api.models.point import (
+    CourtDepth,
+    CourtSide,
+    EndReason,
+    FailureMode,
+    Point,
+    RallyBucket,
+    ReturnOutcome,
+    ServeOutcome,
+    ServeTarget,
+    ShotType,
+    UnusualReason,
+    Wing,
+)
 
 __all__ = [
     "Coach",
     "CoachSession",
+    "CourtDepth",
+    "CourtSide",
     "DominantHand",
     "EmailVerification",
+    "EndReason",
+    "FailureMode",
     "Gender",
     "Match",
     "MatchResult",
@@ -20,6 +38,14 @@ __all__ = [
     "PasswordReset",
     "Player",
     "PlayerTransferCode",
+    "Point",
+    "RallyBucket",
+    "ReturnOutcome",
     "ScoringSystem",
+    "ServeOutcome",
+    "ServeTarget",
+    "ShotType",
     "Surface",
+    "UnusualReason",
+    "Wing",
 ]

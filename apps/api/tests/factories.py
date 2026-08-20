@@ -25,13 +25,20 @@ from matchpoint_api.auth import (
 from matchpoint_api.models import (
     Coach,
     CoachSession,
+    CourtSide,
     EmailVerification,
+    EndReason,
     Match,
     MatchSet,
     MatchSide,
     PasswordReset,
     Player,
     PlayerTransferCode,
+    Point,
+    ServeOutcome,
+    ServeTarget,
+    ShotType,
+    Wing,
 )
 
 
@@ -223,3 +230,37 @@ def make_match_set(session: Session, **overrides: Any) -> MatchSet:
     session.add(match_set)
     session.flush()
     return match_set
+
+
+def make_point(session: Session, **overrides: Any) -> Point:
+    if "match_id" not in overrides:
+        overrides["match_id"] = make_match(session).id
+    # A tracked-player serve, first serve in, ending on a forced error. The minimal
+    # shape the TS contract allows: one serve attempt, no return, a shot recorded, and
+    # every stamp filled in as the client's scoring engine always fills them.
+    point = Point(
+        **{
+            "sequence": 0,
+            "server": MatchSide.TRACKED,
+            "won": True,
+            "serve1_outcome": ServeOutcome.IN,
+            "serve1_box": CourtSide.DEUCE,
+            "serve1_target": ServeTarget.T,
+            "end_reason": EndReason.FORCED,
+            "wing": Wing.FOREHAND,
+            "shot_type": ShotType.DRIVE,
+            "set_number": 1,
+            "game_number": 1,
+            "in_tiebreak": False,
+            "is_break_point": False,
+            "is_game_point": False,
+            "is_game_end": False,
+            "is_set_point": False,
+            "is_set_end": False,
+            "is_match_point": False,
+        }
+        | overrides
+    )
+    session.add(point)
+    session.flush()
+    return point

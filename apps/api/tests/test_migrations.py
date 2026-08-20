@@ -37,6 +37,7 @@ MIGRATED_TABLES = frozenset(
         "player_transfer_codes",
         "matches",
         "match_sets",
+        "points",
     }
 )
 

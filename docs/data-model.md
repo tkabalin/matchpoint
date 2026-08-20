@@ -17,6 +17,7 @@ erDiagram
     players ||--o| player_transfer_codes : "moves coach via"
     players ||--o{ matches : plays
     matches ||--o{ match_sets : "is scored in"
+    matches ||--o{ points : "is captured as"
 
     coaches {
         uuid id PK
@@ -108,6 +109,44 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+
+    points {
+        uuid id PK "client-assigned, like every offline-captured row"
+        uuid match_id FK "the match this point belongs to"
+        int sequence "the point's position in the match, from 0, unique per match"
+        varchar(8) server "tracked, opponent"
+        boolean won "the tracked player's side, always"
+        varchar(5) serve1_outcome "in, fault, ace"
+        varchar(5) serve1_box "nullable: deuce, ad; null on an opponent serve"
+        varchar(4) serve1_target "nullable: wide, body, t; set together with serve1_box"
+        varchar(4) serve1_fault_mode "nullable: net, long, wide"
+        varchar(5) serve2_outcome "nullable: in, fault, ace; set only after a first-serve fault"
+        varchar(5) serve2_box "nullable: deuce, ad"
+        varchar(4) serve2_target "nullable: wide, body, t; set together with serve2_box"
+        varchar(4) serve2_fault_mode "nullable: net, long, wide"
+        varchar(4) return_outcome "nullable: in, net, long, wide; set only on an opponent-serve point"
+        varchar(12) end_reason "forced, mistake, ace, double_fault, unusual"
+        varchar(15) unusual_reason "nullable: net_touch, ball_hit_player, reached_over, double_hit, hindrance, point_penalty, other"
+        text note "nullable: a coach's annotation, legal on any point"
+        varchar(8) wing "nullable: forehand, backhand; set together with shot_type"
+        varchar(8) shot_type "nullable: drive, volley, dropshot, lob"
+        boolean ball_in "nullable"
+        varchar(5) ball_half "nullable: deuce, ad; set together with ball_depth"
+        varchar(5) ball_depth "nullable: short, mid, deep"
+        varchar(4) ball_out_mode "nullable: net, long, wide"
+        varchar(2) rally_length_bucket "nullable: b1, b2, b3, b4; null means genuinely unknown"
+        int set_number "1-based"
+        int game_number "1-based within its set"
+        boolean in_tiebreak
+        boolean is_break_point
+        boolean is_game_point
+        boolean is_game_end
+        boolean is_set_point
+        boolean is_set_end
+        boolean is_match_point
+        timestamptz created_at
+        timestamptz updated_at
+    }
 ```
 
 A match carries metadata only. Point-level data — serves, rally outcomes, rally length — is captured
@@ -135,6 +174,24 @@ partial or duplicated batch lands on the same answer, and analytics read a handf
 instead of replaying points. `winner` is null while a set is in flight, since the client marks the
 point that closes a set and until one arrives the tally is only a score so far. A tiebreak needs no
 column of its own, being another game, so a 7-6 set stores 7-6.
+
+`points` is the capture record itself: one row per point, in the order the capture client assigned
+it, and append-only. A point syncs once its rally is over and is never corrected afterwards (an undo
+before that sync is an outbox delete on the device, never a write here), so the table carries no
+correction or tombstone column. There is no timestamp: the client-assigned `sequence` is the order
+the server trusts, client clock times being informational only, and no foreign key names a set or a
+game, `match_sets` being what a group-by over `sequence`/`set_number`/`game_number` derives.
+`set_number`, `game_number` and the seven `is_*`/`in_tiebreak` booleans are stamped by the client's
+own scoring engine on every point and are never recomputed here, since replaying tennis scoring
+server-side would be a second copy of logic that already lives once, in the client that has to run
+offline anyway.
+
+Deleting a match with points recorded is refused, the same way any other delete that would orphan a
+child row is: a single match is a casual screen a stray tap can reach, and the history captured
+against it should survive that tap. Deleting a player or closing an account erases their points
+along with everything else below them instead, because both are heavyweight, client-confirmed
+erasures whose entire point is to take the history too. The asymmetry is deliberate, not an
+oversight to reconcile.
 
 `default_surface` and `default_scoring_system` on `coaches` are match-setup defaults, not a separate
 preferences table: a coach has at most one value for each, so a join would buy nothing a column
@@ -185,14 +242,15 @@ the widths above look arbitrary.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** Postgres does not index a foreign
 key automatically, so each key carries an index of its own unless it already leads one belonging to
-a unique constraint, as `player_transfer_codes.player_id` and `match_sets.match_id` do. Leaving off
-`ondelete` means a delete that would orphan rows is refused outright rather than cascading through a
-roster and the match history hanging off it. The routes that do mean to take the children with them
-(deleting a player, and closing an account) delete each child table in turn themselves, so the
-refusal stays in place as a backstop: a table added under `players` or `coaches` and left out of one
-of those lists stops the delete loudly instead of being quietly missed. `match_sets.match_id` is the
-one foreign key that cascades: the refusal exists to protect data a coach entered, and a derived row
-is not that, so it follows its match out rather than standing in the way of deleting one.
+a unique constraint, as `player_transfer_codes.player_id`, `match_sets.match_id` and
+`points.match_id` do. Leaving off `ondelete` means a delete that would orphan rows is refused
+outright rather than cascading through a roster and the match history hanging off it. The routes
+that do mean to take the children with them (deleting a player, and closing an account) delete each
+child table in turn themselves, so the refusal stays in place as a backstop: a table added under
+`players` or `coaches` and left out of one of those lists stops the delete loudly instead of being
+quietly missed. `match_sets.match_id` is the one foreign key that cascades: the refusal exists to
+protect data a coach entered, and a derived row is not that, so it follows its match out rather than
+standing in the way of deleting one.
 
 **Optional unless the value is genuinely required.** Player and match setup happens courtside and
 has to be fast, so beyond the fields that identify a row there is little a coach must fill in.
@@ -206,7 +264,9 @@ points, and those go through the cascade above rather than a line in the route. 
 names each child table itself rather than leaning on the database, which is what the no-`ondelete`
 foreign keys are for: a table added under players or matches and left out of that list refuses the
 delete outright instead of being quietly missed. Nothing is recoverable afterwards, so the
-confirmation belongs to the client, where the coach can be shown what they are about to lose.
+confirmation belongs to the client, where the coach can be shown what they are about to lose. A
+single match is the one exception to that last sentence: deleting one with points already recorded
+against it is refused outright rather than taking them with it, for the reason given above `points`.
 
 **Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
 just be their email, name and password hash sitting on a row nothing can reach, which is not what
