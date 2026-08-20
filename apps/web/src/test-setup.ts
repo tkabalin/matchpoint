@@ -49,6 +49,37 @@ document.elementFromPoint ??= () => null;
 // actual scroll position.
 window.scrollTo = () => {};
 
+// jsdom has no Web Locks API, which the sync drain uses to keep two tabs from
+// double-flushing. This minimal in-process stand-in grants exclusive locks in
+// request order and answers `ifAvailable` with null while one is held, enough
+// for a held-lock test to see a second drain skip. Real cross-tab behaviour is
+// covered once, in #118's two-tab e2e.
+const heldLocks = new Map<string, Promise<unknown>>();
+async function requestLock(
+  name: string,
+  options: LockOptions | ((lock: Lock | null) => Promise<unknown>),
+  maybeCallback?: (lock: Lock | null) => Promise<unknown>,
+): Promise<unknown> {
+  const callback = typeof options === "function" ? options : maybeCallback!;
+  const ifAvailable = typeof options === "function" ? false : (options.ifAvailable ?? false);
+  for (;;) {
+    const held = heldLocks.get(name);
+    if (held === undefined) break;
+    if (ifAvailable) return callback(null);
+    await held.catch(() => {});
+  }
+  const run = (async () => callback({ name, mode: "exclusive" }))();
+  heldLocks.set(name, run);
+  try {
+    return await run;
+  } finally {
+    heldLocks.delete(name);
+  }
+}
+(navigator as { locks?: LockManager }).locks ??= {
+  request: requestLock,
+} as LockManager;
+
 // jsdom has no rendering engine, so it has no notion of media queries either —
 // window.matchMedia is entirely absent. usePrefersDark (#176) calls it on every
 // render, so every test touching Logo needs this. Defaults to "not matched" (light):

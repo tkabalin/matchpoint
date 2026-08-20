@@ -1,0 +1,604 @@
+import type { PointCreate } from "@matchpoint/api-client";
+import { zMatchCreate, zMatchRead, zPointBatch } from "@matchpoint/api-client/zod";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+
+import { createMatch } from "@/features/capture/match";
+import type { Point } from "@/features/capture/point";
+import { outboxDb, type OutboxEntry, type OutboxFailure } from "@/features/outbox/db";
+import { append, markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
+
+import { BACKOFF_DELAYS_MS, drainOutbox, MAX_POINTS_PER_BATCH } from "./drain";
+
+// The real toPointCreate cannot exist until the capture model carries the nine
+// score stamps (#210), so the engine is tested through a stand-in that fills
+// them with constants; the transport stub below still parses every body it
+// produces with zPointBatch, so the stand-in cannot drift from the contract.
+vi.mock("./point-payload", () => ({
+  toPointCreate: (point: Point): PointCreate => ({
+    id: point.id,
+    sequence: point.sequence,
+    set_number: 1,
+    game_number: 1,
+    in_tiebreak: false,
+    is_break_point: false,
+    is_game_point: false,
+    is_game_end: false,
+    is_set_end: false,
+    is_set_point: false,
+    is_match_point: false,
+    server: "tracked",
+    won: point.won,
+    end_reason: "ace",
+    serve1_outcome: "ace",
+    // #175's note is a general coach note the capture model does not carry yet;
+    // unusualNote is the prose it does have, and prose is what sizes a batch.
+    note: point.unusualNote,
+  }),
+}));
+
+// Spies with real implementations passing through, so one test can reject a
+// single outbox read the way a schema upgrade in another tab would.
+vi.mock(import("@/features/outbox/outbox"), { spy: true });
+
+const COACH_ID = "c0ac0000-0000-4000-8000-000000000001";
+const DEVICE_ID = "de1ce000-0000-4000-8000-000000000001";
+const MATCH_A = "3f1c2b4e-0000-4000-8000-00000000000a";
+const MATCH_B = "3f1c2b4e-0000-4000-8000-00000000000b";
+const PLAYER_ID = "3f1c2b4e-0000-4000-8000-000000000001";
+const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
+
+/**
+ * Entity ids must be real UUIDs: the generated schemas check the format, so a
+ * bare "p1" would be recorded as a contract violation below. The hex tag keeps
+ * the assertions readable.
+ */
+function uid(tag: string): string {
+  return `00000000-0000-4000-8000-${tag.padStart(12, "0")}`;
+}
+
+function matchEntry(matchId: string): OutboxEntry {
+  const match = createMatch("2026-08-15", PLAYER_ID, { opponentId: OPPONENT_ID }, PLAYER_ID);
+  // createMatch mints its own id; the queue needs this row keyed by the fixture's.
+  return {
+    id: matchId,
+    coachId: COACH_ID,
+    matchId,
+    kind: "match",
+    payload: { ...match.toJSON(), matchId },
+  };
+}
+
+function pointEntry(
+  tag: string,
+  matchId: string,
+  sequence: number,
+  payload: Record<string, unknown> = {},
+): OutboxEntry {
+  const id = uid(tag);
+  return {
+    id,
+    coachId: COACH_ID,
+    matchId,
+    kind: "point",
+    payload: {
+      id,
+      matchId,
+      timestamp: 1_755_600_000_000,
+      sequence,
+      server: "TRACKED",
+      serves: [{ number: 1, outcome: "ACE", location: { box: "DEUCE", target: "T" } }],
+      returnOutcome: null,
+      won: true,
+      endReason: "ACE",
+      unusualReason: null,
+      unusualNote: null,
+      wing: null,
+      shotType: null,
+      ballIn: null,
+      ballLocation: null,
+      rallyLengthBucket: null,
+      ...payload,
+    },
+  };
+}
+
+/** A point carrying the longest note the API takes, for the byte-bound test. */
+function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
+  return pointEntry(tag, matchId, sequence, {
+    serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+    endReason: "UNUSUAL",
+    unusualReason: "OTHER",
+    unusualNote: "x".repeat(2_000),
+  });
+}
+
+async function queue(...entries: OutboxEntry[]): Promise<void> {
+  for (const entry of entries) {
+    const result = await append(entry);
+    if (!result.ok) throw new Error(`fixture append failed: ${result.reason}`);
+  }
+}
+
+/** The API's own ceiling, in bytes rather than characters (body_limit.py). */
+const MAX_REQUEST_BODY_BYTES = 1_000_000;
+
+interface RecordedRequest {
+  method: string;
+  pathname: string;
+  body: unknown;
+}
+
+type Responder = (request: RecordedRequest) => Response | Promise<Response>;
+
+// A body that fails its schema is recorded here and answered with a 400, and
+// the afterEach below fails the test over it. Not thrown inside the stub: the
+// client would swallow the throw as a network failure and the engine would
+// back off for seconds of real time before the test could say why.
+const contractViolations: string[] = [];
+
+/**
+ * Stubs the transport, not the engine's collaborators, for the same reason as
+ * sign-in.test.tsx. Every body the engine builds is parsed with the schema
+ * generated from the API's own spec, which is the check the TypeScript types
+ * cannot make (formats and length bounds erase to `string`), so a drain that
+ * built an invalid request fails here, not live.
+ */
+function stubTransport(respond: Responder): RecordedRequest[] {
+  const requests: RecordedRequest[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const recorded: RecordedRequest = {
+        method: request.method,
+        // Minus the client's /api base path: that prefix belongs to the proxy
+        // config, the route below it is what the engine chooses.
+        pathname: new URL(request.url).pathname.replace(/^\/api/, ""),
+        body: await request.clone().json(),
+      };
+      requests.push(recorded);
+      const schema =
+        recorded.pathname === "/matches"
+          ? zMatchCreate
+          : /^\/matches\/[^/]+\/points$/.test(recorded.pathname)
+            ? zPointBatch
+            : null;
+      const parsed = schema?.safeParse(recorded.body);
+      if (parsed?.success === false) {
+        contractViolations.push(`${recorded.pathname}: ${parsed.error.message}`);
+        return jsonResponse(400, { detail: "request violated the generated contract" });
+      }
+      return respond(recorded);
+    }),
+  );
+  return requests;
+}
+
+function jsonResponse(status: number, body: unknown, headers: Record<string, string> = {}) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+}
+
+/** A spec-shaped success: 201 with a MatchRead body echoing the create. */
+function matchCreated(body: unknown): Response {
+  const create = zMatchCreate.parse(body);
+  return jsonResponse(
+    201,
+    zMatchRead.parse({
+      id: create.id,
+      player_id: create.player_id,
+      opponent_name: create.opponent_name ?? null,
+      played_on: create.played_on,
+      surface: create.surface ?? null,
+      event: create.event ?? null,
+      scoring_system: create.scoring_system ?? null,
+      result: null,
+      created_at: "2026-08-20T10:00:00Z",
+      updated_at: "2026-08-20T10:00:00Z",
+    }),
+  );
+}
+
+/** Routes every request to its happy answer; ingest returns derived set rows. */
+function respondOk(request: RecordedRequest): Response {
+  if (request.pathname === "/matches") return matchCreated(request.body);
+  return jsonResponse(200, []);
+}
+
+function drain() {
+  return drainOutbox(COACH_ID, DEVICE_ID);
+}
+
+async function pendingIds(): Promise<string[]> {
+  return (await readPending(COACH_ID)).map((row) => row.id);
+}
+
+/**
+ * Lets fake-indexeddb's and fetch's queued work run while setTimeout stays
+ * fake: both settle on real macrotasks (setImmediate is deliberately not in
+ * `toFake`), so a bounded number of turns finishes any in-flight sweep.
+ */
+async function ticks(turns = 50): Promise<void> {
+  for (let turn = 0; turn < turns; turn++) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+function useFakeDelays(): void {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+}
+
+/** Drives a drain with fake timers to completion, however long it backs off. */
+async function settle<T>(promise: Promise<T>): Promise<T> {
+  let settled = false;
+  promise.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  while (!settled) {
+    await ticks();
+    await vi.advanceTimersByTimeAsync(60_000);
+  }
+  return promise;
+}
+
+beforeEach(async () => {
+  await outboxDb.delete();
+  await outboxDb.open();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+  expect(contractViolations.splice(0)).toEqual([]);
+});
+
+describe("flushing", () => {
+  test("creates the match first, then flushes its points in enqueue order", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(matchEntry(MATCH_A), pointEntry("a1", MATCH_A, 0), pointEntry("a2", MATCH_A, 1));
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}/points`,
+    ]);
+    const batch = zPointBatch.parse(requests[1]!.body);
+    expect(batch.device_id).toBe(DEVICE_ID);
+    expect(batch.points.map((point) => point.id)).toEqual([uid("a1"), uid("a2")]);
+    expect(await pendingIds()).toEqual([]);
+    expect(result).toEqual({ acknowledged: 3, parked: 0, unauthorized: false, skipped: false });
+  });
+
+  test("groups interleaved rows by match, matches in first-queued order", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+      pointEntry("a2", MATCH_A, 1),
+    );
+
+    await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}/points`,
+      "/matches",
+      `/matches/${MATCH_B}/points`,
+    ]);
+    expect(zPointBatch.parse(requests[1]!.body).points.map((point) => point.id)).toEqual([
+      uid("a1"),
+      uid("a2"),
+    ]);
+  });
+
+  test("flushes points straight away for a match created on an earlier run", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(pointEntry("a1", MATCH_A, 0));
+
+    await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([`/matches/${MATCH_A}/points`]);
+  });
+
+  test("chunks a long queue at the batch ceiling", async () => {
+    const requests = stubTransport(respondOk);
+    // bulkAdd rather than 501 append transactions; the shape matches append's.
+    await outboxDb.entries.bulkAdd(
+      Array.from({ length: MAX_POINTS_PER_BATCH + 1 }, (_, index) => ({
+        ...pointEntry(index.toString(16), MATCH_A, index),
+        status: "pending" as const,
+        schemaVersion: 1,
+      })),
+    );
+
+    const result = await drain();
+
+    // zPointBatch (parsed in the transport stub) carries the spec's maxItems,
+    // so an over-full first chunk fails there rather than by this count alone.
+    const sizes = requests.map((request) => zPointBatch.parse(request.body).points.length);
+    expect(sizes).toEqual([MAX_POINTS_PER_BATCH, 1]);
+    expect(result.acknowledged).toBe(MAX_POINTS_PER_BATCH + 1);
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  test("closes a batch on the body limit before the count ceiling", async () => {
+    const requests = stubTransport(respondOk);
+    // Every point carries the longest note the API takes, so the count ceiling's
+    // worth of them is over the 1 MB body limit while still under that ceiling.
+    await outboxDb.entries.bulkAdd(
+      Array.from({ length: MAX_POINTS_PER_BATCH }, (_, index) => ({
+        ...notedPointEntry(index.toString(16), MATCH_A, index),
+        status: "pending" as const,
+        schemaVersion: 1,
+      })),
+    );
+
+    const result = await drain();
+
+    // A 413 parks permanently and a retry rebuilds the same body, so the split
+    // has to happen before the request, not in answer to one.
+    expect(requests.length).toBeGreaterThan(1);
+    expect(zPointBatch.parse(requests[0]!.body).points.length).toBeLessThan(MAX_POINTS_PER_BATCH);
+    for (const request of requests) {
+      expect(new TextEncoder().encode(JSON.stringify(request.body)).length).toBeLessThanOrEqual(
+        MAX_REQUEST_BODY_BYTES,
+      );
+    }
+    expect(result.acknowledged).toBe(MAX_POINTS_PER_BATCH);
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  test("tolerates a row deleted while the drain is mid-flight", async () => {
+    // The coach undoes B's second point while A's create is on the wire; B's
+    // rows are re-read just before B is flushed, so the batch no longer has it.
+    const requests = stubTransport(async (request) => {
+      if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {
+        await remove([uid("b2")]);
+      }
+      return respondOk(request);
+    });
+    await queue(
+      matchEntry(MATCH_A),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+      pointEntry("b2", MATCH_B, 1),
+    );
+
+    await drain();
+
+    const batch = zPointBatch.parse(requests.at(-1)!.body);
+    expect(batch.points.map((point) => point.id)).toEqual([uid("b1")]);
+    expect(await pendingIds()).toEqual([]);
+  });
+});
+
+describe("refusals", () => {
+  test("parks a refused match and its points, with the reason, without blocking others", async () => {
+    stubTransport((request) => {
+      if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {
+        return jsonResponse(409, { detail: "That player has been archived." });
+      }
+      return respondOk(request);
+    });
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+    );
+
+    const result = await drain();
+
+    const parkedA = await readByMatch(MATCH_A);
+    expect(parkedA.map((row) => row.status)).toEqual(["failed", "failed"]);
+    expect(parkedA.map((row) => row.failure)).toEqual(
+      Array<OutboxFailure>(2).fill({ status: 409, message: "That player has been archived." }),
+    );
+    expect(await readByMatch(MATCH_B)).toEqual([]);
+    expect(result).toEqual({ acknowledged: 2, parked: 2, unauthorized: false, skipped: false });
+  });
+
+  test("parks a refused point batch with the 422's own words, never retrying it", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === "/matches"
+        ? respondOk(request)
+        : jsonResponse(422, {
+            detail: [
+              {
+                loc: ["body", "points", 0, "sequence"],
+                msg: "stamp out of range",
+                type: "value_error",
+              },
+            ],
+          }),
+    );
+    await queue(pointEntry("a1", MATCH_A, 0), pointEntry("a2", MATCH_A, 1));
+
+    await drain();
+
+    const rows = await readByMatch(MATCH_A);
+    expect(rows.map((row) => row.status)).toEqual(["failed", "failed"]);
+    expect(rows[0]!.failure).toEqual({ status: 422, message: "stamp out of range" });
+    // Permanent means one attempt: a poison batch must not loop forever.
+    expect(requests).toHaveLength(1);
+  });
+
+  test("skips every batch of a match whose earlier rows are parked", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(matchEntry(MATCH_A), pointEntry("a1", MATCH_A, 0), matchEntry(MATCH_B));
+    await markFailed([MATCH_A, uid("a1")], {
+      status: 409,
+      message: "That player has been archived.",
+    });
+    // Capture keeps tapping after the park; this lands pending, match invisible.
+    await queue(pointEntry("a2", MATCH_A, 1));
+
+    await drain();
+
+    // Nothing of A's goes out: the server rejects any batch for a match it
+    // refused, so flushing a2 would only grow the failed count every cycle.
+    expect(requests.map((request) => request.pathname)).toEqual(["/matches"]);
+    expect(await pendingIds()).toEqual([uid("a2")]);
+  });
+
+  test("parks a payload this app version cannot map, keeping its cause", async () => {
+    const requests = stubTransport(respondOk);
+    await queue({
+      id: uid("bad1"),
+      coachId: COACH_ID,
+      matchId: MATCH_A,
+      kind: "point",
+      payload: { schema: "from-a-future-app-version" },
+    });
+
+    await drain();
+
+    const [row] = await readByMatch(MATCH_A);
+    expect(row!.status).toBe("failed");
+    expect(row!.failure).toEqual({ status: null, message: expect.stringContaining("point") });
+    expect(requests).toEqual([]);
+  });
+});
+
+describe("halting and retrying", () => {
+  test("halts everything on a 401 and keeps the queue intact", async () => {
+    const requests = stubTransport(() => jsonResponse(401, { detail: "Not signed in" }));
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+    );
+
+    const result = await drain();
+
+    // One request, no parking, no backoff: a revoked session must never cost a
+    // match, and whether it is really over is the next sign-in's question.
+    expect(requests).toHaveLength(1);
+    expect(await pendingIds()).toHaveLength(4);
+    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: true, skipped: false });
+  });
+
+  test("retries a network failure on the backoff schedule, then succeeds", async () => {
+    useFakeDelays();
+    let failures = 2;
+    const requests = stubTransport((request) => {
+      if (failures > 0) {
+        failures -= 1;
+        throw new TypeError("fetch failed");
+      }
+      return respondOk(request);
+    });
+    await queue(pointEntry("a1", MATCH_A, 0));
+
+    const run = drain();
+    await ticks();
+    expect(requests).toHaveLength(1);
+
+    // Not a moment before the schedule says so.
+    await vi.advanceTimersByTimeAsync(BACKOFF_DELAYS_MS[0]! - 1);
+    await ticks();
+    expect(requests).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await ticks();
+    expect(requests).toHaveLength(2);
+
+    await vi.advanceTimersByTimeAsync(BACKOFF_DELAYS_MS[1]!);
+    await ticks();
+    expect(requests).toHaveLength(3);
+
+    expect(await settle(run)).toEqual({
+      acknowledged: 1,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  test("gives up after the schedule and leaves the rows pending", async () => {
+    useFakeDelays();
+    const requests = stubTransport(() => jsonResponse(503, { detail: "down" }));
+    await queue(pointEntry("a1", MATCH_A, 0));
+
+    const result = await settle(drain());
+
+    expect(requests).toHaveLength(1 + BACKOFF_DELAYS_MS.length);
+    expect(await pendingIds()).toEqual([uid("a1")]);
+    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: false, skipped: false });
+  });
+
+  test("waits out a 429's Retry-After when it outlasts the backoff step", async () => {
+    useFakeDelays();
+    let limited = true;
+    const requests = stubTransport((request) => {
+      if (limited) {
+        limited = false;
+        return jsonResponse(429, { detail: "Too many requests" }, { "Retry-After": "30" });
+      }
+      return respondOk(request);
+    });
+    await queue(pointEntry("a1", MATCH_A, 0));
+
+    const run = drain();
+    await ticks();
+    expect(requests).toHaveLength(1);
+
+    // The bucket said 30s; the 1s backoff step must not jump the queue.
+    await vi.advanceTimersByTimeAsync(29_999);
+    await ticks();
+    expect(requests).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await ticks();
+    expect(requests).toHaveLength(2);
+    await settle(run);
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  test("retries the sweep when another tab's upgrade closes the database", async () => {
+    useFakeDelays();
+    const requests = stubTransport(respondOk);
+    await queue(pointEntry("a1", MATCH_A, 0));
+    vi.mocked(readPending).mockRejectedValueOnce(
+      Object.assign(new Error("connection closed"), { name: "DatabaseClosedError" }),
+    );
+
+    const result = await settle(drain());
+
+    // Self-healing: the connection reopens on the next operation, so the row
+    // written before the close still flushes, one backoff step later.
+    expect(requests).toHaveLength(1);
+    expect(result.acknowledged).toBe(1);
+  });
+});
+
+describe("the drain lock", () => {
+  test("skips, sending nothing, while another drain holds the lock", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(pointEntry("a1", MATCH_A, 0));
+    let release = () => {};
+    const held = navigator.locks.request("matchpoint:outbox-drain", async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    });
+    await ticks(1);
+
+    const result = await drain();
+
+    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: false, skipped: true });
+    expect(requests).toEqual([]);
+    expect(await pendingIds()).toEqual([uid("a1")]);
+    release();
+    await held;
+  });
+});
