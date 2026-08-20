@@ -1,7 +1,7 @@
 import uuid
 from typing import Self
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matchpoint_api.models import (
     CourtDepth,
@@ -211,3 +211,55 @@ class PointBatch(RequestModel):
         if len(sequences) != len(self.points):
             raise ValueError("a batch cannot carry the same sequence twice")
         return self
+
+
+class PointRead(BaseModel):
+    """One stored point, as the analytics dashboard and the capture client's sync
+    reconciliation read it back.
+
+    Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
+    created_at or updated_at: a point is never corrected after it lands, so those would
+    only restate when the row was ingested, which is bookkeeping neither reader needs.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    match_id: uuid.UUID
+    sequence: int
+    server: MatchSide
+    won: bool
+
+    serve1_outcome: ServeOutcome
+    serve1_box: CourtSide | None
+    serve1_target: ServeTarget | None
+    serve1_fault_mode: FailureMode | None
+    serve2_outcome: ServeOutcome | None
+    serve2_box: CourtSide | None
+    serve2_target: ServeTarget | None
+    serve2_fault_mode: FailureMode | None
+
+    return_outcome: ReturnOutcome | None
+
+    end_reason: EndReason
+    unusual_reason: UnusualReason | None
+    note: str | None
+
+    wing: Wing | None
+    shot_type: ShotType | None
+    ball_in: bool | None
+    ball_half: CourtSide | None
+    ball_depth: CourtDepth | None
+    ball_out_mode: FailureMode | None
+
+    rally_length_bucket: RallyBucket | None
+
+    set_number: int
+    game_number: int
+    in_tiebreak: bool
+    is_break_point: bool
+    is_game_point: bool
+    is_game_end: bool
+    is_set_point: bool
+    is_set_end: bool
+    is_match_point: bool

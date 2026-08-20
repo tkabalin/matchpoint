@@ -1275,6 +1275,283 @@
         "title": "PointCreate",
         "type": "object"
       },
+      "PointRead": {
+        "description": "One stored point, as the analytics dashboard and the capture client's sync\nreconciliation read it back.\n\nCarries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not\ncreated_at or updated_at: a point is never corrected after it lands, so those would\nonly restate when the row was ingested, which is bookkeeping neither reader needs.",
+        "properties": {
+          "ball_depth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtDepth"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ball_half": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ball_in": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ball In"
+          },
+          "ball_out_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "end_reason": {
+            "$ref": "#/components/schemas/EndReason"
+          },
+          "game_number": {
+            "title": "Game Number",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "in_tiebreak": {
+            "title": "In Tiebreak",
+            "type": "boolean"
+          },
+          "is_break_point": {
+            "title": "Is Break Point",
+            "type": "boolean"
+          },
+          "is_game_end": {
+            "title": "Is Game End",
+            "type": "boolean"
+          },
+          "is_game_point": {
+            "title": "Is Game Point",
+            "type": "boolean"
+          },
+          "is_match_point": {
+            "title": "Is Match Point",
+            "type": "boolean"
+          },
+          "is_set_end": {
+            "title": "Is Set End",
+            "type": "boolean"
+          },
+          "is_set_point": {
+            "title": "Is Set Point",
+            "type": "boolean"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "rally_length_bucket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RallyBucket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "return_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReturnOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "serve1_box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve1_fault_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve1_outcome": {
+            "$ref": "#/components/schemas/ServeOutcome"
+          },
+          "serve1_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_box": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_fault_mode": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FailureMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "serve2_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server": {
+            "$ref": "#/components/schemas/MatchSide"
+          },
+          "set_number": {
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "shot_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShotType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unusual_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnusualReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "wing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Wing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "won": {
+            "title": "Won",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "match_id",
+          "sequence",
+          "server",
+          "won",
+          "serve1_outcome",
+          "serve1_box",
+          "serve1_target",
+          "serve1_fault_mode",
+          "serve2_outcome",
+          "serve2_box",
+          "serve2_target",
+          "serve2_fault_mode",
+          "return_outcome",
+          "end_reason",
+          "unusual_reason",
+          "note",
+          "wing",
+          "shot_type",
+          "ball_in",
+          "ball_half",
+          "ball_depth",
+          "ball_out_mode",
+          "rally_length_bucket",
+          "set_number",
+          "game_number",
+          "in_tiebreak",
+          "is_break_point",
+          "is_game_point",
+          "is_game_end",
+          "is_set_point",
+          "is_set_end",
+          "is_match_point"
+        ],
+        "title": "PointRead",
+        "type": "object"
+      },
       "RallyBucket": {
         "description": "A coarse rally-length bucket.",
         "enum": [
@@ -2948,6 +3225,72 @@
       }
     },
     "/matches/{match_id}/points": {
+      "get": {
+        "description": "A match's points, in the order the capture client assigned them.\n\nFeeds two readers: the analytics dashboard aggregating over rally outcomes and\nserve placement, and the capture client reconciling its local outbox against what\nthe server holds after a sync. A pure read, so match_for_coach takes no lock.",
+        "operationId": "list_points",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PointRead"
+                  },
+                  "title": "Response List Points",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Points",
+        "tags": [
+          "matches"
+        ]
+      },
       "post": {
         "description": "Ingest one flush of captured points, answering with the match's set scores.\n\nAll or nothing: the batch lands whole or none of it does, and a point already\nstored is left as it is rather than rewritten, so a retried or overlapping flush\nconverges instead of failing. `points` carries the batch's own ceiling, and the\n1 MB request body limit is the real bound, which a batch of points carrying long\nnotes reaches sooner.",
         "operationId": "ingest_points",

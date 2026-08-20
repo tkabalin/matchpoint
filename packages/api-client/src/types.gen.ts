@@ -584,6 +584,97 @@ export type PointCreate = {
 };
 
 /**
+ * PointRead
+ *
+ * One stored point, as the analytics dashboard and the capture client's sync
+ * reconciliation read it back.
+ *
+ * Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
+ * created_at or updated_at: a point is never corrected after it lands, so those would
+ * only restate when the row was ingested, which is bookkeeping neither reader needs.
+ */
+export type PointRead = {
+    ball_depth: CourtDepth | null;
+    ball_half: CourtSide | null;
+    /**
+     * Ball In
+     */
+    ball_in: boolean | null;
+    ball_out_mode: FailureMode | null;
+    end_reason: EndReason;
+    /**
+     * Game Number
+     */
+    game_number: number;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * In Tiebreak
+     */
+    in_tiebreak: boolean;
+    /**
+     * Is Break Point
+     */
+    is_break_point: boolean;
+    /**
+     * Is Game End
+     */
+    is_game_end: boolean;
+    /**
+     * Is Game Point
+     */
+    is_game_point: boolean;
+    /**
+     * Is Match Point
+     */
+    is_match_point: boolean;
+    /**
+     * Is Set End
+     */
+    is_set_end: boolean;
+    /**
+     * Is Set Point
+     */
+    is_set_point: boolean;
+    /**
+     * Match Id
+     */
+    match_id: string;
+    /**
+     * Note
+     */
+    note: string | null;
+    rally_length_bucket: RallyBucket | null;
+    return_outcome: ReturnOutcome | null;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    serve1_box: CourtSide | null;
+    serve1_fault_mode: FailureMode | null;
+    serve1_outcome: ServeOutcome;
+    serve1_target: ServeTarget | null;
+    serve2_box: CourtSide | null;
+    serve2_fault_mode: FailureMode | null;
+    serve2_outcome: ServeOutcome | null;
+    serve2_target: ServeTarget | null;
+    server: MatchSide;
+    /**
+     * Set Number
+     */
+    set_number: number;
+    shot_type: ShotType | null;
+    unusual_reason: UnusualReason | null;
+    wing: Wing | null;
+    /**
+     * Won
+     */
+    won: boolean;
+};
+
+/**
  * RallyBucket
  *
  * A coarse rally-length bucket.
@@ -1623,6 +1714,46 @@ export type ReleaseCaptureResponses = {
 };
 
 export type ReleaseCaptureResponse = ReleaseCaptureResponses[keyof ReleaseCaptureResponses];
+
+export type ListPointsData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/points';
+};
+
+export type ListPointsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListPointsError = ListPointsErrors[keyof ListPointsErrors];
+
+export type ListPointsResponses = {
+    /**
+     * Response List Points
+     *
+     * Successful Response
+     */
+    200: Array<PointRead>;
+};
+
+export type ListPointsResponse = ListPointsResponses[keyof ListPointsResponses];
 
 export type IngestPointsData = {
     body: PointBatch;

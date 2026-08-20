@@ -22,7 +22,7 @@ from matchpoint_api.schemas.match import (
     MatchSetRead,
     MatchUpdate,
 )
-from matchpoint_api.schemas.point import PointBatch
+from matchpoint_api.schemas.point import PointBatch, PointRead
 
 # The 401 is declared once at the router because every route here requires a signed-in
 # coach — current_coach reads the cookie off the request rather than declaring a
@@ -298,6 +298,20 @@ def ingest_points(
     sets = recompute_match_sets(db, match.id)
     db.commit()
     return sets
+
+
+@router.get("/{match_id}/points", response_model=list[PointRead])
+def list_points(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list[Point]:
+    """A match's points, in the order the capture client assigned them.
+
+    Feeds two readers: the analytics dashboard aggregating over rally outcomes and
+    serve placement, and the capture client reconciling its local outbox against what
+    the server holds after a sync. A pure read, so match_for_coach takes no lock.
+    """
+    match = match_for_coach(db, match_id, coach.id)
+    return list(
+        db.scalars(select(Point).where(Point.match_id == match.id).order_by(Point.sequence))
+    )
 
 
 # The 409 is declared because the client branches on it: a match with points recorded

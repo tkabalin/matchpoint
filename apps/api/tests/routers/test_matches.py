@@ -1576,6 +1576,122 @@ def test_ingest_into_an_unknown_match_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_list_points_orders_by_sequence_regardless_of_insertion_order(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Arrival order says nothing about a point's place in the match: a batch can be
+    retried or flushed long after capture, so the list comes back by the
+    client-assigned sequence, not by insertion order."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_point(db_session, match_id=match.id, sequence=2)
+    make_point(db_session, match_id=match.id, sequence=0)
+    make_point(db_session, match_id=match.id, sequence=1)
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}/points")
+
+    assert response.status_code == 200
+    assert [row["sequence"] for row in response.json()] == [0, 1, 2]
+
+
+def test_list_points_of_a_match_with_none_recorded_is_an_empty_list(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}/points")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_points_of_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The ownership 404 the other match routes give, not a 403 that would confirm the
+    id exists."""
+    other_match = make_match(db_session)
+    make_point(db_session, match_id=other_match.id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{other_match.id}/points")
+
+    assert response.status_code == 404
+
+
+@pytest.mark.usefixtures("coach")
+def test_list_points_of_an_unknown_match_is_404(client: TestClient) -> None:
+    response = client.get(f"/matches/{uuid.uuid4()}/points")
+
+    assert response.status_code == 404
+
+
+def test_list_points_round_trips_every_field_the_ingest_route_stored(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The read contract matches the write contract: what a flush stored comes back
+    field for field, which is what pins a mapping fixed on one side and not the other."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = point_payload(
+        sequence=7,
+        server="tracked",
+        won=True,
+        serve1_outcome="fault",
+        serve1_box=None,
+        serve1_target=None,
+        serve1_fault_mode="net",
+        serve2_outcome="in",
+        serve2_box="ad",
+        serve2_target="wide",
+        serve2_fault_mode=None,
+        return_outcome=None,
+        end_reason="mistake",
+        unusual_reason=None,
+        note="Deep backhand volley error.",
+        wing="backhand",
+        shot_type="volley",
+        ball_in=False,
+        ball_half=None,
+        ball_depth=None,
+        ball_out_mode="long",
+        rally_length_bucket="b2",
+        set_number=3,
+        game_number=5,
+        in_tiebreak=True,
+        is_break_point=True,
+        is_game_point=True,
+        is_game_end=True,
+        is_set_point=True,
+        is_set_end=True,
+        is_match_point=True,
+    )
+    assert _ingest(client, match, [payload]).status_code == 200
+
+    response = client.get(f"/matches/{match.id}/points")
+
+    assert response.status_code == 200
+    [point] = response.json()
+    assert point == payload | {"match_id": str(match.id)}
+
+
+def test_list_points_carries_no_ingestion_timestamps(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """created_at and updated_at are ingestion bookkeeping on a row that is never
+    corrected once synced, which is why PointRead leaves them off."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}/points")
+
+    [point] = response.json()
+    assert "created_at" not in point
+    assert "updated_at" not in point
+
+
 def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -1659,6 +1775,7 @@ def test_the_routes_that_write_the_claim_lock_the_match_row(
         ("post", f"/matches/{uuid.UUID(int=0)}/capture"),
         ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
         ("post", f"/matches/{uuid.UUID(int=0)}/points"),
+        ("get", f"/matches/{uuid.UUID(int=0)}/points"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:

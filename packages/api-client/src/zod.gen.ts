@@ -503,6 +503,52 @@ export const zPointBatch = z.object({
 });
 
 /**
+ * PointRead
+ *
+ * One stored point, as the analytics dashboard and the capture client's sync
+ * reconciliation read it back.
+ *
+ * Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
+ * created_at or updated_at: a point is never corrected after it lands, so those would
+ * only restate when the row was ingested, which is bookkeeping neither reader needs.
+ */
+export const zPointRead = z.object({
+    ball_depth: zCourtDepth.nullable(),
+    ball_half: zCourtSide.nullable(),
+    ball_in: z.boolean().nullable(),
+    ball_out_mode: zFailureMode.nullable(),
+    end_reason: zEndReason,
+    game_number: z.int(),
+    id: z.uuid(),
+    in_tiebreak: z.boolean(),
+    is_break_point: z.boolean(),
+    is_game_end: z.boolean(),
+    is_game_point: z.boolean(),
+    is_match_point: z.boolean(),
+    is_set_end: z.boolean(),
+    is_set_point: z.boolean(),
+    match_id: z.uuid(),
+    note: z.string().nullable(),
+    rally_length_bucket: zRallyBucket.nullable(),
+    return_outcome: zReturnOutcome.nullable(),
+    sequence: z.int(),
+    serve1_box: zCourtSide.nullable(),
+    serve1_fault_mode: zFailureMode.nullable(),
+    serve1_outcome: zServeOutcome,
+    serve1_target: zServeTarget.nullable(),
+    serve2_box: zCourtSide.nullable(),
+    serve2_fault_mode: zFailureMode.nullable(),
+    serve2_outcome: zServeOutcome.nullable(),
+    serve2_target: zServeTarget.nullable(),
+    server: zMatchSide,
+    set_number: z.int(),
+    shot_type: zShotType.nullable(),
+    unusual_reason: zUnusualReason.nullable(),
+    wing: zWing.nullable(),
+    won: z.boolean()
+});
+
+/**
  * CoachCreate
  */
 export const zCoachCreateWritable = z.object({
@@ -708,6 +754,17 @@ export const zReleaseCapturePath = z.object({
  * Successful Response
  */
 export const zReleaseCaptureResponse = z.void();
+
+export const zListPointsPath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Response List Points
+ *
+ * Successful Response
+ */
+export const zListPointsResponse = z.array(zPointRead);
 
 export const zIngestPointsBody = zPointBatch;
 
