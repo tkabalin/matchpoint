@@ -734,6 +734,32 @@
         "title": "OtpRequest",
         "type": "object"
       },
+      "PlayerChangePasswordRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "new_password": {
+            "format": "password",
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "New Password",
+            "type": "string",
+            "writeOnly": true
+          },
+          "password": {
+            "format": "password",
+            "maxLength": 128,
+            "title": "Password",
+            "type": "string",
+            "writeOnly": true
+          }
+        },
+        "required": [
+          "password",
+          "new_password"
+        ],
+        "title": "PlayerChangePasswordRequest",
+        "type": "object"
+      },
       "PlayerCreate": {
         "additionalProperties": false,
         "properties": {
@@ -2251,6 +2277,81 @@
         "summary": "Logout",
         "tags": [
           "auth"
+        ]
+      }
+    },
+    "/auth/player/change-password": {
+      "post": {
+        "description": "Replace this player's password, given the current one, and end every session.\n\nThe caller keeps working on a freshly issued session cookie. A wrong current\npassword answers 403, a missing or dead session 401, and a new password the\npolicy refuses 400, that one after the 403, so a caller getting both wrong hears\nabout the current password first.",
+        "operationId": "change_player_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Password rejected by policy"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Incorrect password"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Change Player Password",
+        "tags": [
+          "player-auth"
         ]
       }
     },

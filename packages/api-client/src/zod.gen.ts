@@ -178,6 +178,14 @@ export const zOtpRequest = z.object({
 });
 
 /**
+ * PlayerChangePasswordRequest
+ */
+export const zPlayerChangePasswordRequest = z.object({
+    new_password: z.string().min(8).max(128),
+    password: z.string().max(128)
+});
+
+/**
  * PlayerCreate
  */
 export const zPlayerCreate = z.object({
@@ -686,6 +694,13 @@ export const zLoginResponse = zCoachRead;
  * Successful Response
  */
 export const zLogoutResponse = z.void();
+
+export const zChangePlayerPasswordBody = zPlayerChangePasswordRequest;
+
+/**
+ * Successful Response
+ */
+export const zChangePlayerPasswordResponse = z.void();
 
 export const zPlayerLoginBody = zPlayerLoginRequestWritable;
 

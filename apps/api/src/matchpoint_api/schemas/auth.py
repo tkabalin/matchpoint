@@ -72,3 +72,12 @@ class ChangePasswordRequest(RequestModel):
     # already kept out of a 422 body by errors.py under that name.
     password: Password
     new_password: NewPassword
+
+
+class PlayerChangePasswordRequest(RequestModel):
+    # ChangePasswordRequest over again for the player principal: no username for the
+    # no-email reason (the session says who), and both field names are already in
+    # errors.py's SECRET_FIELDS. A schema of its own so the two contracts can drift
+    # apart the day one needs to, without a shared name deciding for both.
+    password: Password
+    new_password: NewPassword

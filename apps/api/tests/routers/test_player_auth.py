@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 
+import httpx2
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
@@ -15,7 +16,7 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.models import CoachSession, Player, PlayerSession
 from matchpoint_api.security import DUMMY_HASH, hash_password
-from tests.conftest import ORIGIN_HEADERS
+from tests.conftest import ORIGIN_HEADERS, TEST_ORIGIN, breach_every_password
 from tests.factories import (
     make_coach,
     make_player,
@@ -448,6 +449,227 @@ def test_requests_beyond_the_per_player_budget_are_refused(
     response = client.get("/auth/player/me")
 
     assert response.status_code == 429
+
+
+# --- POST /auth/player/change-password ---
+
+NEW_PASSWORD = "a-new-password"
+
+
+def _change(client: TestClient, **overrides: object) -> httpx2.Response:
+    """Change with defaults that verify, then repair the cookie jar.
+
+    A 204 that rotates the session answers with Set-Cookie, and the jar then holds two
+    cookies of one name (the hand-set one has a different jar identity than the
+    server's), so reading it raises CookieConflict: cleared and re-set from the
+    response, as the coach change tests do.
+    """
+    body: dict[str, object] = {"password": PLAYER_PASSWORD, "new_password": NEW_PASSWORD}
+    response = client.post("/auth/player/change-password", json=body | overrides)
+    rotated = response.cookies.get(PLAYER_SESSION_COOKIE)
+    if rotated:
+        client.cookies.clear()
+        client.cookies.set(PLAYER_SESSION_COOKIE, rotated)
+    return response
+
+
+def test_the_current_password_buys_a_new_one(client: TestClient, db_session: Session) -> None:
+    """The player's way off the coach-minted password, which is the point of the route:
+    the fridge-magnet credential stops working the moment they choose their own."""
+    _enrolled(db_session)
+    client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    fresh = TestClient(client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS)
+    assert (
+        fresh.post("/auth/player/login", json=PLAYER_LOGIN | {"password": NEW_PASSWORD}).status_code
+        == 200
+    )
+    assert fresh.post("/auth/player/login", json=PLAYER_LOGIN).status_code == 401
+
+
+def test_the_change_ends_every_other_session_and_keeps_the_caller_signed_in(
+    client: TestClient, db_session: Session
+) -> None:
+    """Every session dies, the presented one included, and the caller continues on a
+    fresh one: a thief holds a copy of the same token, so sparing the presented row
+    would spare the thief. Exactly one Set-Cookie, through the renewal channel."""
+    player = _enrolled(db_session)
+    other_device = make_player_session(db_session, player_id=player.id)
+    db_session.commit()
+    sign_in_player(client, db_session, player)
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    assert len(response.headers.get_list("set-cookie")) == 1
+    assert db_session.get(PlayerSession, other_device.id) is None
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 1
+    assert client.get("/auth/player/me").status_code == 200
+
+
+def test_a_change_from_a_session_due_for_renewal_hands_back_the_new_token(
+    client: TestClient, db_session: Session
+) -> None:
+    """current_player may already have queued a renewal of the token this request just
+    revoked; the handler writes the same state key afterwards, so the one Set-Cookie
+    the browser gets carries the fresh token, not a corpse."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player, expires_at=datetime.now(UTC) + timedelta(days=5))
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    assert len(response.headers.get_list("set-cookie")) == 1
+    assert client.get("/auth/player/me").status_code == 200
+
+
+def test_a_wrong_current_password_is_a_403_that_changes_nothing(
+    client: TestClient, db_session: Session
+) -> None:
+    """403 rather than 401: 401 on this route already means the session is gone, and
+    the form has to tell 'sign in again' apart from 'that password is wrong'."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = _change(client, password="wrong-wrong-wrong")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    refreshed = db_session.get(Player, player.id)
+    assert refreshed is not None
+    assert refreshed.password_hash == PLAYER_HASH
+
+
+def test_a_session_whose_player_has_no_hash_hears_the_same_403(
+    client: TestClient, db_session: Session
+) -> None:
+    """The None-guard for the race a regenerate can win against an in-flight change:
+    a session can outlive the credential it was earned with, and the route must
+    answer 403 rather than crash on the NULL."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = _change(client)
+
+    assert response.status_code == 403
+
+
+def test_wrong_guesses_beyond_the_player_s_budget_are_refused(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stolen session gets five guesses at the password, and one every minute or so
+    after that, not a quiet run at it: the budget is charged only for failures."""
+    player = make_player(db_session, password_hash=PLAYER_HASH)
+    sign_in_player(client, db_session, player)
+    _stub_out_verification(monkeypatch)
+    for _ in range(5):
+        assert _change(client).status_code == 403
+
+    response = _change(client)
+
+    assert response.status_code == 429
+
+
+def test_a_correct_password_is_never_refused_by_the_wrong_guess_budget_here_either(
+    client: TestClient, db_session: Session
+) -> None:
+    """Charged after a failed verification only, so the guesses a thief spends cannot
+    lock the player out of the very change that ends the thief's access."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    for _ in range(5):
+        assert _change(client, password="wrong-wrong-wrong").status_code == 403
+
+    assert _change(client).status_code == 204
+
+
+def test_a_change_to_a_breached_password_is_a_400(client: TestClient, db_session: Session) -> None:
+    """The chosen replacement meets the full policy the minted password skipped: it is
+    human-chosen, which is exactly what the policy exists for."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    breach_every_password(client)
+
+    response = _change(client)
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Password has appeared in a known data breach"}
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 1
+
+
+def test_the_policy_takes_the_player_s_own_words(client: TestClient, db_session: Session) -> None:
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = _change(client, new_password="kbltho001-forever")
+
+    assert response.status_code == 400
+    assert response.json() == {"detail": "Password contains your name or email address"}
+
+
+def test_a_wrong_current_password_answers_before_the_policy_does(
+    client: TestClient, db_session: Session
+) -> None:
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    breach_every_password(client)
+
+    response = _change(client, password="wrong-wrong-wrong")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.usefixtures("clock")
+def test_an_unauthenticated_flood_spends_none_of_the_change_budget(
+    client: TestClient, db_session: Session
+) -> None:
+    """The arrival tiers are metered after the session resolves, unlike login's: a
+    stranger's 401s must not drain the shared bucket and 429 every player off the
+    route. The coach route made the same call, for the same reason."""
+    fresh = TestClient(client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS)
+    for _ in range(31):
+        refused = fresh.post(
+            "/auth/player/change-password",
+            json={"password": PLAYER_PASSWORD, "new_password": NEW_PASSWORD},
+        )
+        assert refused.status_code == 401
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+
+    assert _change(client).status_code == 204
+
+
+@pytest.mark.usefixtures("clock")
+def test_a_stolen_session_flood_cannot_429_the_change(
+    client: TestClient, db_session: Session
+) -> None:
+    """The recovery budget's point: ordinary traffic through a stolen cookie drains the
+    shared per-player budget, and the change must stay reachable regardless, since it
+    is the route that ends the theft."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    for _ in range(60):
+        assert client.get("/auth/player/me").status_code == 200
+    assert client.get("/auth/player/me").status_code == 429
+
+    assert _change(client).status_code == 204
+
+
+def test_a_rejected_change_echoes_neither_password(client: TestClient, db_session: Session) -> None:
+    """The 422-redaction backstop, on the one player body carrying two secrets. 'tiny'
+    rather than 'short' because pydantic's own error type is string_too_short, which
+    would let the assertion pass for the wrong reason."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = _change(client, new_password="tiny")
+
+    assert response.status_code == 422
+    assert "tiny" not in response.text
+    assert PLAYER_PASSWORD not in response.text
 
 
 # --- POST /auth/player/logout ---

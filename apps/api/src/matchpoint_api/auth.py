@@ -463,6 +463,13 @@ def current_player(request: Request, db: Annotated[Session, Depends(get_db)]) ->
     return _authenticated_player(request, db, request.app.state.authenticated_per_player_limit)
 
 
+def recovery_player(request: Request, db: Annotated[Session, Depends(get_db)]) -> Player:
+    """recovery_coach for the player principal, and for its reason: the route that
+    ends a thief's access must not spend from the budget the thief's traffic drains."""
+    return _authenticated_player(request, db, request.app.state.recovery_per_player_limit)
+
+
 CurrentCoach = Annotated[Coach, Depends(current_coach)]
 RecoveryCoach = Annotated[Coach, Depends(recovery_coach)]
 CurrentPlayer = Annotated[Player, Depends(current_player)]
+RecoveryPlayer = Annotated[Player, Depends(recovery_player)]

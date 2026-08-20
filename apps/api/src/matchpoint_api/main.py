@@ -188,10 +188,19 @@ def create_app() -> FastAPI:
     # here would make the denial this carve-out prevents cheaper to mount than it was.
     app.state.recovery_per_coach_limit = RateLimiter(per_minute=120, burst=60)
 
-    # The player principal's copy of the budget above, at the coach's sustained rate
-    # with a smaller burst: a player reads their own stats and has no point outbox to
-    # flush, which was the whole argument for 600.
+    # The player principal's copies of the two per-principal budgets, at the coach's
+    # sustained rate with a smaller ordinary burst: a player reads their own stats and
+    # has no point outbox to flush, which was the whole argument for 600. The recovery
+    # budget keeps change-password reachable however drained a thief leaves the other.
     app.state.authenticated_per_player_limit = RateLimiter(per_minute=120, burst=60)
+    app.state.recovery_per_player_limit = RateLimiter(per_minute=120, burst=60)
+
+    # Player change-password: the coach route's tiers at its sizes, in buckets of
+    # their own so guessing at one principal's route cannot stand between the other
+    # and theirs. Two Argon2 runs a call, hence sign-up's arrival sizes again.
+    app.state.player_change_password_per_player_limit = RateLimiter(per_minute=2, burst=5)
+    app.state.player_change_password_per_ip_limit = RateLimiter(per_minute=10, burst=10)
+    app.state.player_change_password_total_limit = RateLimiter(per_minute=30, burst=10)
 
     # A cookie naming no session, charged after the lookup it cost (auth.py). The key is
     # a Cloudflare edge address many coaches share, and every device still presenting a

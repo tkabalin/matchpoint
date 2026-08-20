@@ -369,6 +369,20 @@ export type OtpRequest = {
 };
 
 /**
+ * PlayerChangePasswordRequest
+ */
+export type PlayerChangePasswordRequest = {
+    /**
+     * New Password
+     */
+    new_password: string;
+    /**
+     * Password
+     */
+    password: string;
+};
+
+/**
  * PlayerCreate
  */
 export type PlayerCreate = {
@@ -1156,6 +1170,47 @@ export type LogoutResponses = {
 };
 
 export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type ChangePlayerPasswordData = {
+    body: PlayerChangePasswordRequest;
+    path?: never;
+    query?: never;
+    url: '/auth/player/change-password';
+};
+
+export type ChangePlayerPasswordErrors = {
+    /**
+     * Password rejected by policy
+     */
+    400: ErrorDetail;
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Incorrect password
+     */
+    403: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ChangePlayerPasswordError = ChangePlayerPasswordErrors[keyof ChangePlayerPasswordErrors];
+
+export type ChangePlayerPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type ChangePlayerPasswordResponse = ChangePlayerPasswordResponses[keyof ChangePlayerPasswordResponses];
 
 export type PlayerLoginData = {
     body: PlayerLoginRequestWritable;

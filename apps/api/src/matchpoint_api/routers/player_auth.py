@@ -18,15 +18,20 @@ from matchpoint_api.auth import (
     PLAYER_SESSION_COOKIE,
     SESSION_LIFETIME,
     CurrentPlayer,
+    RecoveryPlayer,
     hash_token,
     new_session_token,
+    revoke_player_sessions,
     set_player_session_cookie,
 )
+from matchpoint_api.breach import BreachChecker
 from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Player, PlayerSession
+from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
-from matchpoint_api.schemas.auth import PlayerLoginRequest
+from matchpoint_api.routers.auth import INCORRECT_PASSWORD
+from matchpoint_api.schemas.auth import PlayerChangePasswordRequest, PlayerLoginRequest
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import PlayerSelfRead
 from matchpoint_api.security import DUMMY_HASH, hash_password, needs_rehash, verify_password
@@ -118,6 +123,78 @@ def player_login(
     db.commit()
     set_player_session_cookie(response, token)
     return player
+
+
+# Changing a player's own password: the coach route's design over again, current
+# password required because the cookie proves a past sign-in, not that whoever holds
+# it now knows the password. RecoveryPlayer for the coach route's reason: the route
+# that ends a stolen session's access must not spend from the budget that session's
+# own traffic drains.
+@router.post(
+    "/change-password",
+    status_code=204,
+    responses={
+        400: {"model": ErrorDetail, "description": REJECTION},
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        403: {"model": ErrorDetail, "description": INCORRECT_PASSWORD},
+        # This route's own tiers and the recovery budget both answer 429 here, so the
+        # description is the wider one the body already carries.
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+def change_player_password(
+    data: PlayerChangePasswordRequest, player: RecoveryPlayer, request: Request, db: DbSession
+) -> None:
+    """Replace this player's password, given the current one, and end every session.
+
+    The caller keeps working on a freshly issued session cookie. A wrong current
+    password answers 403, a missing or dead session 401, and a new password the
+    policy refuses 400, that one after the 403, so a caller getting both wrong hears
+    about the current password first.
+    """
+    # In the handler, after the session resolves, for the coach route's reason: a
+    # stranger must not be able to drain the shared bucket, and a 401 reaches no hash.
+    per_ip: RateLimiter = request.app.state.player_change_password_per_ip_limit
+    total: RateLimiter = request.app.state.player_change_password_total_limit
+    take_all((per_ip, client_key(request)), (total, "total"))
+    # A NULL hash cannot happen here in practice (a session exists, so a login did,
+    # so a password was minted), but a regenerate can race this request: the coach
+    # route's plain read of the column becomes a None-guard rather than a crash.
+    if player.password_hash is None or not verify_password(
+        data.password.get_secret_value(), player.password_hash
+    ):
+        # A budget of wrong guesses charged only for one, keyed on the player:
+        # the coach route's tier for its reasons.
+        per_player: RateLimiter = request.app.state.player_change_password_per_player_limit
+        per_player.take(str(player.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    breach_checker: BreachChecker = request.app.state.breach_checker
+    # The player's context words for the policy: no email to split, so the username
+    # and the joined name carry what a guesser who knows the player would try first.
+    check_password(
+        data.new_password.get_secret_value(),
+        email=None,
+        names=[player.username, f"{player.first_name} {player.last_name}"],
+        breach_checker=breach_checker,
+    )
+    player.password_hash = hash_password(data.new_password.get_secret_value())
+    # Every session dies, the presented one included, for the coach route's reason: a
+    # thief holds a copy of the same token, so sparing it spares the thief.
+    revoke_player_sessions(db, player.id)
+    # A fresh session for the device that just proved the password.
+    token = new_session_token()
+    db.add(
+        PlayerSession(
+            player_id=player.id,
+            token_hash=hash_token(token),
+            expires_at=datetime.now(UTC) + SESSION_LIFETIME,
+        )
+    )
+    db.commit()
+    # Handed over via the renewal channel, so this write and current_player's own
+    # renewal cannot both set the cookie: the handler runs after the dependency, so
+    # the token the browser keeps is this one.
+    request.state.renewed_player_session_token = token
 
 
 # /auth/player/me rather than /players/me: the players router is coach-scoped end to

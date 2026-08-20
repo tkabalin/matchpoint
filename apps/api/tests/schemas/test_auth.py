@@ -2,10 +2,13 @@ import pytest
 from pydantic import ValidationError
 
 from matchpoint_api.schemas.auth import (
+    USERNAME_MAX_LENGTH,
     ChangePasswordRequest,
     ForgotPasswordRequest,
     LoginRequest,
     OtpRequest,
+    PlayerChangePasswordRequest,
+    PlayerLoginRequest,
     ResetPasswordRequest,
     VerifyOtpRequest,
     VerifyResetCodeRequest,
@@ -182,3 +185,54 @@ def test_only_the_new_password_takes_the_sign_up_floor() -> None:
     assert ChangePasswordRequest.model_validate(CHANGE | {"password": "x"}).password is not None
     with pytest.raises(ValidationError):
         ChangePasswordRequest.model_validate(CHANGE | {"new_password": "x" * 7})
+
+
+PLAYER_LOGIN = {"username": "kbltho001", "password": "abcd-efgh-jkmn"}
+PLAYER_CHANGE = {"password": "abcd-efgh-jkmn", "new_password": "a-new-password"}
+
+
+def test_a_valid_player_login_parses() -> None:
+    request = PlayerLoginRequest.model_validate(PLAYER_LOGIN)
+
+    assert request.username == "kbltho001"
+    assert request.password.get_secret_value() == "abcd-efgh-jkmn"
+
+
+def test_the_username_is_stripped_and_bounded() -> None:
+    """Stripped because it arrives typed off paper; bounded at the column's width
+    because anything longer can only be a wrong username, kept away from the query."""
+    stripped = PlayerLoginRequest.model_validate(PLAYER_LOGIN | {"username": "  kbltho001 "})
+    assert stripped.username == "kbltho001"
+    with pytest.raises(ValidationError):
+        PlayerLoginRequest.model_validate(
+            PLAYER_LOGIN | {"username": "x" * (USERNAME_MAX_LENGTH + 1)}
+        )
+
+
+def test_the_player_password_has_no_floor_and_keeps_the_ceiling() -> None:
+    """Login's bounds for login's reasons: a floor would lock out a player whose minted
+    password predates a later format change, and the ceiling spares Argon2."""
+    assert PlayerLoginRequest.model_validate(PLAYER_LOGIN | {"password": "x"}).password is not None
+    with pytest.raises(ValidationError):
+        PlayerLoginRequest.model_validate(PLAYER_LOGIN | {"password": "x" * 129})
+
+
+def test_the_player_login_repr_never_contains_the_password() -> None:
+    assert "abcd-efgh-jkmn" not in repr(PlayerLoginRequest.model_validate(PLAYER_LOGIN))
+
+
+def test_a_valid_player_change_parses() -> None:
+    """No username: the session says whose password this is."""
+    request = PlayerChangePasswordRequest.model_validate(PLAYER_CHANGE)
+
+    assert request.password.get_secret_value() == "abcd-efgh-jkmn"
+    assert request.new_password.get_secret_value() == "a-new-password"
+
+
+def test_only_the_player_change_new_password_takes_the_sign_up_floor() -> None:
+    """The same deliberate asymmetry as the coach's change, and the only test that
+    would catch the two annotations being swapped."""
+    change = PlayerChangePasswordRequest.model_validate(PLAYER_CHANGE | {"password": "x"})
+    assert change.password is not None
+    with pytest.raises(ValidationError):
+        PlayerChangePasswordRequest.model_validate(PLAYER_CHANGE | {"new_password": "x" * 7})
