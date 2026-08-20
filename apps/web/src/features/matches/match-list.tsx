@@ -16,7 +16,9 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { SURFACE_LABEL, formatPlayedOn } from "./match-format";
+import { SURFACE_LABEL } from "@/lib/tennis-labels";
+
+import { formatPlayedOn } from "./match-format";
 
 export function MatchList({ onSelect }: { onSelect: (match: MatchRead) => void }) {
   const { data, isPending, isError } = useQuery(listMatchesOptions());

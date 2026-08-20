@@ -74,14 +74,38 @@ test("links back to settings", async () => {
   expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
 });
 
-test("change password links out to the forgot-password flow, not an inline form", async () => {
+test("change password asks for confirmation before leaving Settings", async () => {
   const user = userEvent.setup();
   await renderSettingsAccount();
 
   expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
-  await user.click(screen.getByRole("link", { name: "Change password" }));
+  await user.click(screen.getByRole("button", { name: "Change password" }));
+
+  expect(await screen.findByText("Change password?")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Reset Password" })).not.toBeInTheDocument();
+});
+
+test("confirming the change-password dialog navigates to the forgot-password flow", async () => {
+  const user = userEvent.setup();
+  await renderSettingsAccount();
+
+  await user.click(screen.getByRole("button", { name: "Change password" }));
+  await screen.findByText("Change password?");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
 
   expect(await screen.findByRole("heading", { name: "Reset Password" })).toBeInTheDocument();
+});
+
+test("cancelling the change-password dialog makes no navigation happen", async () => {
+  const user = userEvent.setup();
+  await renderSettingsAccount();
+
+  await user.click(screen.getByRole("button", { name: "Change password" }));
+  await screen.findByText("Change password?");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByText("Change password?")).not.toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Account & Security" })).toBeInTheDocument();
 });
 
 test("offers Sign Out, grouped with the other session actions", async () => {
@@ -116,11 +140,13 @@ test("cancelling the sign-out-all-sessions confirm makes no request", async () =
   expect(screen.queryByText("Sign out of all other sessions?")).not.toBeInTheDocument();
 });
 
-test("delete account is a stub, not interactive", async () => {
+test("opens the delete-account flow", async () => {
+  const user = userEvent.setup();
   await renderSettingsAccount();
 
-  expect(screen.getByText("Delete account")).toBeInTheDocument();
-  expect(screen.getByText("soon")).toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: /Delete account/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Delete account/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Delete account" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Deleting your account also deletes your players" }),
+  ).toBeInTheDocument();
 });

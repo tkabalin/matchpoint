@@ -8,15 +8,9 @@ import { SegmentedControl } from "@/components/segmented-control";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SURFACE_LABEL } from "@/lib/tennis-labels";
 
 type Filter = "all" | "wins" | "losses";
-
-const SURFACE_LABEL: Record<string, string> = {
-  hard: "Hard",
-  clay: "Clay",
-  grass: "Grass",
-  carpet: "Carpet",
-};
 
 /**
  * This player's match history — real data, unlike its sibling tabs: matches are one

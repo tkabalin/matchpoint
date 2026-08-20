@@ -1,6 +1,6 @@
 import { revokeOtherSessions } from "@matchpoint/api-client";
-import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
@@ -15,11 +15,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 
+import { DeleteAccountSheet } from "./delete-account-sheet";
 import { SignOutAction } from "./sign-out-action";
-import { StubRow } from "./stub-row";
 
 type RevokeStep = "closed" | "confirm" | "success";
 
@@ -28,12 +28,18 @@ type RevokeStep = "closed" | "confirm" | "success";
  * entirely — it links to `/forgot-password` (the existing email-OTP flow) instead
  * of the old in-settings current/new/confirm form, a deliberate scope decision:
  * that flow doesn't ask for the current password and can end with the coach
- * needing to sign back in, unlike the form it replaces.
+ * needing to sign back in, unlike the form it replaces. It's a button with its own
+ * confirm dialog, not a bare `Link`, so it reads the same as Sign Out beside it —
+ * one tile style for every row in this group, not "the one that happens to
+ * navigate" standing out.
  */
 export function SettingsAccount() {
+  const navigate = useNavigate();
   const [revokeStep, setRevokeStep] = useState<RevokeStep>("closed");
   const [revokeError, setRevokeError] = useState<string | null>(null);
   const [revoking, setRevoking] = useState(false);
+  const [confirmingPasswordChange, setConfirmingPasswordChange] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   async function handleConfirmRevoke() {
     setRevoking(true);
@@ -67,13 +73,13 @@ export function SettingsAccount() {
       />
 
       <ItemGroup>
-        <Item variant="outline" render={<Link to="/forgot-password" />}>
+        <Item
+          variant="outline"
+          render={<button type="button" onClick={() => setConfirmingPasswordChange(true)} />}
+        >
           <ItemContent>
             <ItemTitle>Change password</ItemTitle>
           </ItemContent>
-          <ItemActions>
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </ItemActions>
         </Item>
       </ItemGroup>
 
@@ -103,7 +109,36 @@ export function SettingsAccount() {
 
       <Separator />
 
-      <StubRow label="Delete account" danger />
+      <Item
+        variant="outline"
+        render={<button type="button" onClick={() => setDeletingAccount(true)} />}
+      >
+        <ItemContent>
+          <ItemTitle className="text-destructive">Delete account</ItemTitle>
+        </ItemContent>
+      </Item>
+
+      <AlertDialog open={confirmingPasswordChange} onOpenChange={setConfirmingPasswordChange}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change password?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You'll be redirected to reset your password by email.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setConfirmingPasswordChange(false);
+                await navigate({ to: "/forgot-password" });
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={revokeStep === "confirm"}
@@ -142,6 +177,8 @@ export function SettingsAccount() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DeleteAccountSheet open={deletingAccount} onOpenChange={setDeletingAccount} />
     </AppPage>
   );
 }

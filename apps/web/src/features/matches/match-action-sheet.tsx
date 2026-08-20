@@ -8,8 +8,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { parseErrorMessage } from "@/lib/parse-error";
+import { SURFACE_LABEL } from "@/lib/tennis-labels";
 
-import { SURFACE_LABEL, formatPlayedOn } from "./match-format";
+import { formatPlayedOn } from "./match-format";
 
 type Step = "actions" | "confirm-delete";
 
