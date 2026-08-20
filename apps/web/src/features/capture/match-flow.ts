@@ -21,7 +21,7 @@ import { startPoint } from "./capture-flow";
 import type { CaptureState } from "./capture-flow";
 import { Match } from "./match";
 import type { Point, Server } from "./point";
-import { finalWinnerFor, matchSetsFor, nextServerFor, otherIdOf } from "./state";
+import { finalWinnerFor, matchSetsFor, nextBoxFor, nextServerFor, otherIdOf } from "./state";
 import type { MatchSetsState } from "./state";
 
 /**
@@ -62,7 +62,9 @@ export function nextServerRoleFor(liveSets: MatchSetsState, match: Match): Serve
  * Everything needed to start capturing the next point, derived from what's already
  * committed — the composing entry point `capture-flow.ts`'s own doc comment names as
  * this module's job. Re-derives nothing: calls `matchSetsFor`, `nextServerRoleFor`,
- * `nextSequenceFor`, and `capture-flow.startPoint`, in that order.
+ * `nextSequenceFor`, `state.ts`'s `nextBoxFor`, and `capture-flow.startPoint`, in
+ * that order. `box` is only ever derived when the tracked player is serving — it's
+ * meaningless (and `startPoint` rejects it) when the opponent is.
  */
 export function startNextPoint(match: Match, points: readonly Point[]): CaptureState {
   const liveSets = matchSetsFor(
@@ -74,7 +76,8 @@ export function startNextPoint(match: Match, points: readonly Point[]): CaptureS
   );
   const server = nextServerRoleFor(liveSets, match);
   const sequence = nextSequenceFor(points);
-  return startPoint(match.matchId, sequence, server);
+  const box = server === "TRACKED" ? nextBoxFor(liveSets, match.scoringSystem) : null;
+  return startPoint(match.matchId, sequence, server, box);
 }
 
 /**

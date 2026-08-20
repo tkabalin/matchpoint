@@ -9,6 +9,16 @@ const SERVE_ZONE = { box: "DEUCE", target: "T" } as const;
 const AD_ZONE = { box: "AD", target: "WIDE" } as const;
 const COURT_ZONE = { half: "DEUCE", depth: "MID" } as const;
 
+/** Starts a tracked-serving point — box defaults to DEUCE, matching SERVE_ZONE. */
+function startTracked(box: "DEUCE" | "AD" = "DEUCE") {
+  return startPoint(MATCH_ID, 0, "TRACKED", box);
+}
+
+/** Starts an opponent-serving point — box is always null, opponent placement is out of scope. */
+function startOpponent() {
+  return startPoint(MATCH_ID, 0, "OPPONENT", null);
+}
+
 /** The draft startPoint produces — override just the fields a test cares about. */
 function freshDraft(
   server: "TRACKED" | "OPPONENT",
@@ -34,38 +44,46 @@ function freshDraft(
 }
 
 describe("startPoint", () => {
-  test.each(["TRACKED", "OPPONENT"] as const)("%s starts on the first serve", (server) => {
-    const state = startPoint(MATCH_ID, 0, server);
+  test("TRACKED starts on the first serve, with the given box attached", () => {
+    const state = startTracked();
     expect(state.step).toEqual({ name: "SERVE", number: 1 });
-    expect(state.draft).toEqual(freshDraft(server));
+    expect(state.draft).toEqual(freshDraft("TRACKED"));
     expect(state.history).toEqual([]);
+    expect(state.box).toBe("DEUCE");
+  });
+
+  test("OPPONENT starts on the first serve, box is null", () => {
+    const state = startOpponent();
+    expect(state.step).toEqual({ name: "SERVE", number: 1 });
+    expect(state.draft).toEqual(freshDraft("OPPONENT"));
+    expect(state.history).toEqual([]);
+    expect(state.box).toBeNull();
+  });
+
+  test("rejects a null box when server is TRACKED", () => {
+    expect(() => startPoint(MATCH_ID, 0, "TRACKED", null)).toThrow(/box is required/);
+  });
+
+  test("rejects a non-null box when server is OPPONENT", () => {
+    expect(() => startPoint(MATCH_ID, 0, "OPPONENT", "DEUCE")).toThrow(/box must be null/);
   });
 });
 
 describe("serve — tracked player", () => {
-  test("in → RALLY, records the serve zone", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+  test("in → RALLY, combines CaptureState.box with the tapped target", () => {
+    const state = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     expect(state.step).toEqual({ name: "RALLY" });
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: SERVE_ZONE }]);
   });
 
   test("fault on the first serve → SERVE number 2, the fault is kept not overwritten", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_FAULT",
-      location: "NET",
-    });
+    const state = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     expect(state.step).toEqual({ name: "SERVE", number: 2 });
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "FAULT", location: "NET" }]);
   });
 
   test("fault on the second serve → READY, DOUBLE_FAULT, no rally to ask about", () => {
-    let state = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_FAULT",
-      location: "NET",
-    });
+    let state = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     state = transition(state, { type: "TAP_SERVE_FAULT", location: "LONG" });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.serves).toEqual([
@@ -77,44 +95,39 @@ describe("serve — tracked player", () => {
     expect(state.draft.rallyLengthBucket).toBe("B1");
   });
 
-  test("ace → READY, won by the server", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_ACE",
-      location: AD_ZONE,
-    });
+  test("ace → READY, won by the server, box combined the same way as an in-play serve", () => {
+    const state = transition(startTracked("AD"), { type: "TAP_SERVE_ACE", target: AD_ZONE.target });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.won).toBe(true);
     expect(state.draft.endReason).toBe("ACE");
     expect(state.draft.rallyLengthBucket).toBe("B1");
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: AD_ZONE }]);
   });
 
-  test("rejects an ace with no location — tracked serve placement is always captured", () => {
-    expect(() => transition(startPoint(MATCH_ID, 0, "TRACKED"), { type: "TAP_SERVE_ACE" })).toThrow(
-      /requires a location/,
+  test("rejects an ace with no target — tracked serve placement is always captured", () => {
+    expect(() => transition(startTracked(), { type: "TAP_SERVE_ACE" })).toThrow(
+      /requires a target/,
     );
   });
 });
 
 describe("serve — opponent", () => {
   test("ace → READY, won by the opponent (our player never touched it)", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "OPPONENT"), { type: "TAP_SERVE_ACE" });
+    const state = transition(startOpponent(), { type: "TAP_SERVE_ACE" });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.won).toBe(false);
     expect(state.draft.endReason).toBe("ACE");
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: null }]);
   });
 
-  test("rejects an ace with a location — opponent serve placement is out of scope", () => {
+  test("rejects an ace with a target — opponent serve placement is out of scope", () => {
     expect(() =>
-      transition(startPoint(MATCH_ID, 0, "OPPONENT"), {
-        type: "TAP_SERVE_ACE",
-        location: SERVE_ZONE,
-      }),
-    ).toThrow(/must omit location/);
+      transition(startOpponent(), { type: "TAP_SERVE_ACE", target: SERVE_ZONE.target }),
+    ).toThrow(/must omit target/);
   });
 
   test("fault on the second serve → READY, DOUBLE_FAULT, won by the tracked player", () => {
-    let state = transition(startPoint(MATCH_ID, 0, "OPPONENT"), { type: "TAP_SERVE_FAULT" });
+    let state = transition(startOpponent(), { type: "TAP_SERVE_FAULT" });
     state = transition(state, { type: "TAP_SERVE_FAULT" });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.won).toBe(true); // the opponent double-faulted, we win the point
@@ -122,17 +135,14 @@ describe("serve — opponent", () => {
   });
 
   test("return in → RALLY, the serve is recorded as IN with no location", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "OPPONENT"), {
-      type: "TAP_RETURN",
-      outcome: "IN",
-    });
+    const state = transition(startOpponent(), { type: "TAP_RETURN", outcome: "IN" });
     expect(state.step).toEqual({ name: "RALLY" });
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: null }]);
     expect(state.draft.returnOutcome).toBeNull();
   });
 
   test("return error → SHOT_DETAIL, not the no-rally shortcut — the return was contact", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "OPPONENT"), {
+    const state = transition(startOpponent(), {
       type: "TAP_RETURN",
       outcome: "ERROR_NET",
       endReason: "MISTAKE",
@@ -145,53 +155,52 @@ describe("serve — opponent", () => {
   });
 
   test("rejects a return error with no endReason — forced vs mistake must be chosen", () => {
-    expect(() =>
-      transition(startPoint(MATCH_ID, 0, "OPPONENT"), { type: "TAP_RETURN", outcome: "ERROR_OUT" }),
-    ).toThrow(/requires endReason/);
+    expect(() => transition(startOpponent(), { type: "TAP_RETURN", outcome: "ERROR_OUT" })).toThrow(
+      /requires endReason/,
+    );
   });
 
   test("rejects a return-in with an endReason — nothing to classify yet", () => {
     expect(() =>
-      transition(startPoint(MATCH_ID, 0, "OPPONENT"), {
-        type: "TAP_RETURN",
-        outcome: "IN",
-        endReason: "MISTAKE",
-      }),
+      transition(startOpponent(), { type: "TAP_RETURN", outcome: "IN", endReason: "MISTAKE" }),
     ).toThrow(/must omit endReason/);
   });
 });
 
 describe("let", () => {
   test("service let on the first serve is a no-op — nothing was recorded yet", () => {
-    const start = startPoint(MATCH_ID, 0, "TRACKED");
+    const start = startTracked();
     const state = transition(start, { type: "TAP_LET" });
     expect(state).toEqual(start);
   });
 
   test("service let on the second serve keeps the first-serve fault, doesn't reset to first serve", () => {
-    const afterFault = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_FAULT",
-      location: "NET",
-    });
+    const afterFault = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     const state = transition(afterFault, { type: "TAP_LET" });
     expect(state).toEqual(afterFault);
   });
 
   test("rally let resets the whole point to first serve, clearing serves and history", () => {
-    const afterServe = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
+    const afterServe = transition(startTracked(), {
       type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
+      target: SERVE_ZONE.target,
     });
     const state = transition(afterServe, { type: "TAP_LET" });
-    expect(state).toEqual(startPoint(MATCH_ID, 0, "TRACKED"));
+    expect(state).toEqual(startTracked());
+  });
+
+  test("rally let preserves box unchanged — the same point, replayed", () => {
+    const afterServe = transition(startTracked("AD"), {
+      type: "TAP_SERVE_IN",
+      target: AD_ZONE.target,
+    });
+    const state = transition(afterServe, { type: "TAP_LET" });
+    expect(state.box).toBe("AD");
   });
 
   test("rejects a let from a step other than serve or rally", () => {
     const onShotDetail = transition(
-      transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-        type: "TAP_SERVE_IN",
-        location: SERVE_ZONE,
-      }),
+      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target }),
       { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" },
     );
     expect(() => transition(onShotDetail, { type: "TAP_LET" })).toThrow(/not valid on step/);
@@ -200,7 +209,7 @@ describe("let", () => {
 
 describe("rally screen", () => {
   const start = () =>
-    transition(startPoint(MATCH_ID, 0, "TRACKED"), { type: "TAP_SERVE_IN", location: SERVE_ZONE });
+    transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
 
   // A copy-paste bug wiring the same (won, endReason) to more than one button would
   // pass a single-case test — this guards that all four combinations stay distinct.
@@ -219,8 +228,8 @@ describe("rally screen", () => {
 
 describe("full happy path — serve through commit", () => {
   test("a FORCED win threads through every screen and commits to a valid Point", () => {
-    let state: CaptureState = startPoint(MATCH_ID, 0, "TRACKED");
-    state = transition(state, { type: "TAP_SERVE_IN", location: SERVE_ZONE });
+    let state: CaptureState = startTracked();
+    state = transition(state, { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     state = transition(state, { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" });
     state = transition(state, { type: "TAP_SHOT_DETAIL", wing: "FOREHAND", shotType: "DRIVE" });
     state = transition(state, { type: "TAP_BALL_LOCATION", ballIn: true, location: COURT_ZONE });
@@ -239,27 +248,19 @@ describe("full happy path — serve through commit", () => {
 
 describe("unusual point", () => {
   test("rejects Unusual on the first serve — nothing committable exists yet", () => {
-    expect(() => transition(startPoint(MATCH_ID, 0, "TRACKED"), { type: "TAP_UNUSUAL" })).toThrow(
-      /not valid on step/,
-    );
+    expect(() => transition(startTracked(), { type: "TAP_UNUSUAL" })).toThrow(/not valid on step/);
   });
 
   test("rejects Unusual on the second serve too — a lone fault still can't commit", () => {
     // Point.create requires a faulted first serve to have a second attempt. Reaching
     // UNUSUAL_OUTCOME from here would produce a draft commitDraft can never turn into
     // a Point, so this stays blocked even though a serve outcome (the fault) exists.
-    const afterFault = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_FAULT",
-      location: "NET",
-    });
+    const afterFault = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     expect(() => transition(afterFault, { type: "TAP_UNUSUAL" })).toThrow(/not valid on step/);
   });
 
   test("reachable from the rally screen, win/loss is mandatory, reason is optional", () => {
-    const onRally = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     let state = transition(onRally, { type: "TAP_UNUSUAL" });
     expect(state.step).toEqual({ name: "UNUSUAL_OUTCOME" });
 
@@ -276,10 +277,7 @@ describe("unusual point", () => {
   });
 
   test("an unusual point's rally length is never auto-filled, unlike ACE/DOUBLE_FAULT", () => {
-    const onRally = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     let state = transition(onRally, { type: "TAP_UNUSUAL" });
     state = transition(state, { type: "TAP_UNUSUAL_OUTCOME", won: true });
     state = transition(state, {
@@ -303,10 +301,7 @@ describe("unusual point", () => {
 
 describe("undo", () => {
   test("undoes one step back to the exact prior draft", () => {
-    const onRally = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -321,10 +316,7 @@ describe("undo", () => {
     // RALLY_LENGTH is reachable via shot detail (wing/shotType/ballLocation set) and
     // via the unusual escape hatch (all three still null) — the step name alone
     // can't tell UNDO which draft to restore; only the history stack can.
-    const onRally = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     let viaShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -348,15 +340,12 @@ describe("undo", () => {
   });
 
   test("undoing with no history discards the draft", () => {
-    const state = transition(startPoint(MATCH_ID, 0, "TRACKED"), { type: "UNDO" });
+    const state = transition(startTracked(), { type: "UNDO" });
     expect(state.step).toEqual({ name: "ABORTED" });
   });
 
   test("undoing twice from a two-step-deep history exhausts the stack, lands on ABORTED", () => {
-    const onRally = transition(startPoint(MATCH_ID, 0, "TRACKED"), {
-      type: "TAP_SERVE_IN",
-      location: SERVE_ZONE,
-    });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target });
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -437,7 +426,7 @@ describe("commitDraft", () => {
 describe("action validity guards", () => {
   test("rejects an action that doesn't belong on the current step", () => {
     expect(() =>
-      transition(startPoint(MATCH_ID, 0, "TRACKED"), {
+      transition(startTracked(), {
         type: "TAP_SHOT_DETAIL",
         wing: "FOREHAND",
         shotType: "DRIVE",
@@ -447,16 +436,13 @@ describe("action validity guards", () => {
 
   test("rejects TAP_SERVE_IN when the opponent is serving — no such tap on that screen", () => {
     expect(() =>
-      transition(startPoint(MATCH_ID, 0, "OPPONENT"), {
-        type: "TAP_SERVE_IN",
-        location: SERVE_ZONE,
-      }),
+      transition(startOpponent(), { type: "TAP_SERVE_IN", target: SERVE_ZONE.target }),
     ).toThrow(/not valid on step/);
   });
 
   test("rejects TAP_RETURN when the tracked player is serving — no return tap on that screen", () => {
-    expect(() =>
-      transition(startPoint(MATCH_ID, 0, "TRACKED"), { type: "TAP_RETURN", outcome: "IN" }),
-    ).toThrow(/not valid on step/);
+    expect(() => transition(startTracked(), { type: "TAP_RETURN", outcome: "IN" })).toThrow(
+      /not valid on step/,
+    );
   });
 });

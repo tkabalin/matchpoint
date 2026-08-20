@@ -132,6 +132,7 @@ describe("startNextPoint", () => {
     expect(state.draft.matchId).toBe(match.matchId);
     expect(state.draft.sequence).toBe(0);
     expect(state.draft.server).toBe("TRACKED"); // firstServer defaults to trackedPlayerId
+    expect(state.box).toBe("DEUCE"); // game 1, point 1 — always deuce
   });
 
   test("mid-match points: sequence and server against hardcoded expected values", () => {
@@ -151,6 +152,18 @@ describe("startNextPoint", () => {
     expect(state.draft.sequence).toBe(4);
     expect(state.draft.server).toBe("OPPONENT");
     expect(state.step).toEqual({ name: "SERVE", number: 1 });
+    expect(state.box).toBeNull(); // box is never derived for an opponent-serving point
+  });
+
+  test("tracked serving mid-game: box reflects points already played in the current game", () => {
+    const match = matchOf();
+    const points = [
+      ...completedGames(match.matchId, TRACKED_ID, 2), // 2 games -> even -> tracked serves next
+      pointWonBy(match.matchId, TRACKED_ID), // 1 point into that next game
+    ];
+    const state = startNextPoint(match, points);
+    expect(state.draft.server).toBe("TRACKED");
+    expect(state.box).toBe("AD"); // 1 point played so far this game -> odd -> ad
   });
 });
 
