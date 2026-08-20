@@ -13,7 +13,13 @@
 
 import { liveQuery, type Observable } from "dexie";
 
-import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry, type OutboxRow } from "./db";
+import {
+  outboxDb,
+  OUTBOX_PAYLOAD_VERSION,
+  type OutboxEntry,
+  type OutboxFailure,
+  type OutboxRow,
+} from "./db";
 
 export interface AppendFailure {
   /** `quota_exceeded` is the one a coach can act on: free space, or sync. */
@@ -124,21 +130,29 @@ export async function remove(ids: readonly string[]): Promise<void> {
 }
 
 /**
- * Parks rows the server rejected. Takes a list because a rejected match parks
- * its dependent points with it, which is one call, not one per point. Parking a
- * match does not fence off points appended for it afterwards, which arrive
- * pending, so a drain has to check a match's own status before sending them.
+ * Parks rows the server rejected, recording why so the sync status UI can say
+ * more than a count. Takes a list because a rejected match parks its dependent
+ * points with it, which is one call, not one per point. Parking a match does
+ * not fence off points appended for it afterwards, which arrive pending, so a
+ * drain has to check a match's own status before sending them.
  */
-export async function markFailed(ids: readonly string[]): Promise<void> {
-  await outboxDb.entries.where("id").anyOf(ids).modify({ status: "failed" });
+export async function markFailed(ids: readonly string[], failure: OutboxFailure): Promise<void> {
+  await outboxDb.entries.where("id").anyOf(ids).modify({ status: "failed", failure });
 }
 
-/** Returns every failed row of this coach's to the queue; answers how many. */
+/**
+ * Returns every failed row of this coach's to the queue; answers how many. The
+ * recorded failure goes with the status: a retried row's old reason would read
+ * as a fresh refusal if it were left to show alongside `pending`.
+ */
 export function retryFailed(coachId: string): Promise<number> {
   return outboxDb.entries
     .where("[coachId+status]")
     .equals([coachId, "failed"])
-    .modify({ status: "pending" });
+    .modify((row) => {
+      row.status = "pending";
+      delete row.failure;
+    });
 }
 
 /**

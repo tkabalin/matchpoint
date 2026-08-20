@@ -31,6 +31,16 @@ export type OutboxStatus = "pending" | "failed";
  */
 export const OUTBOX_PAYLOAD_VERSION = 1;
 
+/**
+ * Why the drain parked a row: the refusal's HTTP status (null when the payload
+ * itself could not be turned into a request) and a message for the sync status
+ * UI. On the row rather than in drain memory so it survives a reload.
+ */
+export interface OutboxFailure {
+  status: number | null;
+  message: string;
+}
+
 /** What a caller hands to `append`. Becomes an `OutboxRow` once stored. */
 export interface OutboxEntry {
   /** The entity's own client-generated UUID (`Point.id`, `Match.matchId`). */
@@ -58,6 +68,8 @@ export interface OutboxRow extends OutboxEntry {
   seq: number;
   status: OutboxStatus;
   schemaVersion: number;
+  /** Set by `markFailed`, cleared by `retryFailed`. Not indexed, so no version bump. */
+  failure?: OutboxFailure;
 }
 
 const db = new Dexie("matchpoint-outbox") as Dexie & {

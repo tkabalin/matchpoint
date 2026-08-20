@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry } from "./db";
+import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry, type OutboxFailure } from "./db";
 import {
   append,
   deleteOutboxDatabase,
@@ -15,6 +15,9 @@ import {
   type AppendResult,
   type OutboxCounts,
 } from "./outbox";
+
+/** A refusal like the ones the drain records; the tests only need some reason. */
+const PARKED: OutboxFailure = { status: 409, message: "The match is completed." };
 
 const COACH_ID = "c0ac0000-0000-4000-8000-000000000001";
 const OTHER_COACH_ID = "c0ac0000-0000-4000-8000-000000000002";
@@ -131,7 +134,7 @@ describe("append", () => {
 
   test("leaves a parked row parked when its entity is appended again", async () => {
     await append(pointEntry("p1"));
-    await markFailed(["p1"]);
+    await markFailed(["p1"], PARKED);
 
     await append(pointEntry("p1"));
 
@@ -245,7 +248,7 @@ describe("readPending", () => {
     await append(pointEntry("yy-parked"));
     await append(pointEntry("xx-other-coach", { coachId: OTHER_COACH_ID }));
     await append(pointEntry("aa-last"));
-    await markFailed(["yy-parked"]);
+    await markFailed(["yy-parked"], PARKED);
 
     const rows = await readPending(COACH_ID);
 
@@ -266,7 +269,7 @@ describe("readByMatch", () => {
     await append(pointEntry("mm-parked"));
     await append(pointEntry("bb-other-match", { matchId: OTHER_MATCH_ID }));
     await append(pointEntry("aa-last"));
-    await markFailed(["mm-parked"]);
+    await markFailed(["mm-parked"], PARKED);
 
     const rows = await readByMatch(MATCH_ID);
 
@@ -310,7 +313,7 @@ describe("markFailed", () => {
     await append(pointEntry("p1"));
     await append(pointEntry("p2"));
 
-    await markFailed(["m1", "p1", "p2"]);
+    await markFailed(["m1", "p1", "p2"], PARKED);
 
     expect(await readPending(COACH_ID)).toEqual([]);
     expect((await readByMatch(MATCH_ID)).map((row) => row.status)).toEqual([
@@ -320,10 +323,21 @@ describe("markFailed", () => {
     ]);
   });
 
+  test("records why the rows were parked", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+    await append(pointEntry("p1"));
+
+    await markFailed(["m1", "p1"], PARKED);
+
+    // On the rows, not in drain memory: the reason has to survive a reload for
+    // the sync status UI to say more than "failed: 2".
+    expect((await readByMatch(MATCH_ID)).map((row) => row.failure)).toEqual([PARKED, PARKED]);
+  });
+
   test("parks nothing when given no ids", async () => {
     await append(pointEntry("p1"));
 
-    await markFailed([]);
+    await markFailed([], PARKED);
 
     expect(await readPending(COACH_ID)).toHaveLength(1);
   });
@@ -334,13 +348,26 @@ describe("retryFailed", () => {
     await append(pointEntry("p1"));
     await append(pointEntry("p2"));
     await append(pointEntry("p3", { coachId: OTHER_COACH_ID }));
-    await markFailed(["p1", "p3"]);
+    await markFailed(["p1", "p3"], PARKED);
 
     const retried = await retryFailed(COACH_ID);
 
     expect(retried).toBe(1);
     expect((await readPending(COACH_ID)).map((row) => row.id)).toEqual(["p1", "p2"]);
     expect(await readPending(OTHER_COACH_ID)).toEqual([]);
+  });
+
+  test("clears the recorded failure along with the status", async () => {
+    await append(pointEntry("p1"));
+    await markFailed(["p1"], PARKED);
+
+    await retryFailed(COACH_ID);
+
+    // A retried row carrying its old reason would read as a fresh refusal the
+    // next time it is parked alongside rows that genuinely were.
+    const [row] = await readPending(COACH_ID);
+    expect(row!.failure).toBeUndefined();
+    expect("failure" in row!).toBe(false);
   });
 });
 
@@ -378,7 +405,7 @@ describe("watchCounts", () => {
     await append(pointEntry("p1"));
     await append(pointEntry("p2"));
     await append(pointEntry("p3", { coachId: OTHER_COACH_ID }));
-    await markFailed(["p2"]);
+    await markFailed(["p2"], PARKED);
 
     const seen = watch(COACH_ID);
     await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 1, failed: 1 }));
