@@ -29,7 +29,14 @@ from matchpoint_api.routers.players import (
     UNKNOWN_TRANSFER_CODE,
 )
 from matchpoint_api.security import verify_password
-from tests.conftest import Clock, breach_every_password, image_bytes, stored_photos
+from tests.conftest import (
+    ORIGIN_HEADERS,
+    TEST_ORIGIN,
+    Clock,
+    breach_every_password,
+    image_bytes,
+    stored_photos,
+)
 from tests.factories import (
     make_coach,
     make_match,
@@ -263,6 +270,127 @@ def test_create_player_gives_up_after_three_username_collisions(
         client.post("/players", json=_payload())
 
     assert isinstance(caught.value.orig, UniqueViolation)
+
+
+def test_regenerating_gives_a_backfilled_player_a_password_that_signs_them_in(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The whole recovery path in one pass: a row with no credential (every player
+    from before sign-ins existed) gets one minted, the coach reads both halves off
+    the response, and the player's login works. Players have no email, so this
+    route is their only way in or back in."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    assert player.password_hash is None
+
+    response = client.post(f"/players/{player.id}/password")
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["username"] == player.username
+    login_client = TestClient(client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS)
+    login = login_client.post(
+        "/auth/player/login",
+        json={"username": body["username"], "password": body["password"]},
+    )
+    assert login.status_code == 200
+
+
+def test_regenerating_stores_only_a_hash_and_replaces_the_old_password(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One credential at a time: the row keeps one Argon2, so minting again is also
+    the revocation of whatever the old password could still do at the login form."""
+    created = client.post("/players", json=_payload()).json()
+
+    regenerated = client.post(f"/players/{created['id']}/password").json()
+
+    saved = db_session.get(Player, uuid.UUID(created["id"]))
+    assert saved is not None
+    assert saved.password_hash is not None
+    assert saved.password_hash.startswith("$argon2")
+    assert regenerated["password"] not in saved.password_hash
+    login_client = TestClient(client.app, base_url=TEST_ORIGIN, headers=ORIGIN_HEADERS)
+    old = login_client.post(
+        "/auth/player/login",
+        json={"username": created["username"], "password": created["password"]},
+    )
+    new = login_client.post(
+        "/auth/player/login",
+        json={"username": regenerated["username"], "password": regenerated["password"]},
+    )
+    assert old.status_code == 401
+    assert new.status_code == 200
+
+
+def test_regenerating_ends_the_player_s_live_sessions_and_no_one_else_s(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The coach's takeover lever: if the old password or a device is in the wrong
+    hands, minting afresh ends everything the old credential had open."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_player_session(db_session, player_id=player.id)
+    make_player_session(db_session, player_id=player.id)
+    bystander = make_player_session(db_session)
+    db_session.commit()
+
+    response = client.post(f"/players/{player.id}/password")
+
+    assert response.status_code == 201
+    remaining = list(db_session.scalars(select(PlayerSession.id)))
+    assert remaining == [bystander.id]
+
+
+def test_regenerating_another_coach_s_player_is_the_404_an_unknown_id_gets(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A password mint is a takeover of the player's sign-in, so the ownership
+    boundary here is the same one every player route holds, indistinguishably."""
+    other = make_player(db_session)
+    db_session.commit()
+
+    foreign = client.post(f"/players/{other.id}/password")
+    unknown = client.post(f"/players/{uuid.uuid4()}/password")
+
+    assert foreign.status_code == unknown.status_code == 404
+    assert foreign.json() == unknown.json()
+    refreshed = db_session.get(Player, other.id)
+    assert refreshed is not None
+    assert refreshed.password_hash is None
+
+
+def test_a_404_from_the_password_route_spends_no_minting_token(
+    client: TestClient, db_session: Session, coach: Coach, clock: Clock
+) -> None:
+    """The tier is charged after the ownership check, so ids that are not this coach's
+    cannot hold the shared bucket drained and refuse every other coach's creations.
+    Past the per-coach burst, which is what a charged 404 would have spent."""
+    other = make_player(db_session)
+    db_session.commit()
+    for _ in range(61):
+        assert client.post(f"/players/{other.id}/password").status_code == 404
+
+    assert client.post("/players", json=_payload()).status_code == 201
+
+
+def test_creation_and_regeneration_spend_the_same_minting_budget(
+    client: TestClient,
+    db_session: Session,
+    coach: Coach,
+    monkeypatch: pytest.MonkeyPatch,
+    clock: Clock,
+) -> None:
+    """One tier for the two routes that pay an Argon2 hash, so neither is a way
+    around the other's bound. Hashing is stubbed for volume, as the create test."""
+    monkeypatch.setattr(players_module, "hash_password", lambda password: "$argon2-stub")
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    for _ in range(60):
+        assert client.post(f"/players/{player.id}/password").status_code == 201
+
+    refused = client.post("/players", json=_payload())
+
+    assert refused.status_code == 429
 
 
 def test_create_player_re_raises_an_integrity_error_that_is_not_the_username(

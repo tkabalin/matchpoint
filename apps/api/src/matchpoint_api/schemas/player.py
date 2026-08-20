@@ -131,6 +131,16 @@ class PlayerCreatedRead(PlayerRead):
     password: str
 
 
+class PlayerPasswordRead(BaseModel):
+    """A freshly minted sign-in for one player. The password is shown here only."""
+
+    # The username rides along so the screen showing this hands over both halves of
+    # the sign-in without a second read. The password is a plain str, not SecretStr,
+    # for PlayerTransferCodeRead's reason.
+    username: str
+    password: str
+
+
 class RedeemTransferCodeRequest(RequestModel):
     # SecretStr for the reason the OTP is one: the code is a live credential, and naming
     # it in errors.py's SECRET_FIELDS is what keeps it out of a 422's echoed input.

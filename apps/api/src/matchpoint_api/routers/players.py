@@ -9,7 +9,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from matchpoint_api import photos
-from matchpoint_api.auth import CurrentCoach, hash_token, new_player_password, new_session_token
+from matchpoint_api.auth import (
+    CurrentCoach,
+    hash_token,
+    new_player_password,
+    new_session_token,
+    revoke_player_sessions,
+)
 from matchpoint_api.db import get_db
 from matchpoint_api.models import Match, Player, PlayerSession, PlayerTransferCode, Point
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
@@ -17,6 +23,7 @@ from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
     PlayerCreate,
     PlayerCreatedRead,
+    PlayerPasswordRead,
     PlayerRead,
     PlayerTransferCodeRead,
     PlayerUpdate,
@@ -188,6 +195,31 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     # After the commit, as everywhere else a row and a file change together: the row is
     # gone either way, and a file left behind costs disk, not correctness.
     photos.delete(photo_key)
+
+
+# The 404 for another coach's player stays undeclared, as everywhere: it is the same
+# dead end an unknown id answers. 201 because a new credential comes into being.
+@router.post("/{player_id}/password", status_code=201, response_model=PlayerPasswordRead)
+def regenerate_player_password(
+    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach, request: Request
+) -> PlayerPasswordRead:
+    """Mint a fresh one-time password for this player, ending their live sessions.
+
+    This is also how a player who existed before sign-ins, or who forgot their
+    password, gets one: players have no email, so their coach is the recovery path.
+    """
+    # Metered after the ownership check, unlike creation's: a 404 mints nothing, so
+    # charging it would let a coach hold the shared bucket drained, and every other
+    # coach's creations with it, using ids that were never theirs.
+    player = owned_player(db, player_id, coach.id, for_update=True)
+    limit_player_password_rate(request, coach.id)
+    password = new_player_password()
+    player.password_hash = hash_password(password)
+    # The old credential may be in the wrong hands, which is exactly when a coach
+    # reaches for this, so every live session dies with it.
+    revoke_player_sessions(db, player.id)
+    db.commit()
+    return PlayerPasswordRead(username=player.username, password=password)
 
 
 # A photo is set and cleared by its own endpoints rather than through PATCH, because a

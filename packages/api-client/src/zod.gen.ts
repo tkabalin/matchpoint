@@ -222,6 +222,16 @@ export const zPlayerLoginRequest = z.object({
 });
 
 /**
+ * PlayerPasswordRead
+ *
+ * A freshly minted sign-in for one player. The password is shown here only.
+ */
+export const zPlayerPasswordRead = z.object({
+    password: z.string(),
+    username: z.string()
+});
+
+/**
  * PlayerRead
  */
 export const zPlayerRead = z.object({
@@ -908,6 +918,15 @@ export const zUpdatePlayerPath = z.object({
  * Successful Response
  */
 export const zUpdatePlayerResponse = zPlayerRead;
+
+export const zRegeneratePlayerPasswordPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zRegeneratePlayerPasswordResponse = zPlayerPasswordRead;
 
 export const zDeletePlayerPhotoPath = z.object({
     player_id: z.uuid()

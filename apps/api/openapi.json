@@ -942,6 +942,25 @@
         "title": "PlayerLoginRequest",
         "type": "object"
       },
+      "PlayerPasswordRead": {
+        "description": "A freshly minted sign-in for one player. The password is shown here only.",
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "PlayerPasswordRead",
+        "type": "object"
+      },
       "PlayerRead": {
         "properties": {
           "coach_id": {
@@ -4147,6 +4166,70 @@
           }
         },
         "summary": "Update Player",
+        "tags": [
+          "players"
+        ]
+      }
+    },
+    "/players/{player_id}/password": {
+      "post": {
+        "description": "Mint a fresh one-time password for this player, ending their live sessions.\n\nThis is also how a player who existed before sign-ins, or who forgot their\npassword, gets one: players have no email, so their coach is the recovery path.",
+        "operationId": "regenerate_player_password",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerPasswordRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Regenerate Player Password",
         "tags": [
           "players"
         ]

@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { changePassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getMatch, getPlayer, health, ingestPoints, listMatches, listPlayers, listPoints, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { changePassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getMatch, getPlayer, health, ingestPoints, listMatches, listPlayers, listPoints, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -709,6 +709,28 @@ export const updatePlayerMutation = (options?: Partial<Options<UpdatePlayerData>
     const mutationOptions: UseMutationOptions<UpdatePlayerResponse, UpdatePlayerError, Options<UpdatePlayerData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await updatePlayer({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Regenerate Player Password
+ *
+ * Mint a fresh one-time password for this player, ending their live sessions.
+ *
+ * This is also how a player who existed before sign-ins, or who forgot their
+ * password, gets one: players have no email, so their coach is the recovery path.
+ */
+export const regeneratePlayerPasswordMutation = (options?: Partial<Options<RegeneratePlayerPasswordData>>): UseMutationOptions<RegeneratePlayerPasswordResponse, RegeneratePlayerPasswordError, Options<RegeneratePlayerPasswordData>> => {
+    const mutationOptions: UseMutationOptions<RegeneratePlayerPasswordResponse, RegeneratePlayerPasswordError, Options<RegeneratePlayerPasswordData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await regeneratePlayerPassword({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

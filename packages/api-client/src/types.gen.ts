@@ -464,6 +464,22 @@ export type PlayerLoginRequest = {
 };
 
 /**
+ * PlayerPasswordRead
+ *
+ * A freshly minted sign-in for one player. The password is shown here only.
+ */
+export type PlayerPasswordRead = {
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Username
+     */
+    username: string;
+};
+
+/**
  * PlayerRead
  */
 export type PlayerRead = {
@@ -2243,6 +2259,44 @@ export type UpdatePlayerResponses = {
 };
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
+
+export type RegeneratePlayerPasswordData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/password';
+};
+
+export type RegeneratePlayerPasswordErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type RegeneratePlayerPasswordError = RegeneratePlayerPasswordErrors[keyof RegeneratePlayerPasswordErrors];
+
+export type RegeneratePlayerPasswordResponses = {
+    /**
+     * Successful Response
+     */
+    201: PlayerPasswordRead;
+};
+
+export type RegeneratePlayerPasswordResponse = RegeneratePlayerPasswordResponses[keyof RegeneratePlayerPasswordResponses];
 
 export type DeletePlayerPhotoData = {
     body?: never;
