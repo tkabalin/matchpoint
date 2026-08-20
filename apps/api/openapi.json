@@ -2877,6 +2877,7 @@
     },
     "/matches/{match_id}": {
       "delete": {
+        "description": "Erase one match, unless another device is capturing it or it has points recorded.\n\n`device_id` names the asking device, so the device holding the capture claim can\nstill delete the match it is capturing.",
         "operationId": "delete_match",
         "parameters": [
           {
@@ -2887,6 +2888,23 @@
               "format": "uuid",
               "title": "Match Id",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
             }
           }
         ],
@@ -2912,7 +2930,7 @@
                 }
               }
             },
-            "description": "Match has recorded points"
+            "description": "Match cannot be deleted"
           },
           "422": {
             "content": {

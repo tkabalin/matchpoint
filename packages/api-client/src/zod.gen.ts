@@ -710,6 +710,10 @@ export const zDeleteMatchPath = z.object({
     match_id: z.uuid()
 });
 
+export const zDeleteMatchQuery = z.object({
+    device_id: z.uuid().nullish()
+});
+
 /**
  * Successful Response
  */

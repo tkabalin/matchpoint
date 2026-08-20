@@ -1,5 +1,5 @@
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx2
@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
 from matchpoint_api.models import Coach, DominantHand, Match, Player, PlayerTransferCode, Point
+from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
 from matchpoint_api.routers.players import (
     ALREADY_OWNED,
     TRANSFER_CODES_OUTSTANDING,
@@ -512,6 +513,26 @@ def test_delete_player_takes_their_matches_points_with_them(
     assert response.status_code == 204
     assert db_session.get(Match, match.id) is None
     assert db_session.get(Point, point.id) is None
+
+
+def test_delete_player_takes_a_match_being_captured_with_it(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The refusal a live capture claim puts on the match's own delete route stops
+    there. A transfer code is another coach's pending claim, which is why it refuses on
+    every route that reaches the row; a capture claim is this coach's own device holding
+    their own data, and erasing the player is a deliberate act, not a stray tap."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(
+        db_session,
+        player_id=player.id,
+        capture_claim_device_id=uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+    )
+    db_session.commit()
+
+    assert client.delete(f"/players/{player.id}").status_code == 204
+    assert db_session.get(Match, match.id) is None
 
 
 def test_delete_player_leaves_the_rest_of_the_roster_alone(

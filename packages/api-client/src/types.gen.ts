@@ -1521,7 +1521,12 @@ export type DeleteMatchData = {
          */
         match_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Device Id
+         */
+        device_id?: string | null;
+    };
     url: '/matches/{match_id}';
 };
 
@@ -1531,7 +1536,7 @@ export type DeleteMatchErrors = {
      */
     401: ErrorDetail;
     /**
-     * Match has recorded points
+     * Match cannot be deleted
      */
     409: ErrorDetail;
     /**

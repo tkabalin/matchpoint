@@ -39,6 +39,7 @@ from matchpoint_api.models import (
     Point,
 )
 from matchpoint_api.password_policy import BREACHED, COMMON, CONTEXT, REPEATED, SEQUENTIAL
+from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
 from matchpoint_api.security import hash_password, verify_password
 from tests.conftest import (
     ORIGIN_HEADERS,
@@ -1185,6 +1186,26 @@ def test_closing_an_account_may_take_the_roster_along(
     assert db_session.get(PasswordReset, reset.id) is None
     assert db_session.get(CoachSession, session_row.id) is None
     assert client.get("/coaches/me").status_code == 401
+
+
+def test_closing_an_account_takes_a_match_being_captured_with_it(
+    client: TestClient, db_session: Session
+) -> None:
+    """The refusal a live capture claim puts on the match's own delete route stops there,
+    as it does for the player delete. A transfer code refuses here because it is another
+    coach's pending claim; a capture claim is this coach's own device, and a device that
+    died holding one must not hold an account open until the claim lapses."""
+    coach = _closable(client, db_session)
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        capture_claim_device_id=uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+    )
+    db_session.commit()
+
+    assert _close(client, delete_players=True).status_code == 204
+    assert db_session.get(Match, match.id) is None
 
 
 def test_closing_an_account_ends_every_session_and_clears_the_cookie(

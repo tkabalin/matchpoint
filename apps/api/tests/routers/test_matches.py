@@ -24,6 +24,7 @@ from matchpoint_api.models import (
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
     MATCH_HAS_POINTS,
+    MATCH_IS_BEING_CAPTURED,
     POINT_IN_ANOTHER_MATCH,
     POINT_SEQUENCE_TAKEN,
 )
@@ -996,6 +997,91 @@ def test_delete_match_is_allowed_on_a_completed_match(
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
 
 
+# `_claimed_match` is defined just below, with the capture routes it was written for.
+@pytest.mark.parametrize("names_a_device", [False, True])
+def test_delete_match_under_another_devices_claim_is_refused(
+    client: TestClient, db_session: Session, coach: Coach, names_a_device: bool
+) -> None:
+    """Deleting a match mid-capture leaves the capturing device recording into one that
+    no longer exists, and every point it has queued with nothing to land in. Naming a
+    device that is not the holder is the same refusal as naming none, which is what a
+    client too old to send one does."""
+    match = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+    params = {"device_id": str(uuid.uuid4())} if names_a_device else None
+
+    response = client.delete(f"/matches/{match.id}", params=params)
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": MATCH_IS_BEING_CAPTURED}
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+
+
+def test_the_capturing_device_may_delete_its_own_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Backing out of capture does not release the claim, so the device holding one is
+    the likeliest to be deleting: a match set up wrongly, cleared away by the phone that
+    just took it. Refusing there would wait out four hours to protect nobody."""
+    device_id = uuid.uuid4()
+    match = _claimed_match(db_session, coach, device_id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}", params={"device_id": str(device_id)})
+
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_a_lapsed_claim_does_not_block_the_delete(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A lapsed claim counts as free everywhere else and has to here too: a device that
+    stops talking to the server never releases, so one it left behind would keep the
+    match undeletable rather than merely uncapturable."""
+    match = _claimed_match(
+        db_session,
+        coach,
+        uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_releasing_the_claim_clears_the_way_for_the_delete(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The way through for a device that is not the holder, and the reason the refusal
+    is not a dead end: release names no device, so any of the coach's can free a match
+    the capturing one is not coming back to."""
+    match = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 409
+    assert client.post(f"/matches/{match.id}/capture/release").status_code == 204
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+
+
+def test_the_capture_refusal_comes_before_the_points_refusal(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Both stand through any capture that is online, and the claim is the one that
+    answers what the coach is about to do: the match is being recorded right now. Having
+    points is the permanent answer, and it is still there on the retry after a release."""
+    match = _claimed_match(db_session, coach, uuid.uuid4())
+    make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": MATCH_IS_BEING_CAPTURED}
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+
+
 def _claimed_match(
     session: Session, coach: Coach, device_id: uuid.UUID, **overrides: object
 ) -> Match:
@@ -1729,9 +1815,10 @@ def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
             "/points",
             {"device_id": str(uuid.UUID(int=1)), "points": [point_payload()]},
         ),
+        ("delete", "", None),
     ],
 )
-def test_the_routes_that_write_the_claim_lock_the_match_row(
+def test_the_routes_that_read_the_claim_lock_the_match_row(
     client: TestClient,
     db_session: Session,
     coach: Coach,
@@ -1739,10 +1826,14 @@ def test_the_routes_that_write_the_claim_lock_the_match_row(
     suffix: str,
     body: dict[str, str] | None,
 ) -> None:
-    """Each of these reads the claim and then writes it, so the read has to be locked:
-    two requests reading before either writes would both win. Pinned on the emitted SQL
-    because the suite shares one session, which cannot produce two concurrent requests,
-    so dropping the lock would otherwise leave every test here green."""
+    """Each of these reads the claim and then writes the row, so the read has to be
+    locked: two requests reading before either writes would both win. Pinned on the
+    emitted SQL because the suite shares one session, which cannot produce two concurrent
+    requests, so dropping the lock would otherwise leave every test here green.
+
+    Driven through `request` rather than the named methods because httpx's `delete` takes
+    no body, and the parametrize carries one for the routes that do.
+    """
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()
     statements: list[str] = []
@@ -1758,7 +1849,7 @@ def test_the_routes_that_write_the_claim_lock_the_match_row(
     ) -> None:
         statements.append(statement)
 
-    response = getattr(client, method)(f"/matches/{match.id}{suffix}", json=body)
+    response = client.request(method.upper(), f"/matches/{match.id}{suffix}", json=body)
 
     assert response.status_code in {200, 204}
     assert any("FOR UPDATE OF matches" in statement for statement in statements)

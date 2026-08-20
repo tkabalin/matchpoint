@@ -246,6 +246,11 @@ export const createMatch = <ThrowOnError extends boolean = false>(options: Optio
 
 /**
  * Delete Match
+ *
+ * Erase one match, unless another device is capturing it or it has points recorded.
+ *
+ * `device_id` names the asking device, so the device holding the capture claim can
+ * still delete the match it is capturing.
  */
 export const deleteMatch = <ThrowOnError extends boolean = false>(options: Options<DeleteMatchData, ThrowOnError>): RequestResult<DeleteMatchResponses, DeleteMatchErrors, ThrowOnError> => (options.client ?? client).delete<DeleteMatchResponses, DeleteMatchErrors, ThrowOnError>({ url: '/matches/{match_id}', ...options });
 

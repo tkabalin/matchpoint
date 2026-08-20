@@ -47,6 +47,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 # Named so a route test can assert the body exactly, the way the transfer-code refusal
 # on the player routes does.
 MATCH_HAS_POINTS = "Match has recorded points"
+MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
 POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
 POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
 
@@ -65,8 +66,9 @@ def match_for_coach(
     Another coach's match gets the 404 an unknown id gets, not a 403: a 403 would
     confirm the id exists, and ids must stay unenumerable across coaches.
     `for_update` takes a row lock, which every route that reads the claim and then
-    writes it needs: without it two requests read the same row and both write, so a
-    second device wins a claim, or a finish clears one taken since it read.
+    writes the row needs: without it two requests read the same row and both write, so a
+    second device wins a claim, a finish clears one taken since it read, or a delete
+    takes a match claimed while it waited.
     """
     statement = (
         select(Match)
@@ -213,7 +215,7 @@ def claim_capture(
         raise HTTPException(status_code=409, detail="Match is completed")
     holder = capture_holder(match)
     if holder is not None and holder != data.device_id:
-        raise HTTPException(status_code=409, detail="Match is being captured on another device")
+        raise HTTPException(status_code=409, detail=MATCH_IS_BEING_CAPTURED)
     match.capture_claim_device_id = data.device_id
     expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
     match.capture_claim_expires_at = expires_at
@@ -314,20 +316,40 @@ def list_points(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list
     )
 
 
-# The 409 is declared because the client branches on it: a match with points recorded
-# cannot be cleared away and re-entered the way an empty one can, so the coach is told
-# why rather than left to read a generic failure.
+# The 409 is declared because the client branches on it, and one status covers both
+# refusals as on the capture claim: either way the match cannot be cleared away and
+# re-entered the way an empty one can, so the coach is told why rather than left to
+# read a generic failure.
 @router.delete(
     "/{match_id}",
     status_code=204,
-    responses={409: {"model": ErrorDetail, "description": MATCH_HAS_POINTS}},
+    responses={409: {"model": ErrorDetail, "description": "Match cannot be deleted"}},
 )
-def delete_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> None:
+def delete_match(
+    match_id: uuid.UUID, db: DbSession, coach: CurrentCoach, device_id: uuid.UUID | None = None
+) -> None:
+    """Erase one match, unless another device is capturing it or it has points recorded.
+
+    `device_id` names the asking device, so the device holding the capture claim can
+    still delete the match it is capturing.
+    """
+    # Locked for the reason the claim routes give: an unlocked read lets a claim taken
+    # while it waited stand through the delete below.
+    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    # The holder is exempt because backing out of capture does not release its claim
+    # (#197), so refusing over every one would lock a match set up by mistake away for
+    # the rest of the four hours.
+    #
+    # Ahead of the points refusal, being the answer more likely to change the coach's
+    # mind, and the recoverable one: release clears the way, where points never do.
+    holder = capture_holder(match)
+    if holder is not None and holder != device_id:
+        raise HTTPException(status_code=409, detail=MATCH_IS_BEING_CAPTURED)
     # Derived set rows follow the match out through their own ondelete; the points
     # table declares none, so a match with real capture history refuses the delete
     # instead of losing it. Deleting the player, or closing the account, is the only
     # way past a match that has points recorded against it.
-    db.delete(match_for_coach(db, match_id, coach.id))
+    db.delete(match)
     try:
         db.flush()
     except IntegrityError as exc:

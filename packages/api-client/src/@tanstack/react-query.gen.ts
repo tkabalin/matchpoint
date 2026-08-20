@@ -406,6 +406,11 @@ export const createMatchMutation = (options?: Partial<Options<CreateMatchData>>)
 
 /**
  * Delete Match
+ *
+ * Erase one match, unless another device is capturing it or it has points recorded.
+ *
+ * `device_id` names the asking device, so the device holding the capture claim can
+ * still delete the match it is capturing.
  */
 export const deleteMatchMutation = (options?: Partial<Options<DeleteMatchData>>): UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> => {
     const mutationOptions: UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> = {
