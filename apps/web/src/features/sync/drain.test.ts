@@ -272,7 +272,13 @@ describe("flushing", () => {
     expect(batch.device_id).toBe(DEVICE_ID);
     expect(batch.points.map((point) => point.id)).toEqual([uid("a1"), uid("a2")]);
     expect(await pendingIds()).toEqual([]);
-    expect(result).toEqual({ acknowledged: 3, parked: 0, unauthorized: false, skipped: false });
+    expect(result).toEqual({
+      acknowledged: 3,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
   });
 
   test("groups interleaved rows by match, matches in first-queued order", async () => {
@@ -403,7 +409,13 @@ describe("refusals", () => {
       Array<OutboxFailure>(2).fill({ status: 409, message: "That player has been archived." }),
     );
     expect(await readByMatch(MATCH_B)).toEqual([]);
-    expect(result).toEqual({ acknowledged: 2, parked: 2, unauthorized: false, skipped: false });
+    expect(result).toEqual({
+      acknowledged: 2,
+      discarded: 0,
+      parked: 2,
+      unauthorized: false,
+      skipped: false,
+    });
   });
 
   test("parks a refused point batch with the 422's own words, never retrying it", async () => {
@@ -468,6 +480,115 @@ describe("refusals", () => {
   });
 });
 
+// Both statuses mean no retry can ever land these rows. Which one it is says
+// whether the coach chose the loss: only the 410 tombstone does, so only it is
+// swallowed, and the engine tells them apart on the status alone.
+describe("rows that can never land", () => {
+  test("discards a match the server says was deleted, without parking anything", async () => {
+    stubTransport((request) => {
+      if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {
+        // #214's tombstone, for a match id deleted inside the window. The engine
+        // reads the status and never this sentence.
+        return jsonResponse(410, { detail: "This match was deleted." });
+      }
+      return respondOk(request);
+    });
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+    );
+
+    const result = await drain();
+
+    // Gone from the queue rather than parked: the coach deleted the match, so a
+    // failed count would ask them to act on their own decision.
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    expect(await readByMatch(MATCH_B)).toEqual([]);
+    expect(result).toEqual({
+      acknowledged: 2,
+      discarded: 2,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
+  });
+
+  test("discards the points of a deleted match and flushes the next one", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points`
+        ? jsonResponse(410, { detail: "This match was deleted." })
+        : respondOk(request),
+    );
+    // A's create landed on an earlier run, so only its points are queued.
+    await queue(
+      pointEntry("a1", MATCH_A, 0),
+      pointEntry("a2", MATCH_A, 1),
+      pointEntry("b1", MATCH_B, 0),
+    );
+
+    const result = await drain();
+
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    // One attempt at A, and B still goes out: unlandable is permanent, and it
+    // is one match's answer rather than the run's.
+    expect(requests.map((request) => request.pathname)).toEqual([
+      `/matches/${MATCH_A}/points`,
+      `/matches/${MATCH_B}/points`,
+    ]);
+    expect(result.discarded).toBe(2);
+    expect(result.parked).toBe(0);
+  });
+
+  test("parks a match whose player the server will not accept", async () => {
+    stubTransport((request) => {
+      if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {
+        // What a transfer of the player to another coach answers. The match is
+        // the coach's own recorded work, so it has to stay where they can see it.
+        return jsonResponse(404, { detail: "Unknown player_id" });
+      }
+      return respondOk(request);
+    });
+    await queue(matchEntry(MATCH_A), pointEntry("a1", MATCH_A, 0), matchEntry(MATCH_B));
+
+    const result = await drain();
+
+    const parked = await readByMatch(MATCH_A);
+    expect(parked.map((row) => row.status)).toEqual(["failed", "failed"]);
+    expect(parked[0]!.failure).toEqual({ status: 404, message: "Unknown player_id" });
+    expect(result.discarded).toBe(0);
+    expect(result.parked).toBe(2);
+  });
+
+  test("parks the points of a match the server cannot find", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points`
+        ? jsonResponse(404, { detail: "Match not found" })
+        : respondOk(request),
+    );
+    await queue(
+      pointEntry("a1", MATCH_A, 0),
+      pointEntry("a2", MATCH_A, 1),
+      pointEntry("b1", MATCH_B, 0),
+    );
+
+    const result = await drain();
+
+    const parked = await readByMatch(MATCH_A);
+    expect(parked.map((row) => row.failure)).toEqual(
+      Array<OutboxFailure>(2).fill({ status: 404, message: "Match not found" }),
+    );
+    // Parked, not retried, and B is untouched by A's answer.
+    expect(requests.map((request) => request.pathname)).toEqual([
+      `/matches/${MATCH_A}/points`,
+      `/matches/${MATCH_B}/points`,
+    ]);
+    expect(result.discarded).toBe(0);
+    expect(result.parked).toBe(2);
+  });
+});
+
 describe("halting and retrying", () => {
   test("halts everything on a 401 and keeps the queue intact", async () => {
     const requests = stubTransport(() => jsonResponse(401, { detail: "Not signed in" }));
@@ -484,7 +605,13 @@ describe("halting and retrying", () => {
     // match, and whether it is really over is the next sign-in's question.
     expect(requests).toHaveLength(1);
     expect(await pendingIds()).toHaveLength(4);
-    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: true, skipped: false });
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: true,
+      skipped: false,
+    });
   });
 
   test("retries a network failure on the backoff schedule, then succeeds", async () => {
@@ -518,6 +645,7 @@ describe("halting and retrying", () => {
 
     expect(await settle(run)).toEqual({
       acknowledged: 1,
+      discarded: 0,
       parked: 0,
       unauthorized: false,
       skipped: false,
@@ -534,7 +662,13 @@ describe("halting and retrying", () => {
 
     expect(requests).toHaveLength(1 + BACKOFF_DELAYS_MS.length);
     expect(await pendingIds()).toEqual([uid("a1")]);
-    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: false, skipped: false });
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
   });
 
   test("waits out a 429's Retry-After when it outlasts the backoff step", async () => {
@@ -596,7 +730,13 @@ describe("the drain lock", () => {
 
     const result = await drain();
 
-    expect(result).toEqual({ acknowledged: 0, parked: 0, unauthorized: false, skipped: true });
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: true,
+    });
     expect(requests).toEqual([]);
     expect(await pendingIds()).toEqual([uid("a1")]);
     release();

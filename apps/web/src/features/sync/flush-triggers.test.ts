@@ -19,6 +19,7 @@ vi.mock(import("./drain"), async (importOriginal) => ({
   ...(await importOriginal()),
   drainOutbox: vi.fn(async () => ({
     acknowledged: 0,
+    discarded: 0,
     parked: 0,
     unauthorized: false,
     skipped: false,
@@ -178,6 +179,7 @@ describe("registerFlushTriggers", () => {
     recordOwnerIfUnknown(COACH_ID);
     vi.mocked(drainOutbox).mockResolvedValueOnce({
       acknowledged: 0,
+      discarded: 0,
       parked: 0,
       unauthorized: false,
       skipped: true,

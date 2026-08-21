@@ -5,14 +5,15 @@
  * One entry point, drainOutbox. It takes a web lock so two tabs never
  * double-flush, then sweeps the queue: rows grouped by match, the match create
  * first, then its points in enqueue order, in batches bounded by the spec's
- * ceiling and by the body limit. Every server answer lands in one of four
+ * ceiling and by the body limit. Every server answer lands in one of five
  * buckets: success removes the rows; a 401 halts the whole run with the queue
- * intact, because a revoked session must never cost a match; any other 4xx is a
- * permanent refusal, so the match's rows park as failed with the reason
- * recorded; network errors, 5xx and 429 are transient, so the sweep runs again
- * on a doubling backoff until the schedule runs out. Both requests are
- * idempotent server-side, which is what makes re-sending after a lost
- * acknowledgement safe.
+ * intact, because a revoked session must never cost a match; a 410 means the
+ * match those rows belong to was deliberately deleted, so they are discarded
+ * rather than parked; any other 4xx, a 404 included, is a permanent refusal, so
+ * the match's rows park as failed with the reason recorded; network errors, 5xx
+ * and 429 are transient, so the sweep runs again on a doubling backoff until the
+ * schedule runs out. Both requests are idempotent server-side, which is what
+ * makes re-sending after a lost acknowledgement safe.
  */
 
 import {
@@ -55,6 +56,8 @@ const LOCK_NAME = "matchpoint:outbox-drain";
 export interface DrainResult {
   /** Rows the server acknowledged, removed from the queue. */
   acknowledged: number;
+  /** Rows removed unsent because their match was deleted (#214). */
+  discarded: number;
   /** Rows this run parked as failed. */
   parked: number;
   /** True when a 401 stopped the run: the session is gone, the queue is kept. */
@@ -66,6 +69,7 @@ export interface DrainResult {
 /** What one pass over the queue adds to the run beyond the row counts. */
 interface Sweep {
   acknowledged: number;
+  discarded: number;
   parked: number;
   unauthorized: boolean;
   transient: boolean;
@@ -77,7 +81,7 @@ export async function drainOutbox(coachId: string, deviceId: string): Promise<Dr
   const result = await navigator.locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) =>
     lock === null ? null : await drainWithBackoff(coachId, deviceId),
   );
-  return result ?? { acknowledged: 0, parked: 0, unauthorized: false, skipped: true };
+  return result ?? { acknowledged: 0, discarded: 0, parked: 0, unauthorized: false, skipped: true };
 }
 
 /**
@@ -97,10 +101,17 @@ export function isDatabaseClosed(error: unknown): boolean {
 }
 
 async function drainWithBackoff(coachId: string, deviceId: string): Promise<DrainResult> {
-  const totals: DrainResult = { acknowledged: 0, parked: 0, unauthorized: false, skipped: false };
+  const totals: DrainResult = {
+    acknowledged: 0,
+    discarded: 0,
+    parked: 0,
+    unauthorized: false,
+    skipped: false,
+  };
   for (let attempt = 0; ; attempt++) {
     const sweep = await sweepQueue(coachId, deviceId);
     totals.acknowledged += sweep.acknowledged;
+    totals.discarded += sweep.discarded;
     totals.parked += sweep.parked;
     if (sweep.unauthorized) totals.unauthorized = true;
     const backoff = BACKOFF_DELAYS_MS[attempt];
@@ -114,6 +125,7 @@ async function drainWithBackoff(coachId: string, deviceId: string): Promise<Drai
 async function sweepQueue(coachId: string, deviceId: string): Promise<Sweep> {
   const sweep: Sweep = {
     acknowledged: 0,
+    discarded: 0,
     parked: 0,
     unauthorized: false,
     transient: false,
@@ -174,6 +186,11 @@ async function flushMatch(
       case "unauthorized":
         sweep.unauthorized = true;
         return true;
+      case "gone":
+        // A match that cannot be created has nothing for its points to attach
+        // to, so the whole group goes, not just the create.
+        await discard(rows, sweep);
+        return false;
       case "refused":
         await park(rows, refusal(verdict.response, error), sweep);
         return false;
@@ -203,6 +220,11 @@ async function flushMatch(
       case "unauthorized":
         sweep.unauthorized = true;
         return true;
+      case "gone":
+        // The match was deleted, which every row behind this batch would hit
+        // too, so they are discarded on the same grouping as a park.
+        await discard(pointRows.slice(start), sweep);
+        return false;
       case "refused":
         // The batch is refused whole, and the refusal is durable state the
         // rest of this match's rows would hit too, so they park together.
@@ -247,16 +269,19 @@ function mapBatch(rows: readonly OutboxRow[], start: number): Batch {
 }
 
 type Verdict =
-  { kind: "ok" | "transient" | "unauthorized" } | { kind: "refused"; response: Response };
+  { kind: "ok" | "transient" | "unauthorized" | "gone" } | { kind: "refused"; response: Response };
 
 /**
  * No response means fetch itself threw: a network failure. 429 sits with the
  * 5xx bucket because the rate limiter's refusal clears by itself, where the
- * ingest 4xxs conflict with durable state no amount of waiting changes.
+ * ingest 4xxs conflict with durable state no amount of waiting changes. Of
+ * those, only 410 discards: it is our API's tombstone for a match the coach
+ * deleted, and nothing else in this stack sends one (#214).
  */
 function classify(response: Response | undefined): Verdict {
   if (response === undefined) return { kind: "transient" };
   if (response.status === 401) return { kind: "unauthorized" };
+  if (response.status === 410) return { kind: "gone" };
   if (response.status === 429 || response.status >= 500) return { kind: "transient" };
   return response.ok ? { kind: "ok" } : { kind: "refused", response };
 }
@@ -264,6 +289,17 @@ function classify(response: Response | undefined): Verdict {
 async function acknowledge(rows: readonly OutboxRow[], sweep: Sweep): Promise<void> {
   await remove(rows.map((row) => row.id));
   sweep.acknowledged += rows.length;
+}
+
+/**
+ * Removes rows unsent because the coach deleted the match they belong to, on
+ * this device or another. Not parked, because a failed count would ask them to
+ * act on their own decision. Every other row that can never land does park, so
+ * one they did not choose to lose stays visible (#214).
+ */
+async function discard(rows: readonly OutboxRow[], sweep: Sweep): Promise<void> {
+  await remove(rows.map((row) => row.id));
+  sweep.discarded += rows.length;
 }
 
 async function park(
