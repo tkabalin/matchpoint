@@ -64,6 +64,8 @@ export function buildMatchRow(fields: {
 /**
  * Writes rows into the outbox exactly as a capture tap's `append` would land
  * them, once the app's own Dexie instance has the store open (see the poll).
+ * Written outside Dexie, though, so the drain's liveQuery nudge never fires for
+ * these: a seeded row waits for a launch or for connectivity to return.
  */
 export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<void> {
   await expect

@@ -20,6 +20,13 @@ import {
  * taps, which don't exist yet; upgrade the seeding once that UI lands. Only
  * match rows are seeded: the point mapper throws until #210 gives the capture
  * model its score stamps, so the point half of the round trip waits there too.
+ *
+ * What #118 still leaves uncovered, and what each waits on: a multi-batch flush
+ * interrupted between chunks, the completed-match fence, and interleaved points
+ * all need point rows (#210); retrying a parked match by hand needs the sync
+ * status UI (#115); the capture-claim conflict needs both, and re-specifying,
+ * since ingest_points deliberately takes another device's batch while a claim is
+ * held rather than refusing it (#197).
  */
 
 /** OWNER_KEY in src/lib/local-data.ts: whose rows a drain flushes. */
@@ -50,14 +57,26 @@ async function recordedOwner(page: Page): Promise<string> {
   return owner as string;
 }
 
-/** A player of this coach's for seeded matches to track, via the live API. */
-async function createPlayer(page: Page): Promise<string> {
+/**
+ * A player of this coach's for seeded matches to track, via the live API. The
+ * surname is a parameter for the one spec that reads the roster back: the coach
+ * is shared, so its rows include every other spec's players.
+ */
+async function createPlayer(page: Page, lastName = `Player ${Date.now()}`): Promise<string> {
   const response = await postJson(page, "/api/players", {
     first_name: "Offline",
-    last_name: `Player ${Date.now()}`,
+    last_name: lastName,
   });
   expect(response.status()).toBe(201);
   return ((await response.json()) as { id: string }).id;
+}
+
+/** Removes a player, as a second device could while this one is offline. */
+async function deletePlayer(page: Page, playerId: string): Promise<void> {
+  const response = await page.request.delete(`/api/players/${playerId}`, {
+    headers: { origin: originUnderTest() },
+  });
+  expect(response.status()).toBe(204);
 }
 
 /** How many of the coach's matches carry this marker name: the exactly-once probe. */
@@ -76,6 +95,48 @@ async function matchStatus(page: Page, matchId: string): Promise<number> {
 async function openHome(page: Page): Promise<void> {
   await page.goto("/home");
   await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+}
+
+/**
+ * Whether the persisted read cache holds this text yet: the database and store
+ * src/lib/query-persist.ts names, holding one dehydrated snapshot of every
+ * query. Saves are throttled, so a spec that goes offline without waiting on
+ * this would be testing an empty snapshot.
+ */
+function persistedCacheHolds(page: Page, text: string): Promise<boolean> {
+  return page.evaluate(
+    async ({ dbName, storeName, needle }) => {
+      // Listed before opened, for the reason seedOutbox gives: an unversioned
+      // open would create an empty database that idb-keyval then cannot upgrade.
+      if (!(await indexedDB.databases()).some((db) => db.name === dbName)) return false;
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error as Error);
+      });
+      try {
+        if (!db.objectStoreNames.contains(storeName)) return false;
+        const values = await new Promise<unknown[]>((resolve, reject) => {
+          const request = db.transaction(storeName).objectStore(storeName).getAll();
+          request.onsuccess = () => resolve(request.result as unknown[]);
+          request.onerror = () => reject(request.error as Error);
+        });
+        return values.some((value) => JSON.stringify(value).includes(needle));
+      } finally {
+        db.close();
+      }
+    },
+    { dbName: "matchpoint-query-cache", storeName: "cache", needle: text },
+  );
+}
+
+/** A promise a route handler settles, so a spec can wait on the request itself. */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((settle) => {
+    resolve = settle;
+  });
+  return { promise, resolve };
 }
 
 test.describe("with the service worker", () => {
@@ -129,6 +190,48 @@ test.describe("with the service worker", () => {
     // other page the fallback could have answered with.
     await expect(reopened.getByRole("heading", { name: "Players", level: 1 })).toBeVisible();
   });
+
+  test("the roster and the match list render offline from the persisted cache", async ({
+    page,
+  }) => {
+    await openHome(page);
+    await waitForServiceWorkerControl(page);
+    const coachId = await recordedOwner(page);
+    const stamp = crypto.randomUUID().slice(0, 8);
+    const playerId = await createPlayer(page, `Cached ${stamp}`);
+    const marker = `E2E cached ${stamp}`;
+
+    // Through the queue rather than a hand-written body, so this spec holds no
+    // second copy of the create contract. Offline across the seed, as the specs
+    // above are: a raw IndexedDB write is invisible to the queue's liveQuery, so
+    // connectivity returning is the only trigger this row is guaranteed.
+    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
+    await page.context().setOffline(true);
+    await seedOutbox(page, [row]);
+    await page.context().setOffline(false);
+    await expect.poll(() => matchStatus(page, row.matchId), { timeout: 20_000 }).toBe(200);
+
+    // The one online visit (#116): a list has to have been read once for the
+    // snapshot to carry it. Waited on rather than assumed after each screen,
+    // because the save is throttled and a navigation drops the pending one: the
+    // next boot then restores a snapshot the screen it came from is missing from.
+    await page.goto("/players");
+    await expect(page.getByText(`Offline Cached ${stamp}`)).toBeVisible();
+    await expect
+      .poll(() => persistedCacheHolds(page, `Cached ${stamp}`), { timeout: 20_000 })
+      .toBe(true);
+    await page.goto("/matches");
+    await expect(page.getByText(`vs ${marker}`)).toBeVisible();
+    await expect.poll(() => persistedCacheHolds(page, marker), { timeout: 20_000 }).toBe(true);
+
+    // Both screens with the network down and nothing in memory: the API is not
+    // in the precache, so the rows can only have come from the snapshot.
+    await page.context().setOffline(true);
+    await page.reload();
+    await expect(page.getByText(`vs ${marker}`)).toBeVisible();
+    await page.goto("/players");
+    await expect(page.getByText(`Offline Cached ${stamp}`)).toBeVisible();
+  });
 });
 
 test.describe("drain behaviour", () => {
@@ -166,6 +269,93 @@ test.describe("drain behaviour", () => {
     // The interruption really happened after ingestion, and the retry that
     // converged went through the server's insert-or-ignore, not a second write.
     expect(interceptedStatus).toBe(201);
+    expect(await matchesNamed(page, marker)).toBe(1);
+  });
+
+  test("a flush the tab died in the middle of drains on the next launch", async ({ page }) => {
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const playerId = await createPlayer(page);
+
+    await page.context().setOffline(true);
+    const marker = `E2E killed ${crypto.randomUUID()}`;
+    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
+    await seedOutbox(page, [row]);
+
+    // Forwarded, then never answered: the server has the match and the tab is
+    // closed under a request the client is still waiting on, which is what a
+    // phone reclaiming a backgrounded PWA does to a flush in flight.
+    const sent = deferred<number>();
+    await page.route("**/api/matches", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      const response = await route.fetch();
+      sent.resolve(response.status());
+      await new Promise(() => {});
+    });
+
+    await page.context().setOffline(false);
+    expect(await sent.promise).toBe(201);
+    const context = page.context();
+    await page.close();
+
+    // The relaunch, with its own flush held mid-air: the request arriving at all
+    // is the launch trigger firing with nothing touched, and holding it is what
+    // lets the queue be read before anything acknowledges the row.
+    const relaunched = await context.newPage();
+    const attempted = deferred();
+    const release = deferred();
+    let holding = false;
+    await relaunched.route("**/api/matches", async (route) => {
+      if (route.request().method() !== "POST" || holding) return route.continue();
+      holding = true;
+      attempted.resolve();
+      await release.promise;
+      await route.continue();
+    });
+    await relaunched.goto("/home");
+    await attempted.promise;
+    // The first tab died before it could remove the row, so it is still queued
+    // rather than parked or gone.
+    const kept = await readOutboxRows(relaunched);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ id: row.id, status: "pending" });
+
+    release.resolve();
+    await expect.poll(() => readOutboxRows(relaunched), { timeout: 20_000 }).toHaveLength(0);
+    expect(await matchesNamed(relaunched, marker)).toBe(1);
+  });
+
+  test("a match the server refuses for good parks, and the queue behind it drains", async ({
+    page,
+  }) => {
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const doomedPlayerId = await createPlayer(page);
+    const keptPlayerId = await createPlayer(page);
+    // The player the queued match tracks is off the roster, which is a refusal no
+    // retry can clear: nothing this device sends will make that create land.
+    await deletePlayer(page, doomedPlayerId);
+
+    await page.context().setOffline(true);
+    const marker = `E2E parked ${crypto.randomUUID()}`;
+    const doomed = buildMatchRow({ coachId, playerId: doomedPlayerId, opponentName: marker });
+    const kept = buildMatchRow({ coachId, playerId: keptPlayerId, opponentName: marker });
+    // Doomed first, so the park has to leave the sweep able to reach the match
+    // behind it rather than ending the run.
+    await seedOutbox(page, [doomed, kept]);
+
+    await page.context().setOffline(false);
+    await expect.poll(() => matchStatus(page, kept.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(1);
+    // Parked, not discarded, and carrying the refusal: the coach did not ask to
+    // lose this match, so the row and its reason stay for the sync UI (#115).
+    const parked = await readOutboxRows(page);
+    expect(parked[0]).toMatchObject({
+      id: doomed.id,
+      status: "failed",
+      failure: { status: 404, message: "Unknown player_id" },
+    });
+    expect(await matchStatus(page, doomed.matchId)).toBe(404);
     expect(await matchesNamed(page, marker)).toBe(1);
   });
 
