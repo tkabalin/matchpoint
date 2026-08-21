@@ -93,7 +93,10 @@ def test_a_second_recompute_overwrites_the_row_and_stamps_updated_at(db_session:
     _game(db_session, match, 0, won=True)
     first = recompute_match_sets(db_session, match.id)
     assert first[0].games_won_tracked == 1
-    assert first[0].created_at == first[0].updated_at
+    # clock_timestamp() re-samples the wall clock on every call, unlike now(), so the two
+    # server_defaults on this row are independently evaluated and can differ by a
+    # microsecond even on the same INSERT.
+    assert abs((first[0].updated_at - first[0].created_at).total_seconds()) < 0.01
 
     _game(db_session, match, 1, won=True, is_set_end=True)
     second = recompute_match_sets(db_session, match.id)
