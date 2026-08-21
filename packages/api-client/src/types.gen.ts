@@ -1493,6 +1493,10 @@ export type CreateMatchErrors = {
      */
     401: ErrorDetail;
     /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;
@@ -1781,6 +1785,10 @@ export type IngestPointsErrors = {
      * Points cannot be ingested
      */
     409: ErrorDetail;
+    /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
     /**
      * Validation Error
      */

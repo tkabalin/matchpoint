@@ -38,6 +38,7 @@ MIGRATED_TABLES = frozenset(
         "matches",
         "match_sets",
         "points",
+        "deleted_matches",
     }
 )
 

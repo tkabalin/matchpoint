@@ -26,6 +26,7 @@ from matchpoint_api.models import (
     Coach,
     CoachSession,
     CourtSide,
+    DeletedMatch,
     EmailVerification,
     EndReason,
     Match,
@@ -211,6 +212,18 @@ def make_match(session: Session, **overrides: Any) -> Match:
     session.add(match)
     session.flush()
     return match
+
+
+def make_deleted_match(session: Session, **overrides: Any) -> DeletedMatch:
+    if "coach_id" not in overrides:
+        overrides["coach_id"] = make_coach(session).id
+    # The tombstone `delete_match` leaves behind. `deleted_at` is stamped now unless a
+    # test passes its own, which is how the cases where the window has run out are
+    # arranged without waiting it out.
+    deleted = DeletedMatch(**{"id": uuid.uuid4(), "deleted_at": datetime.now(UTC)} | overrides)
+    session.add(deleted)
+    session.flush()
+    return deleted
 
 
 def make_match_set(session: Session, **overrides: Any) -> MatchSet:

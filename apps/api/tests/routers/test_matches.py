@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.models import (
     Coach,
+    DeletedMatch,
     Match,
     MatchResult,
     MatchSet,
@@ -23,12 +24,15 @@ from matchpoint_api.models import (
 )
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
+    DELETED_MATCH_TTL,
     MATCH_IS_BEING_CAPTURED,
+    MATCH_WAS_DELETED,
     POINT_IN_ANOTHER_MATCH,
     POINT_SEQUENCE_TAKEN,
 )
 from tests.factories import (
     make_coach,
+    make_deleted_match,
     make_match,
     make_match_set,
     make_player,
@@ -127,6 +131,24 @@ def test_create_match_against_another_coachs_player_is_404(
         "/matches",
         json={"player_id": str(other_player.id), "played_on": "2026-08-01"},
     )
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_create_match_for_a_transferred_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The 404 that must not become the 410: redeeming a transfer code takes a player and
+    their matches onto another roster, so a match still queued on this coach's device
+    names a player they no longer own. The coach did not ask to lose it, and the status
+    is what tells the sync layer to show it rather than destroy it."""
+    player = make_player(db_session, coach_id=coach.id)
+    body = {"id": str(uuid.uuid4()), "player_id": str(player.id), "played_on": "2026-08-01"}
+    player.coach_id = make_coach(db_session).id
+    db_session.commit()
+
+    response = client.post("/matches", json=body)
 
     assert response.status_code == 404
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
@@ -416,6 +438,46 @@ def test_create_match_repeated_under_another_player_returns_the_stored_match(
     assert db_session.scalar(select(func.count()).select_from(Match)) == 1
     db_session.expire_all()
     assert stored.player_id == player.id
+
+
+def test_create_match_refuses_an_id_the_coach_deleted(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The resurrection a queued create would otherwise manage: the coach deletes the
+    match from a second device, the first flushes the create it still holds, and the
+    upsert puts the row straight back. Answered 410 and not 404, so the sync layer can
+    destroy the queued row on the one status that says the coach asked for this."""
+    player = make_player(db_session, coach_id=coach.id)
+    body = {"id": str(uuid.uuid4()), "player_id": str(player.id), "played_on": "2026-08-01"}
+    assert client.post("/matches", json=body).status_code == 201
+    assert client.delete(f"/matches/{body['id']}").status_code == 204
+
+    response = client.post("/matches", json=body)
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
+def test_create_match_allows_an_id_whose_delete_has_aged_out(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The refusal lasts as long as an outbox could plausibly hold the create and no
+    longer: one arriving after that is not a row that was queued behind the delete, and
+    the record is left to stop matching rather than swept up by anything."""
+    player = make_player(db_session, coach_id=coach.id)
+    aged = make_deleted_match(
+        db_session, deleted_at=datetime.now(UTC) - DELETED_MATCH_TTL - timedelta(minutes=1)
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/matches",
+        json={"id": str(aged.id), "player_id": str(player.id), "played_on": "2026-08-01"},
+    )
+
+    assert response.status_code == 201
+    assert db_session.get(Match, aged.id) is not None
 
 
 def test_create_match_with_another_coachs_match_id_is_404(
@@ -946,6 +1008,49 @@ def test_delete_match_leaves_another_matchs_points_alone(
 
     assert client.delete(f"/matches/{match.id}").status_code == 204
     assert db_session.scalar(select(Point.id)) == kept.id
+
+
+def test_delete_match_records_the_id_it_freed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """What stops a create still queued on another device from putting the match back.
+    Only the id is kept, and only the delete writes it, so nothing of the match itself
+    survives the request."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+
+    recorded = db_session.get(DeletedMatch, match.id)
+    assert recorded is not None
+    assert recorded.deleted_at > datetime.now(UTC) - timedelta(minutes=1)
+    assert recorded.coach_id == coach.id
+
+
+def test_deleting_a_reused_id_starts_its_window_over(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """An id the window has freed can be used again, so its second delete has to record
+    the id afresh rather than collide with what the first delete left behind, and the
+    new match's own queued create is refused for a full window from that second delete.
+    The row also switches owner: a different coach deleted it the second time, so the
+    first coach's account closure must not be the one that removes it."""
+    player = make_player(db_session, coach_id=coach.id)
+    aged = make_deleted_match(
+        db_session, deleted_at=datetime.now(UTC) - DELETED_MATCH_TTL - timedelta(minutes=1)
+    )
+    original_coach_id = aged.coach_id
+    db_session.commit()
+    body = {"id": str(aged.id), "player_id": str(player.id), "played_on": "2026-08-01"}
+
+    assert client.post("/matches", json=body).status_code == 201
+    assert client.delete(f"/matches/{aged.id}").status_code == 204
+
+    assert client.post("/matches", json=body).status_code == 410
+    recorded = db_session.get(DeletedMatch, aged.id)
+    assert recorded is not None
+    assert recorded.coach_id == coach.id
+    assert recorded.coach_id != original_coach_id
 
 
 def test_delete_match_twice_is_404(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -1663,6 +1768,46 @@ def test_ingest_into_another_coachs_match_is_404(
 def test_ingest_into_an_unknown_match_is_404(client: TestClient) -> None:
     response = client.post(
         f"/matches/{uuid.uuid4()}/points",
+        json={"device_id": str(uuid.uuid4()), "points": [point_payload()]},
+    )
+
+    assert response.status_code == 404
+
+
+def test_ingest_into_a_deleted_match_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The batch a device kept capturing after the coach deleted the match from another
+    one. It can never land, and the coach chose that, which the 404 an unknown id gets
+    could not say: it is the status the sync layer discards the queued points on."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.post(
+        f"/matches/{match_id}/points",
+        json={"device_id": str(uuid.uuid4()), "points": [point_payload()]},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
+
+
+@pytest.mark.usefixtures("coach")
+def test_ingest_into_a_match_whose_delete_has_aged_out_is_404(
+    client: TestClient, db_session: Session
+) -> None:
+    """Past the window the id is an ordinary unknown one again, so the batch falls back
+    to the 404 the route gives anything it cannot reach, and the sync layer shows it."""
+    aged = make_deleted_match(
+        db_session, deleted_at=datetime.now(UTC) - DELETED_MATCH_TTL - timedelta(minutes=1)
+    )
+    db_session.commit()
+
+    response = client.post(
+        f"/matches/{aged.id}/points",
         json={"device_id": str(uuid.uuid4()), "points": [point_payload()]},
     )
 

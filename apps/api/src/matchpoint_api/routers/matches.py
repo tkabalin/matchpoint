@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg.errors import UniqueViolation
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.match_sets import recompute_match_sets
-from matchpoint_api.models import Match, MatchSet, Player, Point
+from matchpoint_api.models import DeletedMatch, Match, MatchSet, Player, Point
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.match import (
     MatchCaptureClaim,
@@ -47,6 +47,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 # Named so a route test can assert the body exactly, the way the transfer-code refusal
 # on the player routes does.
 MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
+MATCH_WAS_DELETED = "Match was deleted"
 POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
 POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
 
@@ -55,6 +56,13 @@ POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against anothe
 # outlasts any plausible match, because a device capturing offline cannot renew, and
 # the release route frees a match sooner when a device is not coming back.
 CAPTURE_CLAIM_TTL = timedelta(hours=4)
+
+# How long a deleted match's id refuses a write naming it. Sized to the outbox and not to
+# the capture claim: what has to elapse is a device finishing with its unsent rows, and
+# ingest_points already takes the backlog of a device whose claim lapsed while it was
+# away. 30 days is auth.py's SESSION_LIFETIME, the figure already chosen here for how long
+# an app left alone stays live. Expiry is lazy: an aged row stops matching (#214).
+DELETED_MATCH_TTL = timedelta(days=30)
 
 
 def match_for_coach(
@@ -84,8 +92,28 @@ def match_for_coach(
     return match
 
 
-# The 404 below stays undeclared, being nothing a caller can act on.
-@router.post("", status_code=201, response_model=MatchRead)
+def deleted_within_window(db: Session, match_id: uuid.UUID) -> bool:
+    """Whether a delete of this id is recent enough to still refuse a write naming it.
+
+    Expiry is compared here rather than in the statement, the lazy way `capture_holder`
+    reads a claim, so an aged row stops matching instead of being swept.
+    """
+    deleted_at = db.scalar(select(DeletedMatch.deleted_at).where(DeletedMatch.id == match_id))
+    return deleted_at is not None and deleted_at > datetime.now(UTC) - DELETED_MATCH_TTL
+
+
+# The 410 is declared because the client branches on it: a match the coach deleted is
+# the one refusal where a queued create is destroyed rather than shown to them, so the
+# sync layer needs a status of its own for it (#214). The 404s stay undeclared, being the
+# same dead end whatever caused them and one the coach did not ask for: a player
+# transferred to another roster answers it too, so a client discarding on 404 would erase
+# a match whose only fault was naming a player who has moved.
+@router.post(
+    "",
+    status_code=201,
+    response_model=MatchRead,
+    responses={410: {"model": ErrorDetail, "description": "Match was deleted"}},
+)
 def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match:
     # Checked here rather than left to the FK constraint so the client gets an error
     # naming the problem instead of a 500 from an IntegrityError. Not 422: FastAPI
@@ -112,6 +140,12 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
         .on_conflict_do_update(index_elements=[Match.id], set_={"id": Match.id})
         .returning(Match)
     ).one()
+    # Read after the insert rather than before it, as ingest_points reads its stray ids: a
+    # delete committing while this statement waited on the row it had locked would take
+    # that row, leaving the upsert to insert it again.
+    if deleted_within_window(db, match.id):
+        db.rollback()
+        raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
     # The id already named a match, and not one of the player it was posted against, so
     # ownership has to be established through that match instead. This coach's own comes
     # back, the first write having won; another coach's gets the match routes' ordinary
@@ -238,11 +272,16 @@ def release_capture(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> 
 
 # One 409 covering every refusal below, as on the capture claim: whichever it is, this
 # batch will never be ingestable, so the sync layer parks it instead of retrying, and it
-# can read that off the status without parsing the sentence.
+# can read that off the status without parsing the sentence. The 410 beside it is
+# declared for the same reason and covers the one case where the batch is discarded
+# rather than parked: the coach deleted the match it was captured against (#214).
 @router.post(
     "/{match_id}/points",
     response_model=list[MatchSetRead],
-    responses={409: {"model": ErrorDetail, "description": "Points cannot be ingested"}},
+    responses={
+        409: {"model": ErrorDetail, "description": "Points cannot be ingested"},
+        410: {"model": ErrorDetail, "description": "Match was deleted"},
+    },
 )
 def ingest_points(
     match_id: uuid.UUID, data: PointBatch, db: DbSession, coach: CurrentCoach
@@ -255,6 +294,12 @@ def ingest_points(
     1 MB request body limit is the real bound, which a batch of points carrying long
     notes reaches sooner.
     """
+    # Asked before the ownership read, which cannot tell a deleted match from one that
+    # never existed: the row is gone either way, and only the tombstone says the coach
+    # asked for it. Nothing else turns on the order, since a match cannot exist while a
+    # tombstone inside the window names it, create_match refusing to re-create one.
+    if deleted_within_window(db, match_id):
+        raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
     # Locked because this reads the result and the claim and then writes points
     # against them, and because delete_match deletes the points and then the match:
     # unlocked, a batch could land under a delete that had already erased its points.
@@ -347,5 +392,16 @@ def delete_match(
     # still holding any would refuse the delete outright. The derived set rows follow it
     # out through the schema's one cascade instead.
     db.execute(delete(Point).where(Point.match_id == match.id))
+    # The id is remembered for as long as a create queued elsewhere could still name it,
+    # so flushing an already-acknowledged create cannot put the match back. DO UPDATE
+    # because an id the window has freed can be used again, and deleted again.
+    db.execute(
+        insert(DeletedMatch)
+        .values(id=match.id, coach_id=coach.id)
+        .on_conflict_do_update(
+            index_elements=[DeletedMatch.id],
+            set_={"deleted_at": func.clock_timestamp(), "coach_id": coach.id},
+        )
+    )
     db.delete(match)
     db.commit()

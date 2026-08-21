@@ -1,5 +1,6 @@
 from matchpoint_api.models.coach import Coach
 from matchpoint_api.models.coach_session import CoachSession
+from matchpoint_api.models.deleted_match import DeletedMatch
 from matchpoint_api.models.email_verification import EmailVerification
 from matchpoint_api.models.match import Match, MatchResult, ScoringSystem, Surface
 from matchpoint_api.models.match_set import MatchSet, MatchSide
@@ -26,6 +27,7 @@ __all__ = [
     "CoachSession",
     "CourtDepth",
     "CourtSide",
+    "DeletedMatch",
     "DominantHand",
     "EmailVerification",
     "EndReason",
