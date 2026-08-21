@@ -19,6 +19,7 @@
 import type {
   CourtSide,
   CourtZone,
+  DeuceOrAd,
   EndReason,
   FailureMode,
   ReturnOutcome,
@@ -45,6 +46,10 @@ export interface PointDraft {
   matchId: string;
   sequence: number;
   server: Server;
+  // The deuce/advantage state this point started under — fixed for the point's whole
+  // life, same as `server`. The caller's job to derive (via `state.ts`'s
+  // `deuceOrAdFor`) and hand in at `startPoint`, not something this module computes.
+  deuceOrAd: DeuceOrAd | null;
   serves: ServeAttempt[];
   returnOutcome: ReturnOutcome | null;
   won: boolean | null;
@@ -58,11 +63,17 @@ export interface PointDraft {
   rallyLengthBucket: RallyBucket | null;
 }
 
-function freshDraft(matchId: string, sequence: number, server: Server): PointDraft {
+function freshDraft(
+  matchId: string,
+  sequence: number,
+  server: Server,
+  deuceOrAd: DeuceOrAd | null,
+): PointDraft {
   return {
     matchId,
     sequence,
     server,
+    deuceOrAd,
     serves: [],
     returnOutcome: null,
     won: null,
@@ -118,13 +129,17 @@ export interface CaptureState {
  * responsibility to derive (via `state.ts`'s `nextBoxFor`) and required exactly when
  * `server` is `"TRACKED"` — enforced here so a caller can't start a tracked-serving
  * point without it, or hand one in for an opponent-serving point where it would be
- * meaningless.
+ * meaningless. `deuceOrAd` is likewise the caller's to derive (via `state.ts`'s
+ * `deuceOrAdFor`), but unlike `box` it's never checked against `server` here — nothing
+ * about who's serving constrains whether the game itself happens to be at deuce or
+ * advantage, so there's no cross-field invariant to enforce.
  */
 export function startPoint(
   matchId: string,
   sequence: number,
   server: Server,
   box: CourtSide | null,
+  deuceOrAd: DeuceOrAd | null,
 ): CaptureState {
   if (server === "TRACKED" && box === null) {
     throw new Error("box is required when server is TRACKED");
@@ -134,7 +149,7 @@ export function startPoint(
   }
   return {
     step: { name: "SERVE", number: 1 },
-    draft: freshDraft(matchId, sequence, server),
+    draft: freshDraft(matchId, sequence, server, deuceOrAd),
     history: [],
     box,
   };
@@ -239,9 +254,10 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       // one — matchId/sequence/server are the only three fields that never change
       // across a draft's life, so rebuilding from just those is exactly "start over."
       // History is cleared, not preserved: the discarded rally is meant to be gone,
-      // not something to step back into. box carries over unchanged — it's the same
-      // point being replayed, so the service box it's played from doesn't change.
-      return startPoint(draft.matchId, draft.sequence, draft.server, state.box);
+      // not something to step back into. box and deuceOrAd both carry over unchanged
+      // — it's the same point being replayed, so neither the service box nor the
+      // game score it's played under changes.
+      return startPoint(draft.matchId, draft.sequence, draft.server, state.box, draft.deuceOrAd);
     }
     throw invalidAction(action, step);
   }

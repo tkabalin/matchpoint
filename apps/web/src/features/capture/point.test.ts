@@ -14,6 +14,7 @@ function pointData(overrides: Record<string, unknown> = {}) {
     timestamp: 1_700_000_000_000,
     sequence: 0,
     server: "TRACKED",
+    deuceOrAd: null,
     serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
     returnOutcome: null,
     won: true,
@@ -82,6 +83,22 @@ describe("Point.create structural validation", () => {
 
   test("rejects an unknown server", () => {
     expect(() => Point.create(pointData({ server: "REFEREE" }))).toThrow(/server/);
+  });
+
+  describe("deuceOrAd", () => {
+    test.each(["DEUCE", "AD_TRACKED", "AD_OPPONENT"] as const)("accepts %s", (deuceOrAd) => {
+      const point = Point.create(pointData({ deuceOrAd }));
+      expect(point.deuceOrAd).toBe(deuceOrAd);
+    });
+
+    test("accepts null — most points aren't at deuce or advantage", () => {
+      const point = Point.create(pointData({ deuceOrAd: null }));
+      expect(point.deuceOrAd).toBeNull();
+    });
+
+    test("rejects an unknown deuceOrAd", () => {
+      expect(() => Point.create(pointData({ deuceOrAd: "AD" }))).toThrow(/deuceOrAd/);
+    });
   });
 
   describe("serves", () => {

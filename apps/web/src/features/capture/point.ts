@@ -82,6 +82,17 @@ export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "MID", "DEEP"];
 export type RallyBucket = "B1" | "B2" | "B3" | "B4";
 export const RALLY_BUCKETS: readonly RallyBucket[] = ["B1", "B2", "B3", "B4"];
 
+// The game-score state this point was served under — not to be confused with
+// CourtSide's "DEUCE"/"AD" above, which names the *physical* court a serve is hit
+// from. AD_TRACKED/AD_OPPONENT rather than a bare "AD" so the two can't be confused
+// on sight. Null whenever the game hadn't reached 40-40 yet, or under no-ad scoring,
+// where sudden death never distinguishes a deuce point from any other 40-40 tie (see
+// state.ts's pointCallFor). Derived before capture starts (state.ts's deuceOrAdFor),
+// same as `server` — Point.create checks only that the value is shape-valid, not
+// that it's the tennis-correct one for how the point actually played out.
+export type DeuceOrAd = "DEUCE" | "AD_TRACKED" | "AD_OPPONENT";
+export const DEUCE_OR_ADS: readonly DeuceOrAd[] = ["DEUCE", "AD_TRACKED", "AD_OPPONENT"];
+
 // --- Compound types ----------------------------------------------------------------
 
 // Three zones per box, not raw coordinates — a coach watching live cannot place a
@@ -162,6 +173,9 @@ export class Point {
   // Ordering within the match; scoring (state.ts) replays points in this order.
   readonly sequence: number;
   readonly server: Server;
+  // The deuce/advantage state this point was served under — null before 40-40, or
+  // under no-ad scoring. See DeuceOrAd's own comment above.
+  readonly deuceOrAd: DeuceOrAd | null;
   // Length 1 or 2 — length 2 implies a first-serve fault. Both faulted implies
   // endReason DOUBLE_FAULT.
   readonly serves: readonly ServeAttempt[];
@@ -190,6 +204,7 @@ export class Point {
     timestamp: number;
     sequence: number;
     server: Server;
+    deuceOrAd: DeuceOrAd | null;
     serves: readonly ServeAttempt[];
     returnOutcome: ReturnOutcome | null;
     won: boolean;
@@ -207,6 +222,7 @@ export class Point {
     this.timestamp = fields.timestamp;
     this.sequence = fields.sequence;
     this.server = fields.server;
+    this.deuceOrAd = fields.deuceOrAd;
     this.serves = fields.serves;
     this.returnOutcome = fields.returnOutcome;
     this.won = fields.won;
@@ -246,6 +262,11 @@ export class Point {
       throw new Error(`invalid server: ${String(data.server)}`);
     }
     const server = data.server as Server;
+
+    if (data.deuceOrAd !== null && !DEUCE_OR_ADS.includes(data.deuceOrAd as DeuceOrAd)) {
+      throw new Error(`invalid deuceOrAd: ${String(data.deuceOrAd)}`);
+    }
+    const deuceOrAd = data.deuceOrAd as DeuceOrAd | null;
 
     if (!Array.isArray(data.serves) || (data.serves.length !== 1 && data.serves.length !== 2)) {
       throw new Error("serves must be an array of length 1 or 2");
@@ -397,6 +418,7 @@ export class Point {
       timestamp: data.timestamp,
       sequence: data.sequence,
       server,
+      deuceOrAd,
       serves,
       returnOutcome,
       won: data.won,
@@ -422,6 +444,7 @@ export class Point {
       timestamp: this.timestamp,
       sequence: this.sequence,
       server: this.server,
+      deuceOrAd: this.deuceOrAd,
       // Deep-copied, not the live array/objects: serves holds nested location objects,
       // so a shallow spread alone would let a caller mutate this Point through them.
       serves: this.serves.map(copyServeAttempt),

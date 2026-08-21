@@ -14,7 +14,7 @@
 import type { Match, ScoringSystem } from "./match";
 import { MatchSet } from "./match-set";
 import type { TiebreakScore } from "./match-set";
-import type { CourtSide, Point } from "./point";
+import type { CourtSide, DeuceOrAd, Point } from "./point";
 
 // --- ScoringSystem-derived rules ---------------------------------------------
 //
@@ -766,6 +766,65 @@ export interface Scoreboard {
   opponent: string[];
 }
 
+// Slices the current, in-progress game's own Points out of the full, ordered match
+// log and tallies them — the one reslice scoreboardFor and deuceOrAdFor both need,
+// since neither MatchSetsState nor SetState keeps the per-game split itself, only
+// the count (see SetState.currentGamePoints's own comment on why).
+function currentGameStateFor(
+  points: readonly Point[],
+  state: SetState,
+  trackedPlayerId: string,
+  opponentId: string,
+  isAdScoring: boolean,
+): GameState {
+  const currentGamePoints = points.slice(points.length - state.currentGamePoints);
+  return gameStateFor(currentGamePoints, trackedPlayerId, opponentId, isAdScoring);
+}
+
+// DEUCE, or advantage to whoever leads by exactly 1 — null before 40-40, or whenever
+// isAdScoring is false (no-ad sudden death never distinguishes a deuce point from any
+// other 40-40 tie, the game ends the instant either side leads by 1). Shared by
+// pointCallFor (the display string) and deuceOrAdFor (the stored value — see
+// point.ts's DeuceOrAd) so the two can't drift on what counts as deuce/advantage.
+function deuceOrAdFromCounts(
+  trackedPlayerPoints: number,
+  opponentPoints: number,
+  isAdScoring: boolean,
+): DeuceOrAd | null {
+  if (!isAdScoring || trackedPlayerPoints < 3 || opponentPoints < 3) return null;
+  const lead = trackedPlayerPoints - opponentPoints;
+  if (lead === 0) return "DEUCE";
+  return lead > 0 ? "AD_TRACKED" : "AD_OPPONENT";
+}
+
+/**
+ * The deuce/advantage state the *current, in-progress* game is at — the stored-value
+ * counterpart to pointCallFor's display strings (see point.ts's DeuceOrAd). Null
+ * whenever the game hasn't reached 40-40 yet, there's no game in progress at all
+ * (mid-tiebreak — state.currentGamePoints is 0 there, see setStateFor), or the
+ * scoring system doesn't play with ad.
+ *
+ * Takes the same `points`/`state` split scoreboardFor does, for the same reason:
+ * `state.currentGamePoints` only survives as a count, not the Points themselves, so
+ * the current game has to be resliced out of the full, ordered match log.
+ */
+export function deuceOrAdFor(
+  points: readonly Point[],
+  state: SetState,
+  trackedPlayerId: string,
+  opponentId: string,
+  isAdScoring: boolean,
+): DeuceOrAd | null {
+  const { trackedPlayerPoints, opponentPoints } = currentGameStateFor(
+    points,
+    state,
+    trackedPlayerId,
+    opponentId,
+    isAdScoring,
+  );
+  return deuceOrAdFromCounts(trackedPlayerPoints, opponentPoints, isAdScoring);
+}
+
 /**
  * The live call for a game still in progress — "40", "AD", or one of POINT_LABELS,
  * one per side. Takes the raw point counts rather than a Point[] slice, the same
@@ -782,16 +841,14 @@ function pointCallFor(
 ): { trackedPlayer: string; opponent: string } {
   const label = (points: number) => (points < 3 ? POINT_LABELS[points] : undefined) ?? "40";
 
-  if (trackedPlayerPoints < 3 || opponentPoints < 3 || !isAdScoring) {
+  const deuceOrAd = deuceOrAdFromCounts(trackedPlayerPoints, opponentPoints, isAdScoring);
+  if (deuceOrAd === null) {
     // No-ad sudden death never goes past "40" apiece — the game ends the instant
     // either side leads by 1, so both at "40" is the only reachable undecided state.
     return { trackedPlayer: label(trackedPlayerPoints), opponent: label(opponentPoints) };
   }
-
-  // Both at 3+ under ad scoring: deuce, or advantage to whoever leads by 1.
-  const lead = trackedPlayerPoints - opponentPoints;
-  if (lead === 0) return { trackedPlayer: "40", opponent: "40" };
-  return lead > 0
+  if (deuceOrAd === "DEUCE") return { trackedPlayer: "40", opponent: "40" };
+  return deuceOrAd === "AD_TRACKED"
     ? { trackedPlayer: "AD", opponent: "40" }
     : { trackedPlayer: "40", opponent: "AD" };
 }
@@ -809,9 +866,10 @@ function pointCallFor(
  * Takes the same inputs as matchSetsFor and composes it rather than a
  * MatchSetsState directly — the current game's own point split isn't part of that
  * return value (only the summed currentGamePoints is, which is all nextBoxFor
- * needs), so this re-slices `points` itself: the trailing `currentGamePoints`
- * entries of the full, ordered match log are exactly that game's points, since
- * nothing has been recorded after them and the game before them already resolved.
+ * needs), so `currentGameStateFor` re-slices `points` on its behalf: the trailing
+ * `currentGamePoints` entries of the full, ordered match log are exactly that game's
+ * points, since nothing has been recorded after them and the game before them
+ * already resolved.
  */
 export function scoreboardFor(
   points: readonly Point[],
@@ -854,8 +912,13 @@ export function scoreboardFor(
     trackedPlayer.push(String(state.tiebreak?.trackedPlayerPoints ?? 0));
     opponent.push(String(state.tiebreak?.opponentPoints ?? 0));
   } else {
-    const currentGamePoints = points.slice(points.length - state.currentGamePoints);
-    const currentGame = gameStateFor(currentGamePoints, trackedPlayerId, opponentId, isAdScoring);
+    const currentGame = currentGameStateFor(
+      points,
+      state,
+      trackedPlayerId,
+      opponentId,
+      isAdScoring,
+    );
     const call = pointCallFor(
       currentGame.trackedPlayerPoints,
       currentGame.opponentPoints,

@@ -5,6 +5,7 @@ import type { MatchOutcomeOverride, ScoringSystem } from "./match";
 import { MatchSet } from "./match-set";
 import { Point } from "./point";
 import {
+  deuceOrAdFor,
   finalWinnerFor,
   gameStateFor,
   isAdScoringFor,
@@ -170,6 +171,7 @@ function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {
     timestamp: 1_700_000_000_000 + sequence,
     sequence,
     server: "TRACKED",
+    deuceOrAd: null,
     serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
     returnOutcome: null,
     won: winner === TRACKED_ID,
@@ -1165,6 +1167,72 @@ describe("finalWinnerFor", () => {
     // 2-1 decides a best-of-3 match but not a best-of-5 one.
     expect(finalWinnerFor(matchOf("traditional"), sets)).toBe(TRACKED_ID);
     expect(finalWinnerFor(matchOf("mens_grand_slam"), sets)).toBeNull();
+  });
+});
+
+describe("deuceOrAdFor", () => {
+  // A SetState with just the one field deuceOrAdFor actually reads besides `points` —
+  // trackedPlayerGames/opponentGames/tiebreak/winner don't affect the game-score
+  // reslice, only currentGamePoints does.
+  function stateWithCurrentGamePoints(currentGamePoints: number) {
+    return {
+      trackedPlayerGames: 0,
+      opponentGames: 0,
+      tiebreak: null,
+      winner: null,
+      currentGamePoints,
+    };
+  }
+
+  test("null before 40-40 — not enough points played yet", () => {
+    const points = pointsFor(2, 1);
+    expect(
+      deuceOrAdFor(points, stateWithCurrentGamePoints(3), TRACKED_ID, OPPONENT_ID, true),
+    ).toBeNull();
+  });
+
+  test("DEUCE at 3-3", () => {
+    const points = pointsFor(3, 3);
+    expect(deuceOrAdFor(points, stateWithCurrentGamePoints(6), TRACKED_ID, OPPONENT_ID, true)).toBe(
+      "DEUCE",
+    );
+  });
+
+  test("AD_TRACKED once the tracked player leads by 1 past deuce", () => {
+    const points = [...pointsFor(3, 3), pointWonBy(TRACKED_ID)];
+    expect(deuceOrAdFor(points, stateWithCurrentGamePoints(7), TRACKED_ID, OPPONENT_ID, true)).toBe(
+      "AD_TRACKED",
+    );
+  });
+
+  test("AD_OPPONENT once the opponent leads by 1 past deuce", () => {
+    const points = [...pointsFor(3, 3), pointWonBy(OPPONENT_ID)];
+    expect(deuceOrAdFor(points, stateWithCurrentGamePoints(7), TRACKED_ID, OPPONENT_ID, true)).toBe(
+      "AD_OPPONENT",
+    );
+  });
+
+  test("null under no-ad scoring, even at 3-3 — sudden death never calls advantage", () => {
+    const points = pointsFor(3, 3);
+    expect(
+      deuceOrAdFor(points, stateWithCurrentGamePoints(6), TRACKED_ID, OPPONENT_ID, false),
+    ).toBeNull();
+  });
+
+  test("null mid-tiebreak — currentGamePoints is 0 there, so the reslice is empty", () => {
+    const points = pointsFor(3, 3);
+    expect(
+      deuceOrAdFor(points, stateWithCurrentGamePoints(0), TRACKED_ID, OPPONENT_ID, true),
+    ).toBeNull();
+  });
+
+  test("composes with matchSetsFor end to end: 6 points into a tied game is deuce", () => {
+    const points = pointsFor(3, 3);
+    const liveSets = matchSetsFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    if (liveSets.currentSet === null) throw new Error("expected a current set");
+    expect(deuceOrAdFor(points, liveSets.currentSet.state, TRACKED_ID, OPPONENT_ID, true)).toBe(
+      "DEUCE",
+    );
   });
 });
 

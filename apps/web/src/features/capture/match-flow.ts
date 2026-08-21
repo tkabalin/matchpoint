@@ -20,8 +20,16 @@
 import { startPoint } from "./capture-flow";
 import type { CaptureState } from "./capture-flow";
 import { Match } from "./match";
-import type { Point, Server } from "./point";
-import { finalWinnerFor, matchSetsFor, nextBoxFor, nextServerFor, otherIdOf } from "./state";
+import type { DeuceOrAd, Point, Server } from "./point";
+import {
+  deuceOrAdFor,
+  finalWinnerFor,
+  isAdScoringFor,
+  matchSetsFor,
+  nextBoxFor,
+  nextServerFor,
+  otherIdOf,
+} from "./state";
 import type { MatchSetsState } from "./state";
 
 /**
@@ -59,12 +67,36 @@ export function nextServerRoleFor(liveSets: MatchSetsState, match: Match): Serve
 }
 
 /**
+ * The deuce/advantage state the next point begins under — `state.ts`'s `deuceOrAdFor`
+ * needs a `SetState`, not the `MatchSetsState` `nextServerRoleFor` already takes, so
+ * this unwraps `liveSets.currentSet` the same way `nextBoxFor`'s own callers do. Null
+ * when there's no current set at all (mid-match, between sets — see MatchSetsState's
+ * own comment on when that happens) since there's no in-progress game to be at
+ * deuce/advantage in.
+ */
+export function deuceOrAdForNextPoint(
+  match: Match,
+  liveSets: MatchSetsState,
+  points: readonly Point[],
+): DeuceOrAd | null {
+  if (liveSets.currentSet === null) return null;
+  return deuceOrAdFor(
+    points,
+    liveSets.currentSet.state,
+    match.trackedPlayerId,
+    match.opponentId,
+    isAdScoringFor(match.scoringSystem),
+  );
+}
+
+/**
  * Everything needed to start capturing the next point, derived from what's already
  * committed — the composing entry point `capture-flow.ts`'s own doc comment names as
  * this module's job. Re-derives nothing: calls `matchSetsFor`, `nextServerRoleFor`,
- * `nextSequenceFor`, `state.ts`'s `nextBoxFor`, and `capture-flow.startPoint`, in
- * that order. `box` is only ever derived when the tracked player is serving — it's
- * meaningless (and `startPoint` rejects it) when the opponent is.
+ * `nextSequenceFor`, `state.ts`'s `nextBoxFor`, `deuceOrAdForNextPoint`, and
+ * `capture-flow.startPoint`, in that order. `box` is only ever derived when the
+ * tracked player is serving — it's meaningless (and `startPoint` rejects it) when the
+ * opponent is; `deuceOrAd` has no such restriction (see `startPoint`'s own comment).
  */
 export function startNextPoint(match: Match, points: readonly Point[]): CaptureState {
   const liveSets = matchSetsFor(
@@ -77,7 +109,8 @@ export function startNextPoint(match: Match, points: readonly Point[]): CaptureS
   const server = nextServerRoleFor(liveSets, match);
   const sequence = nextSequenceFor(points);
   const box = server === "TRACKED" ? nextBoxFor(liveSets, match.scoringSystem) : null;
-  return startPoint(match.matchId, sequence, server, box);
+  const deuceOrAd = deuceOrAdForNextPoint(match, liveSets, points);
+  return startPoint(match.matchId, sequence, server, box, deuceOrAd);
 }
 
 /**

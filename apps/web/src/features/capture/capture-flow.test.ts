@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 
 import { commitDraft, startPoint, transition } from "./capture-flow";
 import type { CaptureState, PointDraft } from "./capture-flow";
+import type { DeuceOrAd } from "./point";
 import { Point } from "./point";
 
 const MATCH_ID = "match-1";
@@ -10,13 +11,13 @@ const AD_ZONE = { box: "AD", target: "WIDE" } as const;
 const COURT_ZONE = { half: "DEUCE", depth: "MID" } as const;
 
 /** Starts a tracked-serving point — box defaults to DEUCE, matching SERVE_ZONE. */
-function startTracked(box: "DEUCE" | "AD" = "DEUCE") {
-  return startPoint(MATCH_ID, 0, "TRACKED", box);
+function startTracked(box: "DEUCE" | "AD" = "DEUCE", deuceOrAd: DeuceOrAd | null = null) {
+  return startPoint(MATCH_ID, 0, "TRACKED", box, deuceOrAd);
 }
 
 /** Starts an opponent-serving point — box is always null, opponent placement is out of scope. */
-function startOpponent() {
-  return startPoint(MATCH_ID, 0, "OPPONENT", null);
+function startOpponent(deuceOrAd: DeuceOrAd | null = null) {
+  return startPoint(MATCH_ID, 0, "OPPONENT", null, deuceOrAd);
 }
 
 /** The draft startPoint produces — override just the fields a test cares about. */
@@ -28,6 +29,7 @@ function freshDraft(
     matchId: MATCH_ID,
     sequence: 0,
     server,
+    deuceOrAd: null,
     serves: [],
     returnOutcome: null,
     won: null,
@@ -61,12 +63,20 @@ describe("startPoint", () => {
   });
 
   test("rejects a null box when server is TRACKED", () => {
-    expect(() => startPoint(MATCH_ID, 0, "TRACKED", null)).toThrow(/box is required/);
+    expect(() => startPoint(MATCH_ID, 0, "TRACKED", null, null)).toThrow(/box is required/);
   });
 
   test("rejects a non-null box when server is OPPONENT", () => {
-    expect(() => startPoint(MATCH_ID, 0, "OPPONENT", "DEUCE")).toThrow(/box must be null/);
+    expect(() => startPoint(MATCH_ID, 0, "OPPONENT", "DEUCE", null)).toThrow(/box must be null/);
   });
+
+  test.each(["AD_TRACKED", "AD_OPPONENT"] as const)(
+    "attaches the given deuceOrAd regardless of who's serving — no cross-check against server",
+    (deuceOrAd) => {
+      expect(startTracked("DEUCE", deuceOrAd).draft.deuceOrAd).toBe(deuceOrAd);
+      expect(startOpponent(deuceOrAd).draft.deuceOrAd).toBe(deuceOrAd);
+    },
+  );
 });
 
 describe("serve — tracked player", () => {
@@ -196,6 +206,15 @@ describe("let", () => {
     });
     const state = transition(afterServe, { type: "TAP_LET" });
     expect(state.box).toBe("AD");
+  });
+
+  test("rally let preserves deuceOrAd unchanged — the same point, replayed", () => {
+    const afterServe = transition(startTracked("DEUCE", "AD_TRACKED"), {
+      type: "TAP_SERVE_IN",
+      target: SERVE_ZONE.target,
+    });
+    const state = transition(afterServe, { type: "TAP_LET" });
+    expect(state.draft.deuceOrAd).toBe("AD_TRACKED");
   });
 
   test("rejects a let from a step other than serve or rally", () => {
@@ -426,6 +445,18 @@ describe("commitDraft", () => {
     expect(point.rallyLengthBucket).toBe("B1");
     expect(point.wing).toBeNull();
     expect(point.ballLocation).toBeNull();
+  });
+
+  test("carries deuceOrAd from the draft straight through to the committed Point", () => {
+    const draft = freshDraft("TRACKED", {
+      deuceOrAd: "AD_OPPONENT",
+      serves: [{ number: 1, outcome: "ACE", location: AD_ZONE }],
+      won: true,
+      endReason: "ACE",
+      rallyLengthBucket: "B1",
+    });
+    const point = commitDraft(draft, "point-1", 1_700_000_000_000);
+    expect(point.deuceOrAd).toBe("AD_OPPONENT");
   });
 
   test("a broken draft (READY reached with no endReason) throws via Point.create, not silently", () => {
