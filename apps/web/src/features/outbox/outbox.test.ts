@@ -9,6 +9,7 @@ import {
   readByMatch,
   readPending,
   remove,
+  removeByMatch,
   retryFailed,
   watchCounts,
   type AppendFailure,
@@ -303,6 +304,31 @@ describe("remove", () => {
     // unfiltered rewrite of it would clear the whole unsynced queue.
     await remove([]);
 
+    expect(await readPending(COACH_ID)).toHaveLength(1);
+  });
+});
+
+describe("removeByMatch", () => {
+  test("clears one match's rows, parked ones included, and counts them", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+    await append(pointEntry("p1"));
+    await append(pointEntry("p2"));
+    await append(pointEntry("other", { matchId: OTHER_MATCH_ID }));
+    await markFailed(["p2"], PARKED);
+
+    const removed = await removeByMatch(MATCH_ID);
+
+    // Parked rows go with the pending ones: a coach who has deleted the match
+    // is never going to retry its refusals, and nothing else clears them.
+    expect(removed).toBe(3);
+    expect(await readByMatch(MATCH_ID)).toEqual([]);
+    expect((await readByMatch(OTHER_MATCH_ID)).map((row) => row.id)).toEqual(["other"]);
+  });
+
+  test("answers zero for a match with nothing queued", async () => {
+    await append(pointEntry("p1"));
+
+    expect(await removeByMatch(OTHER_MATCH_ID)).toBe(0);
     expect(await readPending(COACH_ID)).toHaveLength(1);
   });
 });

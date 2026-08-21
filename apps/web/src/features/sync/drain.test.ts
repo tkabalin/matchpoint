@@ -5,7 +5,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createMatch } from "@/features/capture/match";
 import type { Point } from "@/features/capture/point";
 import { outboxDb, type OutboxEntry, type OutboxFailure } from "@/features/outbox/db";
-import { append, markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
+import {
+  append,
+  markFailed,
+  readByMatch,
+  readPending,
+  remove,
+  removeByMatch,
+} from "@/features/outbox/outbox";
 
 import { BACKOFF_DELAYS_MS, drainOutbox, MAX_POINTS_PER_BATCH } from "./drain";
 
@@ -383,6 +390,36 @@ describe("flushing", () => {
     const batch = zPointBatch.parse(requests.at(-1)!.body);
     expect(batch.points.map((point) => point.id)).toEqual([uid("b1")]);
     expect(await pendingIds()).toEqual([]);
+  });
+
+  test("sends nothing for a match purged while the drain is mid-flight", async () => {
+    // The coach deletes match B while A's create is on the wire. B's rows are
+    // re-read just before B would be flushed, so the purge wins and B never
+    // goes out. A purge of the match in flight is the server's to settle.
+    const requests = stubTransport(async (request) => {
+      if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {
+        await removeByMatch(MATCH_B);
+      }
+      return respondOk(request);
+    });
+    await queue(
+      matchEntry(MATCH_A),
+      matchEntry(MATCH_B),
+      pointEntry("b1", MATCH_B, 0),
+      pointEntry("b2", MATCH_B, 1),
+    );
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual(["/matches"]);
+    expect(await readByMatch(MATCH_B)).toEqual([]);
+    expect(result).toEqual({
+      acknowledged: 1,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
   });
 });
 

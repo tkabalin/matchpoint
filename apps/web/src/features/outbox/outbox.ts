@@ -130,6 +130,18 @@ export async function remove(ids: readonly string[]): Promise<void> {
 }
 
 /**
+ * Clears one match's rows, parked ones included, and answers how many went. The
+ * device that deleted the match calls this, because rows left in the queue are
+ * re-sent on the next drain, which is how a device puts back the match it just
+ * removed. Call it after the server's delete, never before: a drain works from
+ * a snapshot of a match's rows, so a purge landing mid-flush can still see the
+ * match created, and only the server's tombstone refuses that (#214).
+ */
+export function removeByMatch(matchId: string): Promise<number> {
+  return outboxDb.entries.where("matchId").equals(matchId).delete();
+}
+
+/**
  * Parks rows the server rejected, recording why so the sync status UI can say
  * more than a count. Takes a list because a rejected match parks its dependent
  * points with it, which is one call, not one per point. Parking a match does
