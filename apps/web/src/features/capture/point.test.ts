@@ -14,8 +14,8 @@ function pointData(overrides: Record<string, unknown> = {}) {
     timestamp: 1_700_000_000_000,
     sequence: 0,
     server: "TRACKED",
-    deuceOrAd: null,
-    serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+    courtSide: "DEUCE",
+    serves: [{ number: 1, outcome: "IN", location: "T" }],
     returnOutcome: null,
     won: true,
     endReason: "FORCED",
@@ -85,19 +85,18 @@ describe("Point.create structural validation", () => {
     expect(() => Point.create(pointData({ server: "REFEREE" }))).toThrow(/server/);
   });
 
-  describe("deuceOrAd", () => {
-    test.each(["DEUCE", "AD_TRACKED", "AD_OPPONENT"] as const)("accepts %s", (deuceOrAd) => {
-      const point = Point.create(pointData({ deuceOrAd }));
-      expect(point.deuceOrAd).toBe(deuceOrAd);
+  describe("courtSide", () => {
+    test.each(["DEUCE", "AD"] as const)("accepts %s", (courtSide) => {
+      const point = Point.create(pointData({ courtSide }));
+      expect(point.courtSide).toBe(courtSide);
     });
 
-    test("accepts null — most points aren't at deuce or advantage", () => {
-      const point = Point.create(pointData({ deuceOrAd: null }));
-      expect(point.deuceOrAd).toBeNull();
+    test("rejects an unknown courtSide", () => {
+      expect(() => Point.create(pointData({ courtSide: "LEFT" }))).toThrow(/courtSide/);
     });
 
-    test("rejects an unknown deuceOrAd", () => {
-      expect(() => Point.create(pointData({ deuceOrAd: "AD" }))).toThrow(/deuceOrAd/);
+    test("rejects a null courtSide — unlike deuceOrAd, every point has one", () => {
+      expect(() => Point.create(pointData({ courtSide: null }))).toThrow(/courtSide/);
     });
   });
 
@@ -106,28 +105,20 @@ describe("Point.create structural validation", () => {
       const serves = Array.from({ length }, (_, index) => ({
         number: index + 1,
         outcome: "IN",
-        location: { box: "DEUCE", target: "T" },
+        location: "T",
       }));
       expect(() => Point.create(pointData({ serves }))).toThrow(/serves/);
     });
 
     test("rejects a serve with the wrong number for its position", () => {
       expect(() =>
-        Point.create(
-          pointData({
-            serves: [{ number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
-          }),
-        ),
+        Point.create(pointData({ serves: [{ number: 2, outcome: "IN", location: "T" }] })),
       ).toThrow(/number/);
     });
 
     test("rejects an unknown serve outcome", () => {
       expect(() =>
-        Point.create(
-          pointData({
-            serves: [{ number: 1, outcome: "LET", location: { box: "DEUCE", target: "T" } }],
-          }),
-        ),
+        Point.create(pointData({ serves: [{ number: 1, outcome: "LET", location: "T" }] })),
       ).toThrow();
     });
 
@@ -136,7 +127,7 @@ describe("Point.create structural validation", () => {
         Point.create(
           pointData({
             server: "OPPONENT",
-            serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+            serves: [{ number: 1, outcome: "IN", location: "T" }],
           }),
         ),
       ).toThrow(/OPPONENT/);
@@ -157,31 +148,24 @@ describe("Point.create structural validation", () => {
     test("rejects a FailureMode location on a TRACKED serve that went in", () => {
       expect(() =>
         Point.create(pointData({ serves: [{ number: 1, outcome: "IN", location: "NET" }] })),
-      ).toThrow(/ServeZone/);
+      ).toThrow(/ServeTarget/);
     });
 
-    test("rejects a ServeZone location on a TRACKED serve that faulted", () => {
+    test("rejects a non-FailureMode location on a TRACKED serve that faulted", () => {
       expect(() =>
-        Point.create(
-          pointData({
-            serves: [
-              { number: 1, outcome: "FAULT", location: { box: "DEUCE", target: "T" } },
-              { number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } },
-            ],
-          }),
-        ),
+        Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: "T" }] })),
       ).toThrow(/FailureMode/);
     });
 
-    test("accepts a ServeZone location on an ace", () => {
+    test("accepts a ServeTarget location on an ace", () => {
       const point = Point.create(
         pointData({
-          serves: [{ number: 1, outcome: "ACE", location: { box: "AD", target: "WIDE" } }],
+          serves: [{ number: 1, outcome: "ACE", location: "WIDE" }],
           endReason: "ACE",
           ...NO_CONTACT,
         }),
       );
-      expect(point.serves[0]?.location).toEqual({ box: "AD", target: "WIDE" });
+      expect(point.serves[0]?.location).toBe("WIDE");
     });
 
     test("rejects a lone faulted first serve with no second attempt", () => {
@@ -215,8 +199,8 @@ describe("Point.create structural validation", () => {
         Point.create(
           pointData({
             serves: [
-              { number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } },
-              { number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } },
+              { number: 1, outcome: "IN", location: "T" },
+              { number: 2, outcome: "IN", location: "T" },
             ],
           }),
         ),
@@ -480,28 +464,19 @@ describe("Point.fromJSON / toJSON", () => {
 
 describe("immutability", () => {
   test("mutating the input serves array after create() does not affect the Point", () => {
-    const serves = [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }];
+    const serves = [{ number: 1, outcome: "IN", location: "T" }];
     const point = Point.create(pointData({ serves }));
 
-    serves.push({ number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } });
+    serves.push({ number: 2, outcome: "IN", location: "T" });
 
     expect(point.serves).toHaveLength(1);
-  });
-
-  test("mutating an input serve's location object after create() does not affect the Point", () => {
-    const location = { box: "DEUCE", target: "T" };
-    const point = Point.create(pointData({ serves: [{ number: 1, outcome: "IN", location }] }));
-
-    location.target = "WIDE";
-
-    expect(point.serves[0]?.location).toEqual({ box: "DEUCE", target: "T" });
   });
 
   test("mutating toJSON()'s output does not affect the Point", () => {
     const point = Point.create(pointData());
 
     const snapshot = point.toJSON();
-    snapshot.serves.push({ number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } });
+    snapshot.serves.push({ number: 2, outcome: "IN", location: "T" });
 
     expect(point.serves).toHaveLength(1);
   });
@@ -561,7 +536,7 @@ describe("firstServeIn", () => {
       pointData({
         serves: [
           { number: 1, outcome: "FAULT", location: "NET" },
-          { number: 2, outcome: "IN", location: { box: "DEUCE", target: "T" } },
+          { number: 2, outcome: "IN", location: "T" },
         ],
       }),
     );

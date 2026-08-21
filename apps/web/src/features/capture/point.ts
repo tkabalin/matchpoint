@@ -61,7 +61,7 @@ export const SHOT_TYPES: readonly ShotType[] = ["DRIVE", "VOLLEY", "DROPSHOT", "
 export type ServeOutcome = "IN" | "FAULT" | "ACE";
 export const SERVE_OUTCOMES: readonly ServeOutcome[] = ["IN", "FAULT", "ACE"];
 
-// Shared by ServeZone.box and CourtZone.half — the same two physical sides of the court.
+// Shared by Point.courtSide and CourtZone.half — the same two physical sides of the court.
 export type CourtSide = "DEUCE" | "AD";
 export const COURT_SIDES: readonly CourtSide[] = ["DEUCE", "AD"];
 
@@ -82,27 +82,9 @@ export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "MID", "DEEP"];
 export type RallyBucket = "B1" | "B2" | "B3" | "B4";
 export const RALLY_BUCKETS: readonly RallyBucket[] = ["B1", "B2", "B3", "B4"];
 
-// The game-score state this point was served under — not to be confused with
-// CourtSide's "DEUCE"/"AD" above, which names the *physical* court a serve is hit
-// from. AD_TRACKED/AD_OPPONENT rather than a bare "AD" so the two can't be confused
-// on sight. Null whenever the game hadn't reached 40-40 yet, or under no-ad scoring,
-// where sudden death never distinguishes a deuce point from any other 40-40 tie (see
-// state.ts's pointCallFor). Derived before capture starts (state.ts's deuceOrAdFor),
-// same as `server` — Point.create checks only that the value is shape-valid, not
-// that it's the tennis-correct one for how the point actually played out.
-export type DeuceOrAd = "DEUCE" | "AD_TRACKED" | "AD_OPPONENT";
-export const DEUCE_OR_ADS: readonly DeuceOrAd[] = ["DEUCE", "AD_TRACKED", "AD_OPPONENT"];
-
 // --- Compound types ----------------------------------------------------------------
 
-// Three zones per box, not raw coordinates — a coach watching live cannot place a
-// coordinate reliably, and wide/body/T is how coaches already think about serve targets.
-export interface ServeZone {
-  box: CourtSide;
-  target: ServeTarget;
-}
-
-// Where the last ball to land, landed — six zones, the same granularity as ServeZone.
+// Where the last ball to land, landed — six zones (side x depth).
 export interface CourtZone {
   half: CourtSide;
   depth: CourtDepth;
@@ -111,8 +93,14 @@ export interface CourtZone {
 export interface ServeAttempt {
   number: 1 | 2;
   outcome: ServeOutcome;
-  // null when server is OPPONENT — opponent serve placement is out of scope.
-  location: ServeZone | FailureMode | null;
+  // Three zones, not raw coordinates — a coach watching live cannot place a
+  // coordinate reliably, and wide/body/T is how coaches already think about serve
+  // targets. Non-null only for the tracked player's own serve: a FailureMode when it
+  // faulted (why it missed), a ServeTarget when it went in or aced (where it landed).
+  // Always null for an OPPONENT serve — placement there is out of scope. Which
+  // physical side (deuce/ad) the serve came from is Point.courtSide, not part of
+  // this — that fact belongs to the whole point, not just the tracked player's serve.
+  location: ServeTarget | FailureMode | null;
 }
 
 function isCourtSide(value: unknown): value is CourtSide {
@@ -125,12 +113,6 @@ function isServeTarget(value: unknown): value is ServeTarget {
 
 function isFailureMode(value: unknown): value is FailureMode {
   return FAILURE_MODES.includes(value as FailureMode);
-}
-
-function isServeZone(value: unknown): value is ServeZone {
-  if (typeof value !== "object" || value === null) return false;
-  const data = value as Record<string, unknown>;
-  return isCourtSide(data.box) && isServeTarget(data.target);
 }
 
 function isCourtZone(value: unknown): value is CourtZone {
@@ -146,21 +128,24 @@ function isServeAttempt(value: unknown): value is ServeAttempt {
   const data = value as Record<string, unknown>;
   if (data.number !== 1 && data.number !== 2) return false;
   if (!SERVE_OUTCOMES.includes(data.outcome as ServeOutcome)) return false;
-  return data.location === null || isServeZone(data.location) || isFailureMode(data.location);
+  return data.location === null || isServeTarget(data.location) || isFailureMode(data.location);
 }
 
 // Plain objects with only primitive fields, so a shallow spread is a full deep copy.
 // null and FailureMode (a string) pass through unchanged.
-function copyLocation<T extends ServeZone | CourtZone | FailureMode | null>(location: T): T {
+function copyLocation<T extends CourtZone | FailureMode | null>(location: T): T {
   if (location === null || typeof location === "string") return location;
   return { ...(location as unknown as Record<string, unknown>) } as unknown as T;
 }
 
+// No copyLocation call needed here, unlike ballLocation below — a ServeAttempt's
+// location is always a primitive (ServeTarget/FailureMode string, or null), never an
+// object, so there's nothing for a caller to mutate through a shared reference.
 function copyServeAttempt(attempt: ServeAttempt): ServeAttempt {
   return {
     number: attempt.number,
     outcome: attempt.outcome,
-    location: copyLocation(attempt.location),
+    location: attempt.location,
   };
 }
 
@@ -173,9 +158,10 @@ export class Point {
   // Ordering within the match; scoring (state.ts) replays points in this order.
   readonly sequence: number;
   readonly server: Server;
-  // The deuce/advantage state this point was served under — null before 40-40, or
-  // under no-ad scoring. See DeuceOrAd's own comment above.
-  readonly deuceOrAd: DeuceOrAd | null;
+  // Which physical side of the court this point was played from — shared by both
+  // players regardless of who serves, unlike ServeAttempt.location's target (see its
+  // own comment). See CourtSide's own comment.
+  readonly courtSide: CourtSide;
   // Length 1 or 2 — length 2 implies a first-serve fault. Both faulted implies
   // endReason DOUBLE_FAULT.
   readonly serves: readonly ServeAttempt[];
@@ -204,7 +190,7 @@ export class Point {
     timestamp: number;
     sequence: number;
     server: Server;
-    deuceOrAd: DeuceOrAd | null;
+    courtSide: CourtSide;
     serves: readonly ServeAttempt[];
     returnOutcome: ReturnOutcome | null;
     won: boolean;
@@ -222,7 +208,7 @@ export class Point {
     this.timestamp = fields.timestamp;
     this.sequence = fields.sequence;
     this.server = fields.server;
-    this.deuceOrAd = fields.deuceOrAd;
+    this.courtSide = fields.courtSide;
     this.serves = fields.serves;
     this.returnOutcome = fields.returnOutcome;
     this.won = fields.won;
@@ -263,10 +249,10 @@ export class Point {
     }
     const server = data.server as Server;
 
-    if (data.deuceOrAd !== null && !DEUCE_OR_ADS.includes(data.deuceOrAd as DeuceOrAd)) {
-      throw new Error(`invalid deuceOrAd: ${String(data.deuceOrAd)}`);
+    if (!isCourtSide(data.courtSide)) {
+      throw new Error(`invalid courtSide: ${String(data.courtSide)}`);
     }
-    const deuceOrAd = data.deuceOrAd as DeuceOrAd | null;
+    const courtSide = data.courtSide as CourtSide;
 
     if (!Array.isArray(data.serves) || (data.serves.length !== 1 && data.serves.length !== 2)) {
       throw new Error("serves must be an array of length 1 or 2");
@@ -286,9 +272,9 @@ export class Point {
         if (!isFailureMode(raw.location)) {
           throw new Error(`serves[${index}].location must be a FailureMode when outcome is FAULT`);
         }
-      } else if (!isServeZone(raw.location)) {
+      } else if (!isServeTarget(raw.location)) {
         throw new Error(
-          `serves[${index}].location must be a ServeZone when outcome is ${raw.outcome}`,
+          `serves[${index}].location must be a ServeTarget when outcome is ${raw.outcome}`,
         );
       }
       return copyServeAttempt(raw);
@@ -418,7 +404,7 @@ export class Point {
       timestamp: data.timestamp,
       sequence: data.sequence,
       server,
-      deuceOrAd,
+      courtSide,
       serves,
       returnOutcome,
       won: data.won,
@@ -444,9 +430,10 @@ export class Point {
       timestamp: this.timestamp,
       sequence: this.sequence,
       server: this.server,
-      deuceOrAd: this.deuceOrAd,
-      // Deep-copied, not the live array/objects: serves holds nested location objects,
-      // so a shallow spread alone would let a caller mutate this Point through them.
+      courtSide: this.courtSide,
+      // Deep-copied, not the live array: each ServeAttempt is its own object, so a
+      // shallow spread of the array alone would let a caller mutate this Point
+      // through the objects it still shares.
       serves: this.serves.map(copyServeAttempt),
       returnOutcome: this.returnOutcome,
       won: this.won,

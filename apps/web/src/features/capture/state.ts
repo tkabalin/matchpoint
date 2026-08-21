@@ -14,7 +14,7 @@
 import type { Match, ScoringSystem } from "./match";
 import { MatchSet } from "./match-set";
 import type { TiebreakScore } from "./match-set";
-import type { CourtSide, DeuceOrAd, Point } from "./point";
+import type { CourtSide, Point } from "./point";
 
 // --- ScoringSystem-derived rules ---------------------------------------------
 //
@@ -271,7 +271,7 @@ export interface SetState {
   // progress (a fresh set, a game that just completed, or mid-tiebreak, where
   // `tiebreak`'s own point counts are the equivalent fact instead). Exposes what
   // setStateFor's own walk already tracks internally and otherwise discards —
-  // deuceOrAdFor needs it to know how far into the current game a point sits.
+  // scoreboardFor needs it to know how far into the current game a point sits.
   currentGamePoints: number;
 }
 
@@ -700,26 +700,30 @@ export function nextServerFor(
     : otherIdOf(tiebreakFirstServer, trackedPlayerId, opponentId);
 }
 
-// Deuce court on an even count of points played so far (0, 2, 4, ... -> deuce; 1, 3,
-// 5, ... -> ad) — the standard tennis service-position pattern, unconditional even
-// through extended deuce in ad scoring, and identical inside a tiebreak (service
-// position still alternates by points played, just within the breaker instead of a
-// game).
-function boxFor(pointsPlayed: number): CourtSide {
+// Deuce side on an even count of points played so far (0, 2, 4, ... -> deuce; 1, 3,
+// 5, ... -> ad) — the standard tennis court-position pattern, unconditional even
+// through extended deuce in ad scoring, and identical inside a tiebreak (position
+// still alternates by points played, just within the breaker instead of a game).
+function courtSideFor(pointsPlayed: number): CourtSide {
   return pointsPlayed % 2 === 0 ? "DEUCE" : "AD";
 }
 
 /**
- * Which service box the next point is served from. Never a fact to record — fully
+ * Which physical side of the court the next point is played from — deuce or ad,
+ * shared by both players regardless of who serves (see point.ts's own comment on
+ * Point.courtSide). Never a fact to record on its own before the point happens: fully
  * determined by how many points have already been played in the current game (or,
- * mid-tiebreak, the breaker so far), the same way `ServeZone`/`CourtZone`'s `box`/
- * `half` fields are themselves recorded facts about a point already played, not
- * derived ones (see point.ts). A fresh, not-yet-started set (no current set at all)
- * is game 1, point 1: always the deuce court.
+ * mid-tiebreak, the breaker so far), the same way `Point.courtSide`/`CourtZone.half`
+ * are themselves recorded facts about a point already played, not derived ones. A
+ * fresh, not-yet-started set (no current set at all) is game 1, point 1: always the
+ * deuce side.
  */
-export function nextBoxFor(liveSets: MatchSetsState, scoringSystem: ScoringSystem): CourtSide {
+export function nextCourtSideFor(
+  liveSets: MatchSetsState,
+  scoringSystem: ScoringSystem,
+): CourtSide {
   if (liveSets.currentSet === null) {
-    return boxFor(0);
+    return courtSideFor(0);
   }
 
   const { setNumber, state } = liveSets.currentSet;
@@ -731,10 +735,10 @@ export function nextBoxFor(liveSets: MatchSetsState, scoringSystem: ScoringSyste
       state.tiebreak === null
         ? 0
         : state.tiebreak.trackedPlayerPoints + state.tiebreak.opponentPoints;
-    return boxFor(pointsPlayed);
+    return courtSideFor(pointsPlayed);
   }
 
-  return boxFor(state.currentGamePoints);
+  return courtSideFor(state.currentGamePoints);
 }
 
 /**
@@ -767,9 +771,9 @@ export interface Scoreboard {
 }
 
 // Slices the current, in-progress game's own Points out of the full, ordered match
-// log and tallies them — the one reslice scoreboardFor and deuceOrAdFor both need,
-// since neither MatchSetsState nor SetState keeps the per-game split itself, only
-// the count (see SetState.currentGamePoints's own comment on why).
+// log and tallies them — scoreboardFor's one reslice, since neither MatchSetsState
+// nor SetState keeps the per-game split itself, only the count (see
+// SetState.currentGamePoints's own comment on why).
 function currentGameStateFor(
   points: readonly Point[],
   state: SetState,
@@ -783,46 +787,18 @@ function currentGameStateFor(
 
 // DEUCE, or advantage to whoever leads by exactly 1 — null before 40-40, or whenever
 // isAdScoring is false (no-ad sudden death never distinguishes a deuce point from any
-// other 40-40 tie, the game ends the instant either side leads by 1). Shared by
-// pointCallFor (the display string) and deuceOrAdFor (the stored value — see
-// point.ts's DeuceOrAd) so the two can't drift on what counts as deuce/advantage.
+// other 40-40 tie, the game ends the instant either side leads by 1). pointCallFor's
+// own intermediate step — not a value stored anywhere, just how it decides between
+// "40"/"40" and "AD"/"40".
 function deuceOrAdFromCounts(
   trackedPlayerPoints: number,
   opponentPoints: number,
   isAdScoring: boolean,
-): DeuceOrAd | null {
+): "DEUCE" | "AD_TRACKED" | "AD_OPPONENT" | null {
   if (!isAdScoring || trackedPlayerPoints < 3 || opponentPoints < 3) return null;
   const lead = trackedPlayerPoints - opponentPoints;
   if (lead === 0) return "DEUCE";
   return lead > 0 ? "AD_TRACKED" : "AD_OPPONENT";
-}
-
-/**
- * The deuce/advantage state the *current, in-progress* game is at — the stored-value
- * counterpart to pointCallFor's display strings (see point.ts's DeuceOrAd). Null
- * whenever the game hasn't reached 40-40 yet, there's no game in progress at all
- * (mid-tiebreak — state.currentGamePoints is 0 there, see setStateFor), or the
- * scoring system doesn't play with ad.
- *
- * Takes the same `points`/`state` split scoreboardFor does, for the same reason:
- * `state.currentGamePoints` only survives as a count, not the Points themselves, so
- * the current game has to be resliced out of the full, ordered match log.
- */
-export function deuceOrAdFor(
-  points: readonly Point[],
-  state: SetState,
-  trackedPlayerId: string,
-  opponentId: string,
-  isAdScoring: boolean,
-): DeuceOrAd | null {
-  const { trackedPlayerPoints, opponentPoints } = currentGameStateFor(
-    points,
-    state,
-    trackedPlayerId,
-    opponentId,
-    isAdScoring,
-  );
-  return deuceOrAdFromCounts(trackedPlayerPoints, opponentPoints, isAdScoring);
 }
 
 /**
@@ -865,11 +841,10 @@ function pointCallFor(
  *
  * Takes the same inputs as matchSetsFor and composes it rather than a
  * MatchSetsState directly — the current game's own point split isn't part of that
- * return value (only the summed currentGamePoints is, which is all nextBoxFor
- * needs), so `currentGameStateFor` re-slices `points` on its behalf: the trailing
- * `currentGamePoints` entries of the full, ordered match log are exactly that game's
- * points, since nothing has been recorded after them and the game before them
- * already resolved.
+ * return value (only the summed currentGamePoints is), so `currentGameStateFor`
+ * re-slices `points` on its behalf: the trailing `currentGamePoints` entries of the
+ * full, ordered match log are exactly that game's points, since nothing has been
+ * recorded after them and the game before them already resolved.
  */
 export function scoreboardFor(
   points: readonly Point[],

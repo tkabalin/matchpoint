@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 
 import {
-  deuceOrAdForNextPoint,
   isMatchOver,
   nextSequenceFor,
   nextServerRoleFor,
@@ -31,8 +30,8 @@ function pointWonBy(matchId: string, winner: string, sequence?: number) {
     timestamp: 1_700_000_000_000 + resolvedSequence,
     sequence: resolvedSequence,
     server: "TRACKED",
-    deuceOrAd: null,
-    serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+    courtSide: "DEUCE",
+    serves: [{ number: 1, outcome: "IN", location: "T" }],
     returnOutcome: null,
     won: winner === TRACKED_ID,
     endReason: "FORCED",
@@ -49,14 +48,6 @@ function pointWonBy(matchId: string, winner: string, sequence?: number) {
 /** `count` clean 4-0 games in a row, all won by `winner`. */
 function completedGames(matchId: string, winner: string, count: number) {
   return Array.from({ length: count * 4 }, () => pointWonBy(matchId, winner));
-}
-
-/** `trackedWins` points won by the tracked player, then `opponentWins` by the opponent. */
-function pointsFor(matchId: string, trackedWins: number, opponentWins: number) {
-  return [
-    ...Array.from({ length: trackedWins }, () => pointWonBy(matchId, TRACKED_ID)),
-    ...Array.from({ length: opponentWins }, () => pointWonBy(matchId, OPPONENT_ID)),
-  ];
 }
 
 /** A minimal Match via createMatch — override just what a test cares about. */
@@ -142,8 +133,7 @@ describe("startNextPoint", () => {
     expect(state.draft.matchId).toBe(match.matchId);
     expect(state.draft.sequence).toBe(0);
     expect(state.draft.server).toBe("TRACKED"); // firstServer defaults to trackedPlayerId
-    expect(state.box).toBe("DEUCE"); // game 1, point 1 — always deuce
-    expect(state.draft.deuceOrAd).toBeNull(); // 0-0 is nowhere near deuce
+    expect(state.draft.courtSide).toBe("DEUCE"); // game 1, point 1 — always deuce
   });
 
   test("mid-match points: sequence and server against hardcoded expected values", () => {
@@ -163,11 +153,13 @@ describe("startNextPoint", () => {
     expect(state.draft.sequence).toBe(4);
     expect(state.draft.server).toBe("OPPONENT");
     expect(state.step).toEqual({ name: "SERVE", number: 1 });
-    expect(state.box).toBeNull(); // box is never derived for an opponent-serving point
-    expect(state.draft.deuceOrAd).toBeNull(); // 1 game in, nowhere near deuce
+    // courtSide is derived for every point, opponent-serving included — it's shared
+    // by both players, not tracked-only (see point.ts's Point.courtSide comment).
+    // 4 points played -> a fresh game just started -> 0 points into it -> deuce.
+    expect(state.draft.courtSide).toBe("DEUCE");
   });
 
-  test("tracked serving mid-game: box reflects points already played in the current game", () => {
+  test("tracked serving mid-game: courtSide reflects points already played in the current game", () => {
     const match = matchOf();
     const points = [
       ...completedGames(match.matchId, TRACKED_ID, 2), // 2 games -> even -> tracked serves next
@@ -175,53 +167,7 @@ describe("startNextPoint", () => {
     ];
     const state = startNextPoint(match, points);
     expect(state.draft.server).toBe("TRACKED");
-    expect(state.box).toBe("AD"); // 1 point played so far this game -> odd -> ad
-  });
-
-  test("the next point starts at deuce once the current game reaches 3-3", () => {
-    const match = matchOf();
-    const points = [
-      ...completedGames(match.matchId, TRACKED_ID, 6),
-      ...pointsFor(match.matchId, 3, 3),
-    ];
-    const state = startNextPoint(match, points);
-    expect(state.draft.deuceOrAd).toBe("DEUCE");
-  });
-
-  test("the next point starts with advantage once one side leads by 1 past deuce", () => {
-    const match = matchOf();
-    const points = [
-      ...completedGames(match.matchId, TRACKED_ID, 6),
-      ...pointsFor(match.matchId, 3, 3),
-      pointWonBy(match.matchId, OPPONENT_ID),
-    ];
-    const state = startNextPoint(match, points);
-    expect(state.draft.deuceOrAd).toBe("AD_OPPONENT");
-  });
-
-  test("no-ad scoring never starts a point at deuce or advantage", () => {
-    const match = matchOf("no_ad_scoring");
-    const points = [
-      ...completedGames(match.matchId, TRACKED_ID, 6),
-      ...pointsFor(match.matchId, 3, 3),
-    ];
-    const state = startNextPoint(match, points);
-    expect(state.draft.deuceOrAd).toBeNull();
-  });
-});
-
-describe("deuceOrAdForNextPoint", () => {
-  test("null when there's no current set at all — no game in progress to be at deuce in", () => {
-    const match = matchOf();
-    const liveSets = { completedSets: [], currentSet: null };
-    expect(deuceOrAdForNextPoint(match, liveSets, [])).toBeNull();
-  });
-
-  test("composes with matchSetsFor end to end: 6 points into a tied game is deuce", () => {
-    const match = matchOf();
-    const points = pointsFor(match.matchId, 3, 3);
-    const liveSets = matchSetsFor(points, match.matchId, TRACKED_ID, OPPONENT_ID, "traditional");
-    expect(deuceOrAdForNextPoint(match, liveSets, points)).toBe("DEUCE");
+    expect(state.draft.courtSide).toBe("AD"); // 1 point played so far this game -> odd -> ad
   });
 });
 

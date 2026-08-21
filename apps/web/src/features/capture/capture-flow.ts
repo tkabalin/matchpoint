@@ -19,7 +19,6 @@
 import type {
   CourtSide,
   CourtZone,
-  DeuceOrAd,
   EndReason,
   FailureMode,
   ReturnOutcome,
@@ -27,7 +26,6 @@ import type {
   Server,
   ServeAttempt,
   ServeTarget,
-  ServeZone,
   ShotType,
   UnusualReason,
   Wing,
@@ -46,10 +44,12 @@ export interface PointDraft {
   matchId: string;
   sequence: number;
   server: Server;
-  // The deuce/advantage state this point started under — fixed for the point's whole
-  // life, same as `server`. The caller's job to derive (via `state.ts`'s
-  // `deuceOrAdFor`) and hand in at `startPoint`, not something this module computes.
-  deuceOrAd: DeuceOrAd | null;
+  // Which physical side of the court this point is played from — fixed for the
+  // point's whole life, regardless of who serves (see point.ts's own comment on
+  // Point.courtSide). The caller's job to derive (via `state.ts`'s
+  // `nextCourtSideFor`) and hand in at `startPoint`, not something this module
+  // computes.
+  courtSide: CourtSide;
   serves: ServeAttempt[];
   returnOutcome: ReturnOutcome | null;
   won: boolean | null;
@@ -67,13 +67,13 @@ function freshDraft(
   matchId: string,
   sequence: number,
   server: Server,
-  deuceOrAd: DeuceOrAd | null,
+  courtSide: CourtSide,
 ): PointDraft {
   return {
     matchId,
     sequence,
     server,
-    deuceOrAd,
+    courtSide,
     serves: [],
     returnOutcome: null,
     won: null,
@@ -114,44 +114,24 @@ export interface CaptureState {
   // Oldest first. Popped by UNDO — see its own comment below for why a stack is
   // needed rather than re-deriving the prior draft from the step name alone.
   history: readonly { step: CaptureStep; draft: PointDraft }[];
-  // Which service box this point is served from — fixed for the point's whole
-  // lifetime (deuce/ad doesn't change between a first and second serve attempt, or
-  // across a let replay of the same point). Never a tap: it's derived (see
-  // `nextBoxFor` in state.ts) before capture even starts, since it's fully
-  // predictable from how many points have been played in the current game. Null
-  // when the opponent is serving — box only ever describes the tracked player's own
-  // serve position (see point.ts).
-  box: CourtSide | null;
 }
 
 /**
- * Starts a new point's capture at the first serve. `box` is the caller's
- * responsibility to derive (via `state.ts`'s `nextBoxFor`) and required exactly when
- * `server` is `"TRACKED"` — enforced here so a caller can't start a tracked-serving
- * point without it, or hand one in for an opponent-serving point where it would be
- * meaningless. `deuceOrAd` is likewise the caller's to derive (via `state.ts`'s
- * `deuceOrAdFor`), but unlike `box` it's never checked against `server` here — nothing
- * about who's serving constrains whether the game itself happens to be at deuce or
- * advantage, so there's no cross-field invariant to enforce.
+ * Starts a new point's capture at the first serve. `courtSide` is the caller's
+ * responsibility to derive (via `state.ts`'s `nextCourtSideFor`) and hand in — this
+ * module never computes it. Not checked against `server`: it applies the same way
+ * regardless of who serves (see point.ts's own comment on Point.courtSide).
  */
 export function startPoint(
   matchId: string,
   sequence: number,
   server: Server,
-  box: CourtSide | null,
-  deuceOrAd: DeuceOrAd | null,
+  courtSide: CourtSide,
 ): CaptureState {
-  if (server === "TRACKED" && box === null) {
-    throw new Error("box is required when server is TRACKED");
-  }
-  if (server === "OPPONENT" && box !== null) {
-    throw new Error("box must be null when server is OPPONENT");
-  }
   return {
     step: { name: "SERVE", number: 1 },
-    draft: freshDraft(matchId, sequence, server, deuceOrAd),
+    draft: freshDraft(matchId, sequence, server, courtSide),
     history: [],
-    box,
   };
 }
 
@@ -159,14 +139,14 @@ export function startPoint(
 
 export type CaptureAction =
   // Tracked player serving only (never valid for OPPONENT — see TAP_RETURN below).
-  // `target` alone, not a full ServeZone: `box` is already known from CaptureState,
-  // derived before capture started, never tapped.
+  // `target` is where within the box the serve landed — which box itself is
+  // `draft.courtSide`, not tapped here (see point.ts's own comment on the split).
   | { type: "TAP_SERVE_IN"; target: ServeTarget }
   // location required for TRACKED (why it missed), omitted for OPPONENT (out of
   // scope — opponent serve placement, fault or otherwise, is never captured).
   | { type: "TAP_SERVE_FAULT"; location?: FailureMode }
-  // target required for TRACKED (combined with CaptureState.box — see TAP_SERVE_IN),
-  // omitted for OPPONENT (an ace against the tracked player has no location at all).
+  // target required for TRACKED (see TAP_SERVE_IN), omitted for OPPONENT (an ace
+  // against the tracked player has no location at all).
   | { type: "TAP_SERVE_ACE"; target?: ServeTarget }
   // Opponent serving only: there's no separate "serve in" tap the way tracked-serving
   // has one — reaching for "where did the return go" already implies the serve was in.
@@ -218,7 +198,6 @@ function advance(state: CaptureState, nextStep: CaptureStep, nextDraft: PointDra
     step: nextStep,
     draft: nextDraft,
     history: [...state.history, { step: state.step, draft: state.draft }],
-    box: state.box,
   };
 }
 
@@ -234,9 +213,9 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     const previous = history[history.length - 1];
     if (previous === undefined) {
       // Nothing left to step back into — the whole draft is discarded.
-      return { step: { name: "ABORTED" }, draft, history: [], box: state.box };
+      return { step: { name: "ABORTED" }, draft, history: [] };
     }
-    return { ...previous, history: history.slice(0, -1), box: state.box };
+    return { ...previous, history: history.slice(0, -1) };
   }
 
   // TAP_LET is context-sensitive by origin step, not by a field on the action itself.
@@ -254,10 +233,9 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       // one — matchId/sequence/server are the only three fields that never change
       // across a draft's life, so rebuilding from just those is exactly "start over."
       // History is cleared, not preserved: the discarded rally is meant to be gone,
-      // not something to step back into. box and deuceOrAd both carry over unchanged
-      // — it's the same point being replayed, so neither the service box nor the
-      // game score it's played under changes.
-      return startPoint(draft.matchId, draft.sequence, draft.server, state.box, draft.deuceOrAd);
+      // not something to step back into. courtSide carries over unchanged — it's the
+      // same point being replayed, so the court side it's played from doesn't change.
+      return startPoint(draft.matchId, draft.sequence, draft.server, draft.courtSide);
     }
     throw invalidAction(action, step);
   }
@@ -280,11 +258,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       const { number } = step;
       if (action.type === "TAP_SERVE_IN") {
         if (draft.server !== "TRACKED") throw invalidAction(action, step);
-        if (state.box === null) {
-          throw new Error("TAP_SERVE_IN requires CaptureState.box to already be known");
-        }
-        const location: ServeZone = { box: state.box, target: action.target };
-        const nextDraft = withServe(draft, { number, outcome: "IN", location });
+        const nextDraft = withServe(draft, { number, outcome: "IN", location: action.target });
         return advance(state, { name: "RALLY" }, nextDraft);
       }
       if (action.type === "TAP_SERVE_ACE") {
@@ -292,11 +266,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
           if (action.target === undefined) {
             throw new Error("TAP_SERVE_ACE requires a target when server is TRACKED");
           }
-          if (state.box === null) {
-            throw new Error("TAP_SERVE_ACE requires CaptureState.box to already be known");
-          }
-          const location: ServeZone = { box: state.box, target: action.target };
-          const nextDraft = withServe(draft, { number, outcome: "ACE", location });
+          const nextDraft = withServe(draft, { number, outcome: "ACE", location: action.target });
           // Aced by the tracked player: they served it, so they won.
           return advance(state, { name: "READY" }, readyDraft(nextDraft, true, "ACE"));
         }
