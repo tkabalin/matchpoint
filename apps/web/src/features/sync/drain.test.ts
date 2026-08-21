@@ -86,7 +86,8 @@ function pointEntry(
       timestamp: 1_755_600_000_000,
       sequence,
       server: "TRACKED",
-      serves: [{ number: 1, outcome: "ACE", location: { box: "DEUCE", target: "T" } }],
+      courtSide: "DEUCE",
+      serves: [{ number: 1, outcome: "ACE", location: "T" }],
       returnOutcome: null,
       won: true,
       endReason: "ACE",
@@ -105,7 +106,7 @@ function pointEntry(
 /** A point carrying the longest note the API takes, for the byte-bound test. */
 function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
   return pointEntry(tag, matchId, sequence, {
-    serves: [{ number: 1, outcome: "IN", location: { box: "DEUCE", target: "T" } }],
+    serves: [{ number: 1, outcome: "IN", location: "T" }],
     endReason: "UNUSUAL",
     unusualReason: "OTHER",
     unusualNote: "x".repeat(2_000),
