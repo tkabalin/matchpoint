@@ -47,8 +47,7 @@ consistent where a dump restored on its own leaves rows naming photos that are g
 
 ## Access & Security
 
-**Principle of least privilege** governs SSH access; access is limited to what's needed, nothing
-more.
+SSH access follows the principle of least privilege.
 
 ### Hardening checklist
 

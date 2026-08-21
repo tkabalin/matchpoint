@@ -8,7 +8,7 @@ decisions are in [infrastructure.md](infrastructure.md).
 ## CI — every branch and merge request
 
 **A pipeline runs** for every merge request and every push to `main`. A branch with no open merge
-request gets one too — but once an MR exists, only the MR pipeline runs, so the same commit is never
+request gets one too, but once an MR exists, only the MR pipeline runs, so the same commit is never
 checked twice.
 
 | Stage | API (uv / Python)                        | Web (pnpm / Node)                               |
@@ -127,8 +127,8 @@ which makes "did this deploy take effect" answerable from outside — a containe
 Caddy still fronts the previous tag cannot pass. Publishing that tag is deliberate: it identifies a
 build without describing one, since the repository it indexes is private.
 
-**Deploys are automatic** on every green `main` pipeline — merging is releasing, which fits the
-rapid usability-testing loop with the client. Guardrails: deploys record to the GitLab `production`
+**Deploys are automatic** on every green `main` pipeline. Merging is releasing, which fits the rapid
+usability-testing loop with the client. Guardrails: deploys record to the GitLab `production`
 environment for history and one-click redeploys, with deploy access matching merge access (the merge
 is the release decision, so gating deploy more tightly only produces failed jobs); a
 `resource_group` keeps two deploys from overlapping; and the deploy job is never auto-cancelled.

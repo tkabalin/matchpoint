@@ -10,14 +10,14 @@ not carry a design essay.
 
 MatchPoint's analytics dashboard is the whole point of the app (per the assignment brief): serve
 percentages, rally-length win rates, trends across matches, opponent comparisons. All of that is
-read as color before it's read as a number — a coach scanning a chart mid-session doesn't have time
+read as color before it's read as a number. A coach scanning a chart mid-session doesn't have time
 to parse a legend twice. That only works if a color means the same thing everywhere it appears, and
 if the palette itself doesn't quietly exclude coaches with color vision deficiency (CVD), which is
 common enough (~8% of men) that "works for the designer's eyes" isn't a real bar.
 
 ## Navigation color: why blue is exclusive to chrome
 
-Deep blue (`#045C8C`) is the one color reserved for brand and interactive state — nav bars, active
+Deep blue (`#045C8C`) is the one color reserved for brand and interactive state: nav bars, active
 tabs, links, primary buttons. It is deliberately excluded from being reused as a category or status
 color, even though it's also part of the categorical palette below. The reasoning is scannability,
 not aesthetics: if blue means "primary action" in one part of the screen and "category 5" in a chart
@@ -35,11 +35,11 @@ in the same view — the one case where the collision could actually mislead som
 ### Two tokens, not one: why dark mode gets its own blue
 
 Human vision has fewer cone receptors dedicated to blue than to red or green, so blue reads as
-perceptually darker than its luminance number alone suggests — a gap that widens specifically
-against a near-black background, where `#045C8C` loses more contrast than its numbers imply. Every
-other color in this file is a chart swatch, which is transient — on screen for as long as one chart
-is. The nav/brand color is not: it's present on every screen, permanently, so a contrast loss there
-is a standing cost rather than a one-off.
+perceptually darker than its luminance number alone suggests. That gap widens specifically against a
+near-black background, where `#045C8C` loses more contrast than its numbers imply. Every other color
+in this file is a chart swatch, which is transient, on screen for as long as one chart is. The
+nav/brand color is not: it's present on every screen, permanently, so a contrast loss there is a
+standing cost rather than a one-off.
 
 Rather than compromise the light-mode value to make one hex survive both themes, dark mode gets its
 own token, `#1E88C7` — same semantic role, same restriction (chrome and interactive state only,
@@ -77,7 +77,7 @@ with a small nudge:
 **Round two: a grayscale audit caught what hue tuning couldn't see.** The working test adopted was
 blunt on purpose: does the palette still separate in black and white? Two colors can sit far apart
 in hue and still land close together in relative luminance (`0.299R + 0.587G + 0.114B`), and for
-more severe color vision deficiency, luminance — not hue — is what actually carries the separation.
+more severe color vision deficiency, luminance, not hue, is what actually carries the separation.
 Auditing the palette this way found red and green only 13 points apart on a 0–255 scale, and blue
 and violet only 11 apart — both functionally the same shade once hue is discounted, despite reading
 as obviously different colors to typical vision.
@@ -105,14 +105,14 @@ the dark end of the range specifically because nothing else in the palette occup
 
 ## Sequential scale: why a strength meter gets its own third concept
 
-The rule originally had two concepts — brand/nav (blue, exclusive) and categorical (the seven-color
+The rule originally had two concepts: brand/nav (blue, exclusive) and categorical (the seven-color
 rainbow, for unordered distinct values). Neither fit a password strength meter: strength is one
 ordinal quantity running from weak to strong, not a set of categories with no inherent order.
-Forcing it into the categorical palette would have been actively misleading — a distinct hue per
+Forcing it into the categorical palette would have been actively misleading: a distinct hue per
 strength step reads as "these are different kinds of thing," when the actual message is "this one
 thing is getting better or worse."
 
-The fix reuses three existing categorical hexes — Burnt vermillion, Orange, Jade green — as
+The fix reuses three existing categorical hexes (Burnt vermillion, Orange, Jade green) as
 interpolation anchors rather than inventing a fourth palette concept from scratch. This mirrors the
 navigation color's precedent: `#045C8C` already carries two documented roles (nav/brand and a
 categorical swatch), so a color carrying a second role, clearly scoped to when each applies, was
@@ -122,7 +122,7 @@ against light/dark backgrounds and CVD simulation, for one meter, when the categ
 and green already passed that audit and sit at the right ends of a weak→strong story.
 
 The fill is a continuous interpolation, not discrete steps, because a severity scale's whole value
-is showing _how far along_ the scale a value sits — five discrete swatches would visually
+is showing _how far along_ the scale a value sits, and five discrete swatches would visually
 reintroduce the categorical palette's "these are different things" reading, exactly what a
 sequential scale needs to avoid. Two linear segments (vermillion→orange, orange→green) rather than
 one direct vermillion→green blend, so the midpoint actually passes through orange rather than a
@@ -145,13 +145,12 @@ names that pattern explicitly and locks it down, rather than leaving it as an im
 that the next chart built might not notice and quietly break.
 
 Locking it down matters because outcome meaning is exactly the kind of thing a coach needs to read
-at a glance, mid-session, without parsing a legend — the same scannability argument that already
-governs why blue is nav-exclusive. If green sometimes means "won the point" and sometimes means
-"category 4 in an unrelated legend," a coach has to stop and check which chart they're looking at
-before the color means anything. Reserving green/red/orange for outcomes and score bands only, and
-pulling every other categorical need from a separate "safe" set (yellow, indigo, violet, plus blue
-when nav chrome isn't in view), keeps that one glance reliable everywhere it appears on the
-dashboard.
+at a glance, mid-session, without parsing a legend — the same scannability argument that keeps blue
+nav-exclusive. If green sometimes means "won the point" and sometimes means "category 4 in an
+unrelated legend," a coach has to stop and check which chart they're looking at before the color
+means anything. Reserving green/red/orange for outcomes and score bands only, and pulling every
+other categorical need from a separate "safe" set (yellow, indigo, violet, plus blue when nav chrome
+isn't in view), keeps that one glance reliable everywhere it appears on the dashboard.
 
 The per-chart assignments follow directly from what each chart is actually showing, not from a
 uniform rule applied blindly. Single-series charts (a distribution histogram, a scatter with one
@@ -165,8 +164,8 @@ dashboard screen where nav chrome and a data chart actually share the view.
 
 ## Why every color also needs a pattern
 
-A colorblind-safe, luminance-audited hue selection is necessary but not sufficient. It protects
-against confusing two _different_ hues, but it does nothing for:
+A colorblind-safe, luminance-audited hue selection is not enough on its own. It protects against
+confusing two _different_ hues, but it does nothing for:
 
 - **Total color blindness (achromatopsia)** or a grayscale printout — the rarest case, but the one
   every other safeguard in this file still fails silently against unless something _other_ than hue
