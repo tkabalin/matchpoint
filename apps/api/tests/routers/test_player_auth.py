@@ -4,7 +4,7 @@ import httpx2
 import pytest
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, event, func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import (
@@ -15,7 +15,7 @@ from matchpoint_api.auth import (
     new_session_token,
 )
 from matchpoint_api.models import CoachSession, Player, PlayerSession
-from matchpoint_api.security import DUMMY_HASH, hash_password
+from matchpoint_api.security import DUMMY_HASH, hash_password, verify_password
 from tests.conftest import ORIGIN_HEADERS, TEST_ORIGIN, breach_every_password
 from tests.factories import (
     make_coach,
@@ -217,6 +217,92 @@ def test_logging_in_clears_only_the_player_s_own_expired_sessions(
     remaining = set(db_session.scalars(select(PlayerSession.id)))
     assert other.id in remaining
     assert len(remaining) == 2  # the other player's dead row, and the fresh login
+
+
+# The race the row lock closes. A regenerate revokes the sessions that exist when it
+# runs, so a request whose verification predates it must not insert one afterwards: the
+# revoked password would keep working, on a session that renews itself for 30 days.
+
+REGENERATED_HASH = hash_password("what-the-coach-just-minted")
+
+
+def _regenerate_mid_verification(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, player: Player
+) -> None:
+    """Land a coach's regenerate in the window a verification holds open.
+
+    The suite shares one session, so no second request can genuinely run alongside this
+    one: the new hash and the revocation are flushed from inside `verify_password`, where
+    the coach's commit would land, leaving the row state the lock has to catch.
+    """
+    real = verify_password
+
+    def verify_then_regenerate(password: str, password_hash: str) -> bool:
+        verified = real(password, password_hash)
+        player.password_hash = REGENERATED_HASH
+        db_session.execute(delete(PlayerSession).where(PlayerSession.player_id == player.id))
+        db_session.flush()
+        return verified
+
+    monkeypatch.setattr(
+        "matchpoint_api.routers.player_auth.verify_password", verify_then_regenerate
+    )
+
+
+def _statements_of(db_session: Session) -> list[str]:
+    """Collect the SQL a request emits, so a lock can be pinned where behaviour cannot
+    reach it: one shared session cannot produce two concurrent requests, so a re-read
+    without the lock leaves the window open and every test here green regardless."""
+    statements: list[str] = []
+
+    @event.listens_for(db_session.get_bind(), "before_cursor_execute")
+    def _record(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    return statements
+
+
+def test_a_login_that_verified_a_regenerated_password_mints_no_session(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The coach's takeover lever has to hold end to end: a login carrying the old
+    password answers as a wrong one once the mint has landed, rather than handing back
+    the very session the regenerate had just swept away."""
+    player = _enrolled(db_session)
+    _regenerate_mid_verification(monkeypatch, db_session, player)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect username or password"}
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 0
+    assert not client.cookies.get(PLAYER_SESSION_COOKIE)
+
+
+def test_a_login_locks_the_player_row_before_minting_a_session(
+    client: TestClient, db_session: Session
+) -> None:
+    """The other half of the same race, the one behaviour cannot reach: the re-read has
+    to hold the row until the session row is in, or a regenerate landing between the two
+    sweeps a table the new session is not yet in."""
+    _enrolled(db_session)
+    statements = _statements_of(db_session)
+
+    response = client.post("/auth/player/login", json=PLAYER_LOGIN)
+
+    assert response.status_code == 200
+    locked = [s for s in statements if "FROM players" in s and "FOR UPDATE" in s]
+    assert locked
+    assert statements.index(locked[0]) < next(
+        i for i, s in enumerate(statements) if "INSERT INTO player_sessions" in s
+    )
 
 
 def _stub_out_verification(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -670,6 +756,46 @@ def test_a_rejected_change_echoes_neither_password(client: TestClient, db_sessio
     assert response.status_code == 422
     assert "tiny" not in response.text
     assert PLAYER_PASSWORD not in response.text
+
+
+def test_a_change_verified_before_a_regenerate_overwrites_neither_hash_nor_revocation(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The regenerate has to be the last word. A change whose current-password proof
+    predates it would otherwise write over the password the coach was just shown and
+    mint itself a session out of the revocation's reach: a stolen cookie keeping the
+    account, and the coach holding a credential that no longer works."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    _regenerate_mid_verification(monkeypatch, db_session, player)
+
+    response = _change(client)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    refreshed = db_session.get(Player, player.id)
+    assert refreshed is not None
+    assert refreshed.password_hash == REGENERATED_HASH
+    assert db_session.scalar(select(func.count()).select_from(PlayerSession)) == 0
+
+
+def test_a_change_locks_the_player_row_before_writing_the_new_hash(
+    client: TestClient, db_session: Session
+) -> None:
+    """`current_player` resolves the row unlocked, so the write needs its own lock for
+    the login route's reason, and pinned on the SQL for the login route's reason."""
+    player = _enrolled(db_session)
+    sign_in_player(client, db_session, player)
+    statements = _statements_of(db_session)
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    locked = [s for s in statements if "FROM players" in s and "FOR UPDATE" in s]
+    assert locked
+    assert statements.index(locked[0]) < next(
+        i for i, s in enumerate(statements) if "UPDATE players" in s
+    )
 
 
 # --- POST /auth/player/logout ---

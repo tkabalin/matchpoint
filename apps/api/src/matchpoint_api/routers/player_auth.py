@@ -72,6 +72,19 @@ def reject_player_login(request: Request, username: str) -> NoReturn:
     raise HTTPException(status_code=401, detail=INCORRECT_PLAYER_CREDENTIALS)
 
 
+def credential_is_current(db: Session, player: Player, verified_hash: str) -> bool:
+    """Lock the player's row, and say whether the hash just verified is still stored.
+
+    Both routes below verify against an unlocked read and then write, so a regenerate
+    committing in between would leave a session minted from the password it just revoked:
+    that delete only reaches the rows existing at that instant (docs/security.md). Taking
+    the lock `owned_player` takes orders the two instead. Called before the new hash is
+    assigned, since autoflush would otherwise re-read this request's own pending write.
+    """
+    stored = db.scalar(select(Player.password_hash).where(Player.id == player.id).with_for_update())
+    return stored == verified_hash
+
+
 # The 401 is declared because the sign-in form branches on "wrong credentials", with a
 # model for ErrorDetail's reason.
 @router.post(
@@ -99,12 +112,21 @@ def player_login(
         # or the timing would say which usernames are live accounts.
         verify_password(password, DUMMY_HASH)
         reject_player_login(request, username)
-    if not verify_password(password, player.password_hash):
+    verified_hash = player.password_hash
+    if not verify_password(password, verified_hash):
         reject_player_login(request, username)
     # The one moment plaintext and a database session are both in hand, as at login:
-    # a change to security.py's parameters reaches rows hashed before it.
-    if needs_rehash(player.password_hash):
-        player.password_hash = hash_password(password)
+    # a change to security.py's parameters reaches rows hashed before it. Hashed before
+    # the lock below rather than after it, so the Argon2 semaphore is never waited on
+    # holding a row.
+    rehashed = hash_password(password) if needs_rehash(verified_hash) else None
+    if not credential_is_current(db, player, verified_hash):
+        # A regenerate landed while this login was verifying, so the password presented
+        # is the revoked one and mints nothing. No wrong-guess token: the guess was right
+        # when made, and the loser is usually the player their coach just re-credentialed.
+        raise HTTPException(status_code=401, detail=INCORRECT_PLAYER_CREDENTIALS)
+    if rehashed is not None:
+        player.password_hash = rehashed
     now = datetime.now(UTC)
     # The signing-in player's own dead rows go now: login's sweep, login's reasoning.
     db.execute(
@@ -160,8 +182,9 @@ def change_player_password(
     # A NULL hash cannot happen here in practice (a session exists, so a login did,
     # so a password was minted), but a regenerate can race this request: the coach
     # route's plain read of the column becomes a None-guard rather than a crash.
-    if player.password_hash is None or not verify_password(
-        data.password.get_secret_value(), player.password_hash
+    verified_hash = player.password_hash
+    if verified_hash is None or not verify_password(
+        data.password.get_secret_value(), verified_hash
     ):
         # A budget of wrong guesses charged only for one, keyed on the player:
         # the coach route's tier for its reasons.
@@ -177,7 +200,15 @@ def change_player_password(
         names=[player.username, f"{player.first_name} {player.last_name}"],
         breach_checker=breach_checker,
     )
-    player.password_hash = hash_password(data.new_password.get_secret_value())
+    # Hashed before the lock for the login route's reason. Without the lock a regenerate
+    # that has already revoked every session would be overwritten here, handing the caller
+    # a password of their own choosing on the row the coach believes they took back.
+    new_hash = hash_password(data.new_password.get_secret_value())
+    if not credential_is_current(db, player, verified_hash):
+        # The regenerate won, so the current-password proof this request carries is
+        # stale: it answers as a wrong password does, charging nothing for login's reason.
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    player.password_hash = new_hash
     # Every session dies, the presented one included, for the coach route's reason: a
     # thief holds a copy of the same token, so sparing it spares the thief.
     revoke_player_sessions(db, player.id)
