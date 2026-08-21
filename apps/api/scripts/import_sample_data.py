@@ -1,0 +1,283 @@
+"""One-off import of sample coaches/players/matches/points from CSV, for the BBD demo
+dataset.
+
+Not part of the shipped image or the app's runtime code — run manually, once, by piping
+this file into a shell in the api container so it reuses the container's own
+matchpoint_api package and MATCHPOINT_DATABASE_URL rather than opening a separate
+connection to prod Postgres.
+
+Running this against prod:
+
+  1. Take a manual backup on top of the daily snapshot, since this is a write to shared
+     prod state:
+       ssh matchpoint-prod
+       docker compose -f /opt/matchpoint/compose.yml exec -T postgres \\
+           pg_dump -U matchpoint matchpoint > backup-before-import.sql
+  2. scp coaches.csv players.csv matches.csv, and points.csv if there is one, to the
+     VPS, then copy each into the api container (compose has no volume mount for
+     arbitrary host files):
+       docker compose -f /opt/matchpoint/compose.yml cp coaches.csv api:/tmp/coaches.csv
+       docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
+       docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv
+       docker compose -f /opt/matchpoint/compose.yml cp points.csv api:/tmp/points.csv
+  3. Run the script with the container's own Python and environment:
+       docker compose -f /opt/matchpoint/compose.yml exec -T api python - < import_sample_data.py
+  4. Record the printed demo password somewhere it won't get lost.
+
+Expected CSV files, read from /tmp inside the container:
+
+  coaches.csv:  email,display_name
+  players.csv:  coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
+  matches.csv:  coach_email,player_first_name,player_last_name,opponent_name,played_on,
+                surface,event,scoring_system,result,match_key
+  points.csv:   coach_email,match_key,sequence,server,won,serve1_outcome,serve1_box,
+                serve1_target,serve1_fault_mode,serve2_outcome,serve2_box,serve2_target,
+                serve2_fault_mode,return_outcome,end_reason,unusual_reason,note,wing,
+                shot_type,ball_in,ball_half,ball_depth,ball_out_mode,rally_length_bucket,
+                set_number,game_number,in_tiebreak,is_break_point,is_game_point,
+                is_game_end,is_set_point,is_set_end,is_match_point
+
+- date_of_birth / played_on: ISO format (YYYY-MM-DD).
+- dominant_hand: right | left (blank = unset)
+- gender: male | female | other (blank = unset)
+- surface: hard | clay | grass | carpet (blank = unset)
+- scoring_system: traditional | mens_grand_slam | womens_grand_slam | no_ad_scoring |
+  match_tiebreak_10_points | short_sets | pro_set | legacy (blank = unset)
+- result: win | loss (blank = unset)
+- match_key: an arbitrary label, unique per coach (blank = this match has no points).
+  It exists only to join points.csv to a match here; it is never stored, so a match
+  created without points never needs one.
+- players.csv/matches.csv link back to coaches.csv by coach_email; matches.csv links to
+  players.csv by (coach_email, player_first_name, player_last_name) — there's no id
+  column in the source data, so that triple has to be unique per coach.
+- points.csv is optional and, if present, one row per point in capture order, joined to
+  a match by (coach_email, match_key). Every enum/boolean column matches
+  `schemas/point.py`'s `PointCreate` exactly, which is what validates each row (shape
+  only, same as live capture) before it is stored — see that schema for which columns
+  pair up (e.g. serve1_box with serve1_target) and which are conditional on another
+  column (e.g. unusual_reason only on an `end_reason` of `unusual`). Booleans are
+  `true | false` (also accepts `1 | 0` and `yes | no`); blank means unset on an optional
+  column. `match_sets` needs nothing of its own — it's recomputed from the imported
+  points, same as a live sync would.
+
+All imported coaches share one password, printed at the end, since sample coaches are
+never signed up for real and the CSV carries no password to hash.
+"""
+
+import csv
+import secrets
+import uuid
+from datetime import date
+from pathlib import Path
+
+from pydantic import ValidationError
+
+from matchpoint_api.db import session_factory
+from matchpoint_api.match_sets import recompute_match_sets
+from matchpoint_api.models import (
+    Coach,
+    CourtDepth,
+    CourtSide,
+    DominantHand,
+    EndReason,
+    FailureMode,
+    Gender,
+    Match,
+    MatchResult,
+    MatchSide,
+    Player,
+    Point,
+    RallyBucket,
+    ReturnOutcome,
+    ScoringSystem,
+    ServeOutcome,
+    ServeTarget,
+    ShotType,
+    Surface,
+    UnusualReason,
+    Wing,
+)
+from matchpoint_api.schemas.point import PointCreate
+from matchpoint_api.security import hash_password
+
+CSV_DIR = "/tmp"
+
+_TRUE_VALUES = {"true", "1", "yes"}
+_FALSE_VALUES = {"false", "0", "no"}
+
+
+def _blank_to_none(value: str) -> str | None:
+    return value.strip() or None
+
+
+def _parse_date(value: str) -> date | None:
+    parsed = _blank_to_none(value)
+    return date.fromisoformat(parsed) if parsed else None
+
+
+def _parse_bool(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in _TRUE_VALUES:
+        return True
+    if normalized in _FALSE_VALUES:
+        return False
+    raise ValueError(f"expected a boolean value, got {value!r}")
+
+
+def main() -> None:
+    demo_password = secrets.token_urlsafe(12)
+    demo_password_hash = hash_password(demo_password)
+
+    with session_factory() as db:
+        coach_by_email: dict[str, Coach] = {}
+        with open(f"{CSV_DIR}/coaches.csv", newline="") as f:
+            for row in csv.DictReader(f):
+                coach = Coach(
+                    email=row["email"],
+                    display_name=row["display_name"],
+                    password_hash=demo_password_hash,
+                )
+                db.add(coach)
+                coach_by_email[coach.email.lower()] = coach
+        db.flush()
+
+        player_by_key: dict[tuple[str, str, str], Player] = {}
+        with open(f"{CSV_DIR}/players.csv", newline="") as f:
+            for row in csv.DictReader(f):
+                coach = coach_by_email[row["coach_email"].lower()]
+                player = Player(
+                    coach_id=coach.id,
+                    first_name=row["first_name"],
+                    last_name=row["last_name"],
+                    date_of_birth=_parse_date(row["date_of_birth"]),
+                    dominant_hand=DominantHand(v)
+                    if (v := _blank_to_none(row["dominant_hand"]))
+                    else None,
+                    gender=Gender(v) if (v := _blank_to_none(row["gender"])) else None,
+                    notes=_blank_to_none(row["notes"]),
+                )
+                db.add(player)
+                player_by_key[(coach.email.lower(), player.first_name, player.last_name)] = player
+        db.flush()
+
+        matches_created = 0
+        match_by_key: dict[tuple[str, str], Match] = {}
+        with open(f"{CSV_DIR}/matches.csv", newline="") as f:
+            for row in csv.DictReader(f):
+                key = (
+                    row["coach_email"].lower(),
+                    row["player_first_name"],
+                    row["player_last_name"],
+                )
+                player = player_by_key[key]
+                match = Match(
+                    player_id=player.id,
+                    opponent_name=_blank_to_none(row["opponent_name"]),
+                    played_on=_parse_date(row["played_on"]),
+                    surface=Surface(v) if (v := _blank_to_none(row["surface"])) else None,
+                    event=_blank_to_none(row["event"]),
+                    scoring_system=ScoringSystem(v)
+                    if (v := _blank_to_none(row["scoring_system"]))
+                    else None,
+                    result=MatchResult(v) if (v := _blank_to_none(row["result"])) else None,
+                )
+                db.add(match)
+                matches_created += 1
+                if match_key := _blank_to_none(row["match_key"]):
+                    match_by_key[(row["coach_email"].lower(), match_key)] = match
+        # match.id is a Python-side default, only assigned to the instance on flush;
+        # points.csv needs it to set match_id below.
+        db.flush()
+
+        points_created = 0
+        matches_with_points: set[uuid.UUID] = set()
+        points_path = Path(f"{CSV_DIR}/points.csv")
+        if points_path.exists():
+            with points_path.open(newline="") as f:
+                for line_number, row in enumerate(csv.DictReader(f), start=2):
+                    match = match_by_key[(row["coach_email"].lower(), row["match_key"])]
+                    ball_in = _blank_to_none(row["ball_in"])
+                    try:
+                        point_data = PointCreate(
+                            id=uuid.uuid4(),
+                            sequence=int(row["sequence"]),
+                            server=MatchSide(row["server"]),
+                            won=_parse_bool(row["won"]),
+                            serve1_outcome=ServeOutcome(row["serve1_outcome"]),
+                            serve1_box=CourtSide(v)
+                            if (v := _blank_to_none(row["serve1_box"]))
+                            else None,
+                            serve1_target=ServeTarget(v)
+                            if (v := _blank_to_none(row["serve1_target"]))
+                            else None,
+                            serve1_fault_mode=FailureMode(v)
+                            if (v := _blank_to_none(row["serve1_fault_mode"]))
+                            else None,
+                            serve2_outcome=ServeOutcome(v)
+                            if (v := _blank_to_none(row["serve2_outcome"]))
+                            else None,
+                            serve2_box=CourtSide(v)
+                            if (v := _blank_to_none(row["serve2_box"]))
+                            else None,
+                            serve2_target=ServeTarget(v)
+                            if (v := _blank_to_none(row["serve2_target"]))
+                            else None,
+                            serve2_fault_mode=FailureMode(v)
+                            if (v := _blank_to_none(row["serve2_fault_mode"]))
+                            else None,
+                            return_outcome=ReturnOutcome(v)
+                            if (v := _blank_to_none(row["return_outcome"]))
+                            else None,
+                            end_reason=EndReason(row["end_reason"]),
+                            unusual_reason=UnusualReason(v)
+                            if (v := _blank_to_none(row["unusual_reason"]))
+                            else None,
+                            note=_blank_to_none(row["note"]),
+                            wing=Wing(v) if (v := _blank_to_none(row["wing"])) else None,
+                            shot_type=ShotType(v)
+                            if (v := _blank_to_none(row["shot_type"]))
+                            else None,
+                            ball_in=_parse_bool(ball_in) if ball_in else None,
+                            ball_half=CourtSide(v)
+                            if (v := _blank_to_none(row["ball_half"]))
+                            else None,
+                            ball_depth=CourtDepth(v)
+                            if (v := _blank_to_none(row["ball_depth"]))
+                            else None,
+                            ball_out_mode=FailureMode(v)
+                            if (v := _blank_to_none(row["ball_out_mode"]))
+                            else None,
+                            rally_length_bucket=RallyBucket(v)
+                            if (v := _blank_to_none(row["rally_length_bucket"]))
+                            else None,
+                            set_number=int(row["set_number"]),
+                            game_number=int(row["game_number"]),
+                            in_tiebreak=_parse_bool(row["in_tiebreak"]),
+                            is_break_point=_parse_bool(row["is_break_point"]),
+                            is_game_point=_parse_bool(row["is_game_point"]),
+                            is_game_end=_parse_bool(row["is_game_end"]),
+                            is_set_point=_parse_bool(row["is_set_point"]),
+                            is_set_end=_parse_bool(row["is_set_end"]),
+                            is_match_point=_parse_bool(row["is_match_point"]),
+                        )
+                    except (ValidationError, ValueError) as exc:
+                        raise ValueError(f"points.csv line {line_number}: {exc}") from exc
+                    db.add(Point(**point_data.model_dump(), match_id=match.id))
+                    matches_with_points.add(match.id)
+                    points_created += 1
+
+            # Flush so the recompute's own SQL select sees the points just added.
+            db.flush()
+            for match_id in matches_with_points:
+                recompute_match_sets(db, match_id)
+
+        db.commit()
+        n_coaches, n_players = len(coach_by_email), len(player_by_key)
+        print(f"Imported {n_coaches} coaches, {n_players} players, {matches_created} matches.")
+        if points_path.exists():
+            print(f"Imported {points_created} points across {len(matches_with_points)} matches.")
+        print(f"Demo coach password (same for every imported coach): {demo_password}")
+
+
+if __name__ == "__main__":
+    main()
