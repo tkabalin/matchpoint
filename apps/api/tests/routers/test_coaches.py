@@ -30,6 +30,7 @@ from matchpoint_api.main import create_app
 from matchpoint_api.models import (
     Coach,
     CoachSession,
+    DeletedMatch,
     EmailVerification,
     Match,
     MatchSet,
@@ -52,6 +53,7 @@ from tests.conftest import (
 from tests.factories import (
     make_coach,
     make_coach_session,
+    make_deleted_match,
     make_match,
     make_match_set,
     make_password_reset,
@@ -1263,6 +1265,20 @@ def test_closing_an_account_deletes_a_live_reset_code(
     assert db_session.get(PasswordReset, reset.id) is None
 
 
+def test_closing_an_account_deletes_a_deleted_match_tombstone(
+    client: TestClient, db_session: Session
+) -> None:
+    """The foreign key from deleted_matches has no ondelete either, so a tombstone left
+    behind would refuse the delete outright (#214)."""
+    coach = _closable(client, db_session)
+    tombstone = make_deleted_match(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    assert _close(client).status_code == 204
+
+    assert db_session.get(DeletedMatch, tombstone.id) is None
+
+
 def test_a_transfer_code_survives_the_delete_players_waiver(
     client: TestClient, db_session: Session
 ) -> None:
@@ -1306,13 +1322,15 @@ def test_the_email_can_sign_up_again_afterwards(client: TestClient, db_session: 
 def test_closing_an_account_leaves_every_other_coach_untouched(
     client: TestClient, db_session: Session
 ) -> None:
-    """The cascade is scoped by the session and nothing else. A bystander's player, match
-    and session are exactly what a coach_id-wide delete would take with it."""
+    """The cascade is scoped by the session and nothing else. A bystander's player, match,
+    session and deleted-match tombstone are exactly what a coach_id-wide delete would take
+    with it."""
     _closable(client, db_session)
     bystander = make_coach(db_session)
     their_player = make_player(db_session, coach_id=bystander.id)
     their_match = make_match(db_session, player_id=their_player.id)
     their_session = make_coach_session(db_session, coach_id=bystander.id)
+    their_tombstone = make_deleted_match(db_session, coach_id=bystander.id)
     db_session.commit()
 
     assert _close(client).status_code == 204
@@ -1321,6 +1339,7 @@ def test_closing_an_account_leaves_every_other_coach_untouched(
     assert db_session.get(Player, their_player.id) is not None
     assert db_session.get(Match, their_match.id) is not None
     assert db_session.get(CoachSession, their_session.id) is not None
+    assert db_session.get(DeletedMatch, their_tombstone.id) is not None
 
 
 def test_a_wrong_password_erases_nothing(client: TestClient, db_session: Session) -> None:

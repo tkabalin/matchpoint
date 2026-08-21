@@ -195,7 +195,9 @@ or point-flush naming a deleted id gets `410 Gone` rather than the ordinary 404,
 reserved for an id that was never this coach's, such as a player just transferred away — the client
 discards on 410 and surfaces a 404 to the coach. The record is kept for thirty days, long enough for
 an offline outbox to plausibly still be flushing, and holds only the id and the coach who deleted
-it: no match data survives the delete for anything more to be read off.
+it: no match data survives the delete for anything more to be read off. The coach is kept only so
+account closure can find and remove the row; the 410 check above reads the id alone and stays
+unscoped by coach, the way it already had to before the column existed.
 
 `default_surface` and `default_scoring_system` on `coaches` are match-setup defaults, not a separate
 preferences table: a coach has at most one value for each, so a join would buy nothing a column
@@ -284,9 +286,10 @@ own device shouldn't hold up the coach's own data indefinitely.
 **Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
 just be their email, name and password hash sitting on a row nothing can reach, which is not what
 someone asking to be removed has asked for. So the closure deletes the coach and everything below
-them: their players, the matches recorded against those players, their sessions and any live reset
-code, in one transaction. Nothing keys on the address, so it is free for a fresh sign-up
-immediately, and no row survives to link the new account to the old one.
+them: their players, the matches recorded against those players, their sessions, any live reset
+code, and any `deleted_matches` row their own deletes left behind, in one transaction. Nothing keys
+on the address, so it is free for a fresh sign-up immediately, and no row survives to link the new
+account to the old one.
 
 **A closure is refused while any player is still on the roster.** Players move between coaches as
 they grow up, so a name still on the roster may be one another coach is about to take over, and

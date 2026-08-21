@@ -21,6 +21,7 @@ from matchpoint_api.config import settings
 from matchpoint_api.db import get_db
 from matchpoint_api.models import (
     Coach,
+    DeletedMatch,
     EmailVerification,
     Match,
     PasswordReset,
@@ -414,6 +415,7 @@ def delete_current_coach(
     db.execute(delete(Match).where(Match.player_id.in_(their_players)))
     db.execute(delete(Player).where(Player.coach_id == coach.id))
     db.execute(delete(PasswordReset).where(PasswordReset.coach_id == coach.id))
+    db.execute(delete(DeletedMatch).where(DeletedMatch.coach_id == coach.id))
     revoke_sessions(db, coach.id)
     db.delete(coach)
     db.commit()
