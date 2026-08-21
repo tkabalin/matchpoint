@@ -15,6 +15,7 @@ import {
   maxSetsFor,
   nextBoxFor,
   nextServerFor,
+  scoreboardFor,
   setRulesFor,
   setStateFor,
 } from "./state";
@@ -1164,5 +1165,102 @@ describe("finalWinnerFor", () => {
     // 2-1 decides a best-of-3 match but not a best-of-5 one.
     expect(finalWinnerFor(matchOf("traditional"), sets)).toBe(TRACKED_ID);
     expect(finalWinnerFor(matchOf("mens_grand_slam"), sets)).toBeNull();
+  });
+});
+
+describe("scoreboardFor", () => {
+  test("a brand-new match is love-all: one games column, one point column, both 0", () => {
+    const scoreboard = scoreboardFor([], MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(scoreboard).toEqual({ trackedPlayer: ["0", "0"], opponent: ["0", "0"] });
+  });
+
+  test("a completed set plus a live game: one column per set, point call last", () => {
+    const points = [
+      ...completedGames(OPPONENT_ID, 4),
+      ...completedGames(TRACKED_ID, 6), // set 1: 6-4 to the tracked player
+      ...Array.from({ length: 2 }, () => pointWonBy(TRACKED_ID)), // 30-0 into set 2
+    ];
+    const scoreboard = scoreboardFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(scoreboard).toEqual({
+      trackedPlayer: ["6", "0", "30"],
+      opponent: ["4", "0", "0"],
+    });
+  });
+
+  // Reach 6-6 without either side crossing the win threshold early — same safe
+  // sequencing matchSetsFor's own tiebreak test uses: tracked's first 5 games
+  // (5-0, under 6), then all 6 of the opponent's (5-6, only a 1-game lead), then
+  // tracked's 6th (6-6, ties it and enters the breaker).
+  const REACH_SIX_ALL = [
+    ...completedGames(TRACKED_ID, 5),
+    ...completedGames(OPPONENT_ID, 6),
+    ...completedGames(TRACKED_ID, 1),
+  ];
+
+  test("a set decided by a tiebreak shows the games score plain — no brackets", () => {
+    // Breaker: opponent's points first (0-5, safe — under the 7-point target), then
+    // tracked's, crossing it only at the intended 7-5.
+    const points = [
+      ...REACH_SIX_ALL,
+      ...Array.from({ length: 5 }, () => pointWonBy(OPPONENT_ID)),
+      ...Array.from({ length: 7 }, () => pointWonBy(TRACKED_ID)),
+    ];
+    const scoreboard = scoreboardFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(scoreboard).toEqual({ trackedPlayer: ["7"], opponent: ["6"] });
+  });
+
+  test("mid-tiebreak: games column freezes at 6-6, final column is live breaker points", () => {
+    const points = [...REACH_SIX_ALL, ...pointsFor(3, 2)];
+    const scoreboard = scoreboardFor(points, MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(scoreboard).toEqual({ trackedPlayer: ["6", "3"], opponent: ["6", "2"] });
+  });
+
+  test("deuce and advantage are called, not just counted", () => {
+    // Only the current set's own games column (0-0, nothing completed yet) precedes
+    // the point call — no separate "set score" column when no set is finished.
+    const deuce = scoreboardFor(pointsFor(3, 3), MATCH_ID, TRACKED_ID, OPPONENT_ID, "traditional");
+    expect(deuce).toEqual({ trackedPlayer: ["0", "40"], opponent: ["0", "40"] });
+
+    const advantage = scoreboardFor(
+      [...pointsFor(3, 3), pointWonBy(TRACKED_ID)],
+      MATCH_ID,
+      TRACKED_ID,
+      OPPONENT_ID,
+      "traditional",
+    );
+    expect(advantage).toEqual({ trackedPlayer: ["0", "AD"], opponent: ["0", "40"] });
+  });
+
+  test("no-ad scoring never calls AD — 3-3 stays 40-40, sudden death from there", () => {
+    const scoreboard = scoreboardFor(
+      pointsFor(3, 3),
+      MATCH_ID,
+      TRACKED_ID,
+      OPPONENT_ID,
+      "no_ad_scoring",
+    );
+    expect(scoreboard).toEqual({ trackedPlayer: ["0", "40"], opponent: ["0", "40"] });
+  });
+
+  test("match_tiebreak_10_points' decider shows its breaker score bracketed once decided", () => {
+    const points = [
+      ...completedGames(TRACKED_ID, 6), // set 1: tracked 6-0
+      ...completedGames(OPPONENT_ID, 6), // set 2: opponent 6-0
+      // Decider: straight to the breaker at 0-0 — opponent's points first (0-7,
+      // safe — under the 10-point target), then tracked's, crossing it at 10-7.
+      ...Array.from({ length: 7 }, () => pointWonBy(OPPONENT_ID)),
+      ...Array.from({ length: 10 }, () => pointWonBy(TRACKED_ID)),
+    ];
+    const scoreboard = scoreboardFor(
+      points,
+      MATCH_ID,
+      TRACKED_ID,
+      OPPONENT_ID,
+      "match_tiebreak_10_points",
+    );
+    expect(scoreboard).toEqual({
+      trackedPlayer: ["6", "0", "[10]"],
+      opponent: ["0", "6", "[7]"],
+    });
   });
 });

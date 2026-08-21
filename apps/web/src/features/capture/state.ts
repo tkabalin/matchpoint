@@ -754,3 +754,116 @@ export function finalWinnerFor(match: Match, matchSets: readonly MatchSet[]): st
   const rules = matchRulesFor(match.scoringSystem);
   return matchStateFor(matchSets, match.trackedPlayerId, match.opponentId, rules).winner;
 }
+
+// --- Scoreboard display -----------------------------------------------------------
+
+// The call for 0, 1, or 2 points won — 3+ moves into deuce/AD territory, resolved by
+// pointCallFor below since that depends on the opponent's count too.
+const POINT_LABELS = ["0", "15", "30"] as const;
+
+export interface Scoreboard {
+  trackedPlayer: string[];
+  opponent: string[];
+}
+
+/**
+ * The live call for a game still in progress — "40", "AD", or one of POINT_LABELS,
+ * one per side. Takes the raw point counts rather than a Point[] slice, the same
+ * split gameStateFor already returns from counting — this just turns that count into
+ * what an umpire would actually call.
+ *
+ * Assumes the game is genuinely undecided (resolveGameWinner would return null) —
+ * scoreboardFor only ever calls this on the match's current, unfinished game.
+ */
+function pointCallFor(
+  trackedPlayerPoints: number,
+  opponentPoints: number,
+  isAdScoring: boolean,
+): { trackedPlayer: string; opponent: string } {
+  const label = (points: number) => (points < 3 ? POINT_LABELS[points] : undefined) ?? "40";
+
+  if (trackedPlayerPoints < 3 || opponentPoints < 3 || !isAdScoring) {
+    // No-ad sudden death never goes past "40" apiece — the game ends the instant
+    // either side leads by 1, so both at "40" is the only reachable undecided state.
+    return { trackedPlayer: label(trackedPlayerPoints), opponent: label(opponentPoints) };
+  }
+
+  // Both at 3+ under ad scoring: deuce, or advantage to whoever leads by 1.
+  const lead = trackedPlayerPoints - opponentPoints;
+  if (lead === 0) return { trackedPlayer: "40", opponent: "40" };
+  return lead > 0
+    ? { trackedPlayer: "AD", opponent: "40" }
+    : { trackedPlayer: "40", opponent: "AD" };
+}
+
+/**
+ * The live score in the two-row, one-column-per-set shape a broadcast scoreboard
+ * uses: each completed set contributes one games column, the in-progress set (if
+ * any) contributes a live games column of its own, and the final column is the live
+ * call for the current game — tiebreak points while the breaker's running,
+ * pointCallFor's labels otherwise. A match_tiebreak_10_points decider plays no games
+ * at all (see setStateFor), so a *completed* set of that shape shows its breaker
+ * score in brackets instead of the games column, per MatchSet's own field comment;
+ * a *live* one skips straight to the breaker points as its only column.
+ *
+ * Takes the same inputs as matchSetsFor and composes it rather than a
+ * MatchSetsState directly — the current game's own point split isn't part of that
+ * return value (only the summed currentGamePoints is, which is all nextBoxFor
+ * needs), so this re-slices `points` itself: the trailing `currentGamePoints`
+ * entries of the full, ordered match log are exactly that game's points, since
+ * nothing has been recorded after them and the game before them already resolved.
+ */
+export function scoreboardFor(
+  points: readonly Point[],
+  matchId: string,
+  trackedPlayerId: string,
+  opponentId: string,
+  scoringSystem: ScoringSystem,
+): Scoreboard {
+  const isAdScoring = isAdScoringFor(scoringSystem);
+  const maxSets = maxSetsFor(scoringSystem);
+  const liveSets = matchSetsFor(points, matchId, trackedPlayerId, opponentId, scoringSystem);
+
+  const trackedPlayer: string[] = [];
+  const opponent: string[] = [];
+
+  for (const matchSet of liveSets.completedSets) {
+    const rules = setRulesFor(scoringSystem, matchSet.setNumber, maxSets);
+    if (rules.gamesToWin === 0 && matchSet.tiebreak !== null) {
+      trackedPlayer.push(`[${matchSet.tiebreak.trackedPlayerPoints}]`);
+      opponent.push(`[${matchSet.tiebreak.opponentPoints}]`);
+    } else {
+      trackedPlayer.push(String(matchSet.trackedPlayerGames));
+      opponent.push(String(matchSet.opponentGames));
+    }
+  }
+
+  if (liveSets.currentSet === null) {
+    return { trackedPlayer, opponent };
+  }
+
+  const { setNumber, state } = liveSets.currentSet;
+  const rules = setRulesFor(scoringSystem, setNumber, maxSets);
+
+  if (rules.gamesToWin !== 0) {
+    trackedPlayer.push(String(state.trackedPlayerGames));
+    opponent.push(String(state.opponentGames));
+  }
+
+  if (isTiebreakFor(state, rules)) {
+    trackedPlayer.push(String(state.tiebreak?.trackedPlayerPoints ?? 0));
+    opponent.push(String(state.tiebreak?.opponentPoints ?? 0));
+  } else {
+    const currentGamePoints = points.slice(points.length - state.currentGamePoints);
+    const currentGame = gameStateFor(currentGamePoints, trackedPlayerId, opponentId, isAdScoring);
+    const call = pointCallFor(
+      currentGame.trackedPlayerPoints,
+      currentGame.opponentPoints,
+      isAdScoring,
+    );
+    trackedPlayer.push(call.trackedPlayer);
+    opponent.push(call.opponent);
+  }
+
+  return { trackedPlayer, opponent };
+}
