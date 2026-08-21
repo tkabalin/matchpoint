@@ -86,6 +86,8 @@ so it gets a layer split of its own rather than one level covering it:
 - The reload-while-offline flow is an e2e spec run against a **production build** (`vite preview`),
   Chromium only. `vite dev` never registers a service worker, so the step it exists to cover,
   reloading mid-match with the network down, cannot run under it.
+- The same project covers the read side: with the network down, the roster and the match list have
+  to render from the persisted query cache rather than from a request that cannot complete.
 - The drain engine (replaying the offline outbox back into requests) is unit-tested against the
   generated Zod schemas rather than hand-rolled fixtures, for the reason § Contract checks against
   the API gives.
