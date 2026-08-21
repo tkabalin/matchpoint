@@ -147,6 +147,12 @@ erDiagram
         timestamptz created_at
         timestamptz updated_at
     }
+
+    deleted_matches {
+        uuid id PK "a deleted match's own id; no foreign key, the row it named is gone"
+        uuid coach_id FK "the coach who deleted it"
+        timestamptz deleted_at "when the delete happened, and the only timestamp here"
+    }
 ```
 
 A match carries metadata only. Point-level data — serves, rally outcomes, rally length — is captured
@@ -175,23 +181,21 @@ instead of replaying points. `winner` is null while a set is in flight, since th
 point that closes a set and until one arrives the tally is only a score so far. A tiebreak needs no
 column of its own, being another game, so a 7-6 set stores 7-6.
 
-`points` is the capture record itself: one row per point, in the order the capture client assigned
-it, and append-only. A point syncs once its rally is over and is never corrected afterwards (an undo
-before that sync is an outbox delete on the device, never a write here), so the table carries no
-correction or tombstone column. There is no timestamp: the client-assigned `sequence` is the order
-the server trusts, client clock times being informational only, and no foreign key names a set or a
-game, `match_sets` being what a group-by over `sequence`/`set_number`/`game_number` derives.
-`set_number`, `game_number` and the seven `is_*`/`in_tiebreak` booleans are stamped by the client's
-own scoring engine on every point and are never recomputed here, since replaying tennis scoring
-server-side would be a second copy of logic that already lives once, in the client that has to run
-offline anyway.
+`points` is the capture record: one row per point, in client-assigned order, and append-only. An
+undo before sync is an outbox delete on the device, never a write here, so the table carries no
+correction or tombstone column, and no timestamp: the client's `sequence` is the order the server
+trusts. `set_number`, `game_number` and the `is_*`/`in_tiebreak` flags are stamped by the client's
+own scoring engine and never recomputed here, since that logic already has to run offline.
 
-Deleting a match with points recorded is refused, the same way any other delete that would orphan a
-child row is: a single match is a casual screen a stray tap can reach, and the history captured
-against it should survive that tap. Deleting a player or closing an account erases their points
-along with everything else below them instead, because both are heavyweight, client-confirmed
-erasures whose entire point is to take the history too. The asymmetry is deliberate, not an
-oversight to reconcile.
+Deleting a match deletes its points too, in the same transaction as deleting a player or closing an
+account: the realistic delete is a coach backing out of a mis-set-up match, and its points would
+otherwise skew that player's statistics for good. `deleted_matches` stops that delete being undone
+by a create still queued offline: `POST /matches` upserts on a client-chosen id, so a queued create
+or point-flush naming a deleted id gets `410 Gone` rather than the ordinary 404, which stays
+reserved for an id that was never this coach's, such as a player just transferred away — the client
+discards on 410 and surfaces a 404 to the coach. The record is kept for thirty days, long enough for
+an offline outbox to plausibly still be flushing, and holds only the id and the coach who deleted
+it: no match data survives the delete for anything more to be read off.
 
 `default_surface` and `default_scoring_system` on `coaches` are match-setup defaults, not a separate
 preferences table: a coach has at most one value for each, so a join would buy nothing a column
@@ -232,8 +236,10 @@ never exists on a device, so there is no offline identity to preserve.
 **Timestamps default to `clock_timestamp()`, not `now()`.** In Postgres `now()` is the _transaction_
 timestamp, so a batch of rows synced in one transaction would share a creation time — voiding any
 ordering that uses `created_at` to break a tie. Every table carries `created_at` and `updated_at`,
-both `timestamptz`. That is a column default; a timestamp a route computes for itself, a session
-expiry, comes from Python's clock.
+both `timestamptz`, bar `deleted_matches`, which carries one `deleted_at`: its row records that a
+delete happened, so a creation stamp beside it would be the same fact written twice. That is a
+column default; a timestamp a route computes for itself, a session expiry, comes from Python's
+clock.
 
 **Enums are VARCHAR with a named CHECK constraint**, not native Postgres enums (`str_enum` in
 `models/types.py`). Postgres cannot remove a value from a native enum, so a migration adding one
@@ -245,12 +251,12 @@ key automatically, so each key carries an index of its own unless it already lea
 a unique constraint, as `player_transfer_codes.player_id`, `match_sets.match_id` and
 `points.match_id` do. Leaving off `ondelete` means a delete that would orphan rows is refused
 outright rather than cascading through a roster and the match history hanging off it. The routes
-that do mean to take the children with them (deleting a player, and closing an account) delete each
-child table in turn themselves, so the refusal stays in place as a backstop: a table added under
-`players` or `coaches` and left out of one of those lists stops the delete loudly instead of being
-quietly missed. `match_sets.match_id` is the one foreign key that cascades: the refusal exists to
-protect data a coach entered, and a derived row is not that, so it follows its match out rather than
-standing in the way of deleting one.
+that do mean to take the children with them (deleting a match, deleting a player, and closing an
+account) delete each child table in turn themselves, so the refusal stays in place as a backstop: a
+table added under `matches`, `players` or `coaches` and left out of one of those lists stops the
+delete loudly instead of being quietly missed. `match_sets.match_id` is the one foreign key that
+cascades: the refusal exists to protect data a coach entered, and a derived row is not that, so it
+follows its match out rather than standing in the way of deleting one.
 
 **Optional unless the value is genuinely required.** Player and match setup happens courtside and
 has to be fast, so beyond the fields that identify a row there is little a coach must fill in.
@@ -259,25 +265,21 @@ and a row missing any of them is not an account.
 
 **Deletion is deletion, and the route owns the cascade.** No table carries a deleted flag: a row a
 coach asks to be rid of goes, and what hung off it goes with it. Deleting a player takes the matches
-recorded against them, in one transaction; deleting a match takes the set rows derived from its
-points, and those go through the cascade above rather than a line in the route. Otherwise the route
-names each child table itself rather than leaning on the database, which is what the no-`ondelete`
-foreign keys are for: a table added under players or matches and left out of that list refuses the
-delete outright instead of being quietly missed. Nothing is recoverable afterwards, so the
-confirmation belongs to the client, where the coach can be shown what they are about to lose. A
-single match is the one exception to that last sentence: deleting one with points already recorded
-against it is refused outright rather than taking them with it, for the reason given above `points`.
+recorded against them, in one transaction; deleting a match takes the points captured against it the
+same way, and the set rows derived from those points through the cascade above rather than a line in
+the route. Otherwise the route names each child table itself rather than leaning on the database,
+which is what the no-`ondelete` foreign keys are for: a table added under players or matches and
+left out of that list refuses the delete outright instead of being quietly missed. Nothing is
+recoverable afterwards, so the confirmation belongs to the client, where the coach can be shown what
+they are about to lose. A `deleted_matches` row is the one thing a delete writes rather than
+removes, and it holds an id and the deleting coach, nothing else, for the reason given above it.
 
-**A match being captured is not deleted out from under the device capturing it.** A delete that
-ignored the claim would leave that device recording into a match that no longer exists, with every
-point it has queued offline unable to land and nothing to tell the coach why. So the delete is
-refused while a live claim stands, and the request names the asking device so the holder can still
-delete the match it is capturing: backing out of capture does not release a claim, and the device
-that took one is the likeliest to be clearing away a match set up wrongly. Releasing the claim is
-the way through from any other device, and a lapsed one already counts as free. Unlike the
-transfer-code refusal below, this one stops at the single match: a capture claim is this coach's own
-device holding their own data, so deleting the player or closing the account takes the match along
-rather than waiting out a device that may never come back.
+**A match being captured is not deleted out from under the device capturing it.** Deleting it
+regardless would leave that device queuing points against a match that no longer exists. The delete
+is refused while a live claim stands, except from the holding device itself, which can still back
+out of its own capture; any other device must release the claim first. Deleting the player or
+closing the account skips this check and takes the match anyway, since a stale claim on the coach's
+own device shouldn't hold up the coach's own data indefinitely.
 
 **Closing a coach account is erasure, and takes their data with it.** A closed-but-kept coach would
 just be their email, name and password hash sitting on a row nothing can reach, which is not what

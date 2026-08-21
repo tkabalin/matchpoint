@@ -8,17 +8,21 @@ paths:
 - No table carries a deleted-but-kept flag, and a new one must not introduce the idea: a coach who
   asks to be rid of a row means it, and a flag would leave the data sitting where nothing can reach
   it. `DELETE /players/{id}` erases the player and their matches; `DELETE /coaches/me` erases the
-  coach and every row below them; a match entered by mistake deletes on its own.
+  coach and every row below them; a match entered by mistake deletes on its own, points and all.
+  `deleted_matches` is not a counter-example: the match is genuinely gone, and the row holds only
+  its id and the deleting coach, long enough that a create or a point flush queued offline before
+  the delete is refused instead of landing. A window like that measures how long a client may sit on
+  unsent rows, never how long a server-side lease runs, and expires lazily: an aged row stops
+  matching and nothing sweeps it.
 - **A route that deletes a parent deletes each child table in turn itself**, in the request's one
-  transaction, so a **new table hanging off `players` or `coaches`, or off anything already below
-  them, extends that route's delete list**. The foreign keys declare no `ondelete`, so one left out
-  makes the delete fail rather than orphan rows. Nothing else catches it; a route test that deletes
-  with the new table populated does. `match_sets` is the single exception and not a precedent: it
-  holds a tally the server derives from a match's points, so it cascades with the match instead of
-  appearing in any delete list. A points table under `matches` puts `DELETE /matches/{id}` in the
-  same position, and nothing catches the `IntegrityError` it would raise, so adding that table
-  includes choosing what the route does with the point data (`docs/data-model.md` records the
-  policy).
+  transaction, so a **new table hanging off `matches`, `players` or `coaches`, or off anything
+  already below them, extends that route's delete list**. The foreign keys declare no `ondelete`, so
+  one left out makes the delete fail rather than orphan rows. Nothing else catches it; a route test
+  that deletes with the new table populated does. `match_sets` is the single exception and not a
+  precedent: it holds a tally the server derives from a match's points, so it cascades with the
+  match instead of appearing in any delete list. `DELETE /matches/{id}` is in the same position, and
+  deletes the match's points itself rather than refusing over them (`docs/data-model.md` records
+  why).
 - A delete is refused where the row is not this coach's alone to destroy: a live transfer code is
   another coach's pending claim, so it answers 409 on the player delete and on account closure
   alike. Refusals like that belong on **every** route that reaches the row, or the first one left
@@ -46,6 +50,8 @@ paths:
 
 - Every table carries `created_at` and `updated_at`, both `DateTime(timezone=True)` with
   `server_default=func.clock_timestamp()`, and `updated_at` also `onupdate=func.clock_timestamp()`.
+  `deleted_matches` is the one exception, its single `deleted_at` being the moment the row exists to
+  record; a table whose timestamp is not the row's own creation says so the same way.
 - `clock_timestamp()`, not `now()`: in Postgres `now()` is the _transaction_ timestamp, so every row
   written in one transaction shares a value — silently voiding any ordering that uses the column as
   a tiebreaker, which is exactly what a batch of synced matches would hit.
