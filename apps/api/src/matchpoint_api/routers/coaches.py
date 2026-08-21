@@ -405,10 +405,9 @@ def delete_current_coach(
     # Children first, in one transaction, because no foreign key here declares an
     # `ondelete` bar the derived set rows, which follow their match out on their own, so a
     # table added below the coach and left out of this list stops the delete outright
-    # rather than being quietly missed; points go with the account here, where
-    # `DELETE /matches/{id}` refuses over them instead. Nothing keys on the email
-    # (`email_verifications` cannot hold a registered address), so the address is free for
-    # a fresh sign-up the moment this commits.
+    # rather than being quietly missed. Nothing keys on the email (`email_verifications`
+    # cannot hold a registered address), so the address is free for a fresh sign-up the
+    # moment this commits.
     their_players = select(Player.id).where(Player.coach_id == coach.id)
     their_matches = select(Match.id).where(Match.player_id.in_(their_players))
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))

@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from psycopg.errors import ForeignKeyViolation, UniqueViolation
-from sqlalchemy import select
+from psycopg.errors import UniqueViolation
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -46,7 +46,6 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 # Named so a route test can assert the body exactly, the way the transfer-code refusal
 # on the player routes does.
-MATCH_HAS_POINTS = "Match has recorded points"
 MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
 POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
 POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
@@ -258,7 +257,7 @@ def ingest_points(
     """
     # Locked because this reads the result and the claim and then writes points
     # against them, and because delete_match deletes the points and then the match:
-    # unlocked, a batch could land under a delete that had already checked for points.
+    # unlocked, a batch could land under a delete that had already erased its points.
     match = match_for_coach(db, match_id, coach.id, for_update=True)
     if match.result is not None:
         raise HTTPException(status_code=409, detail="Match is completed")
@@ -316,22 +315,23 @@ def list_points(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list
     )
 
 
-# The 409 is declared because the client branches on it, and one status covers both
-# refusals as on the capture claim: either way the match cannot be cleared away and
-# re-entered the way an empty one can, so the coach is told why rather than left to
-# read a generic failure.
+# The 409 is declared because the client branches on it, and it now covers the one
+# refusal left: another device is capturing the match. Points recorded against it were a
+# second until #214, so the coach-facing delete reads the reason off the status alone.
 @router.delete(
     "/{match_id}",
     status_code=204,
-    responses={409: {"model": ErrorDetail, "description": "Match cannot be deleted"}},
+    responses={409: {"model": ErrorDetail, "description": "Match is being captured"}},
 )
 def delete_match(
     match_id: uuid.UUID, db: DbSession, coach: CurrentCoach, device_id: uuid.UUID | None = None
 ) -> None:
-    """Erase one match, unless another device is capturing it or it has points recorded.
+    """Erase one match and the points captured against it, unless another device holds it.
 
     `device_id` names the asking device, so the device holding the capture claim can
-    still delete the match it is capturing.
+    still delete the match it is capturing. A player's analytics change retroactively and
+    that is the intent: a match started against the wrong player skews every statistic it
+    is counted in until it goes.
     """
     # Locked for the reason the claim routes give: an unlocked read lets a claim taken
     # while it waited stand through the delete below.
@@ -339,25 +339,13 @@ def delete_match(
     # The holder is exempt because backing out of capture does not release its claim
     # (#197), so refusing over every one would lock a match set up by mistake away for
     # the rest of the four hours.
-    #
-    # Ahead of the points refusal, being the answer more likely to change the coach's
-    # mind, and the recoverable one: release clears the way, where points never do.
     holder = capture_holder(match)
     if holder is not None and holder != device_id:
         raise HTTPException(status_code=409, detail=MATCH_IS_BEING_CAPTURED)
-    # Derived set rows follow the match out through their own ondelete; the points
-    # table declares none, so a match with real capture history refuses the delete
-    # instead of losing it. Deleting the player, or closing the account, is the only
-    # way past a match that has points recorded against it.
+    # The points go by hand and in this transaction, as the player delete and account
+    # closure already erase them: `points.match_id` declares no `ondelete`, so a match
+    # still holding any would refuse the delete outright. The derived set rows follow it
+    # out through the schema's one cascade instead.
+    db.execute(delete(Point).where(Point.match_id == match.id))
     db.delete(match)
-    try:
-        db.flush()
-    except IntegrityError as exc:
-        db.rollback()
-        # Narrows the type for Pyright, and keeps any other integrity failure out of a
-        # 409 about points. `points` is the only inbound key that refuses rather than
-        # cascading, so a second one has to narrow further than the violation class.
-        if isinstance(exc.orig, ForeignKeyViolation):
-            raise HTTPException(status_code=409, detail=MATCH_HAS_POINTS) from exc
-        raise
     db.commit()

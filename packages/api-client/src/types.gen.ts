@@ -1536,7 +1536,7 @@ export type DeleteMatchErrors = {
      */
     401: ErrorDetail;
     /**
-     * Match cannot be deleted
+     * Match is being captured
      */
     409: ErrorDetail;
     /**

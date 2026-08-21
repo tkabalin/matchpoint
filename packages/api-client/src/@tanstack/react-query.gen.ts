@@ -407,10 +407,12 @@ export const createMatchMutation = (options?: Partial<Options<CreateMatchData>>)
 /**
  * Delete Match
  *
- * Erase one match, unless another device is capturing it or it has points recorded.
+ * Erase one match and the points captured against it, unless another device holds it.
  *
  * `device_id` names the asking device, so the device holding the capture claim can
- * still delete the match it is capturing.
+ * still delete the match it is capturing. A player's analytics change retroactively and
+ * that is the intent: a match started against the wrong player skews every statistic it
+ * is counted in until it goes.
  */
 export const deleteMatchMutation = (options?: Partial<Options<DeleteMatchData>>): UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> => {
     const mutationOptions: UseMutationOptions<DeleteMatchResponse, DeleteMatchError, Options<DeleteMatchData>> = {

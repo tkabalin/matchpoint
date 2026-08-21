@@ -124,8 +124,7 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     # Children first, in one transaction, for the reason account closure gives: a table
     # added below players and left out of this list stops the delete outright rather than
     # orphaning rows, no foreign key here declaring an `ondelete`. The derived set rows
-    # under a match are the one exception, and follow their match out on their own; points
-    # go with the player here, where `DELETE /matches/{id}` refuses over them instead.
+    # under a match are the one exception, and follow their match out on their own.
     photo_key = player.photo_key
     their_matches = select(Match.id).where(Match.player_id == player.id)
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))

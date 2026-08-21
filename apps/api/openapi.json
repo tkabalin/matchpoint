@@ -2877,7 +2877,7 @@
     },
     "/matches/{match_id}": {
       "delete": {
-        "description": "Erase one match, unless another device is capturing it or it has points recorded.\n\n`device_id` names the asking device, so the device holding the capture claim can\nstill delete the match it is capturing.",
+        "description": "Erase one match and the points captured against it, unless another device holds it.\n\n`device_id` names the asking device, so the device holding the capture claim can\nstill delete the match it is capturing. A player's analytics change retroactively and\nthat is the intent: a match started against the wrong player skews every statistic it\nis counted in until it goes.",
         "operationId": "delete_match",
         "parameters": [
           {
@@ -2930,7 +2930,7 @@
                 }
               }
             },
-            "description": "Match cannot be deleted"
+            "description": "Match is being captured"
           },
           "422": {
             "content": {

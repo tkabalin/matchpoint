@@ -41,8 +41,8 @@ class MatchSet(Base):
     # row never exists on a device, so no request body carries one (docs/data-model.md).
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     # The only `ondelete` in the schema. A derived row is not history to be protected, so
-    # it follows the match out instead of refusing to let it go; the delete of a match
-    # with real point data behind it still has the points to refuse over.
+    # it follows the match out instead of refusing to let it go; the points it was derived
+    # from are erased by `delete_match` itself, as every other child table is.
     match_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"))
     set_number: Mapped[int]
     games_won_tracked: Mapped[int]

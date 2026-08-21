@@ -5,7 +5,7 @@ from typing import Any
 import httpx2
 import pytest
 from fastapi.testclient import TestClient
-from psycopg.errors import ForeignKeyViolation, UniqueViolation
+from psycopg.errors import ForeignKeyViolation
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -23,7 +23,6 @@ from matchpoint_api.models import (
 )
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
-    MATCH_HAS_POINTS,
     MATCH_IS_BEING_CAPTURED,
     POINT_IN_ANOTHER_MATCH,
     POINT_SEQUENCE_TAKEN,
@@ -915,51 +914,38 @@ def test_delete_match_takes_its_derived_sets_with_it(
     assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
 
 
-def test_delete_match_with_points_recorded_is_refused(
+def test_delete_match_takes_its_points_with_it(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The one child table `delete_match` cannot cascade or clear itself: a coach's
-    captured history has to survive a delete a stray tap could reach. The body is
-    asserted exactly because the route declares the 409 as ErrorDetail for a form to
-    branch on."""
+    """The reversal #214 asked for: a match captured against the wrong player or format
+    used to be permanent once a single point had landed, and its points went on skewing
+    every statistic they were counted in. The route erases them itself, `points.match_id`
+    declaring no `ondelete`."""
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
-    point = make_point(db_session, match_id=match.id)
+    make_point(db_session, match_id=match.id)
+    make_point(db_session, match_id=match.id, sequence=1)
     db_session.commit()
 
     response = client.delete(f"/matches/{match.id}")
 
-    assert response.status_code == 409
-    assert response.json() == {"detail": MATCH_HAS_POINTS}
-    assert db_session.get(Match, match.id) is not None
-    assert db_session.get(Point, point.id) is not None
+    assert response.status_code == 204
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
 
 
-def test_an_integrity_error_that_is_not_from_points_is_not_absorbed(
+def test_delete_match_leaves_another_matchs_points_alone(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Only a foreign-key violation from points becomes the 409 above; any other
-    integrity failure is a bug and stays a server error, since answering "has
-    points" would send whoever hit it looking in the wrong place.
-
-    Reaching that arm needs no row under points at all, so it is engineered instead:
-    a `before_flush` hook rides in a second, unrelated row (a duplicate coach email)
-    the moment the route's own flush is about to run, which is what actually raises
-    here and confirms the route's `except` only narrows on the one violation it means
-    to catch.
-    """
-    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
-    other_coach = make_coach(db_session)
+    """The points are erased by match id, so the sibling match of the same player keeps
+    its own: the delete is scoped to what the coach asked to lose."""
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    make_point(db_session, match_id=match.id)
+    kept = make_point(db_session, match_id=make_match(db_session, player_id=player_id).id)
     db_session.commit()
 
-    @event.listens_for(db_session, "before_flush")
-    def _sabotage(session: Session, _context: object, _instances: object) -> None:
-        if any(isinstance(deleted, Match) for deleted in session.deleted):
-            session.add(Coach(email=other_coach.email, display_name="Duplicate", password_hash="x"))
-
-    with pytest.raises(IntegrityError) as caught:
-        client.delete(f"/matches/{match.id}")
-
-    assert isinstance(caught.value.orig, UniqueViolation)
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert db_session.scalar(select(Point.id)) == kept.id
 
 
 def test_delete_match_twice_is_404(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -1085,12 +1071,12 @@ def test_releasing_the_claim_clears_the_way_for_the_delete(
     assert client.delete(f"/matches/{match.id}").status_code == 204
 
 
-def test_the_capture_refusal_comes_before_the_points_refusal(
+def test_the_capture_refusal_still_stands_over_a_match_with_points(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Both stand through any capture that is online, and the claim is the one that
-    answers what the coach is about to do: the match is being recorded right now. Having
-    points is the permanent answer, and it is still there on the retry after a release."""
+    """Points no longer refuse the delete, and the claim is now the only thing that does,
+    so a claimed match keeps both its row and its points: the coach is told the match is
+    being recorded right now, and a release is the way through."""
     match = _claimed_match(db_session, coach, uuid.uuid4())
     make_point(db_session, match_id=match.id)
     db_session.commit()
@@ -1100,6 +1086,7 @@ def test_the_capture_refusal_comes_before_the_points_refusal(
     assert response.status_code == 409
     assert response.json() == {"detail": MATCH_IS_BEING_CAPTURED}
     assert db_session.scalar(select(func.count()).select_from(Match)) == 1
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 1
 
 
 def _claimed_match(
@@ -1805,9 +1792,9 @@ def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
     bug and stays a server error, since answering "that sequence is taken" would send
     whoever hit it looking in the wrong place.
 
-    Engineered the way the delete route's twin is, there being no body that reaches
-    this arm: a `before_flush` hook rides in an unrelated row with a dangling foreign
-    key just as the route's own write is about to run.
+    Engineered, there being no body that reaches this arm: a `before_flush` hook rides
+    in an unrelated row with a dangling foreign key just as the route's own write is
+    about to run.
     """
     device_id = uuid.uuid4()
     match = _claimed_match(db_session, coach, device_id)
