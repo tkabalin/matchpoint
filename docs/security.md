@@ -177,6 +177,13 @@ cannot lock the coach out of closing the account. The arrival tiers are charged 
 every metered route here, so a flood delays a closure without preventing one. Every session goes
 with the rows, and the cookie the request arrived on is cleared.
 
+**A password write and a password check cannot interleave.** Every write commits its new hash with a
+revocation of every session, so a check made against the hash it replaced must not go on to act: to
+mint a session from the retired password, to write over the hash that retired it, or to erase the
+account on a proof just invalidated. Each of those routes re-reads the hash under a row lock on
+`coaches` before it writes, and answers as a wrong password when it has moved. Hashing stays outside
+the lock, so a sign-in never holds a row waiting for Argon2.
+
 **The closure asks for the password a screen early.** `POST /coaches/me/verify-password` checks a
 password against the signed-in coach's hash and answers 204 or 403 having touched nothing, so the
 form can refuse a typo where it was typed rather than at the final warning. It authorises nothing:
