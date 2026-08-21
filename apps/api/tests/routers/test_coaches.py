@@ -1340,6 +1340,34 @@ def test_a_wrong_password_erases_nothing(client: TestClient, db_session: Session
     assert client.get("/coaches/me").status_code == 200
 
 
+def test_a_closure_verified_before_a_password_write_erases_nothing(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A password write is how a coach ends a stolen session's access, so a closure whose
+    proof predates it must not go through: the account would be erased by the credential
+    that write retired, and nothing undoes it.
+
+    The write is flushed from inside `verify_password`, where the other request's commit
+    would land: one shared session cannot run two requests at once.
+    """
+    coach = _closable(client, db_session)
+    real = verify_password
+
+    def verify_then_write(password: str, password_hash: str) -> bool:
+        verified = real(password, password_hash)
+        coach.password_hash = hash_password("what-the-other-request-just-wrote")
+        db_session.flush()
+        return verified
+
+    monkeypatch.setattr("matchpoint_api.routers.coaches.verify_password", verify_then_write)
+
+    response = _close(client)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    assert db_session.get(Coach, coach.id) is not None
+
+
 def test_closing_an_account_needs_a_session(client: TestClient) -> None:
     """No session, no coach to re-authenticate: the 401 is current_coach's, which is
     exactly why a wrong password answers 403 instead."""

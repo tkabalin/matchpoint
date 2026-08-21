@@ -8,7 +8,7 @@ import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import delete, event, func, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import (
@@ -268,6 +268,94 @@ def test_a_current_hash_is_left_alone_on_login(client: TestClient, db_session: S
     refreshed = db_session.get(Coach, coach.id)
     assert refreshed is not None
     assert refreshed.password_hash == current_hash
+
+
+# The race the row lock closes. A password write commits its new hash together with a
+# revocation of every session, so a request whose verification predates it must not get
+# to write or to mint afterwards: the retired password would keep working.
+
+RETIRED_HASH = hash_password("what-the-other-request-just-wrote")
+
+
+def _password_write_mid_verification(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, coach: Coach, module: str
+) -> None:
+    """Land another request's password write in the window a verification holds open.
+
+    The suite shares one session, so no second request can genuinely run alongside this
+    one: the new hash and the revocation are flushed from inside `verify_password`, where
+    the other request's commit would land, leaving the row state the lock has to catch.
+    """
+    real = verify_password
+
+    def verify_then_write(password: str, password_hash: str) -> bool:
+        verified = real(password, password_hash)
+        coach.password_hash = RETIRED_HASH
+        db_session.execute(delete(CoachSession).where(CoachSession.coach_id == coach.id))
+        db_session.flush()
+        return verified
+
+    monkeypatch.setattr(f"{module}.verify_password", verify_then_write)
+
+
+def _statements_of(db_session: Session) -> list[str]:
+    """Collect the SQL a request emits, so a lock can be pinned where behaviour cannot
+    reach it: one shared session cannot produce two concurrent requests, so a re-read
+    without the lock leaves the window open and every test here green regardless."""
+    statements: list[str] = []
+
+    @event.listens_for(db_session.get_bind(), "before_cursor_execute")
+    def _record(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: bool,
+    ) -> None:
+        statements.append(statement)
+
+    return statements
+
+
+def test_a_login_that_verified_a_retired_password_mints_no_session(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What a reset and a change-password are for: whoever holds the old password is
+    meant to be out. A login carrying it answers as a wrong one once the write has
+    landed, rather than handing back a session the revocation had just swept away."""
+    coach = make_coach(
+        db_session, email="mike@example.com", password_hash=hash_password("a-good-password")
+    )
+    db_session.commit()
+    _password_write_mid_verification(monkeypatch, db_session, coach, "matchpoint_api.routers.auth")
+
+    response = client.post("/auth/login", json=LOGIN)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect email or password"}
+    assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 0
+    assert "set-cookie" not in response.headers
+
+
+def test_a_login_locks_the_coach_row_before_minting_a_session(
+    client: TestClient, db_session: Session
+) -> None:
+    """The other half of the same race, the one behaviour cannot reach: the re-read has
+    to hold the row until the session row is in, or a password write landing between the
+    two revokes a table the new session is not yet in."""
+    make_coach(db_session, email="mike@example.com", password_hash=hash_password("a-good-password"))
+    db_session.commit()
+    statements = _statements_of(db_session)
+
+    response = client.post("/auth/login", json=LOGIN)
+
+    assert response.status_code == 200
+    locked = [s for s in statements if "FROM coaches" in s and "FOR UPDATE" in s]
+    assert locked
+    assert statements.index(locked[0]) < next(
+        i for i, s in enumerate(statements) if "INSERT INTO coach_sessions" in s
+    )
 
 
 def _stub_out_verification(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2034,6 +2122,44 @@ def test_a_rejected_change_echoes_neither_password(client: TestClient, db_sessio
     assert response.status_code == 422
     assert SIGN_UP["password"] not in response.text
     assert "tiny" not in response.text
+
+
+def test_a_change_verified_before_another_write_overwrites_neither_hash_nor_revocation(
+    client: TestClient, db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Whichever password write commits first has to be the one that stands. A change
+    whose current-password proof predates it would otherwise write over the password a
+    reset just mailed the coach and mint itself a session out of that reset's reach: a
+    stolen cookie keeping the account, while the coach's own new password is refused."""
+    coach = _signed_in(client, db_session)
+    _password_write_mid_verification(monkeypatch, db_session, coach, "matchpoint_api.routers.auth")
+
+    response = _change(client)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Incorrect password"}
+    refreshed = db_session.get(Coach, coach.id)
+    assert refreshed is not None
+    assert refreshed.password_hash == RETIRED_HASH
+    assert db_session.scalar(select(func.count()).select_from(CoachSession)) == 0
+
+
+def test_a_change_locks_the_coach_row_before_writing_the_new_hash(
+    client: TestClient, db_session: Session
+) -> None:
+    """`recovery_coach` resolves the row unlocked, so the write needs its own lock for
+    the login route's reason, and pinned on the SQL for the login route's reason."""
+    _signed_in(client, db_session)
+    statements = _statements_of(db_session)
+
+    response = _change(client)
+
+    assert response.status_code == 204
+    locked = [s for s in statements if "FROM coaches" in s and "FOR UPDATE" in s]
+    assert locked
+    assert statements.index(locked[0]) < next(
+        i for i, s in enumerate(statements) if "UPDATE coaches" in s
+    )
 
 
 # --- The per-coach ceiling on authenticated traffic ---

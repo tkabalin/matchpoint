@@ -233,6 +233,20 @@ def revoke_sessions(db: Session, coach_id: uuid.UUID) -> None:
     db.execute(delete(CoachSession).where(CoachSession.coach_id == coach_id))
 
 
+def credential_is_current(db: Session, coach: Coach, verified_hash: str) -> bool:
+    """Lock this coach's row, and say whether the hash just verified is still stored.
+
+    Every route that checks a password reads the row unlocked (`login`'s lookup, or
+    `current_coach`), and a password write commits a revocation with the new hash, so one
+    landing between that check and what the check authorised leaves the revocation
+    defeated: a session minted from the old password, or a write over the hash that
+    retired it. Locking here orders the two. Called before this request's own new hash is
+    assigned, since autoflush would otherwise re-read that pending write.
+    """
+    stored = db.scalar(select(Coach.password_hash).where(Coach.id == coach.id).with_for_update())
+    return stored == verified_hash
+
+
 def _unauthenticated() -> HTTPException:
     # One message for a missing cookie, an unknown token and an expired session: to
     # the caller they are the same fact ("sign in"), and distinguishing them would

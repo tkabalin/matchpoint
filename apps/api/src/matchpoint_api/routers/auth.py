@@ -15,6 +15,7 @@ from matchpoint_api.auth import (
     SESSION_LIFETIME,
     VERIFICATION_LIFETIME,
     RecoveryCoach,
+    credential_is_current,
     hash_otp,
     hash_token,
     new_otp,
@@ -123,12 +124,21 @@ def login(data: LoginRequest, request: Request, db: DbSession, response: Respons
         # ignored: DUMMY_HASH matches nothing anyone can submit.
         verify_password(password, DUMMY_HASH)
         reject_login(request, email)
-    if not verify_password(password, coach.password_hash):
+    verified_hash = coach.password_hash
+    if not verify_password(password, verified_hash):
         reject_login(request, email)
     # The one moment the plaintext and a database session are both in hand, so it is
     # here that a change to security.py's parameters reaches rows hashed before it.
-    if needs_rehash(coach.password_hash):
-        coach.password_hash = hash_password(password)
+    # Hashed before the lock below, so no row is held across the Argon2 semaphore.
+    rehashed = hash_password(password) if needs_rehash(verified_hash) else None
+    if not credential_is_current(db, coach, verified_hash):
+        # A password write landed while this login was verifying, so the password
+        # presented is the retired one and mints nothing. No wrong-guess token: the guess
+        # was right when it was made, and the loser is usually the coach themselves,
+        # signing in on a second device as they change the password on the first.
+        raise HTTPException(status_code=401, detail=INCORRECT_CREDENTIALS)
+    if rehashed is not None:
+        coach.password_hash = rehashed
     now = datetime.now(UTC)
     # Signing in is the one moment this coach's own dead rows are cheap to find — the
     # foreign key's index already narrows to them — so the login that would add to the
@@ -773,12 +783,21 @@ def change_password(
     per_ip: RateLimiter = request.app.state.change_password_per_ip_limit
     total: RateLimiter = request.app.state.change_password_total_limit
     take_all((per_ip, client_key(request)), (total, "total"))
-    if not verify_password(data.password.get_secret_value(), coach.password_hash):
+    verified_hash = coach.password_hash
+    if not verify_password(data.password.get_secret_value(), verified_hash):
         # A budget of wrong guesses charged only for one, keyed on the account:
         # reject_login's tier for reject_login's reasons, minus its lockout worry, since
         # spending a token here needs a live session for the account it would lock out.
         per_coach: RateLimiter = request.app.state.change_password_per_coach_limit
         per_coach.take(str(coach.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    # `recovery_coach` read the row unlocked, so the proof above is only as fresh as the
+    # lock this takes: without it a reset landing in between would be written over here,
+    # the new session outliving the revocation that was meant to end this one. The policy
+    # call below holds the lock, which only ever queues this coach's own password writes.
+    if not credential_is_current(db, coach, verified_hash):
+        # The other write won, so the current-password proof is stale and answers as a
+        # wrong password does, charging nothing: the guess was right when it was made.
         raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
     breach_checker: BreachChecker = request.app.state.breach_checker
     # The presented session goes with all the others, as at DELETE /auth/sessions: a

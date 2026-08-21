@@ -12,6 +12,7 @@ from matchpoint_api.auth import (
     SESSION_COOKIE,
     VERIFICATION_COOKIE,
     CurrentCoach,
+    credential_is_current,
     hash_token,
     revoke_sessions,
 )
@@ -355,12 +356,18 @@ def delete_current_coach(
     per_ip: RateLimiter = request.app.state.close_account_per_ip_limit
     total: RateLimiter = request.app.state.close_account_total_limit
     take_all((per_ip, client_key(request)), (total, "total"))
-    if not verify_password(data.password.get_secret_value(), coach.password_hash):
+    verified_hash = coach.password_hash
+    if not verify_password(data.password.get_secret_value(), verified_hash):
         # change-password's wrong-guess budget, charged only for a failure: what it bounds
         # is a stolen session hunting for the password, and here that hunt ends in a delete
         # nothing undoes.
         per_coach: RateLimiter = request.app.state.close_account_per_coach_limit
         per_coach.take(str(coach.id))
+        raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
+    # Locked here rather than at `_locked_coach` below, so nothing can retire the password
+    # between the proof and the erase: a coach changing their password to end a thief's
+    # access must not have the account deleted by a request that proof was made for.
+    if not credential_is_current(db, coach, verified_hash):
         raise HTTPException(status_code=403, detail=INCORRECT_PASSWORD)
     # After the password and not before it: every answer this route gives past the 401
     # comes from a caller who has just re-authenticated, so no later answer has to argue
