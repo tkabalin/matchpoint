@@ -197,6 +197,15 @@ deliberately revokes nothing: a transfer moves ownership between coaches, the pl
 and credential are unchanged, and the new coach holds the regenerate lever if they want the player
 re-credentialed.
 
+**A rotation and a sign-in cannot interleave.** A revocation deletes the session rows that exist
+when it runs, so a login or a change-password that verified an unlocked read could mint one just
+after the sweep and leave the revoked password holding a live, self-renewing session. All three
+paths take the same row lock on `players` before they write: the two credential checks re-read the
+stored hash under it and answer as a wrong password when a rotation has already landed, and the
+regenerate waits for whichever request is in flight and then revokes what it minted. Without that
+ordering the coach's one recovery lever could be survived by the credential it revoked, or written
+over by the change-password that raced it.
+
 **Password reset invalidates all sessions.** The purpose of a reset is that someone else may hold
 the old credential; leaving their sessions alive would defeat it.
 
