@@ -48,10 +48,12 @@ export function MatchSetup() {
             </Field>
             <Field>
               <FieldLabel htmlFor="surface">Surface</FieldLabel>
-              <ToggleGroup id="surface" defaultValue={["hard"]} variant="outline">
-                <ToggleGroupItem value="hard">Hard</ToggleGroupItem>
+              <ToggleGroup id="surface" defaultValue={["unspecified"]} variant="outline">
+                <ToggleGroupItem value="unspecified">Unspecified</ToggleGroupItem>
+                <ToggleGroupItem value="carpet">Carpet</ToggleGroupItem>
                 <ToggleGroupItem value="clay">Clay</ToggleGroupItem>
                 <ToggleGroupItem value="grass">Grass</ToggleGroupItem>
+                <ToggleGroupItem value="hard">Hard</ToggleGroupItem>
               </ToggleGroup>
             </Field>
             <Field>
