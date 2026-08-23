@@ -65,9 +65,9 @@ test.describe("signed in", () => {
     await expect(page.getByRole("heading", { name: "Start a match" })).toBeVisible();
   });
 
-  test("loads the stats placeholder at /stats", async ({ page }) => {
+  test("loads the squad stats page at /stats", async ({ page }) => {
     await page.goto("/stats");
-    await expect(page.getByRole("heading", { name: "Stats — coming soon" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Squad stats" })).toBeVisible();
   });
 
   // The heading is the coach's own display name, which profile-photo.spec.ts edits and
