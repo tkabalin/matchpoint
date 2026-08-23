@@ -202,6 +202,37 @@ test("links to the match setup screen", async () => {
   expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
 });
 
+test("shows the all-time record and player details above the scope panel", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  expect(await screen.findByText("Win/loss record")).toBeInTheDocument();
+  expect(screen.getByText("All-time")).toBeInTheDocument();
+  expect(screen.getByText("Player details")).toBeInTheDocument();
+  expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
+  expect(screen.getByText("Strong two-handed backhand.")).toBeInTheDocument();
+});
+
+test("the Notes button opens the notes sheet", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  expect(screen.queryByRole("heading", { name: "Notes" })).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Notes" }));
+
+  expect(await screen.findByRole("heading", { name: "Notes" })).toBeInTheDocument();
+});
+
 test("opens on the Serve tab by default, with the scope panel and recent form above it", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
@@ -211,7 +242,7 @@ test("opens on the Serve tab by default, with the scope panel and recent form ab
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
   expect(await screen.findByText("Your serve")).toBeInTheDocument();
-  expect(screen.getByText("All matches · Full match")).toBeInTheDocument();
+  expect(screen.getByText("All matches")).toBeInTheDocument();
   expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
   expect(screen.queryByText("Point enders")).not.toBeInTheDocument();
 });
@@ -230,7 +261,7 @@ test("switches to Rally when its toggle is clicked, scope panel and recent form 
 
   expect(await screen.findByText("Point enders")).toBeInTheDocument();
   expect(screen.queryByText("Your serve")).not.toBeInTheDocument();
-  expect(screen.getByText("All matches · Full match")).toBeInTheDocument();
+  expect(screen.getByText("All matches")).toBeInTheDocument();
   expect(screen.getByText("Recent form · last 5")).toBeInTheDocument();
 });
 

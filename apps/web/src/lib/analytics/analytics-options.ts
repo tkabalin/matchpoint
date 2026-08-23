@@ -49,17 +49,20 @@ export const getPlayerOverviewOptions = (options: { path: { player_id: string } 
 
 // PLACEHOLDER: GET /players/{player_id}/analytics/serve
 //
-// "v2" isn't a real API version — it's here so a browser that persisted the old
-// `ServeStats` shape (pre-scope-panel redesign) to IndexedDB can't hand that stale
-// shape back under this query key and crash the new component reading fields that
-// didn't exist on it. Bump it again the next time this fixture's shape changes.
+// "v3" isn't a real API version — it's here so a browser that persisted an older
+// `ServeStats` shape to IndexedDB can't hand that stale shape back under this
+// query key and crash the new component reading fields that didn't exist on it.
+// Bumped from v2 when `outcome` split into firstServe/secondServe (a coach on
+// the 2nd-serve toggle used to read `stats.outcome.firstServe.in` — undefined
+// under the old flat `{in, fault, ace}` shape, a `Cannot read properties of
+// undefined` crash). Bump it again the next time this fixture's shape changes.
 export const getServeStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<ServeStats>(["analytics", "serve", "v2", options.path.player_id], SERVE_STATS);
+  fixtureOptions<ServeStats>(["analytics", "serve", "v3", options.path.player_id], SERVE_STATS);
 
 // PLACEHOLDER: GET /players/{player_id}/analytics/rally — see getServeStatsOptions'
 // own comment on why this carries a version segment.
 export const getRallyStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<RallyStats>(["analytics", "rally", "v2", options.path.player_id], RALLY_STATS);
+  fixtureOptions<RallyStats>(["analytics", "rally", "v3", options.path.player_id], RALLY_STATS);
 
 // PLACEHOLDER: GET /players/{player_id}/analytics/opponents — feeds the Serve/Rally
 // scope panel's "vs opponent" picker.

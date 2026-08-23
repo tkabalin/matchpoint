@@ -1,7 +1,7 @@
 import { getPlayerOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import { ArrowLeft, CircleDot, Pencil, Repeat2 } from "lucide-react";
+import { ArrowLeft, CircleDot, NotebookPen, Pencil, Repeat2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
@@ -14,6 +14,9 @@ import type { StatsFilters } from "@/lib/analytics/types.provisional";
 import { cn } from "@/lib/utils";
 
 import { EditPlayerSheet } from "./edit-player-sheet";
+import { PlayerDetailsCard } from "./player-details-card";
+import { PlayerNotesSheet } from "./player-notes-sheet";
+import { PlayerRecordCard } from "./player-record-card";
 import { RecentFormRow } from "./recent-form-row";
 import { StatsScopePanel } from "./stats-scope-panel";
 import { RallyTab } from "./tabs/rally-tab";
@@ -31,6 +34,7 @@ export function PlayerProfile() {
   const { playerId } = routeApi.useParams();
   const [tab, setTab] = useState<Tab>("serve");
   const [editing, setEditing] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const {
     data: player,
@@ -89,6 +93,9 @@ export function PlayerProfile() {
 
       <EditPlayerSheet player={player} open={editing} onOpenChange={setEditing} />
 
+      <PlayerRecordCard playerId={playerId} />
+      <PlayerDetailsCard player={player} />
+
       <StatsScopePanel playerId={playerId} filters={filters} onApply={setFilters} />
       <RecentFormRow playerId={playerId} opponentId={filters.opponentId} />
 
@@ -107,6 +114,13 @@ export function PlayerProfile() {
       <div className="mt-4">
         {tab === "serve" ? <ServeTab playerId={playerId} /> : <RallyTab playerId={playerId} />}
       </div>
+
+      <Button type="button" variant="outline" className="w-full" onClick={() => setNotesOpen(true)}>
+        <NotebookPen />
+        Notes
+      </Button>
+
+      <PlayerNotesSheet playerId={playerId} open={notesOpen} onOpenChange={setNotesOpen} />
     </AppPage>
   );
 }

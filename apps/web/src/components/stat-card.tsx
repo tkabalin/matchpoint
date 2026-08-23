@@ -27,9 +27,7 @@ export function StatCard({
   return (
     <Card className={className}>
       <CardContent className="flex flex-col gap-2">
-        {title && (
-          <h3 className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">{title}</h3>
-        )}
+        {title && <h3 className="text-base font-bold text-foreground">{title}</h3>}
         {note && <p className={cn("text-[0.625rem] text-muted-foreground", "-mt-1")}>{note}</p>}
         {children}
         {footnote && <p className="text-[0.625rem] text-muted-foreground">{footnote}</p>}
