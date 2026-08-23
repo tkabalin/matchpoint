@@ -1,6 +1,7 @@
 import type { PlayerRead } from "@matchpoint/api-client";
 import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { expect, test, vi } from "vitest";
 
 import { PlayerDetailsCard } from "./player-details-card";
 
@@ -21,7 +22,7 @@ const BASE_PLAYER: PlayerRead = {
 };
 
 test("shows date of birth, dominant hand and notes", () => {
-  render(<PlayerDetailsCard player={BASE_PLAYER} />);
+  render(<PlayerDetailsCard player={BASE_PLAYER} onEdit={() => {}} />);
 
   expect(screen.getByText("Player details")).toBeInTheDocument();
   expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
@@ -33,8 +34,19 @@ test("shows a dash for every field the player hasn't filled in", () => {
   render(
     <PlayerDetailsCard
       player={{ ...BASE_PLAYER, date_of_birth: null, dominant_hand: null, notes: null }}
+      onEdit={() => {}}
     />,
   );
 
   expect(screen.getAllByText("—")).toHaveLength(3);
+});
+
+test("Edit lives in this card and fires the handler", async () => {
+  const onEdit = vi.fn();
+  const user = userEvent.setup();
+  render(<PlayerDetailsCard player={BASE_PLAYER} onEdit={onEdit} />);
+
+  await user.click(screen.getByRole("button", { name: "Edit" }));
+
+  expect(onEdit).toHaveBeenCalledOnce();
 });

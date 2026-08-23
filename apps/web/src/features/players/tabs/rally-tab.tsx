@@ -132,7 +132,11 @@ export function RallyTab({ playerId }: { playerId: string }) {
             series={[
               {
                 name: "Share of point-enders",
-                color: "var(--color-chart-1)",
+                // chart-1 is a pale, near-white blue in light mode — legible
+                // against a dark chart background but not against the card's
+                // own light surface. chart-3 is the same dedicated chart hue,
+                // just further down its lightness ramp.
+                color: "var(--color-chart-3)",
                 points: shotFrequency,
               },
             ]}
@@ -304,7 +308,6 @@ function StyleCard({
               // which needs to read as "none," not "a few."
               style={{ height: `${row.value === 0 ? 0 : Math.max(15, (row.value / max) * 100)}%` }}
             />
-            <span className="text-[0.5rem] text-muted-foreground">{row.label}</span>
           </div>
         ))}
       </div>
@@ -318,7 +321,7 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
   if (!wing) {
     return (
       <div className="border-t pt-3">
-        <p className="mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">Reason</p>
+        <p className="mb-2 text-base font-bold text-foreground">Reason</p>
         <BreakdownBars rows={unusualReasons ?? []} pattern="indigo" />
       </div>
     );
@@ -328,9 +331,7 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
 
   return (
     <div className="border-t pt-3">
-      <p className="mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-        Wing: setup shot
-      </p>
+      <p className="mb-2 text-base font-bold text-foreground">Wing: setup shot</p>
       {wingTotal > 0 && (
         <>
           <OutcomeStack
@@ -360,18 +361,14 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
         </>
       )}
 
-      <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-        Shot type
-      </p>
+      <p className="mt-3 mb-2 text-base font-bold text-foreground">Shot type</p>
       <BreakdownBars
         rows={shotType}
         pattern="indigo"
         icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
       />
 
-      <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-        Final ball: where it landed
-      </p>
+      <p className="mt-3 mb-2 text-base font-bold text-foreground">Final ball: where it landed</p>
       <CourtHeatmap zones={courtZones} flip={flipCourt} />
     </div>
   );

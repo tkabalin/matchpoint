@@ -202,7 +202,7 @@ test("links to the match setup screen", async () => {
   expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
 });
 
-test("shows the all-time record and player details above the scope panel", async () => {
+test("shows the all-time record and player details side by side", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),

@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 
 import type { CourtZoneCount } from "@/lib/analytics/types.provisional";
 
@@ -136,8 +136,20 @@ export function CourtHeatmap({
           DEUCE
         </text>
 
-        <OutZoneBar y={HEADER_H} zone={topZone} fill={fill(topZone.value)} pct={pct} />
-        <OutZoneBar y={COURT_Y1} zone={bottomZone} fill={fill(bottomZone.value)} pct={pct} />
+        <OutZoneBar
+          y={HEADER_H}
+          zone={topZone}
+          fill={fill(topZone.value)}
+          pct={pct}
+          position="top"
+        />
+        <OutZoneBar
+          y={COURT_Y1}
+          zone={bottomZone}
+          fill={fill(bottomZone.value)}
+          pct={pct}
+          position="bottom"
+        />
 
         <WideBar x={0} side="left" value={wide} fill={fill(wide)} pct={pct} showLabel={false} />
         <WideBar x={COURT_X1} side="right" value={wide} fill={fill(wide)} pct={pct} showLabel />
@@ -234,13 +246,19 @@ function OutZoneBar({
   zone,
   fill,
   pct,
+  position,
 }: {
   y: number;
   zone: { text: string; value: number; kind: "net" | "long" };
   fill: string;
   pct: (value: number) => number;
+  /** Which edge of the court this bar sits on — the long-zone arrow has to
+   *  point off the court on that edge, so top points up and bottom points
+   *  down, whichever one the flip prop put "Long" on. */
+  position: "top" | "bottom";
 }) {
   const isNet = zone.kind === "net";
+  const LongArrow = position === "top" ? ArrowUp : ArrowDown;
   const iconSize = 20;
 
   return (
@@ -277,7 +295,7 @@ function OutZoneBar({
             stroke="var(--color-foreground)"
             strokeWidth={1}
           />
-          <ArrowUp
+          <LongArrow
             x={COURT_X0 + 10}
             y={y + OUT_H / 2 - iconSize / 2}
             width={iconSize}

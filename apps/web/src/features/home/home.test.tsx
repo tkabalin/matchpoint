@@ -409,6 +409,20 @@ test("'View full stats' opens the last-viewed player's profile", async () => {
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
+test("tapping the continue-with player row opens the view/start-match sheet, not straight to stats", async () => {
+  setLastViewedPlayerId(players[0]!.id);
+  stubAuthenticatedHomeWithLastViewedPlayer();
+  const user = userEvent.setup();
+  await renderHome();
+  const heading = await screen.findByRole("heading", { name: "Continue with" });
+  const section = within(heading.closest("section")!);
+
+  await user.click(section.getByRole("button", { name: /Amahle Nkosi/ }));
+
+  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Start match" })).toBeInTheDocument();
+});
+
 test("shows the squad's player count and matches played in the last 7 days", async () => {
   stubFetch({
     "/api/coaches/me": () => new Response(null, { status: 401 }),
@@ -466,15 +480,15 @@ test("ranks best and worst form, and shows a legitimate empty needs-attention st
   expect(snapshot.getByText("No flags this week.")).toBeInTheDocument();
 });
 
-test("tapping a squad-snapshot row opens that player's action sheet", async () => {
+test("tapping a squad-snapshot row goes straight to that player's stats page", async () => {
   stubAuthenticatedHome();
   const user = userEvent.setup();
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  await user.click(await snapshot.findByRole("button", { name: /Amahle Nkosi/ }));
+  await user.click(await snapshot.findByRole("link", { name: /Amahle Nkosi/ }));
 
-  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
 test("renders the bottom nav with Home active", async () => {

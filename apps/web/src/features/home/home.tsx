@@ -26,7 +26,6 @@ import { useState } from "react";
 
 import { AddPhotoNudge } from "@/components/add-photo-nudge";
 import { AddPlayerSheet } from "@/components/add-player-sheet";
-import { OutcomeSwatch } from "@/components/outcome-swatch";
 import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerActionSheet } from "@/components/player-action-sheet";
@@ -215,7 +214,6 @@ export function Home() {
                   `${formRank.best.last5Record} last 5 · ${formRank.best.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
                 }
                 emptyDetail="Not enough matches logged yet."
-                onSelect={setSelected}
               />
               <SquadRow
                 label="Worst form"
@@ -227,7 +225,6 @@ export function Home() {
                   `${formRank.worst.last5Record} last 5 · ${formRank.worst.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
                 }
                 emptyDetail="Not enough matches logged yet."
-                onSelect={setSelected}
               />
               <SquadRow
                 label="Needs attention"
@@ -236,14 +233,12 @@ export function Home() {
                 player={attention ? findPlayer(attention.playerId) : null}
                 detail={attention?.reason ?? null}
                 emptyDetail="No flags this week."
-                onSelect={setSelected}
               />
             </div>
 
             <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-              Best/worst form ranks players with 3+ matches logged this period. &ldquo;Needs
-              attention&rdquo; flags a player&rsquo;s own decline vs their own average, not a squad
-              rank, so it can surface your strongest player too.
+              Based on each player&rsquo;s last few matches. &ldquo;Needs attention&rdquo; can flag
+              even your best player if their results have slipped lately.
             </p>
           </CardContent>
         </Card>
@@ -252,7 +247,7 @@ export function Home() {
       {lastViewedPlayer && (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-bold">Continue with</h2>
-          <ContinueWithCard player={lastViewedPlayer} />
+          <ContinueWithCard player={lastViewedPlayer} onSelect={setSelected} />
         </section>
       )}
 
@@ -305,7 +300,11 @@ const TONE_ICON_CLASS: Record<OutcomeName, string> = {
 /** One row of the squad snapshot (best form / worst form / needs attention).
  *  Renders as a plain, non-interactive line in its own muted tone when there's
  *  no player to show — an empty result here (nobody eligible, nobody flagged)
- *  is a legitimate outcome the row should say plainly, not paper over. */
+ *  is a legitimate outcome the row should say plainly, not paper over.
+ *
+ *  Goes straight to the player's stats page, not the view/start-match sheet —
+ *  a coach tapping a ranked row already wants the numbers behind that ranking,
+ *  not a choice between viewing and starting a match. */
 function SquadRow({
   label,
   icon: Icon,
@@ -313,7 +312,6 @@ function SquadRow({
   player,
   detail,
   emptyDetail,
-  onSelect,
 }: {
   label: string;
   /** Large and distinct per row — no two rows on this card, or elsewhere on
@@ -323,7 +321,6 @@ function SquadRow({
   player: PlayerRead | null;
   detail: string | null;
   emptyDetail: string;
-  onSelect: (player: PlayerRead) => void;
 }) {
   const icon = <Icon className={cn("size-7 shrink-0", TONE_ICON_CLASS[tone])} aria-hidden="true" />;
 
@@ -342,9 +339,10 @@ function SquadRow({
   }
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(player)}
+    <Link
+      to="/players/$playerId"
+      params={{ playerId: player.id }}
+      onClick={() => setLastViewedPlayerId(player.id)}
       className="flex w-full items-center gap-2.5 border-t py-2.5 text-left first:border-t-0 first:pt-0"
     >
       {icon}
@@ -356,7 +354,7 @@ function SquadRow({
         <p className="text-xs text-muted-foreground">{detail}</p>
       </div>
       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-    </button>
+    </Link>
   );
 }
 
@@ -365,7 +363,13 @@ function recordFrom(results: readonly ("win" | "loss")[]): string {
   return `${wins}–${results.length - wins}`;
 }
 
-function ContinueWithCard({ player }: { player: PlayerRead }) {
+function ContinueWithCard({
+  player,
+  onSelect,
+}: {
+  player: PlayerRead;
+  onSelect: (player: PlayerRead) => void;
+}) {
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
   const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: player.id } }));
   const { data: recentForm } = useQuery(
@@ -379,16 +383,10 @@ function ContinueWithCard({ player }: { player: PlayerRead }) {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
-        <Item
-          className="p-0"
-          render={
-            <Link
-              to="/players/$playerId"
-              params={{ playerId: player.id }}
-              onClick={() => setLastViewedPlayerId(player.id)}
-            />
-          }
-        >
+        {/* Opens the same View player / Start match sheet every other player
+            row on this screen does — "View full stats" below stays the direct
+            shortcut for someone who already knows that's what they want. */}
+        <Item className="p-0" render={<button type="button" onClick={() => onSelect(player)} />}>
           <ItemMedia>
             <PlayerAvatar player={player} />
           </ItemMedia>
@@ -406,11 +404,14 @@ function ContinueWithCard({ player }: { player: PlayerRead }) {
         {last5.length > 0 && (
           <div className="flex gap-1">
             {last5.map((result, index) => (
-              <OutcomeSwatch
+              <span
                 key={index}
-                size="sm"
-                pattern={result === "win" ? "win" : "unforced"}
-                label={result === "win" ? "W" : "L"}
+                role="img"
+                aria-label={result === "win" ? "Won" : "Lost"}
+                className={cn(
+                  "size-2.5 shrink-0 rounded-full",
+                  result === "win" ? "bg-outcome-win" : "border border-muted-foreground",
+                )}
               />
             ))}
           </div>

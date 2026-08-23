@@ -1,7 +1,7 @@
 import { getPlayerOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import { ArrowLeft, CircleDot, NotebookPen, Pencil, Repeat2 } from "lucide-react";
+import { ArrowLeft, CircleDot, NotebookPen, Play, Repeat2 } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
@@ -17,7 +17,6 @@ import { EditPlayerSheet } from "./edit-player-sheet";
 import { PlayerDetailsCard } from "./player-details-card";
 import { PlayerNotesSheet } from "./player-notes-sheet";
 import { PlayerRecordCard } from "./player-record-card";
-import { RecentFormRow } from "./recent-form-row";
 import { StatsScopePanel } from "./stats-scope-panel";
 import { RallyTab } from "./tabs/rally-tab";
 import { ServeTab } from "./tabs/serve-tab";
@@ -76,28 +75,26 @@ export function PlayerProfile() {
         trailing={<PlayerAvatar player={player} size="sm" />}
       />
 
-      <div className="flex items-center gap-2">
-        <Link
-          to="/new-match/$playerId"
-          params={{ playerId }}
-          className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}
-        >
-          Start match
-        </Link>
-
-        <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
-          <Pencil />
-          Edit
-        </Button>
-      </div>
+      {/* The single most frequent action on this page (Pareto's/Fitts's laws)
+          — large, filled and icon-led so it doesn't get lost next to the
+          cards below it, the way the old small outline link did. */}
+      <Link
+        to="/new-match/$playerId"
+        params={{ playerId }}
+        className={cn(buttonVariants({ size: "lg" }), "w-full gap-2")}
+      >
+        <Play />
+        Start match
+      </Link>
 
       <EditPlayerSheet player={player} open={editing} onOpenChange={setEditing} />
 
-      <PlayerRecordCard playerId={playerId} />
-      <PlayerDetailsCard player={player} />
-
       <StatsScopePanel playerId={playerId} filters={filters} onApply={setFilters} />
-      <RecentFormRow playerId={playerId} opponentId={filters.opponentId} />
+
+      <div className="grid grid-cols-2 items-stretch gap-3">
+        <PlayerRecordCard playerId={playerId} opponentId={filters.opponentId} />
+        <PlayerDetailsCard player={player} onEdit={() => setEditing(true)} />
+      </div>
 
       {/* Matches the mockup's own Serve/Rally toggle exactly — a bordered
           segmented pill, not the app's usual underline tabs. */}
