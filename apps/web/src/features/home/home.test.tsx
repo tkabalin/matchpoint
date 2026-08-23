@@ -90,12 +90,6 @@ function stubUnauthenticatedHome() {
   });
 }
 
-function daysAgoDateString(days: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() - days);
-  return date.toISOString().slice(0, 10);
-}
-
 const lastViewedMatches = [
   {
     id: "3f1c2b4e-0000-4000-8000-00000000ma01",
@@ -423,43 +417,17 @@ test("tapping the continue-with player row opens the view/start-match sheet, not
   expect(screen.getByRole("link", { name: "Start match" })).toBeInTheDocument();
 });
 
-test("shows the squad's player count and matches played in the last 7 days", async () => {
+test("shows the squad's player count", async () => {
   stubFetch({
     "/api/coaches/me": () => new Response(null, { status: 401 }),
     "/api/players": () => Response.json(players),
-    "/api/matches": () =>
-      Response.json([
-        { ...lastViewedMatches[0], id: "match-recent", played_on: daysAgoDateString(2) },
-        { ...lastViewedMatches[0], id: "match-old", played_on: daysAgoDateString(14) },
-      ]),
+    "/api/matches": () => Response.json([]),
   });
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
   expect(snapshot.getByText("2")).toBeInTheDocument();
   expect(snapshot.getByText("players")).toBeInTheDocument();
-  expect(snapshot.getByText("1")).toBeInTheDocument();
-  expect(snapshot.getByText("match this week")).toBeInTheDocument();
-});
-
-test("counts a match played today from a timezone ahead of UTC", async () => {
-  // 01:30 SAST is still the previous day in UTC, so reading `played_on` as UTC midnight
-  // would date today's match in the future and leave it out of the count. Only Date is
-  // faked: faking setTimeout as well would stall the query client and the DOM polling.
-  vi.stubEnv("TZ", "Africa/Johannesburg");
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(new Date("2026-08-15T23:30:00Z"));
-  stubFetch({
-    "/api/coaches/me": () => new Response(null, { status: 401 }),
-    "/api/players": () => Response.json(players),
-    "/api/matches": () =>
-      Response.json([{ ...lastViewedMatches[0], id: "match-today", played_on: "2026-08-16" }]),
-  });
-  await renderHome();
-
-  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  expect(snapshot.getByText("1")).toBeInTheDocument();
-  expect(snapshot.getByText("match this week")).toBeInTheDocument();
 });
 
 // The two-player fixture roster deterministically maps to a "clean best" and a
@@ -478,6 +446,16 @@ test("ranks best and worst form, and shows a legitimate empty needs-attention st
   expect(snapshot.getByText("Sipho Dlamini")).toBeInTheDocument();
   expect(snapshot.getByText("Needs attention")).toBeInTheDocument();
   expect(snapshot.getByText("No flags this week.")).toBeInTheDocument();
+});
+
+test("best/worst form show last-5 and forced:unforced as icon+number pairs, like Continue with", async () => {
+  stubAuthenticatedHome();
+  await renderHome();
+
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  const bestRow = (await snapshot.findByText("Amahle Nkosi")).closest("a")!;
+  expect(within(bestRow).getByText("Last 5")).toBeInTheDocument();
+  expect(within(bestRow).getByText("Forced : Unforced")).toBeInTheDocument();
 });
 
 test("tapping a squad-snapshot row goes straight to that player's stats page", async () => {

@@ -18,6 +18,7 @@ import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { BreakdownBars } from "@/components/breakdown-bars";
+import { LegibleXTick, LegibleYTick } from "@/components/chart-ticks";
 import { OutcomeStack } from "@/components/outcome-swatch";
 import { SegmentedControl } from "@/components/segmented-control";
 import { ShotRadar } from "@/components/shot-radar";
@@ -177,58 +178,12 @@ export function RallyTab({ playerId }: { playerId: string }) {
  * middle ground between those two doesn't have one clean read, so it's left
  * uncaptioned rather than forcing a claim onto it.
  */
-// `ChartContainer` styles every tick's `<text>` to `fill-muted-foreground` via a
-// stylesheet rule, which beats a plain `fill` attribute passed through
-// `tick={{...}}` (a presentation attribute loses to any same-property CSS rule,
-// however low its specificity). A custom tick using `style` — a real inline
-// style, which does win — is the only way to make this axis read darker and
-// larger than the app's other, lower-stakes charts.
-function LegibleXTick({
-  x,
-  y,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value: string | number };
-}) {
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={12}
-      textAnchor="middle"
-      style={{ fill: "var(--color-foreground)", fontSize: 11, fontWeight: 700 }}
-    >
-      {payload?.value}
-    </text>
-  );
-}
-
-function LegibleYTick({
-  x,
-  y,
-  payload,
-}: {
-  x?: number;
-  y?: number;
-  payload?: { value: string | number };
-}) {
-  return (
-    <text
-      x={x}
-      y={y}
-      dy={4}
-      textAnchor="end"
-      style={{ fill: "var(--color-foreground)", fontSize: 11, fontWeight: 700 }}
-    >
-      {payload?.value}
-    </text>
-  );
-}
-
 function RallyLengthCard({ buckets }: { buckets: RallyLengthBucket[] }) {
-  const config = { count: { label: "Points", color: "var(--color-chart-1)" } };
+  // chart-1 is a pale, near-white blue in light mode, illegible against this
+  // card's own light surface — same finding as `ShotRadar`'s own comment
+  // above, chart-3 is the same dedicated chart hue further down its
+  // lightness ramp.
+  const config = { count: { label: "Points", color: "var(--color-chart-3)" } };
   const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
 
   return (
@@ -249,7 +204,7 @@ function RallyLengthCard({ buckets }: { buckets: RallyLengthBucket[] }) {
           <XAxis dataKey="label" tickLine={false} axisLine={false} tick={<LegibleXTick />} />
           <YAxis allowDecimals={false} width={28} tick={<LegibleYTick />} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="count" fill="var(--color-chart-1)" radius={2} />
+          <Bar dataKey="count" fill="var(--color-chart-3)" radius={2} />
         </BarChart>
       </ChartContainer>
 

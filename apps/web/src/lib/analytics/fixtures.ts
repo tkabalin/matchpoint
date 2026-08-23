@@ -8,6 +8,9 @@ import type {
   ServeStats,
   ServeTrendPoint,
   SquadMemberStats,
+  SquadMetricKey,
+  SquadStatsEntry,
+  SquadTrendPoint,
 } from "./types.provisional";
 
 /**
@@ -485,4 +488,90 @@ const SQUAD_MEMBER_TEMPLATES: readonly Omit<SquadMemberStats, "playerId">[] = [
 export function squadMemberStatsFor(playerId: string, rosterIndex: number): SquadMemberStats {
   const template = SQUAD_MEMBER_TEMPLATES[rosterIndex % SQUAD_MEMBER_TEMPLATES.length]!;
   return { ...template, playerId };
+}
+
+// The Squad stats page's own per-player fixture: round-robins like
+// `SQUAD_MEMBER_TEMPLATES` above, but carries the raw record and serve
+// figure that page's leaderboard/headline need and `SquadMemberStats`
+// doesn't. One template (index 3) sits below the 3-match ranking threshold
+// on purpose, so the leaderboard's dimmed/unranked row has a real fixture.
+const SQUAD_STATS_TEMPLATES: readonly Omit<SquadStatsEntry, "playerId">[] = [
+  {
+    wins: 8,
+    losses: 2,
+    forcedToUnforcedRatio: 1.6,
+    firstServeInPercent: 68,
+    matchesLoggedThisPeriod: 10,
+  },
+  {
+    wins: 5,
+    losses: 5,
+    forcedToUnforcedRatio: 0.7,
+    firstServeInPercent: 58,
+    matchesLoggedThisPeriod: 10,
+  },
+  {
+    wins: 1,
+    losses: 8,
+    forcedToUnforcedRatio: 0.9,
+    firstServeInPercent: 46,
+    matchesLoggedThisPeriod: 9,
+  },
+  {
+    wins: 1,
+    losses: 0,
+    forcedToUnforcedRatio: 1.0,
+    firstServeInPercent: 55,
+    matchesLoggedThisPeriod: 1,
+  },
+  {
+    wins: 4,
+    losses: 3,
+    forcedToUnforcedRatio: 1.3,
+    firstServeInPercent: 61,
+    matchesLoggedThisPeriod: 7,
+  },
+  {
+    wins: 3,
+    losses: 2,
+    forcedToUnforcedRatio: 1.1,
+    firstServeInPercent: 63,
+    matchesLoggedThisPeriod: 5,
+  },
+];
+
+export function squadStatsFor(playerId: string, rosterIndex: number): SquadStatsEntry {
+  const template = SQUAD_STATS_TEMPLATES[rosterIndex % SQUAD_STATS_TEMPLATES.length]!;
+  return { ...template, playerId };
+}
+
+const SQUAD_TREND: Record<SquadMetricKey, SquadTrendPoint[]> = {
+  record: [
+    { week: "Wk 1", value: 52 },
+    { week: "Wk 2", value: 55 },
+    { week: "Wk 3", value: 49 },
+    { week: "Wk 4", value: 58 },
+    { week: "Wk 5", value: 61 },
+    { week: "Wk 6", value: 60 },
+  ],
+  forcedToUnforced: [
+    { week: "Wk 1", value: 1.0 },
+    { week: "Wk 2", value: 1.05 },
+    { week: "Wk 3", value: 0.95 },
+    { week: "Wk 4", value: 1.1 },
+    { week: "Wk 5", value: 1.15 },
+    { week: "Wk 6", value: 1.2 },
+  ],
+  firstServe: [
+    { week: "Wk 1", value: 58 },
+    { week: "Wk 2", value: 59 },
+    { week: "Wk 3", value: 57 },
+    { week: "Wk 4", value: 61 },
+    { week: "Wk 5", value: 62 },
+    { week: "Wk 6", value: 63 },
+  ],
+};
+
+export function squadTrendFor(key: SquadMetricKey): SquadTrendPoint[] {
+  return SQUAD_TREND[key];
 }

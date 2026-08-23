@@ -8,6 +8,8 @@ import {
   RECENT_FORM,
   SERVE_STATS,
   squadMemberStatsFor,
+  squadStatsFor,
+  squadTrendFor,
 } from "./fixtures";
 import type {
   AttentionFlag,
@@ -18,6 +20,8 @@ import type {
   RallyStats,
   RecentForm,
   ServeStats,
+  SquadMetricKey,
+  SquadTrendPoint,
 } from "./types.provisional";
 
 /**
@@ -120,3 +124,20 @@ export const listAttentionFlagsOptions = () => fixtureOptions<AttentionFlag[]>([
  * of its own to fetch.
  */
 export { squadMemberStatsFor };
+
+/**
+ * PLACEHOLDER for the Squad stats page's own per-player fixture: same
+ * reasoning as `squadMemberStatsFor` above — synchronous, derived from the
+ * roster the caller already has loaded, nothing of its own to fetch.
+ */
+export { squadStatsFor };
+
+// PLACEHOLDER: GET /squads/current/analytics/trend?metric= — the Squad stats
+// page's trend card, a squad-wide average of one metric over the last 6
+// weeks. No version segment: unlike `getServeStatsOptions`, this key has no
+// prior persisted shape to collide with yet.
+export const getSquadTrendOptions = (options: { query: { metric: SquadMetricKey } }) =>
+  fixtureOptions<SquadTrendPoint[]>(
+    ["analytics", "squad-trend", options.query.metric],
+    squadTrendFor(options.query.metric),
+  );

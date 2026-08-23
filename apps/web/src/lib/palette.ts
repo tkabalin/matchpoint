@@ -46,3 +46,22 @@ export const PATTERN_VAR: Record<PatternName, string> = {
   indigo: "var(--color-cat-indigo)",
   violet: "var(--color-cat-violet)",
 };
+
+/** SVG pattern-fill URLs for the non-outcome categorical colors, defined by
+ *  `components/chart-patterns.tsx`'s `<CategoricalPatternDefs />` — the
+ *  Recharts-usable equivalent of `PATTERN_CLASS` above, which only paints
+ *  HTML boxes. */
+export const CATEGORICAL_PATTERN_FILL: Record<CategoryName, string> = {
+  yellow: "url(#chart-pattern-yellow)",
+  indigo: "url(#chart-pattern-indigo)",
+  violet: "url(#chart-pattern-violet)",
+};
+
+/** A hatch/dot fill reads as texture on a filled bar, but is invisible on a
+ *  thin line stroke — a line series' own non-color channel is its dash style
+ *  instead, the standard accessible substitute for a stroked mark. */
+export const CATEGORICAL_STROKE_DASH: Record<CategoryName, string | undefined> = {
+  yellow: undefined,
+  indigo: "6 3",
+  violet: "2 3",
+};

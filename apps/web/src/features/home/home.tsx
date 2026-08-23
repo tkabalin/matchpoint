@@ -8,7 +8,6 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
-  CalendarCheck,
   ChevronRight,
   History,
   type LucideIcon,
@@ -52,24 +51,9 @@ import type { OutcomeName } from "@/lib/palette";
 import { relativeTimeFrom } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
-const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
-
-// `played_on` is a plain calendar date, which `new Date(str)` reads as UTC midnight:
-// east of UTC that puts a match played today in the future, dropping it from the count
-// until local mid-morning. Both dates are built locally and compared as whole days.
-function isWithinTheLastWeek(dateStr: string): boolean {
-  const [year, month, day] = dateStr.split("-").map(Number);
-  const playedOn = new Date(year!, month! - 1, day!);
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const daysAgo = Math.round((today.getTime() - playedOn.getTime()) / MILLISECONDS_PER_DAY);
-  return daysAgo >= 0 && daysAgo <= 7;
-}
-
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
-  const { data: allMatches } = useQuery(listMatchesOptions());
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PlayerRead | null>(null);
   const [adding, setAdding] = useState(false);
@@ -87,10 +71,6 @@ export function Home() {
   const searchResults = roster.filter((player) =>
     `${player.first_name} ${player.last_name}`.toLowerCase().includes(search.toLowerCase()),
   );
-  const matchesThisWeek = (allMatches ?? []).filter((match) =>
-    isWithinTheLastWeek(match.played_on),
-  ).length;
-
   const squadMembers = roster.map((player, index) => squadMemberStatsFor(player.id, index));
   const formRank = rankForm(squadMembers);
   const attention = pickSquadAttention(squadMembers);
@@ -192,15 +172,6 @@ export function Home() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <CalendarCheck className="size-7 shrink-0 text-primary" aria-hidden="true" />
-                <div>
-                  <p className="text-xl font-bold tabular-nums">{matchesThisWeek}</p>
-                  <p className="text-[0.625rem] text-muted-foreground">
-                    {matchesThisWeek === 1 ? "match this week" : "matches this week"}
-                  </p>
-                </div>
-              </div>
             </div>
 
             <div className="flex flex-col">
@@ -209,10 +180,8 @@ export function Home() {
                 icon={TrendingUp}
                 tone="win"
                 player={formRank.best ? findPlayer(formRank.best.playerId) : null}
-                detail={
-                  formRank.best &&
-                  `${formRank.best.last5Record} last 5 · ${formRank.best.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
-                }
+                detail={null}
+                stats={formRank.best ?? undefined}
                 emptyDetail="Not enough matches logged yet."
               />
               <SquadRow
@@ -220,10 +189,8 @@ export function Home() {
                 icon={TrendingDown}
                 tone="unforced"
                 player={formRank.worst ? findPlayer(formRank.worst.playerId) : null}
-                detail={
-                  formRank.worst &&
-                  `${formRank.worst.last5Record} last 5 · ${formRank.worst.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
-                }
+                detail={null}
+                stats={formRank.worst ?? undefined}
                 emptyDetail="Not enough matches logged yet."
               />
               <SquadRow
@@ -311,6 +278,7 @@ function SquadRow({
   tone,
   player,
   detail,
+  stats,
   emptyDetail,
 }: {
   label: string;
@@ -319,12 +287,16 @@ function SquadRow({
   icon: LucideIcon;
   tone: OutcomeName;
   player: PlayerRead | null;
+  /** Plain caption text — used by rows without a `stats` pair (Needs attention). */
   detail: string | null;
+  /** Last-5 record and forced:unforced ratio, shown as the same icon+number
+   *  pair "Continue with" uses, not folded into a single line of text. */
+  stats?: { last5Record: string; forcedToUnforcedRatio: number };
   emptyDetail: string;
 }) {
   const icon = <Icon className={cn("size-7 shrink-0", TONE_ICON_CLASS[tone])} aria-hidden="true" />;
 
-  if (!player || !detail) {
+  if (!player || (!detail && !stats)) {
     return (
       <div className="flex items-center gap-2.5 border-t py-2.5 first:border-t-0 first:pt-0">
         {icon}
@@ -351,7 +323,32 @@ function SquadRow({
           {label}
         </p>
         <p className="truncate text-sm font-semibold">{`${player.first_name} ${player.last_name}`}</p>
-        <p className="text-xs text-muted-foreground">{detail}</p>
+        {stats ? (
+          <div className="mt-1 flex gap-6">
+            <div className="flex items-center gap-2">
+              <History className="size-7 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xl font-bold tabular-nums">{stats.last5Record}</p>
+                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+                  Last 5
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xl font-bold tabular-nums">
+                  {stats.forcedToUnforcedRatio.toFixed(1)}
+                </p>
+                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+                  Forced : Unforced
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">{detail}</p>
+        )}
       </div>
       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
     </Link>

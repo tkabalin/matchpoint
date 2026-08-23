@@ -137,6 +137,15 @@ categorical distinction on the dashboard that isn't a point outcome.
   visible on this screen.
 - **H2H — segmented control** (aggregate vs. per-match) — active state uses nav blue, inactive uses
   neutral gray. No categorical color needed.
+- **Squad stats — Spread histogram / Trend line** — not single-series in the sense the row above
+  means: both are one chart switched between three different metrics (Record / Forced:Unforced / 1st
+  serve %) via a dropdown, not one fixed measurement. Each metric gets its own color from the safe
+  non-outcome set (yellow / indigo / violet), shared between the two charts so a metric is always
+  the same color everywhere it appears on that page. Avoid blue — the bottom nav is visible on this
+  page. The histogram's bars carry the metric's real pattern fill (an SVG `<pattern>`, not the CSS
+  `pattern-*` utilities, which only paint HTML boxes); the trend line's stroke can't show a hatch
+  texture at 2px, so it carries a per-metric dash style instead (solid / dashed / dotted) as the
+  same principle's line-shaped equivalent.
 
 ## Light/dark mode background rule
 

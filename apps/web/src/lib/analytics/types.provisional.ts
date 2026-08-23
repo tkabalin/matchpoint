@@ -286,3 +286,58 @@ export interface FormRankEntry {
   last5Record: string;
   forcedToUnforcedRatio: number;
 }
+
+/** Per-player inputs behind the Squad stats page — a sibling to
+ *  `SquadMemberStats` (the home screen's own per-player shape), not a
+ *  replacement: `matchesLoggedThisPeriod` means the same thing in both, but
+ *  this carries the raw record and serve figure the leaderboard/headline
+ *  need that the home screen doesn't. */
+export interface SquadStatsEntry {
+  playerId: string;
+  wins: number;
+  losses: number;
+  /** Same field, same "capture can't distinguish a winner from a forced
+   *  error" caveat as `PlayerOverview.forcedToUnforced` (#175/#206). */
+  forcedToUnforcedRatio: number;
+  /** Share of first-serve attempts landing in, 0–100. */
+  firstServeInPercent: number;
+  matchesLoggedThisPeriod: number;
+}
+
+/** Which of the three squad-wide metrics is selected — shared vocabulary
+ *  between the leaderboard's dropdown and the spread histogram (which always
+ *  mirrors it), and separately by the trend card's own dropdown. */
+export type SquadMetricKey = "record" | "forcedToUnforced" | "firstServe";
+
+/** One row of the Squad stats leaderboard, after the selected metric has
+ *  been resolved to a single sortable number. */
+export interface SquadLeaderboardRow {
+  playerId: string;
+  name: string;
+  /** Null for a below-threshold row — the row shows `matchesLoggedThisPeriod`
+   *  instead, never a fabricated value. */
+  metricValue: number | null;
+  matchesLoggedThisPeriod: number;
+  /** Null alongside `metricValue`, for the same reason. */
+  rank: number | null;
+}
+
+/** One bucket of the leaderboard's "Spread" histogram. */
+export interface SquadHistogramBucket {
+  /** The bucket's own value range, formatted for the metric (e.g. "40–52%"). */
+  label: string;
+  count: number;
+}
+
+/** The squad headline's three aggregate numbers, all matches, whole roster. */
+export interface SquadHeadline {
+  record: WinLossRecord;
+  forcedToUnforcedRatio: number;
+  firstServeInPercent: number;
+}
+
+/** One point in the squad trend card's last-6-weeks series. */
+export interface SquadTrendPoint {
+  week: string;
+  value: number;
+}
