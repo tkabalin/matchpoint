@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -32,6 +33,7 @@ function stubUserAgent(userAgent: string) {
 }
 
 async function renderInstallGuide() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const installRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -48,7 +50,11 @@ async function renderInstallGuide() {
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/install"] }),
   });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   await screen.findByRole("heading", { name: "Install MatchPoint" });
 }
 

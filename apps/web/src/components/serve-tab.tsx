@@ -30,12 +30,14 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getServeStatsOptions } from "@/lib/analytics/analytics-options";
+import { getMatchServeStatsOptions, getServeStatsOptions } from "@/lib/analytics/analytics-options";
 import type {
   BreakdownRow,
+  PhaseFilter,
   ReturnOutcomeSplit,
   ServeNumber,
   ServeSideStats,
+  SetFilter,
 } from "@/lib/analytics/types.provisional";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
@@ -47,9 +49,25 @@ const FAULT_MODE_ICON: Record<string, typeof Grid2x2> = {
   In: CircleCheck,
 };
 
-export function ServeTab({ playerId }: { playerId: string }) {
+export function ServeTab({
+  playerId,
+  matchId,
+  set = "all",
+  phase = "full",
+  opponentId = null,
+}: {
+  playerId: string;
+  /** Scopes to one match's own analytics instead of the whole player, for
+   *  the per-match stats page — same tab, different (still fixture) data. */
+  matchId?: string;
+  set?: SetFilter;
+  phase?: PhaseFilter;
+  opponentId?: string | null;
+}) {
   const { data, isPending, isError } = useQuery(
-    getServeStatsOptions({ path: { player_id: playerId } }),
+    matchId
+      ? getMatchServeStatsOptions({ path: { match_id: matchId }, query: { set, phase } })
+      : getServeStatsOptions({ path: { player_id: playerId }, query: { set, phase, opponentId } }),
   );
 
   if (isPending) return <Skeleton className="h-96 w-full" />;

@@ -33,7 +33,6 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
-import { InProgressBanner } from "@/components/in-progress-banner";
 import { InstallAppNudge } from "@/components/install-app-nudge";
 import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
 import {
@@ -119,7 +118,6 @@ export function Home() {
         </div>
       </header>
 
-      <InProgressBanner />
       {coach && <AddPhotoNudge coach={coach} />}
       {coach && <InstallAppNudge />}
 

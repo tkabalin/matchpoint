@@ -2,87 +2,20 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
+import { ChipRow } from "@/components/chip-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemTitle } from "@/components/ui/item";
 import { listOpponentsOptions } from "@/lib/analytics/analytics-options";
-import type {
-  MatchScope,
-  OpponentOption,
-  PhaseFilter,
-  SetFilter,
-  StatsFilters,
-} from "@/lib/analytics/types.provisional";
+import {
+  PHASE_LABEL,
+  PHASE_OPTIONS,
+  SCOPE_OPTIONS,
+  SET_LABEL,
+  SET_OPTIONS,
+} from "@/lib/analytics/filter-options";
+import type { OpponentOption, StatsFilters } from "@/lib/analytics/types.provisional";
 import { cn } from "@/lib/utils";
-
-const SCOPE_OPTIONS: { value: MatchScope; label: string }[] = [
-  { value: "all", label: "All matches" },
-  { value: "vs-opponent", label: "vs opponent" },
-];
-
-const SET_OPTIONS: { value: SetFilter; label: string }[] = [
-  { value: "all", label: "All sets" },
-  { value: "1", label: "Set 1" },
-  { value: "2", label: "Set 2" },
-  { value: "3", label: "Set 3" },
-];
-
-const PHASE_OPTIONS: { value: PhaseFilter; label: string }[] = [
-  { value: "full", label: "Full match" },
-  { value: "tiebreaks", label: "Tiebreaks" },
-  { value: "breakPoints", label: "Break points" },
-  { value: "gamePoints", label: "Game points" },
-  { value: "setPoints", label: "Set points" },
-  { value: "matchPoints", label: "Match points" },
-  { value: "gameEnding", label: "Game-ending" },
-  { value: "setEnding", label: "Set-ending" },
-];
-
-const SET_LABEL: Record<SetFilter, string> = Object.fromEntries(
-  SET_OPTIONS.map((option) => [option.value, option.label]),
-) as Record<SetFilter, string>;
-const PHASE_LABEL: Record<PhaseFilter, string> = Object.fromEntries(
-  PHASE_OPTIONS.map((option) => [option.value, option.label]),
-) as Record<PhaseFilter, string>;
-
-function ChipRow<T extends string>({
-  options,
-  value,
-  onChange,
-  scroll,
-  "aria-label": ariaLabel,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (value: T) => void;
-  scroll?: boolean;
-  "aria-label": string;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label={ariaLabel}
-      className={cn("flex flex-wrap gap-1.5", scroll && "flex-nowrap overflow-x-auto pb-1")}
-    >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          onClick={() => onChange(option.value)}
-          aria-pressed={value === option.value}
-          className={cn(
-            "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap",
-            value === option.value
-              ? "border-primary bg-primary text-primary-foreground"
-              : "border-border bg-transparent text-muted-foreground",
-          )}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function summaryFor(filters: StatsFilters, opponentName: string | null): string {
   const scope = filters.scope === "all" ? "All matches" : (opponentName ?? "Choose opponent");
@@ -106,10 +39,12 @@ function summaryFor(filters: StatsFilters, opponentName: string | null): string 
  * `filters` and collapses the panel, echoed back as the trigger row's own summary
  * text — matching the mockup exactly.
  *
- * No fixture yet varies by set/phase, so those two don't change the numbers on the
- * tab underneath. Recent form (rendered by the caller, above the tabs) is the one
- * exception: it's keyed by the committed opponent, so applying a "vs opponent"
- * scope really does change what's shown there.
+ * Scope, Set and Phase all change the numbers on the tab underneath —
+ * `getServeStatsOptions`/`getRallyStatsOptions` pick a deterministically
+ * scaled fixture variant per combination (no real endpoint buckets by
+ * set/phase yet — see the GitLab issue filed against that gap). Recent form
+ * (rendered by the caller, above the tabs) is keyed by the committed
+ * opponent the same way.
  */
 export function StatsScopePanel({
   playerId,

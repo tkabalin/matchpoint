@@ -29,12 +29,18 @@ const match: MatchRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-/** Routes by pathname, method-aware — needed once a test drives an actual DELETE. */
+/**
+ * Routes by pathname, method-aware — needed once a test drives an actual DELETE.
+ * `/api/players` defaults to an empty roster when a test doesn't care about it —
+ * MatchList fetches it to resolve which of the coach's players played each match.
+ */
 function stubFetch(routes: Record<string, (input: Request) => Response | Promise<Response>>) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
+      if (pathname === "/api/players" && !routes[pathname])
+        return Promise.resolve(Response.json([]));
       const handler = routes[pathname];
       if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
       return Promise.resolve(handler(input));
@@ -50,8 +56,13 @@ function renderMatchesPage() {
   const routes = ["/matches", "/home", "/players", "/stats", "/new-match"].map((path) =>
     createRoute({ getParentRoute: () => rootRoute, path, component: MatchesPage }),
   );
+  const matchStatsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/matches/$matchId",
+    component: () => <h1>Match Stats</h1>,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren(routes),
+    routeTree: rootRoute.addChildren([...routes, matchStatsRoute]),
     history: createMemoryHistory({ initialEntries: ["/matches"] }),
   });
   render(
@@ -88,19 +99,57 @@ test("offers starting a match when none is in progress", async () => {
   expect(screen.queryByText("Match in progress")).not.toBeInTheDocument();
 });
 
-test("tapping a match opens its actions", async () => {
+test("tapping a match row navigates to its stats page", async () => {
   stubFetch({ "/api/matches": () => Response.json([match]) });
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
+  await user.click(await screen.findByRole("link", { name: /vs T\. Naidoo/ }));
 
-  expect(await screen.findByRole("heading", { name: "vs T. Naidoo" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Delete match" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Match Stats" })).toBeInTheDocument();
 });
 
-test("Cancel closes the sheet without deleting", async () => {
+test("the edit icon is hidden once the match has a result", async () => {
+  stubFetch({ "/api/matches": () => Response.json([{ ...match, result: "win" }]) });
+  renderMatchesPage();
+
+  await screen.findByText("vs T. Naidoo");
+
+  expect(
+    screen.queryByRole("button", { name: /Edit details for the match/ }),
+  ).not.toBeInTheDocument();
+});
+
+test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what changed", async () => {
+  const patches: string[] = [];
+  stubFetch({
+    "/api/matches": () => Response.json([match]),
+    [`/api/matches/${match.id}`]: async (input) => {
+      if (input.method === "PATCH") {
+        patches.push(await input.text());
+        return Response.json({ ...match, opponent_name: "Sarah K" });
+      }
+      return Response.json(match);
+    },
+  });
+  const user = userEvent.setup();
+  renderMatchesPage();
+
+  await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
+
+  const opponentField = await screen.findByRole("textbox", { name: "Opponent" });
+  expect(opponentField).toHaveValue("T. Naidoo");
+  await user.clear(opponentField);
+  await user.type(opponentField, "Sarah K");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByRole("heading", { name: "Save these changes?" });
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() => expect(patches).toHaveLength(1));
+  expect(JSON.parse(patches[0]!)).toEqual({ opponent_name: "Sarah K" });
+});
+
+test("Cancel closes the delete sheet without deleting", async () => {
   const deletes: string[] = [];
   stubFetch({
     "/api/matches": () => Response.json([match]),
@@ -112,11 +161,11 @@ test("Cancel closes the sheet without deleting", async () => {
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-  expect(screen.queryByRole("heading", { name: "vs T. Naidoo" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Delete this match?" })).not.toBeInTheDocument();
   expect(deletes).toEqual([]);
 });
 
@@ -132,9 +181,7 @@ test("Delete match asks for confirmation before sending anything", async () => {
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
-  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
 
   expect(await screen.findByRole("heading", { name: "Delete this match?" })).toBeInTheDocument();
   expect(deletes).toEqual([]);
@@ -157,9 +204,7 @@ test("confirming deletes the match and it leaves the list", async () => {
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
-  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
@@ -178,9 +223,7 @@ test("a failed delete says so and keeps the match", async () => {
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
-  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
@@ -205,38 +248,52 @@ test("the delete names this device, so its own capture claim cannot block it", a
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
-  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
   await waitFor(() => expect(sentDeviceIds).toEqual([getDeviceId()]));
 });
 
-test("a match being captured on another device says so", async () => {
+test("a match being captured on another device offers to release and delete anyway", async () => {
+  let released = false;
+  let deleted = false;
   stubFetch({
-    "/api/matches": () => Response.json([match]),
+    "/api/matches": () => Response.json(deleted ? [] : [match]),
     [`/api/matches/${match.id}`]: (input) => {
       if (input.method === "DELETE") {
-        // The server's own wording, rendered as it stands: the refusal names a
-        // situation only the server can see, so local copy for it would go stale.
-        return Response.json(
-          { detail: "Match is being captured on another device" },
-          { status: 409 },
-        );
+        if (!released) {
+          return Response.json(
+            { detail: "Match is being captured on another device" },
+            { status: 409 },
+          );
+        }
+        deleted = true;
+        return new Response(null, { status: 204 });
       }
-      return Response.json([match]);
+      return Response.json(match);
+    },
+    [`/api/matches/${match.id}/capture/release`]: (input) => {
+      if (input.method === "POST") {
+        released = true;
+        return new Response(null, { status: 204 });
+      }
+      return new Response(null, { status: 404 });
     },
   });
   const user = userEvent.setup();
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /vs T\. Naidoo/ }));
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
-  await user.click(screen.getByRole("button", { name: "Delete match" }));
+  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
-  expect(await screen.findByText("Match is being captured on another device")).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Being captured on another device" }),
+  ).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Release and delete anyway" }));
+
+  await waitFor(() => expect(deleted).toBe(true));
+  expect(await screen.findByText("No matches yet")).toBeInTheDocument();
 });

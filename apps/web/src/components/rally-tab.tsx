@@ -27,16 +27,18 @@ import { StatHero } from "@/components/stat-hero";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getRallyStatsOptions } from "@/lib/analytics/analytics-options";
+import { getMatchRallyStatsOptions, getRallyStatsOptions } from "@/lib/analytics/analytics-options";
 import type {
   BreakdownRow,
+  PhaseFilter,
   PointEnderStyle,
   RallyLengthBucket,
+  SetFilter,
 } from "@/lib/analytics/types.provisional";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
-import { CourtHeatmap } from "../court-heatmap";
+import { CourtHeatmap } from "./court-heatmap";
 
 type WonSide = "you" | "opponents";
 
@@ -55,10 +57,26 @@ const SHOT_TYPE_ICON: Record<string, typeof TrendingUp> = {
   Lob: Rainbow,
 };
 
-export function RallyTab({ playerId }: { playerId: string }) {
+export function RallyTab({
+  playerId,
+  matchId,
+  set = "all",
+  phase = "full",
+  opponentId = null,
+}: {
+  playerId: string;
+  /** Scopes to one match's own analytics instead of the whole player, for
+   *  the per-match stats page — same tab, different (still fixture) data. */
+  matchId?: string;
+  set?: SetFilter;
+  phase?: PhaseFilter;
+  opponentId?: string | null;
+}) {
   const [wonSide, setWonSide] = useState<WonSide>("you");
   const { data, isPending, isError } = useQuery(
-    getRallyStatsOptions({ path: { player_id: playerId } }),
+    matchId
+      ? getMatchRallyStatsOptions({ path: { match_id: matchId }, query: { set, phase } })
+      : getRallyStatsOptions({ path: { player_id: playerId }, query: { set, phase, opponentId } }),
   );
   // Starts closed, and stays closed on its own: nothing auto-opens on load or
   // on switching You won/They won, only a tap on a style card opens its own

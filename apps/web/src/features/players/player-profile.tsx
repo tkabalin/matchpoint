@@ -7,7 +7,9 @@ import { useState } from "react";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerLoadError } from "@/components/player-load-error";
+import { RallyTab } from "@/components/rally-tab";
 import { SegmentedControl } from "@/components/segmented-control";
+import { ServeTab } from "@/components/serve-tab";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StatsFilters } from "@/lib/analytics/types.provisional";
@@ -18,8 +20,6 @@ import { PlayerDetailsCard } from "./player-details-card";
 import { PlayerNotesSheet } from "./player-notes-sheet";
 import { PlayerRecordCard } from "./player-record-card";
 import { StatsScopePanel } from "./stats-scope-panel";
-import { RallyTab } from "./tabs/rally-tab";
-import { ServeTab } from "./tabs/serve-tab";
 
 // Avoids a circular import between this component and its route file — the
 // standard TanStack Router way to read typed params from outside the route file.
@@ -109,7 +109,21 @@ export function PlayerProfile() {
       />
 
       <div className="mt-4">
-        {tab === "serve" ? <ServeTab playerId={playerId} /> : <RallyTab playerId={playerId} />}
+        {tab === "serve" ? (
+          <ServeTab
+            playerId={playerId}
+            set={filters.set}
+            phase={filters.phase}
+            opponentId={filters.opponentId}
+          />
+        ) : (
+          <RallyTab
+            playerId={playerId}
+            set={filters.set}
+            phase={filters.phase}
+            opponentId={filters.opponentId}
+          />
+        )}
       </div>
 
       <Button type="button" variant="outline" className="w-full" onClick={() => setNotesOpen(true)}>

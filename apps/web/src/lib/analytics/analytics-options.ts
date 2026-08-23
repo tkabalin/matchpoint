@@ -4,9 +4,9 @@ import {
   COACH_NOTES,
   OPPONENTS,
   PLAYER_OVERVIEW,
-  RALLY_STATS,
   RECENT_FORM,
-  SERVE_STATS,
+  rallyStatsFor,
+  serveStatsFor,
   squadMemberStatsFor,
   squadStatsFor,
   squadTrendFor,
@@ -16,10 +16,12 @@ import type {
   CoachNote,
   InProgressMatch,
   OpponentOption,
+  PhaseFilter,
   PlayerOverview,
   RallyStats,
   RecentForm,
   ServeStats,
+  SetFilter,
   SquadMetricKey,
   SquadTrendPoint,
 } from "./types.provisional";
@@ -52,7 +54,11 @@ export const getPlayerOverviewOptions = (options: { path: { player_id: string } 
     PLAYER_OVERVIEW,
   );
 
-// PLACEHOLDER: GET /players/{player_id}/analytics/serve
+// PLACEHOLDER: GET /players/{player_id}/analytics/serve?set=&phase= — no real
+// set/phase bucketing exists yet (see the GitLab issue filed against this
+// gap), so the query key carries them and `serveStatsFor` picks a
+// deterministically-scaled fixture variant instead of the one static object
+// every selection used to render regardless of what was picked.
 //
 // "v3" isn't a real API version — it's here so a browser that persisted an older
 // `ServeStats` shape to IndexedDB can't hand that stale shape back under this
@@ -61,13 +67,66 @@ export const getPlayerOverviewOptions = (options: { path: { player_id: string } 
 // the 2nd-serve toggle used to read `stats.outcome.firstServe.in` — undefined
 // under the old flat `{in, fault, ace}` shape, a `Cannot read properties of
 // undefined` crash). Bump it again the next time this fixture's shape changes.
-export const getServeStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<ServeStats>(["analytics", "serve", "v3", options.path.player_id], SERVE_STATS);
+export const getServeStatsOptions = (options: {
+  path: { player_id: string };
+  query?: { set?: SetFilter; phase?: PhaseFilter; opponentId?: string | null };
+}) => {
+  const set = options.query?.set ?? "all";
+  const phase = options.query?.phase ?? "full";
+  const opponentId = options.query?.opponentId ?? null;
+  return fixtureOptions<ServeStats>(
+    ["analytics", "serve", "v3", options.path.player_id, set, phase, opponentId ?? "all"],
+    serveStatsFor({ set, phase, opponentId }),
+  );
+};
 
-// PLACEHOLDER: GET /players/{player_id}/analytics/rally — see getServeStatsOptions'
-// own comment on why this carries a version segment.
-export const getRallyStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<RallyStats>(["analytics", "rally", "v3", options.path.player_id], RALLY_STATS);
+// PLACEHOLDER: GET /players/{player_id}/analytics/rally?set=&phase= — see
+// getServeStatsOptions' own comment on both the version segment and the
+// set/phase scaling.
+export const getRallyStatsOptions = (options: {
+  path: { player_id: string };
+  query?: { set?: SetFilter; phase?: PhaseFilter; opponentId?: string | null };
+}) => {
+  const set = options.query?.set ?? "all";
+  const phase = options.query?.phase ?? "full";
+  const opponentId = options.query?.opponentId ?? null;
+  return fixtureOptions<RallyStats>(
+    ["analytics", "rally", "v3", options.path.player_id, set, phase, opponentId ?? "all"],
+    rallyStatsFor({ set, phase, opponentId }),
+  );
+};
+
+// PLACEHOLDER: GET /matches/{match_id}/analytics/serve?set=&phase= — the
+// per-match stats page's Serve tab (#199/#213 follow-up). `matchWeight` is a
+// fixed "this one match looked a bit different" shift, composed with the
+// page's own set/phase selection the same way the player-wide endpoint does.
+const MATCH_SERVE_WEIGHT = [0.9, 1.25, 1.1] as const;
+export const getMatchServeStatsOptions = (options: {
+  path: { match_id: string };
+  query?: { set?: SetFilter; phase?: PhaseFilter };
+}) => {
+  const set = options.query?.set ?? "all";
+  const phase = options.query?.phase ?? "full";
+  return fixtureOptions<ServeStats>(
+    ["analytics", "match-serve", options.path.match_id, set, phase],
+    serveStatsFor({ set, phase, matchWeight: MATCH_SERVE_WEIGHT }),
+  );
+};
+
+// PLACEHOLDER: GET /matches/{match_id}/analytics/rally?set=&phase= — see
+// getMatchServeStatsOptions' own comment.
+const MATCH_RALLY_SCALE = 0.16;
+export const getMatchRallyStatsOptions = (options: {
+  path: { match_id: string };
+  query?: { set?: SetFilter; phase?: PhaseFilter };
+}) => {
+  const set = options.query?.set ?? "all";
+  const phase = options.query?.phase ?? "full";
+  return fixtureOptions<RallyStats>(
+    ["analytics", "match-rally", options.path.match_id, set, phase],
+    rallyStatsFor({ set, phase, scale: MATCH_RALLY_SCALE }),
+  );
+};
 
 // PLACEHOLDER: GET /players/{player_id}/analytics/opponents — feeds the Serve/Rally
 // scope panel's "vs opponent" picker.

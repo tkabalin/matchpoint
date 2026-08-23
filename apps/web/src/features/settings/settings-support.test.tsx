@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -13,6 +14,7 @@ import { expect, test } from "vitest";
 import { SettingsSupport } from "./settings-support";
 
 async function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const pageRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -29,7 +31,11 @@ async function renderPage() {
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/settings/support"] }),
   });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   await screen.findByRole("heading", { name: "Support" });
 }
 

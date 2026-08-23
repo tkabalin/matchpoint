@@ -2,11 +2,13 @@ import type {
   CoachNote,
   Metric,
   OpponentOption,
+  PhaseFilter,
   PlayerOverview,
   RallyStats,
   RecentForm,
   ServeStats,
   ServeTrendPoint,
+  SetFilter,
   SquadMemberStats,
   SquadMetricKey,
   SquadStatsEntry,
@@ -292,6 +294,195 @@ export const RALLY_STATS: RallyStats = {
     ],
   },
 };
+
+/**
+ * Set/Phase don't have a real backend to bucket by yet (see the GitLab issue
+ * filed against this gap), so this scales `RALLY_STATS`/`SERVE_STATS`
+ * deterministically instead of returning one static object regardless of
+ * the panel's selection — the point is "changing the dropdown visibly
+ * changes the numbers," not exhaustive realism. Style-card *headline* counts
+ * (won/lost/hero/rallyLength) are recomputed from the scaled counts so those
+ * stay mutually consistent; each style's own wing/shot-type/court-zone
+ * drill-down detail is left at its base value; a coach would need to expand
+ * a style card and total the wing split by hand to notice the drift, far
+ * less visible than the top-of-card numbers matching.
+ */
+// A small deterministic hash so any opponent id (not just a hand-picked few)
+// gets its own, stable-across-reloads variant — "vs opponent" scope needs
+// coverage for the whole roster, not just the handful `RECENT_FORM` names.
+function hashUnit(input: string): number {
+  let hash = 0;
+  for (let index = 0; index < input.length; index++) {
+    hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
+  }
+  return (hash % 1000) / 1000;
+}
+
+/** 0.7–1.3, centred on 1 — a mild per-opponent shift, not a different match altogether. */
+function opponentScale(opponentId: string | null): number {
+  return opponentId === null ? 1 : 0.7 + hashUnit(opponentId) * 0.6;
+}
+
+function opponentWeight(opponentId: string | null): [number, number, number] {
+  if (opponentId === null) return [1, 1, 1];
+  const seed = hashUnit(opponentId);
+  return [
+    0.75 + seed * 0.5,
+    0.75 + hashUnit(opponentId + "f") * 0.5,
+    0.75 + hashUnit(opponentId + "a") * 0.5,
+  ];
+}
+
+const RALLY_SET_SCALE: Record<SetFilter, number> = { all: 1, "1": 0.55, "2": 0.85, "3": 0.4 };
+const RALLY_PHASE_SCALE: Record<PhaseFilter, number> = {
+  full: 1,
+  tiebreaks: 0.12,
+  breakPoints: 0.2,
+  gamePoints: 0.35,
+  setPoints: 0.15,
+  matchPoints: 0.08,
+  gameEnding: 0.5,
+  setEnding: 0.25,
+};
+
+function scaleCount(count: number, factor: number): number {
+  return Math.max(0, Math.round(count * factor));
+}
+
+export function rallyStatsFor(filters: {
+  set: SetFilter;
+  phase: PhaseFilter;
+  opponentId?: string | null;
+  /** Composes with set/phase — the per-match view starts from a smaller
+   *  "one match's worth" base before its own Set/Phase filter narrows further. */
+  scale?: number;
+}): RallyStats {
+  const factor =
+    RALLY_SET_SCALE[filters.set] *
+    RALLY_PHASE_SCALE[filters.phase] *
+    opponentScale(filters.opponentId ?? null) *
+    (filters.scale ?? 1);
+  if (factor === 1) return RALLY_STATS;
+
+  const styles = {
+    you: RALLY_STATS.styles.you.map((style) => ({
+      ...style,
+      count: scaleCount(style.count, factor),
+    })),
+    opponents: RALLY_STATS.styles.opponents.map((style) => ({
+      ...style,
+      count: scaleCount(style.count, factor),
+    })),
+  } as unknown as RallyStats["styles"];
+
+  const won = styles.you.reduce((sum, style) => sum + style.count, 0);
+  const lost = styles.opponents.reduce((sum, style) => sum + style.count, 0);
+  const forced =
+    (styles.you.find((style) => style.kind === "forced")?.count ?? 0) +
+    (styles.opponents.find((style) => style.kind === "forced")?.count ?? 0);
+  const unforced =
+    (styles.you.find((style) => style.kind === "unforced")?.count ?? 0) +
+    (styles.opponents.find((style) => style.kind === "unforced")?.count ?? 0);
+  const heroValue = unforced === 0 ? forced : Math.round((forced / unforced) * 10) / 10;
+
+  return {
+    ...RALLY_STATS,
+    hero: { ...RALLY_STATS.hero, value: heroValue },
+    won,
+    lost,
+    rallyLength: RALLY_STATS.rallyLength.map((bucket) => ({
+      ...bucket,
+      count: scaleCount(bucket.count, factor),
+    })),
+    styles,
+  };
+}
+
+// Per-arm weights for {in, fault, ace}, renormalized to sum to 100 below —
+// a uniform scale would cancel out under renormalization, so each variant
+// needs its own, different-shaped weighting to actually shift the ratio.
+const SERVE_SET_WEIGHT: Record<SetFilter, [number, number, number]> = {
+  all: [1, 1, 1],
+  "1": [1.1, 0.8, 1.3],
+  "2": [0.95, 1.1, 0.9],
+  "3": [0.8, 1.3, 0.7],
+};
+const SERVE_PHASE_WEIGHT: Record<PhaseFilter, [number, number, number]> = {
+  full: [1, 1, 1],
+  tiebreaks: [0.7, 1.4, 1.6],
+  breakPoints: [0.85, 1.2, 0.6],
+  gamePoints: [1.05, 0.9, 1.1],
+  setPoints: [0.9, 1.15, 0.8],
+  matchPoints: [0.75, 1.3, 1.2],
+  gameEnding: [1, 1, 1.4],
+  setEnding: [0.95, 1.05, 1],
+};
+
+function normalizedTriple(values: readonly [number, number, number]): {
+  in: number;
+  fault: number;
+  ace: number;
+} {
+  const total = values.reduce((sum, value) => sum + value, 0) || 1;
+  const scaled = values.map((value) => (value / total) * 100);
+  const rounded = scaled.map(Math.round);
+  const remainder = 100 - rounded.reduce((sum, value) => sum + value, 0);
+  const maxIndex = rounded.indexOf(Math.max(...rounded));
+  rounded[maxIndex]! += remainder;
+  return { in: rounded[0]!, fault: rounded[1]!, ace: rounded[2]! };
+}
+
+export function serveStatsFor(filters: {
+  set: SetFilter;
+  phase: PhaseFilter;
+  opponentId?: string | null;
+  /** Composes with set/phase, same purpose as `rallyStatsFor`'s `scale`. */
+  matchWeight?: readonly [number, number, number];
+}): ServeStats {
+  const setWeight = SERVE_SET_WEIGHT[filters.set];
+  const phaseWeight = SERVE_PHASE_WEIGHT[filters.phase];
+  const oppWeight = opponentWeight(filters.opponentId ?? null);
+  const matchWeight = filters.matchWeight ?? [1, 1, 1];
+  if (
+    setWeight.every((w) => w === 1) &&
+    phaseWeight.every((w) => w === 1) &&
+    oppWeight.every((w) => w === 1) &&
+    matchWeight.every((w) => w === 1)
+  ) {
+    return SERVE_STATS;
+  }
+
+  const weight: [number, number, number] = [
+    setWeight[0] * phaseWeight[0] * oppWeight[0] * matchWeight[0],
+    setWeight[1] * phaseWeight[1] * oppWeight[1] * matchWeight[1],
+    setWeight[2] * phaseWeight[2] * oppWeight[2] * matchWeight[2],
+  ];
+
+  function scaleOutcome(outcome: { in: number; fault: number; ace: number }) {
+    return normalizedTriple([
+      outcome.in * weight[0],
+      outcome.fault * weight[1],
+      outcome.ace * weight[2],
+    ]);
+  }
+
+  return {
+    serving: {
+      ...SERVE_STATS.serving,
+      outcome: {
+        firstServe: scaleOutcome(SERVE_STATS.serving.outcome.firstServe),
+        secondServe: scaleOutcome(SERVE_STATS.serving.outcome.secondServe),
+      },
+    },
+    returning: {
+      ...SERVE_STATS.returning,
+      outcome: {
+        firstServe: scaleOutcome(SERVE_STATS.returning.outcome.firstServe),
+        secondServe: scaleOutcome(SERVE_STATS.returning.outcome.secondServe),
+      },
+    },
+  };
+}
 
 export const OPPONENTS: OpponentOption[] = [
   { id: "sarah-k", name: "Sarah K", matches: 14, recent: true },

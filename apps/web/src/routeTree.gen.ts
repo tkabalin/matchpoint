@@ -15,9 +15,10 @@ import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
 import { Route as AuthenticatedHomeRouteImport } from "./routes/_authenticated.home"
 import { Route as AuthenticatedInstallRouteImport } from "./routes/_authenticated.install"
-import { Route as AuthenticatedMatchesRouteImport } from "./routes/_authenticated.matches"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated.profile"
 import { Route as AuthenticatedStatsRouteImport } from "./routes/_authenticated.stats"
+import { Route as AuthenticatedMatchesIndexRouteImport } from "./routes/_authenticated.matches.index"
+import { Route as AuthenticatedMatchesMatchIdRouteImport } from "./routes/_authenticated.matches.$matchId"
 import { Route as AuthenticatedNewMatchIndexRouteImport } from "./routes/_authenticated.new-match.index"
 import { Route as AuthenticatedNewMatchPlayerIdRouteImport } from "./routes/_authenticated.new-match.$playerId"
 import { Route as AuthenticatedPlayersIndexRouteImport } from "./routes/_authenticated.players.index"
@@ -57,11 +58,6 @@ const AuthenticatedInstallRoute = AuthenticatedInstallRouteImport.update({
   path: "/install",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedMatchesRoute = AuthenticatedMatchesRouteImport.update({
-  id: "/matches",
-  path: "/matches",
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
   id: "/profile",
   path: "/profile",
@@ -72,6 +68,18 @@ const AuthenticatedStatsRoute = AuthenticatedStatsRouteImport.update({
   path: "/stats",
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMatchesIndexRoute =
+  AuthenticatedMatchesIndexRouteImport.update({
+    id: "/matches/",
+    path: "/matches/",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedMatchesMatchIdRoute =
+  AuthenticatedMatchesMatchIdRouteImport.update({
+    id: "/matches/$matchId",
+    path: "/matches/$matchId",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedNewMatchIndexRoute =
   AuthenticatedNewMatchIndexRouteImport.update({
     id: "/new-match/",
@@ -133,15 +141,16 @@ export interface FileRoutesByFullPath {
   "/sign-up": typeof SignUpRoute
   "/home": typeof AuthenticatedHomeRoute
   "/install": typeof AuthenticatedInstallRoute
-  "/matches": typeof AuthenticatedMatchesRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/stats": typeof AuthenticatedStatsRoute
+  "/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/settings/app": typeof AuthenticatedSettingsAppRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/settings/support": typeof AuthenticatedSettingsSupportRoute
+  "/matches/": typeof AuthenticatedMatchesIndexRoute
   "/new-match/": typeof AuthenticatedNewMatchIndexRoute
   "/players/": typeof AuthenticatedPlayersIndexRoute
   "/settings/": typeof AuthenticatedSettingsIndexRoute
@@ -152,15 +161,16 @@ export interface FileRoutesByTo {
   "/sign-up": typeof SignUpRoute
   "/home": typeof AuthenticatedHomeRoute
   "/install": typeof AuthenticatedInstallRoute
-  "/matches": typeof AuthenticatedMatchesRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/stats": typeof AuthenticatedStatsRoute
+  "/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/settings/app": typeof AuthenticatedSettingsAppRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/settings/support": typeof AuthenticatedSettingsSupportRoute
+  "/matches": typeof AuthenticatedMatchesIndexRoute
   "/new-match": typeof AuthenticatedNewMatchIndexRoute
   "/players": typeof AuthenticatedPlayersIndexRoute
   "/settings": typeof AuthenticatedSettingsIndexRoute
@@ -173,15 +183,16 @@ export interface FileRoutesById {
   "/sign-up": typeof SignUpRoute
   "/_authenticated/home": typeof AuthenticatedHomeRoute
   "/_authenticated/install": typeof AuthenticatedInstallRoute
-  "/_authenticated/matches": typeof AuthenticatedMatchesRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
   "/_authenticated/stats": typeof AuthenticatedStatsRoute
+  "/_authenticated/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/_authenticated/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/_authenticated/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/_authenticated/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/_authenticated/settings/app": typeof AuthenticatedSettingsAppRoute
   "/_authenticated/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/_authenticated/settings/support": typeof AuthenticatedSettingsSupportRoute
+  "/_authenticated/matches/": typeof AuthenticatedMatchesIndexRoute
   "/_authenticated/new-match/": typeof AuthenticatedNewMatchIndexRoute
   "/_authenticated/players/": typeof AuthenticatedPlayersIndexRoute
   "/_authenticated/settings/": typeof AuthenticatedSettingsIndexRoute
@@ -194,15 +205,16 @@ export interface FileRouteTypes {
     | "/sign-up"
     | "/home"
     | "/install"
-    | "/matches"
     | "/profile"
     | "/stats"
+    | "/matches/$matchId"
     | "/new-match/$playerId"
     | "/players/$playerId"
     | "/settings/account"
     | "/settings/app"
     | "/settings/match-defaults"
     | "/settings/support"
+    | "/matches/"
     | "/new-match/"
     | "/players/"
     | "/settings/"
@@ -213,15 +225,16 @@ export interface FileRouteTypes {
     | "/sign-up"
     | "/home"
     | "/install"
-    | "/matches"
     | "/profile"
     | "/stats"
+    | "/matches/$matchId"
     | "/new-match/$playerId"
     | "/players/$playerId"
     | "/settings/account"
     | "/settings/app"
     | "/settings/match-defaults"
     | "/settings/support"
+    | "/matches"
     | "/new-match"
     | "/players"
     | "/settings"
@@ -233,15 +246,16 @@ export interface FileRouteTypes {
     | "/sign-up"
     | "/_authenticated/home"
     | "/_authenticated/install"
-    | "/_authenticated/matches"
     | "/_authenticated/profile"
     | "/_authenticated/stats"
+    | "/_authenticated/matches/$matchId"
     | "/_authenticated/new-match/$playerId"
     | "/_authenticated/players/$playerId"
     | "/_authenticated/settings/account"
     | "/_authenticated/settings/app"
     | "/_authenticated/settings/match-defaults"
     | "/_authenticated/settings/support"
+    | "/_authenticated/matches/"
     | "/_authenticated/new-match/"
     | "/_authenticated/players/"
     | "/_authenticated/settings/"
@@ -298,13 +312,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedInstallRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/matches": {
-      id: "/_authenticated/matches"
-      path: "/matches"
-      fullPath: "/matches"
-      preLoaderRoute: typeof AuthenticatedMatchesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     "/_authenticated/profile": {
       id: "/_authenticated/profile"
       path: "/profile"
@@ -317,6 +324,20 @@ declare module "@tanstack/react-router" {
       path: "/stats"
       fullPath: "/stats"
       preLoaderRoute: typeof AuthenticatedStatsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/matches/": {
+      id: "/_authenticated/matches/"
+      path: "/matches"
+      fullPath: "/matches/"
+      preLoaderRoute: typeof AuthenticatedMatchesIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    "/_authenticated/matches/$matchId": {
+      id: "/_authenticated/matches/$matchId"
+      path: "/matches/$matchId"
+      fullPath: "/matches/$matchId"
+      preLoaderRoute: typeof AuthenticatedMatchesMatchIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     "/_authenticated/new-match/": {
@@ -388,15 +409,16 @@ declare module "@tanstack/react-router" {
 interface AuthenticatedRouteChildren {
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
   AuthenticatedInstallRoute: typeof AuthenticatedInstallRoute
-  AuthenticatedMatchesRoute: typeof AuthenticatedMatchesRoute
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedStatsRoute: typeof AuthenticatedStatsRoute
+  AuthenticatedMatchesMatchIdRoute: typeof AuthenticatedMatchesMatchIdRoute
   AuthenticatedNewMatchPlayerIdRoute: typeof AuthenticatedNewMatchPlayerIdRoute
   AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppRoute: typeof AuthenticatedSettingsAppRoute
   AuthenticatedSettingsMatchDefaultsRoute: typeof AuthenticatedSettingsMatchDefaultsRoute
   AuthenticatedSettingsSupportRoute: typeof AuthenticatedSettingsSupportRoute
+  AuthenticatedMatchesIndexRoute: typeof AuthenticatedMatchesIndexRoute
   AuthenticatedNewMatchIndexRoute: typeof AuthenticatedNewMatchIndexRoute
   AuthenticatedPlayersIndexRoute: typeof AuthenticatedPlayersIndexRoute
   AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
@@ -405,9 +427,9 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedHomeRoute: AuthenticatedHomeRoute,
   AuthenticatedInstallRoute: AuthenticatedInstallRoute,
-  AuthenticatedMatchesRoute: AuthenticatedMatchesRoute,
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedStatsRoute: AuthenticatedStatsRoute,
+  AuthenticatedMatchesMatchIdRoute: AuthenticatedMatchesMatchIdRoute,
   AuthenticatedNewMatchPlayerIdRoute: AuthenticatedNewMatchPlayerIdRoute,
   AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
   AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
@@ -415,6 +437,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSettingsMatchDefaultsRoute:
     AuthenticatedSettingsMatchDefaultsRoute,
   AuthenticatedSettingsSupportRoute: AuthenticatedSettingsSupportRoute,
+  AuthenticatedMatchesIndexRoute: AuthenticatedMatchesIndexRoute,
   AuthenticatedNewMatchIndexRoute: AuthenticatedNewMatchIndexRoute,
   AuthenticatedPlayersIndexRoute: AuthenticatedPlayersIndexRoute,
   AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,

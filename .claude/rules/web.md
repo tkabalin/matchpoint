@@ -18,11 +18,13 @@ paths:
 - **No cross-imports between feature slices.** If `features/matches` needs something from
   `features/players`, it belongs in `src/components/` or `src/lib/` — and only once there are two
   real call sites (see Code Style in `CLAUDE.md`).
-- **One named exception: `features/outbox/`.** Both `features/capture/` and `features/sync/` import
-  it by design: capture appends to the local queue, sync drains it, and the two may not import each
-  other (see `web-capture.md`). It stays a slice rather than moving to `src/lib/` because it owns a
-  database schema and its own durability rules, not a helper. This is not a precedent — anything
-  else two slices share still goes in `src/components/` or `src/lib/`.
+- **One named exception: `features/outbox/`.** `features/capture/` and `features/sync/` import it by
+  design: capture appends to the local queue, sync drains it, and the two may not import each other
+  (see `web-capture.md`). `features/matches/` also imports it — deleting a match has to clear that
+  match's own queued rows (`removeByMatch`), or a later drain re-posts them and puts the match back
+  (#214). It stays a slice rather than moving to `src/lib/` because it owns a database schema and
+  its own durability rules, not a helper. This is not a precedent — anything else two slices share
+  still goes in `src/components/` or `src/lib/`.
 - `src/lib/local-data.ts` imports it too, the one place a `lib/` module depends on a slice. Deleting
   what the device holds for a coach spans the outbox and the persisted query cache, so it belongs to
   neither, and the keep-or-delete rules of a sign-out, a coach switch and a revoked session are only

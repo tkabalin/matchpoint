@@ -1,13 +1,17 @@
 import type { ReactNode } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
+import { InProgressBanner } from "@/components/in-progress-banner";
 import { cn } from "@/lib/utils";
 
 /**
  * The phone-shaped column every screen sits in.
  *
  * The bottom nav is fixed, so the padding that keeps content clear of it belongs
- * here rather than being remembered at each page.
+ * here rather than being remembered at each page. `InProgressBanner` lives here
+ * too, not at each call site — a coach mid-match can be on any authenticated
+ * screen, not just home and matches, so the way back has to follow them
+ * everywhere rather than being remembered per page.
  */
 export function AppPage({
   children,
@@ -28,6 +32,7 @@ export function AppPage({
           className,
         )}
       >
+        <InProgressBanner />
         {children}
       </div>
       {nav && <BottomNav />}
