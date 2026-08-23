@@ -96,7 +96,9 @@ export interface ServeAttempt {
   // Three zones, not raw coordinates — a coach watching live cannot place a
   // coordinate reliably, and wide/body/T is how coaches already think about serve
   // targets. Non-null only for the tracked player's own serve: a FailureMode when it
-  // faulted (why it missed), a ServeTarget when it went in or aced (where it landed).
+  // faulted (why it missed), and optionally a ServeTarget when it went in or aced —
+  // null there means placement wasn't captured, which is what the one-tap capture
+  // screen records: that the ball landed in the box, not where inside it.
   // Always null for an OPPONENT serve — placement there is out of scope. Which
   // physical side (deuce/ad) the serve came from is Point.courtSide, not part of
   // this — that fact belongs to the whole point, not just the tracked player's serve.
@@ -272,9 +274,9 @@ export class Point {
         if (!isFailureMode(raw.location)) {
           throw new Error(`serves[${index}].location must be a FailureMode when outcome is FAULT`);
         }
-      } else if (!isServeTarget(raw.location)) {
+      } else if (raw.location !== null && !isServeTarget(raw.location)) {
         throw new Error(
-          `serves[${index}].location must be a ServeTarget when outcome is ${raw.outcome}`,
+          `serves[${index}].location must be a ServeTarget or null when outcome is ${raw.outcome}`,
         );
       }
       return copyServeAttempt(raw);

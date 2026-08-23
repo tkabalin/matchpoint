@@ -151,6 +151,13 @@ describe("Point.create structural validation", () => {
       ).toThrow(/ServeTarget/);
     });
 
+    test("accepts a null location on a TRACKED serve that went in — placement is optional", () => {
+      const point = Point.create(
+        pointData({ serves: [{ number: 1, outcome: "IN", location: null }] }),
+      );
+      expect(point.serves[0]?.location).toBeNull();
+    });
+
     test("rejects a non-FailureMode location on a TRACKED serve that faulted", () => {
       expect(() =>
         Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: "T" }] })),

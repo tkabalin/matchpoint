@@ -139,14 +139,16 @@ export function startPoint(
 
 export type CaptureAction =
   // Tracked player serving only (never valid for OPPONENT — see TAP_RETURN below).
-  // `target` is where within the box the serve landed — which box itself is
-  // `draft.courtSide`, not tapped here (see point.ts's own comment on the split).
-  | { type: "TAP_SERVE_IN"; target: ServeTarget }
+  // `target` is where within the box the serve landed, and optional: the capture
+  // screen taps the box `draft.courtSide` already fixes, so one tap says the serve
+  // landed without saying where inside it (see point.ts's own comment on the split).
+  | { type: "TAP_SERVE_IN"; target?: ServeTarget }
   // location required for TRACKED (why it missed), omitted for OPPONENT (out of
   // scope — opponent serve placement, fault or otherwise, is never captured).
   | { type: "TAP_SERVE_FAULT"; location?: FailureMode }
-  // target required for TRACKED (see TAP_SERVE_IN), omitted for OPPONENT (an ace
-  // against the tracked player has no location at all).
+  // target optional for TRACKED (see TAP_SERVE_IN — the Ace button carries no
+  // placement), and never valid for OPPONENT (an ace against the tracked player has
+  // no location at all).
   | { type: "TAP_SERVE_ACE"; target?: ServeTarget }
   // Opponent serving only: there's no separate "serve in" tap the way tracked-serving
   // has one — reaching for "where did the return go" already implies the serve was in.
@@ -258,15 +260,20 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       const { number } = step;
       if (action.type === "TAP_SERVE_IN") {
         if (draft.server !== "TRACKED") throw invalidAction(action, step);
-        const nextDraft = withServe(draft, { number, outcome: "IN", location: action.target });
+        const nextDraft = withServe(draft, {
+          number,
+          outcome: "IN",
+          location: action.target ?? null,
+        });
         return advance(state, { name: "RALLY" }, nextDraft);
       }
       if (action.type === "TAP_SERVE_ACE") {
         if (draft.server === "TRACKED") {
-          if (action.target === undefined) {
-            throw new Error("TAP_SERVE_ACE requires a target when server is TRACKED");
-          }
-          const nextDraft = withServe(draft, { number, outcome: "ACE", location: action.target });
+          const nextDraft = withServe(draft, {
+            number,
+            outcome: "ACE",
+            location: action.target ?? null,
+          });
           // Aced by the tracked player: they served it, so they won.
           return advance(state, { name: "READY" }, readyDraft(nextDraft, true, "ACE"));
         }

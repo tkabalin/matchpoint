@@ -70,6 +70,12 @@ describe("serve — tracked player", () => {
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: SERVE_TARGET }]);
   });
 
+  test("in with no target → RALLY — one tap says it landed, not where inside the box", () => {
+    const state = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    expect(state.step).toEqual({ name: "RALLY" });
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: null }]);
+  });
+
   test("fault on the first serve → SERVE number 2, the fault is kept not overwritten", () => {
     const state = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     expect(state.step).toEqual({ name: "SERVE", number: 2 });
@@ -98,10 +104,11 @@ describe("serve — tracked player", () => {
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: AD_TARGET }]);
   });
 
-  test("rejects an ace with no target — tracked serve placement is always captured", () => {
-    expect(() => transition(startTracked(), { type: "TAP_SERVE_ACE" })).toThrow(
-      /requires a target/,
-    );
+  test("ace with no target → READY — the Ace button carries no placement", () => {
+    const state = transition(startTracked(), { type: "TAP_SERVE_ACE" });
+    expect(state.step).toEqual({ name: "READY" });
+    expect(state.draft.won).toBe(true);
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: null }]);
   });
 });
 
