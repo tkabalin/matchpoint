@@ -1,3 +1,5 @@
+import type { LucideIcon } from "lucide-react";
+
 import { OutcomeLegend } from "@/components/outcome-swatch";
 import { PATTERN_CLASS, type PatternName } from "@/lib/palette";
 import type { BreakdownRow } from "@/lib/analytics/types.provisional";
@@ -16,6 +18,8 @@ export function BreakdownBars({
   pattern = "win",
   secondaryPattern,
   legend,
+  icon,
+  unit = "",
   className,
 }: {
   rows: BreakdownRow[];
@@ -25,10 +29,16 @@ export function BreakdownBars({
   /** Colour for the second stacked segment, where rows carry one. */
   secondaryPattern?: PatternName;
   legend?: { pattern: PatternName; label: string }[];
+  /** A large, distinct Lucide icon per row, keyed by label — every stat row gets
+   *  its own symbol rather than relying on colour alone to tell rows apart. */
+  icon?: (row: BreakdownRow) => LucideIcon;
+  /** Suffix appended to each row's value, e.g. "%" when rows are percentages
+   *  rather than raw counts — a bare number reads as a count by default. */
+  unit?: string;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col gap-2", className)}>
+    <div className={cn("flex flex-col gap-2.5", className)}>
       {rows.map((row) => {
         // A group where nothing has been recorded yet has max: 0, and 0 / 0 is NaN
         // — a "NaN%" width is dropped by the browser, so the bar would render
@@ -36,25 +46,29 @@ export function BreakdownBars({
         const primary = row.max === 0 ? 0 : (row.value / row.max) * 100;
         const secondary = row.max === 0 ? 0 : ((row.secondaryValue ?? 0) / row.max) * 100;
         const rowPattern = typeof pattern === "function" ? pattern(row) : pattern;
+        const Icon = icon?.(row);
 
         return (
-          <div key={row.label}>
-            <div className="flex justify-between text-xs">
-              <span>{row.label}</span>
-              <span className="tabular-nums">
-                {row.secondaryValue === undefined
-                  ? row.value
-                  : `${row.value} UFE · ${row.secondaryValue} FE`}
-              </span>
-            </div>
-            <div className="mt-1 flex h-2 overflow-hidden rounded-sm bg-muted">
-              <span className={PATTERN_CLASS[rowPattern]} style={{ width: `${primary}%` }} />
-              {secondary > 0 && secondaryPattern && (
-                <span
-                  className={PATTERN_CLASS[secondaryPattern]}
-                  style={{ width: `${secondary}%` }}
-                />
-              )}
+          <div key={row.label} className="flex items-center gap-2.5">
+            {Icon && <Icon className="size-6 shrink-0 text-foreground" aria-hidden="true" />}
+            <div className="flex-1">
+              <div className="flex justify-between text-xs">
+                <span>{row.label}</span>
+                <span className="tabular-nums">
+                  {row.secondaryValue === undefined
+                    ? `${row.value}${unit}`
+                    : `${row.value}${unit} UFE · ${row.secondaryValue}${unit} FE`}
+                </span>
+              </div>
+              <div className="mt-1 flex h-2 overflow-hidden rounded-sm bg-muted">
+                <span className={PATTERN_CLASS[rowPattern]} style={{ width: `${primary}%` }} />
+                {secondary > 0 && secondaryPattern && (
+                  <span
+                    className={PATTERN_CLASS[secondaryPattern]}
+                    style={{ width: `${secondary}%` }}
+                  />
+                )}
+              </div>
             </div>
           </div>
         );

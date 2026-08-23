@@ -1,3 +1,5 @@
+import type { LucideIcon } from "lucide-react";
+
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +21,9 @@ export function SegmentedControl<T extends string>({
 }: {
   value: T;
   onValueChange: (value: T) => void;
-  options: { value: T; label: string }[];
+  /** `icon`, when given, must be a distinct symbol per option — two options
+   *  sharing an icon defeats the point of having one. */
+  options: { value: T; label: string; icon?: LucideIcon }[];
   className?: string;
   "aria-label"?: string;
 }) {
@@ -39,7 +43,8 @@ export function SegmentedControl<T extends string>({
       {...props}
     >
       {options.map((option) => (
-        <ToggleGroupItem key={option.value} value={option.value} className="flex-1">
+        <ToggleGroupItem key={option.value} value={option.value} className="flex-1 gap-1.5">
+          {option.icon && <option.icon className="size-4 shrink-0" aria-hidden="true" />}
           {option.label}
         </ToggleGroupItem>
       ))}

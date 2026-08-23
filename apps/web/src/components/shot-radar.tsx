@@ -1,6 +1,91 @@
+import type { LucideIcon } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronsDown,
+  ChevronsUp,
+  ChevronUp,
+  Rainbow,
+  TrendingDown,
+  TrendingUp,
+  Waves,
+} from "lucide-react";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts";
 
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+
+/**
+ * One icon per axis, all eight distinct — this chart's only caller is the Rally
+ * tab's wing×shot-type radar, so the eight labels are pinned here rather than
+ * passed in (nothing else to stay generic for yet, per the two-call-site rule).
+ * Forehand and backhand versions of the same shot deliberately don't share an
+ * icon: reusing one across two different axes reads as "these are the same
+ * thing," which they aren't.
+ */
+const AXIS_ICON: Record<string, LucideIcon> = {
+  "FH Drive": TrendingUp,
+  "BH Drive": TrendingDown,
+  "FH Volley": ChevronUp,
+  "BH Volley": ChevronsUp,
+  "FH Drop": ChevronDown,
+  "BH Drop": ChevronsDown,
+  "FH Lob": Rainbow,
+  "BH Lob": Waves,
+};
+
+const ICON_SIZE = 18;
+
+interface AxisTickProps {
+  x?: number;
+  y?: number;
+  cx?: number;
+  cy?: number;
+  payload?: { value: string };
+}
+
+/**
+ * Replaces `PolarAngleAxis`'s default plain-text tick with an icon-plus-label
+ * pair, pushed outward from the chart's centre along the same radial line as
+ * its axis — so the icon reads as belonging to that spoke of the web, not
+ * floating in a fixed screen direction.
+ */
+function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
+  const label = payload?.value ?? "";
+  const Icon = AXIS_ICON[label];
+  const dx = x - cx;
+  const dy = y - cy;
+  const length = Math.hypot(dx, dy) || 1;
+  const unitX = dx / length;
+  const unitY = dy / length;
+  const textAnchor = dx > 6 ? "start" : dx < -6 ? "end" : "middle";
+  const iconX = x + unitX * 14;
+  const iconY = y + unitY * 14;
+  const labelX = x + unitX * 30;
+  const labelY = y + unitY * 30;
+
+  return (
+    <g>
+      {Icon && (
+        <Icon
+          x={iconX - ICON_SIZE / 2}
+          y={iconY - ICON_SIZE / 2}
+          width={ICON_SIZE}
+          height={ICON_SIZE}
+          className="text-foreground"
+        />
+      )}
+      <text
+        x={labelX}
+        y={labelY}
+        textAnchor={textAnchor}
+        dominantBaseline="middle"
+        fontSize={9}
+        fill="var(--color-muted-foreground)"
+      >
+        {label}
+      </text>
+    </g>
+  );
+}
 
 /**
  * Share of point-ending shots per shot type.
@@ -35,9 +120,13 @@ export function ShotRadar({
 
   return (
     <ChartContainer config={config} className={className}>
-      <RadarChart data={data} outerRadius="70%">
+      <RadarChart
+        data={data}
+        outerRadius="52%"
+        margin={{ top: 20, bottom: 20, left: 36, right: 36 }}
+      >
         <PolarGrid />
-        <PolarAngleAxis dataKey="shot" tick={{ fontSize: 10 }} />
+        <PolarAngleAxis dataKey="shot" tick={<AxisTick />} />
         {series.map((entry) => (
           <Radar
             key={entry.name}

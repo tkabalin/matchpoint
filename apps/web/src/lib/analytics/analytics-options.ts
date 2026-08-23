@@ -2,24 +2,21 @@ import { queryOptions } from "@tanstack/react-query";
 
 import {
   COACH_NOTES,
-  HEAD_TO_HEAD,
-  HEAD_TO_HEAD_DETAIL,
+  OPPONENTS,
   PLAYER_OVERVIEW,
   RALLY_STATS,
+  RECENT_FORM,
   SERVE_STATS,
-  trendStatsFor,
 } from "./fixtures";
 import type {
   AttentionFlag,
   CoachNote,
-  HeadToHeadDetail,
-  HeadToHeadSummary,
   InProgressMatch,
+  OpponentOption,
   PlayerOverview,
   RallyStats,
+  RecentForm,
   ServeStats,
-  TrendStats,
-  TrendWindow,
 } from "./types.provisional";
 
 /**
@@ -51,35 +48,39 @@ export const getPlayerOverviewOptions = (options: { path: { player_id: string } 
   );
 
 // PLACEHOLDER: GET /players/{player_id}/analytics/serve
+//
+// "v2" isn't a real API version — it's here so a browser that persisted the old
+// `ServeStats` shape (pre-scope-panel redesign) to IndexedDB can't hand that stale
+// shape back under this query key and crash the new component reading fields that
+// didn't exist on it. Bump it again the next time this fixture's shape changes.
 export const getServeStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<ServeStats>(["analytics", "serve", options.path.player_id], SERVE_STATS);
+  fixtureOptions<ServeStats>(["analytics", "serve", "v2", options.path.player_id], SERVE_STATS);
 
-// PLACEHOLDER: GET /players/{player_id}/analytics/rally
+// PLACEHOLDER: GET /players/{player_id}/analytics/rally — see getServeStatsOptions'
+// own comment on why this carries a version segment.
 export const getRallyStatsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<RallyStats>(["analytics", "rally", options.path.player_id], RALLY_STATS);
+  fixtureOptions<RallyStats>(["analytics", "rally", "v2", options.path.player_id], RALLY_STATS);
 
-// PLACEHOLDER: GET /players/{player_id}/analytics/trends?window=
-export const getTrendStatsOptions = (options: {
+// PLACEHOLDER: GET /players/{player_id}/analytics/opponents — feeds the Serve/Rally
+// scope panel's "vs opponent" picker.
+export const listOpponentsOptions = (options: { path: { player_id: string } }) =>
+  fixtureOptions<OpponentOption[]>(["analytics", "opponents", options.path.player_id], OPPONENTS);
+
+// PLACEHOLDER: GET /players/{player_id}/analytics/recent-form?opponent_id= — the
+// dot row above the Serve/Rally tabs, scoped to all matches or one opponent.
+//
+// Only `all` plus 3 of `OPPONENTS`' 12 entries have a fixture — `null`, not the
+// all-matches fallback, for the other 9. `RecentFormRow` already treats a null
+// result as "nothing to show" and renders nothing, which is honest; silently
+// substituting the all-matches record under that opponent's name would not be.
+export const getRecentFormOptions = (options: {
   path: { player_id: string };
-  query: { window: TrendWindow };
-}) =>
-  fixtureOptions<TrendStats>(
-    ["analytics", "trends", options.path.player_id, options.query.window],
-    trendStatsFor(options.query.window),
-  );
-
-// PLACEHOLDER: GET /players/{player_id}/analytics/head-to-head
-export const listHeadToHeadOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<HeadToHeadSummary[]>(["analytics", "h2h", options.path.player_id], HEAD_TO_HEAD);
-
-// PLACEHOLDER: GET /players/{player_id}/analytics/head-to-head/{opponent_id}
-export const getHeadToHeadOptions = (options: {
-  path: { player_id: string; opponent_id: string };
+  query: { opponentId: string | null };
 }) => {
-  const summary = HEAD_TO_HEAD.find((entry) => entry.opponentId === options.path.opponent_id);
-  return fixtureOptions<HeadToHeadDetail>(
-    ["analytics", "h2h", options.path.player_id, options.path.opponent_id],
-    { ...HEAD_TO_HEAD_DETAIL, ...summary },
+  const key = options.query.opponentId ?? "all";
+  return fixtureOptions<RecentForm | null>(
+    ["analytics", "recent-form", options.path.player_id, key],
+    RECENT_FORM[key] ?? null,
   );
 };
 

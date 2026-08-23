@@ -1,18 +1,17 @@
 import type {
   CoachNote,
-  HeadToHeadDetail,
-  HeadToHeadSummary,
   Metric,
+  OpponentOption,
   PlayerOverview,
   RallyStats,
+  RecentForm,
   ServeStats,
-  TrendStats,
-  TrendWindow,
+  ServeTrendPoint,
 } from "./types.provisional";
 
 /**
  * Deterministic stand-in data for the analytics the API doesn't serve yet, using the
- * wireframe's own numbers so the screens read the way they were designed to.
+ * mockup's own numbers so the screens read the way they were designed to.
  *
  * Fixed rather than generated: these screens get reviewed and screenshotted, and a
  * chart that reshuffles on every reload can't be compared against the design or
@@ -31,264 +30,275 @@ function percent(
 }
 
 export const PLAYER_OVERVIEW: PlayerOverview = {
-  form: percent("Form — win % last 5", 80, "n=5", 62, 12),
-  recentResults: ["win", "win", "loss", "win", "win"],
+  form: percent("Form: win % last 5", 80, "n=5", 62, 12),
   holdPercentage: percent("Hold %", 72, "n=14", 68, 4),
-  returnGamesWon: percent("Return games won %", 31, "n=14", 33, -2),
-  forcedToUnforced: {
-    label: "Forced : Unforced ratio",
-    value: 1.4,
-    unit: "ratio",
-    sampleSize: "n=14",
-    baseline: 1.5,
-    delta: 0.2,
-    max: 3,
-    higherIsBetter: true,
-  },
   seasonRecord: { wins: 14, losses: 6 },
   allTimeRecord: { wins: 52, losses: 28 },
-  highlights: [
-    { direction: "up", text: "Strong 1st serve win rate — 71%" },
-    { direction: "down", text: "High backhand unforced errors — 11/match" },
-  ],
-  upcoming: {
-    opponentName: "A. Torres",
-    when: "Sat 10:00",
-    note: "0–2 vs Torres. 3 of his 4 wins came on your break points.",
-  },
 };
+
+const SERVE_TREND: ServeTrendPoint[] = [
+  { match: "M1", firstServeIn: 61, secondServeIn: 52 },
+  { match: "M2", firstServeIn: 64, secondServeIn: 49 },
+  { match: "M3", firstServeIn: 68, secondServeIn: 55 },
+  { match: "M4", firstServeIn: 65, secondServeIn: 51 },
+  { match: "M5", firstServeIn: 70, secondServeIn: 58 },
+  { match: "M6", firstServeIn: 68, secondServeIn: 54 },
+];
+
+const THEIR_SERVE_TREND: ServeTrendPoint[] = [
+  { match: "M1", firstServeIn: 58, secondServeIn: 47 },
+  { match: "M2", firstServeIn: 60, secondServeIn: 45 },
+  { match: "M3", firstServeIn: 61, secondServeIn: 50 },
+  { match: "M4", firstServeIn: 57, secondServeIn: 44 },
+  { match: "M5", firstServeIn: 63, secondServeIn: 52 },
+  { match: "M6", firstServeIn: 61, secondServeIn: 48 },
+];
 
 export const SERVE_STATS: ServeStats = {
   serving: {
-    hero: percent("Hold % (service games won)", 72, "n=14", 68, 4),
-    coachNote: "Holding at a career high — worth locking in this service routine.",
-    metrics: [
-      percent("Break pts saved", 67, "n=9", 61, 6),
-      percent("1st serve in %", 61, "n=112", 64, -3),
-      percent("1st serve pts won", 71, "n=68", 66, 5),
-      percent("2nd serve pts won", 54, "n=44", 56, -2),
-      {
-        label: "Double faults / set",
-        value: 1.8,
-        unit: "perSet",
-        sampleSize: "n=20 sets",
-        baseline: 2.2,
-        delta: -0.4,
-        max: 5,
-        higherIsBetter: false,
-      },
-      {
-        label: "Aces / match",
-        value: 3.2,
-        unit: "perMatch",
-        sampleSize: "n=14",
-        baseline: 2.6,
-        delta: 0.6,
-        max: 6,
-        higherIsBetter: true,
-      },
-    ],
-    breakdown: [
-      { label: "Serve winner (ace)", value: 18, max: 28 },
-      { label: "Forehand (2nd shot)", value: 7, max: 28 },
-      { label: "Double fault", value: 10, max: 28 },
-    ],
+    // Each side sums to 100 on its own — three disjoint buckets (in/fault/ace),
+    // not `in` as a superset of `ace`. See `ServeOutcomeCounts`'s own comment.
+    outcome: {
+      firstServe: { in: 68, fault: 24, ace: 8 },
+      secondServe: { in: 85, fault: 12, ace: 3 },
+    },
+    faultMode: {
+      firstServe: { net: 55, long: 20, wide: 25 },
+      secondServe: { net: 38, long: 34, wide: 28 },
+    },
+    trend: SERVE_TREND,
   },
   returning: {
-    hero: percent("Return games won %", 31, "n=14", 33, -2),
-    coachNote: "Break points are being created — conversion is where the games are going.",
-    metrics: [
-      percent("Break pts converted", 48, "n=8", 39, 9),
-      percent("1st serve return pts won", 34, "n=98", 36, -2),
-      percent("2nd serve return pts won", 52, "n=57", 49, 3),
-    ],
-    breakdown: [
-      { label: "Return winner", value: 6, max: 20 },
-      { label: "Forehand return", value: 9, max: 20 },
-      { label: "Return error", value: 14, max: 20 },
-    ],
+    outcome: {
+      firstServe: { in: 61, fault: 31, ace: 8 },
+      secondServe: { in: 80, fault: 15, ace: 5 },
+    },
+    faultMode: {
+      firstServe: { net: 48, long: 29, wide: 23 },
+      secondServe: { net: 33, long: 37, wide: 30 },
+    },
+    trend: THEIR_SERVE_TREND,
+    returnOutcome: {
+      firstServe: [
+        { label: "In", value: 74, max: 100 },
+        { label: "Net", value: 11, max: 100 },
+        { label: "Long", value: 9, max: 100 },
+        { label: "Wide", value: 6, max: 100 },
+      ],
+      secondServe: [
+        { label: "In", value: 86, max: 100 },
+        { label: "Net", value: 7, max: 100 },
+        { label: "Long", value: 4, max: 100 },
+        { label: "Wide", value: 3, max: 100 },
+      ],
+    },
   },
 };
 
+const RADAR_AXES = [
+  "FH Drive",
+  "FH Volley",
+  "FH Drop",
+  "FH Lob",
+  "BH Lob",
+  "BH Drop",
+  "BH Volley",
+  "BH Drive",
+];
+
+function shotFrequencyFor(shares: number[]) {
+  return RADAR_AXES.map((shot, index) => ({ shot, share: shares[index]! }));
+}
+
+const YOU_WON_GAP_NOTE =
+  "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means your shot put the opponent under real pressure and their error (or your winner) followed from that; unforced means they missed a routine ball with no real pressure on it.";
+const THEY_WON_GAP_NOTE =
+  "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means their shot put you under real pressure and your error (or their winner) followed from that; unforced means you missed a routine ball with no real pressure on it.";
+
+// These numbers reconcile with each other — this screen gets screenshotted
+// for the client, and a coach working through the cards would notice if they
+// didn't:
+//   - styles.you's three counts sum to `won` (42); styles.opponents' three
+//     sum to `lost` (31).
+//   - hero.value is (styles.you.forced + styles.opponents.forced) /
+//     (styles.you.unforced + styles.opponents.unforced) = 45/25 = 1.8.
+//   - rallyLength sums to `won + lost` (73).
 export const RALLY_STATS: RallyStats = {
   hero: {
     label: "Forced : Unforced ratio",
-    value: 1.4,
+    value: 1.8,
     unit: "ratio",
     sampleSize: "n=14",
     baseline: 1.5,
-    delta: 0.2,
+    delta: 0.3,
     max: 3,
     higherIsBetter: true,
   },
-  coachNote: "Trending up — errors are converting to winners more often than last month.",
-  winnersByShot: [
-    { label: "Forehand", value: 12, max: 20 },
-    { label: "Backhand", value: 6, max: 20 },
-    { label: "Volley", value: 3, max: 20 },
+  won: 42,
+  lost: 31,
+  rallyLength: [
+    { label: "1–3 shots", count: 28 },
+    { label: "4–6 shots", count: 22 },
+    { label: "7–9 shots", count: 14 },
+    { label: "10+ shots", count: 9 },
   ],
-  errorsByShot: [
-    { label: "Backhand", value: 11, secondaryValue: 4, max: 20 },
-    { label: "Forehand", value: 9, secondaryValue: 3, max: 20 },
-  ],
-  outcomeMix: [
-    { label: "You", forced: 60, unforcedErrors: 40 },
-    { label: "Opponents", forced: 50, unforcedErrors: 50 },
-  ],
-  errorsUnderPressure: percent("Errors under pressure (BP)", 44, "n=9", 29, 15, false),
-  errorsOverall: percent("Errors overall", 29, "n=112", null, null, false),
-  // The four stored shot types (#175): wing x type is what capture keeps, smash
-  // folded into volley, so the radar has no overhead or slice axis to draw (#206).
-  shotFrequency: [
-    { shot: "Drive", share: 0.58 },
-    { shot: "Volley", share: 0.22 },
-    { shot: "Drop shot", share: 0.06 },
-    { shot: "Lob", share: 0.14 },
-  ],
+  shotFrequency: {
+    you: shotFrequencyFor([0.85, 0.55, 0.35, 0.2, 0.15, 0.25, 0.4, 0.6]),
+    opponents: shotFrequencyFor([0.45, 0.3, 0.2, 0.15, 0.25, 0.4, 0.55, 0.75]),
+  },
+  placementNote: {
+    you: YOU_WON_GAP_NOTE,
+    opponents: THEY_WON_GAP_NOTE,
+  },
+  styles: {
+    you: [
+      {
+        kind: "forced",
+        label: "Forced (their pressure)",
+        count: 27,
+        detail: {
+          wing: { forehand: 15, backhand: 12 },
+          shotType: [
+            { label: "Drive", value: 12, max: 15 },
+            { label: "Volley", value: 8, max: 15 },
+            { label: "Dropshot", value: 5, max: 15 },
+            { label: "Lob", value: 2, max: 15 },
+          ],
+          courtZones: [
+            { zone: "Deuce short", count: 0 },
+            { zone: "Deuce deep", count: 2 },
+            { zone: "Ad short", count: 0 },
+            { zone: "Ad deep", count: 0 },
+            { zone: "Net", count: 3 },
+            { zone: "Long", count: 2 },
+            { zone: "Wide", count: 1 },
+          ],
+          unusualReasons: null,
+        },
+      },
+      {
+        kind: "unforced",
+        label: "Unforced (their free error)",
+        count: 13,
+        detail: {
+          wing: { forehand: 6, backhand: 7 },
+          shotType: [
+            { label: "Drive", value: 5, max: 6 },
+            { label: "Volley", value: 4, max: 6 },
+            { label: "Dropshot", value: 3, max: 6 },
+            { label: "Lob", value: 1, max: 6 },
+          ],
+          courtZones: [
+            { zone: "Deuce short", count: 0 },
+            { zone: "Deuce deep", count: 1 },
+            { zone: "Ad short", count: 0 },
+            { zone: "Ad deep", count: 0 },
+            { zone: "Net", count: 7 },
+            { zone: "Long", count: 4 },
+            { zone: "Wide", count: 1 },
+          ],
+          unusualReasons: null,
+        },
+      },
+      {
+        kind: "unusual",
+        label: "Unusual (in your favor)",
+        count: 2,
+        detail: {
+          wing: null,
+          shotType: [],
+          courtZones: [],
+          unusualReasons: [
+            { label: "Net touch", value: 1, max: 2 },
+            { label: "Hindrance", value: 1, max: 2 },
+          ],
+        },
+      },
+    ],
+    opponents: [
+      {
+        kind: "forced",
+        label: "Forced (your pressure)",
+        count: 18,
+        detail: {
+          wing: { forehand: 10, backhand: 8 },
+          shotType: [
+            { label: "Drive", value: 8, max: 10 },
+            { label: "Volley", value: 6, max: 10 },
+            { label: "Dropshot", value: 3, max: 10 },
+            { label: "Lob", value: 1, max: 10 },
+          ],
+          courtZones: [
+            { zone: "Deuce short", count: 0 },
+            { zone: "Deuce deep", count: 0 },
+            { zone: "Ad short", count: 0 },
+            { zone: "Ad deep", count: 1 },
+            { zone: "Net", count: 3 },
+            { zone: "Long", count: 1 },
+            { zone: "Wide", count: 1 },
+          ],
+          unusualReasons: null,
+        },
+      },
+      {
+        kind: "unforced",
+        label: "Unforced (your free error)",
+        count: 12,
+        detail: {
+          wing: { forehand: 5, backhand: 7 },
+          shotType: [
+            { label: "Drive", value: 5, max: 5 },
+            { label: "Volley", value: 3, max: 5 },
+            { label: "Dropshot", value: 3, max: 5 },
+            { label: "Lob", value: 1, max: 5 },
+          ],
+          courtZones: [
+            { zone: "Deuce short", count: 0 },
+            { zone: "Deuce deep", count: 0 },
+            { zone: "Ad short", count: 0 },
+            { zone: "Ad deep", count: 0 },
+            { zone: "Net", count: 5 },
+            { zone: "Long", count: 3 },
+            { zone: "Wide", count: 2 },
+          ],
+          unusualReasons: null,
+        },
+      },
+      {
+        kind: "unusual",
+        label: "Unusual (against you)",
+        count: 1,
+        detail: {
+          wing: null,
+          shotType: [],
+          courtZones: [],
+          unusualReasons: [{ label: "Point penalty", value: 1, max: 1 }],
+        },
+      },
+    ],
+  },
 };
 
-const TREND_SAMPLE: Record<TrendWindow, string> = {
-  last5: "n=5",
-  last10: "n=10",
-  season: "n=20",
-};
-
-export function trendStatsFor(window: TrendWindow): TrendStats {
-  const n = TREND_SAMPLE[window];
-  return {
-    insight: "Break-point conversion +9 pts over 8 matches",
-    metrics: [
-      percent("Form", 70, n, 62, 8),
-      percent("Hold %", 72, n, 68, 4),
-      percent("Return games won %", 31, n, 33, -2),
-      {
-        label: "Forced:Unforced ratio",
-        value: 1.4,
-        unit: "ratio",
-        sampleSize: n,
-        baseline: 1.5,
-        delta: 0.2,
-        max: 3,
-        higherIsBetter: true,
-      },
-      percent("Break-point conversion", 48, "n=8", 39, 9),
-      percent("2nd serve won %", 54, n, 56, -2),
-      {
-        label: "Double faults / set",
-        value: 1.8,
-        unit: "perSet",
-        sampleSize: "n=20 sets",
-        baseline: 2.2,
-        delta: -0.4,
-        max: 5,
-        higherIsBetter: false,
-      },
-    ],
-    distributionLabel: "1st serve in %",
-    distribution: [
-      { bucket: "50–55%", matches: 1 },
-      { bucket: "55–60%", matches: 3 },
-      { bucket: "60–65%", matches: 4 },
-      { bucket: "65–70%", matches: 2 },
-    ],
-    journalCorrelation: {
-      tag: "worked on toss",
-      metricLabel: "BP saved",
-      tagged: { sampleSize: 5, value: 71 },
-      untagged: { sampleSize: 9, value: 54 },
-    },
-    correlation: [
-      { unforcedErrors: 8, gamesLost: 4 },
-      { unforcedErrors: 10, gamesLost: 6 },
-      { unforcedErrors: 12, gamesLost: 5 },
-      { unforcedErrors: 14, gamesLost: 7 },
-      { unforcedErrors: 15, gamesLost: 6 },
-      { unforcedErrors: 17, gamesLost: 8 },
-      { unforcedErrors: 18, gamesLost: 7 },
-      { unforcedErrors: 20, gamesLost: 9 },
-      { unforcedErrors: 21, gamesLost: 8 },
-      { unforcedErrors: 23, gamesLost: 10 },
-    ],
-  };
-}
-
-export const HEAD_TO_HEAD: HeadToHeadSummary[] = [
-  {
-    opponentId: "torres",
-    opponentName: "A. Torres",
-    meetings: 4,
-    record: { wins: 3, losses: 1 },
-    winRate: 67,
-  },
-  {
-    opponentId: "naidoo",
-    opponentName: "T. Naidoo",
-    meetings: 2,
-    record: { wins: 1, losses: 1 },
-    winRate: null,
-  },
-  {
-    opponentId: "reyes",
-    opponentName: "J. Reyes",
-    meetings: 1,
-    record: { wins: 0, losses: 1 },
-    winRate: null,
-  },
+export const OPPONENTS: OpponentOption[] = [
+  { id: "sarah-k", name: "Sarah K", matches: 14, recent: true },
+  { id: "priya-m", name: "Priya M", matches: 9, recent: true },
+  { id: "danny-g", name: "Danny G", matches: 6, recent: true },
+  { id: "alex-t", name: "Alex T", matches: 5, recent: false },
+  { id: "ben-h", name: "Ben H", matches: 4, recent: false },
+  { id: "chloe-w", name: "Chloe W", matches: 4, recent: false },
+  { id: "femi-o", name: "Femi O", matches: 3, recent: false },
+  { id: "grace-l", name: "Grace L", matches: 2, recent: false },
+  { id: "ivan-s", name: "Ivan S", matches: 2, recent: false },
+  { id: "jules-p", name: "Jules P", matches: 1, recent: false },
+  { id: "nadia-r", name: "Nadia R", matches: 1, recent: false },
+  { id: "owen-b", name: "Owen B", matches: 1, recent: false },
 ];
 
-export const HEAD_TO_HEAD_DETAIL: HeadToHeadDetail = {
-  ...HEAD_TO_HEAD[0]!,
-  hero: percent("4 meetings · 3–1", 67, "n=4", 65, 2),
-  results: ["win", "loss", "win", "win"],
-  exploit:
-    "Her backhand under pressure — 6 of her last 9 break-point unforced errors were backhand",
-  avoid: "Her forehand — she's winning 70% of points ending on it against you",
-  slope: [
-    { label: "Hold %", first: 58, last: 74 },
-    { label: "BP conv", first: 32, last: 48 },
-    // Scaled onto the same 0–100 axis as the other two so one chart can carry all
-    // three: the underlying ratio runs 1.0 → 1.6 on a 0–3 scale.
-    { label: "F:UE", first: 33, last: 53 },
-  ],
-  lossPatterns: [
-    { label: "Late-set fade", value: 1, max: 1 },
-    { label: "Broken early", value: 0, max: 1 },
-    { label: "Tiebreak", value: 0, max: 1 },
-  ],
-  yourServe: [
-    percent("1st serve won", 71, "n=44", 66, 5),
-    percent("2nd serve won", 54, "n=30", 56, null),
-    {
-      label: "Double fault rate",
-      value: 2,
-      unit: "perSet",
-      sampleSize: "4 DF",
-      baseline: null,
-      delta: null,
-      max: 5,
-      higherIsBetter: false,
-      display: "≈2/set",
-    },
-  ],
-  theirServe: [
-    percent("His 1st serve won", 63, "n=40", null, null),
-    {
-      label: "His ace rate",
-      value: 2.5,
-      unit: "perMatch",
-      sampleSize: "n=4 matches",
-      baseline: null,
-      delta: null,
-      max: 6,
-      higherIsBetter: false,
-      display: "2.5/match",
-    },
-  ],
-  winnersByShot: [
-    { label: "Forehand", value: 12, max: 20 },
-    { label: "Backhand", value: 6, max: 20 },
-  ],
-  shotFrequency: RALLY_STATS.shotFrequency,
+export const RECENT_FORM: Record<string, RecentForm> = {
+  all: { results: ["win", "win", "loss", "win", "win"] },
+  "sarah-k": { results: ["win", "loss", "win", "win", "loss"] },
+  "priya-m": { results: ["win", "win", "win", "loss", "win"] },
+  "danny-g": { results: ["loss", "win", "loss", "win", "win"] },
 };
 
 export const COACH_NOTES: CoachNote[] = [

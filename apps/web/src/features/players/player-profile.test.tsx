@@ -102,7 +102,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the player's name and static fields", async () => {
+test("renders the player's name and avatar", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
@@ -112,51 +112,6 @@ test("renders the player's name and static fields", async () => {
 
   expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
   expect(screen.getByText("AN")).toBeInTheDocument();
-  // The static fields sit in the Overview tab's details panel, which loads with it.
-  expect(await screen.findByText("2008-04-12")).toBeInTheDocument();
-  expect(screen.getByText("right")).toBeInTheDocument();
-  expect(screen.getByText("Strong two-handed backhand.")).toBeInTheDocument();
-});
-
-test("shows a placeholder for unset fields", async () => {
-  stubFetch({
-    [`/api/players/${player.id}`]: () =>
-      Response.json({ ...player, date_of_birth: null, dominant_hand: null, notes: null }),
-    "/api/matches": () => Response.json([]),
-  });
-
-  await renderPlayerProfile();
-
-  await screen.findByRole("heading", { name: "Amahle Nkosi" });
-  expect(await screen.findAllByText("—")).toHaveLength(3);
-});
-
-test("lists that player's matches on the Matches tab", async () => {
-  stubFetch({
-    [`/api/players/${player.id}`]: () => Response.json(player),
-    "/api/matches": () =>
-      Response.json([
-        {
-          id: "3f1c2b4e-0000-4000-8000-00000000ma01",
-          player_id: player.id,
-          opponent_name: "T. Naidoo",
-          played_on: "2026-08-10",
-          surface: "hard",
-          event: null,
-          scoring_system: "traditional",
-          created_at: "2026-08-11T09:00:00Z",
-          updated_at: "2026-08-11T09:00:00Z",
-        },
-      ]),
-  });
-
-  const user = userEvent.setup();
-  await renderPlayerProfile();
-  await screen.findByRole("heading", { name: "Amahle Nkosi" });
-
-  await user.click(screen.getByRole("tab", { name: "Matches" }));
-
-  expect(await screen.findByText("vs T. Naidoo")).toBeInTheDocument();
 });
 
 // The API answers 404 rather than 403 for another coach's player, so a 403 cannot
@@ -247,23 +202,21 @@ test("links to the match setup screen", async () => {
   expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
 });
 
-test("switches to a tab's content when its trigger is clicked", async () => {
+test("opens on the Serve tab by default, with the scope panel and recent form above it", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  expect(screen.queryByRole("group", { name: "Serve or return" })).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("tab", { name: "Serve" }));
-
-  expect(await screen.findByText("Hold % (service games won)")).toBeInTheDocument();
+  expect(await screen.findByText("Your serve")).toBeInTheDocument();
+  expect(screen.getByText("All matches · Full match")).toBeInTheDocument();
+  expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
+  expect(screen.queryByText("Point enders")).not.toBeInTheDocument();
 });
 
-test("H2H tab lists opponents, drills into one, and comes back", async () => {
+test("switches to Rally when its toggle is clicked, scope panel and recent form stay put", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
@@ -271,22 +224,14 @@ test("H2H tab lists opponents, drills into one, and comes back", async () => {
   const user = userEvent.setup();
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
+  await screen.findByText("Your serve");
 
-  await user.click(screen.getByRole("tab", { name: "H2H" }));
+  await user.click(screen.getByRole("button", { name: "Rally" }));
 
-  expect(await screen.findByText("A. Torres")).toBeInTheDocument();
-  expect(screen.getByText("n=4 · 3–1 · 67%")).toBeInTheDocument();
-  // Under the threshold a rate would be noise, so only the raw record is shown.
-  expect(screen.getByText("n=2 · 1–1 · too few for a rate")).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: /A. Torres/ }));
-
-  expect(await screen.findByRole("heading", { name: "vs A. Torres" })).toBeInTheDocument();
-  expect(screen.getByText(/Her backhand under pressure/)).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Back to opponents" }));
-
-  expect(await screen.findByText("A. Torres")).toBeInTheDocument();
+  expect(await screen.findByText("Point enders")).toBeInTheDocument();
+  expect(screen.queryByText("Your serve")).not.toBeInTheDocument();
+  expect(screen.getByText("All matches · Full match")).toBeInTheDocument();
+  expect(screen.getByText("Recent form · last 5")).toBeInTheDocument();
 });
 
 test("Edit opens the sheet pre-filled with the player's current values", async () => {

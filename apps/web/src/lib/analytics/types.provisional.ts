@@ -3,7 +3,7 @@
  *
  * Everything here is modelled as the generated DTO would be — numbers and units,
  * not display strings — so that when the endpoints land, only the hook bodies in
- * `use-analytics.ts` change and no component has to be touched.
+ * `analytics-options.ts` change and no component has to be touched.
  *
  * These live in `lib/` rather than a feature slice because home, players and
  * matches all read them, and `.claude/rules/web.md` puts anything shared between
@@ -38,7 +38,7 @@ export interface WinLossRecord {
   losses: number;
 }
 
-/** A labelled quantity in a horizontal bar list (winners by shot type, etc.). */
+/** A labelled quantity in a horizontal bar list (fault mode, shot type, etc.). */
 export interface BreakdownRow {
   label: string;
   /** Primary count. */
@@ -49,102 +49,157 @@ export interface BreakdownRow {
   max: number;
 }
 
-export interface Highlight {
-  direction: "up" | "down";
-  text: string;
-}
-
+/** Read by the home screen, the roster list, and the player-profile's own
+ *  record card — `seasonRecord`/`allTimeRecord` are that card's data. */
 export interface PlayerOverview {
   form: Metric;
-  /** Most recent matches, oldest first. */
-  recentResults: MatchOutcome[];
   holdPercentage: Metric;
-  returnGamesWon: Metric;
-  forcedToUnforced: Metric;
   seasonRecord: WinLossRecord;
   allTimeRecord: WinLossRecord;
-  highlights: Highlight[];
-  upcoming: { opponentName: string; when: string; note: string } | null;
+}
+
+/** In/fault/ace counts for one serve attempt number (1st or 2nd) — three
+ *  disjoint buckets that sum to 100, not `in` as a superset of `ace`. The
+ *  headline "% in" a coach cares about is `in + ace` together, computed at
+ *  the call site rather than stored as a fourth number that could drift out
+ *  of sync with these three. */
+export interface ServeOutcomeCounts {
+  in: number;
+  fault: number;
+  ace: number;
+}
+
+export type ServeNumber = "first" | "second";
+
+/** Where a fault landed, split by which serve attempt it was. */
+export interface FaultModeSplit {
+  firstServe: { net: number; long: number; wide: number };
+  secondServe: { net: number; long: number; wide: number };
+}
+
+/** One match's serve-in rate, for the recent-matches trend line. */
+export interface ServeTrendPoint {
+  match: string;
+  firstServeIn: number;
+  secondServeIn: number;
+}
+
+export interface ServeSideStats {
+  /** Split by serve number, like `faultMode` already is below — the hero
+   *  headline and the outcome stack read from whichever half the 1st/2nd
+   *  serve toggle has selected, rather than a fixed value that ignores it. */
+  outcome: { firstServe: ServeOutcomeCounts; secondServe: ServeOutcomeCounts };
+  faultMode: FaultModeSplit;
+  trend: ServeTrendPoint[];
+}
+
+/** The tracked player's return outcome against the opponent's serve — in, or
+ *  which way it missed — split by which serve attempt it was returning. */
+export interface ReturnOutcomeSplit {
+  firstServe: BreakdownRow[];
+  secondServe: BreakdownRow[];
 }
 
 export interface ServeStats {
   /** Hero metric differs by side, so both sides carry a full set. */
-  serving: { hero: Metric; coachNote: string; metrics: Metric[]; breakdown: BreakdownRow[] };
-  returning: { hero: Metric; coachNote: string; metrics: Metric[]; breakdown: BreakdownRow[] };
+  serving: ServeSideStats;
+  /** Same shape as `serving`, plus the tracked player's own return outcome
+   *  against the opponent's serve — there's nothing analogous on the serving side. */
+  returning: ServeSideStats & { returnOutcome: ReturnOutcomeSplit };
 }
 
-// One `forced` figure, not winners plus forced errors: capture deliberately records
-// no distinction between a clean winner and a forced error (#175), so a split here
-// would bake in numbers no point can ever supply (#206).
-export interface OutcomeMix {
+/** One of the three ways a rally-ending point can be tallied for the drill-down. */
+export type PointEnderKind = "forced" | "unforced" | "unusual";
+
+/** Seven zones: deuce/ad × short/deep (the four in-court cells), plus
+ *  net/long/wide for the ones that landed out. Label matches the zone exactly. */
+export interface CourtZoneCount {
+  zone: string;
+  count: number;
+}
+
+/** Wing/shot-type/court-zone breakdown behind one point-ender style, when it
+ *  has a setup shot to describe (forced and unforced do; unusual doesn't). */
+export interface PointEnderStyleDetail {
+  wing: { forehand: number; backhand: number } | null;
+  shotType: BreakdownRow[];
+  courtZones: CourtZoneCount[];
+  /** Only set when `wing` is null — what kind of unusual point each one was. */
+  unusualReasons: BreakdownRow[] | null;
+}
+
+/** One of the three tap-to-expand style cards under Point enders — its label
+ *  names which side applied the pressure or gave the point away, which flips
+ *  with the "You won/They won" toggle (e.g. "Forced (their pressure)" vs.
+ *  "Forced (your pressure)"). "Forced" itself can't distinguish a clean
+ *  winner from a forced error the point-ending capture stores them the same
+ *  way (#175/#206), so the label never claims to. */
+export interface PointEnderStyle {
+  kind: PointEnderKind;
   label: string;
-  forced: number;
-  unforcedErrors: number;
+  count: number;
+  detail: PointEnderStyleDetail;
+}
+
+/** How many points ended after roughly this many shots — not scoped to the
+ *  "You won/They won" toggle, since the read this is for (serve/return vs.
+ *  fitness) cuts across who won the point. */
+export interface RallyLengthBucket {
+  label: string;
+  count: number;
 }
 
 export interface RallyStats {
   hero: Metric;
-  coachNote: string;
-  winnersByShot: BreakdownRow[];
-  errorsByShot: BreakdownRow[];
-  outcomeMix: OutcomeMix[];
-  errorsUnderPressure: Metric;
-  errorsOverall: Metric;
-  /** Radar axes: share of point-ending shots, 0–1 per shot type. */
-  shotFrequency: { shot: string; share: number }[];
+  won: number;
+  lost: number;
+  /** Radar axes: share of point-ending shots per wing×shot-type combination,
+   *  0–1. One set per side of the "You won / They won" toggle. */
+  shotFrequency: Record<"you" | "opponents", { shot: string; share: number }[]>;
+  /** The explainer paragraph under the radar — how placement below is derived. */
+  placementNote: Record<"you" | "opponents", string>;
+  styles: Record<"you" | "opponents", readonly [PointEnderStyle, PointEnderStyle, PointEnderStyle]>;
+  rallyLength: RallyLengthBucket[];
 }
 
-export type TrendWindow = "last5" | "last10" | "season";
+/**
+ * Scope/filter state for the Serve and Rally tabs' scope panel. UI state
+ * only — no fixture yet varies by set/phase, so this is what a coach has picked
+ * and what the scope bar echoes back, not a query parameter. Recent form (below)
+ * is the one exception: it does vary by scope, since it's the one piece the
+ * mockup itself shows changing on Apply.
+ */
+export type MatchScope = "all" | "vs-opponent";
+export type SetFilter = "all" | "1" | "2" | "3";
+export type PhaseFilter =
+  | "full"
+  | "tiebreaks"
+  | "breakPoints"
+  | "gamePoints"
+  | "setPoints"
+  | "matchPoints"
+  | "gameEnding"
+  | "setEnding";
 
-export interface TrendStats {
-  insight: string;
-  metrics: Metric[];
-  /** Histogram of one metric across matches, for the spread view. */
-  distribution: { bucket: string; matches: number }[];
-  distributionLabel: string;
-  journalCorrelation: {
-    tag: string;
-    metricLabel: string;
-    tagged: { sampleSize: number; value: number };
-    untagged: { sampleSize: number; value: number };
-  };
-  /** Per-match points for the unforced-errors vs. games-lost scatter. */
-  correlation: { unforcedErrors: number; gamesLost: number }[];
+export interface StatsFilters {
+  scope: MatchScope;
+  opponentId: string | null;
+  set: SetFilter;
+  phase: PhaseFilter;
 }
 
-export interface HeadToHeadSummary {
-  opponentId: string;
-  opponentName: string;
-  meetings: number;
-  record: WinLossRecord;
-  /** Null below the sample size where a rate would mislead. */
-  winRate: number | null;
+/** One opponent, for the "vs opponent" filter's picker. `recent` marks the
+ *  "Most played" group; the rest are listed alphabetically underneath. */
+export interface OpponentOption {
+  id: string;
+  name: string;
+  matches: number;
+  recent: boolean;
 }
 
-/** One metric's first-two vs. last-two meeting average, drawn as a slope line. */
-export interface SlopeLine {
-  label: string;
-  first: number;
-  last: number;
-}
-
-export interface HeadToHeadDetail extends HeadToHeadSummary {
-  hero: Metric;
-  /** Meeting by meeting, oldest first. */
+/** Recent match results, scoped to all matches or to one opponent. */
+export interface RecentForm {
   results: MatchOutcome[];
-  exploit: string;
-  avoid: string;
-  /**
-   * The slope graph. Exactly three lines, matching the three colours
-   * .claude/rules/web-color.md allocates for it (yellow, indigo, violet) — a
-   * fourth metric here would have no colour of its own to draw with.
-   */
-  slope: readonly [SlopeLine, SlopeLine, SlopeLine];
-  lossPatterns: BreakdownRow[];
-  yourServe: Metric[];
-  theirServe: Metric[];
-  winnersByShot: BreakdownRow[];
-  shotFrequency: { shot: string; share: number }[];
 }
 
 export interface CoachNote {
