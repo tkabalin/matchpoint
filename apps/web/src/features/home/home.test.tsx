@@ -305,8 +305,9 @@ test("filters players as the user types", async () => {
 
   await user.type(screen.getByLabelText("Search players"), "sipho");
 
-  expect(await screen.findByText("Sipho Dlamini")).toBeInTheDocument();
-  expect(screen.queryByText("Amahle Nkosi")).not.toBeInTheDocument();
+  const results = within(await screen.findByRole("list", { name: "Search results" }));
+  expect(results.getByText("Sipho Dlamini")).toBeInTheDocument();
+  expect(results.queryByText("Amahle Nkosi")).not.toBeInTheDocument();
 });
 
 test("shows an empty state when no player matches", async () => {
@@ -376,11 +377,11 @@ test("'Add' opens the add-player sheet directly", async () => {
   expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
 });
 
-test("shows no last-viewed-player box when nothing has been viewed yet", async () => {
+test("shows no continue-with box when nothing has been viewed yet", async () => {
   stubAuthenticatedHome();
   await renderHome();
 
-  expect(screen.queryByRole("heading", { name: "Last viewed player" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Continue with" })).not.toBeInTheDocument();
 });
 
 test("shows the last-viewed player once one has been viewed", async () => {
@@ -388,22 +389,22 @@ test("shows the last-viewed player once one has been viewed", async () => {
   stubAuthenticatedHomeWithLastViewedPlayer();
   await renderHome();
 
-  const heading = await screen.findByRole("heading", { name: "Last viewed player" });
+  const heading = await screen.findByRole("heading", { name: "Continue with" });
   const section = within(heading.closest("section")!);
   expect(section.getByText("Amahle Nkosi")).toBeInTheDocument();
   expect(section.getByText("AN")).toBeInTheDocument();
-  expect(await section.findByText("Last match: vs T. Naidoo")).toBeInTheDocument();
-  expect(section.getByRole("link", { name: "View full profile" })).toBeInTheDocument();
+  expect(await section.findByText(/Last viewed just now · vs T\. Naidoo/)).toBeInTheDocument();
+  expect(section.getByRole("link", { name: "View full stats" })).toBeInTheDocument();
 });
 
-test("'View full profile' opens the last-viewed player's profile", async () => {
+test("'View full stats' opens the last-viewed player's profile", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
   const user = userEvent.setup();
   await renderHome();
-  await screen.findByRole("heading", { name: "Last viewed player" });
+  await screen.findByRole("heading", { name: "Continue with" });
 
-  await user.click(screen.getByRole("link", { name: "View full profile" }));
+  await user.click(screen.getByRole("link", { name: "View full stats" }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
@@ -421,10 +422,10 @@ test("shows the squad's player count and matches played in the last 7 days", asy
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  expect(snapshot.getByText("Players")).toBeInTheDocument();
-  expect(snapshot.getAllByRole("definition")[0]).toHaveTextContent("2");
-  expect(snapshot.getByText("Matches this week")).toBeInTheDocument();
-  expect(snapshot.getAllByRole("definition")[1]).toHaveTextContent("1");
+  expect(snapshot.getByText("2")).toBeInTheDocument();
+  expect(snapshot.getByText("players")).toBeInTheDocument();
+  expect(snapshot.getByText("1")).toBeInTheDocument();
+  expect(snapshot.getByText("match this week")).toBeInTheDocument();
 });
 
 test("counts a match played today from a timezone ahead of UTC", async () => {
@@ -443,31 +444,37 @@ test("counts a match played today from a timezone ahead of UTC", async () => {
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  expect(snapshot.getByText("Matches this week")).toBeInTheDocument();
-  expect(snapshot.getAllByRole("definition")[1]).toHaveTextContent("1");
+  expect(snapshot.getByText("1")).toBeInTheDocument();
+  expect(snapshot.getByText("match this week")).toBeInTheDocument();
 });
 
-// A <dd> describes the *preceding* <dt> inside a <dl> — reviewed by Thomas on !126,
-// where the value rendered before its label and paired every number with the
-// previous tile's label for assistive tech. Asserts the DOM order directly, since
-// getAllByRole alone wouldn't have caught the original bug.
-test("pairs each snapshot label with its own value, not the previous tile's", async () => {
+// The two-player fixture roster deterministically maps to a "clean best" and a
+// "clean worst" squad-member profile (see `squadMemberStatsFor` in fixtures.ts) —
+// neither trips a needs-attention flag, which is itself the point: an empty
+// result is what "nobody needs attention this week" should look like, not a
+// fallback to whichever player happens to be worst.
+test("ranks best and worst form, and shows a legitimate empty needs-attention state", async () => {
   stubAuthenticatedHome();
   await renderHome();
 
-  const snapshot = await screen.findByRole("region", { name: "Squad snapshot" });
-  const terms = within(snapshot).getAllByRole("term");
-  for (const term of terms) {
-    expect(term.nextElementSibling?.tagName).toBe("DD");
-  }
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  expect(snapshot.getByText("Best form")).toBeInTheDocument();
+  expect(snapshot.getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect(snapshot.getByText("Worst form")).toBeInTheDocument();
+  expect(snapshot.getByText("Sipho Dlamini")).toBeInTheDocument();
+  expect(snapshot.getByText("Needs attention")).toBeInTheDocument();
+  expect(snapshot.getByText("No flags this week.")).toBeInTheDocument();
 });
 
-test("shows an empty needs-attention state until trend flagging exists", async () => {
+test("tapping a squad-snapshot row opens that player's action sheet", async () => {
   stubAuthenticatedHome();
+  const user = userEvent.setup();
   await renderHome();
 
-  expect(await screen.findByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
-  expect(screen.getByText("No flagged trends yet.")).toBeInTheDocument();
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  await user.click(await snapshot.findByRole("button", { name: /Amahle Nkosi/ }));
+
+  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
 });
 
 test("renders the bottom nav with Home active", async () => {

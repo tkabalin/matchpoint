@@ -7,6 +7,7 @@ import {
   RALLY_STATS,
   RECENT_FORM,
   SERVE_STATS,
+  squadMemberStatsFor,
 } from "./fixtures";
 import type {
   AttentionFlag,
@@ -109,3 +110,13 @@ export const getInProgressMatchOptions = () =>
  * trend flagging (#158).
  */
 export const listAttentionFlagsOptions = () => fixtureOptions<AttentionFlag[]>(["attention"], []);
+
+/**
+ * PLACEHOLDER for a per-player squad-snapshot endpoint: the eventual API
+ * computes each player's rolling stats and streaks server-side; until then,
+ * `squadMemberStatsFor` synthesizes them from a small set of hand-authored
+ * fixture profiles (see `fixtures.ts`). Synchronous, not `queryOptions` —
+ * it derives from the roster the caller already has loaded, with nothing
+ * of its own to fetch.
+ */
+export { squadMemberStatsFor };

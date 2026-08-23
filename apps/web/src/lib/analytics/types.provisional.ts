@@ -54,6 +54,10 @@ export interface BreakdownRow {
 export interface PlayerOverview {
   form: Metric;
   holdPercentage: Metric;
+  /** Forced points (a winner or a forced error — capture can't tell them
+   *  apart, #175/#206) against unforced errors. The home screen's
+   *  "Continue with" card is this field's only current reader. */
+  forcedToUnforced: Metric;
   seasonRecord: WinLossRecord;
   allTimeRecord: WinLossRecord;
 }
@@ -226,4 +230,59 @@ export interface InProgressMatch {
   opponentName: string;
   score: string;
   elapsed: string;
+}
+
+/** One stat tracked for a player's own-baseline decline check (the home
+ *  screen's "needs attention" Tier 2 — see `lib/analytics/attention.ts`).
+ *  Every stat here is oriented so a higher `current` is always the better
+ *  direction, so a negative z-score always means "worse than usual for this
+ *  player," never "worse in absolute terms." */
+export interface TrackedStat {
+  key: string;
+  label: string;
+  unit: MetricUnit;
+  current: number;
+  /** This player's own rolling average — never the squad average or a fixed
+   *  target, so a naturally streaky player isn't judged against someone
+   *  else's normal. */
+  rollingMean: number;
+  rollingStdDev: number;
+}
+
+/** Per-player inputs behind the home screen's squad snapshot — ranking for
+ *  best/worst form, and the two-tier "needs attention" decision. */
+export interface SquadMemberStats {
+  playerId: string;
+  /** Matches logged in the current ranking period (this season, this term —
+   *  whatever window the eventual endpoint scopes to). */
+  matchesLoggedThisPeriod: number;
+  /** Most recent matches, oldest first, same convention as `PlayerOverview`. */
+  last5: MatchOutcome[];
+  forcedToUnforcedRatio: number;
+  /** Zero-length when the player's last match wasn't itself a loss. */
+  currentStreak: { outcome: MatchOutcome; length: number };
+  /** Null when the player has never logged a match. */
+  daysSinceLastMatch: number | null;
+  trackedStats: TrackedStat[];
+}
+
+export type AttentionTier = "hard-flag" | "decline";
+
+/** The winner of the home screen's single "needs attention" slot — see
+ *  `lib/analytics/attention.ts` for how the tiers are compared. */
+export interface AttentionResult {
+  playerId: string;
+  tier: AttentionTier;
+  reason: string;
+  /** Comparable across every candidate regardless of tier: `Infinity` for a
+   *  hard flag (always outranks a decline), `|z|` for a decline. */
+  severity: number;
+}
+
+/** One end of the squad's best/worst form ranking. */
+export interface FormRankEntry {
+  playerId: string;
+  /** "W–L" over the player's own `last5`. */
+  last5Record: string;
+  forcedToUnforcedRatio: number;
 }

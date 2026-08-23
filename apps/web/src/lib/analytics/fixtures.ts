@@ -7,6 +7,7 @@ import type {
   RecentForm,
   ServeStats,
   ServeTrendPoint,
+  SquadMemberStats,
 } from "./types.provisional";
 
 /**
@@ -32,6 +33,16 @@ function percent(
 export const PLAYER_OVERVIEW: PlayerOverview = {
   form: percent("Form: win % last 5", 80, "n=5", 62, 12),
   holdPercentage: percent("Hold %", 72, "n=14", 68, 4),
+  forcedToUnforced: {
+    label: "Forced : Unforced ratio",
+    value: 1.4,
+    unit: "ratio",
+    sampleSize: "n=14",
+    baseline: 1.5,
+    delta: 0.2,
+    max: 3,
+    higherIsBetter: true,
+  },
   seasonRecord: { wins: 14, losses: 6 },
   allTimeRecord: { wins: 52, losses: 28 },
 };
@@ -327,3 +338,151 @@ export const COACH_NOTES: CoachNote[] = [
     linkedMatchId: null,
   },
 ];
+
+/**
+ * PLACEHOLDER for a per-player squad-snapshot endpoint: until the API computes
+ * these (rolling means/stddevs, streaks, days-since-last-match) server-side,
+ * each real roster player is handed one of these hand-authored profiles by
+ * position, cycling if the roster is longer than the list. Round-robin by
+ * index rather than derived from the id keeps this fixture explicit and
+ * reviewable, matching every other fixture in this file, while still varying
+ * across the roster — a single shared profile (this file's usual pattern)
+ * would make every player tie for both best and worst form.
+ *
+ * The six profiles between them exercise every branch of the decision in
+ * `lib/analytics/attention.ts`: a clean best performer, a clean but weaker
+ * one, a Tier 1 losing-streak flag, a Tier 1 stale-data flag, a Tier 2
+ * statistical decline, and an unremarkable middle-of-the-pack player.
+ */
+const SQUAD_MEMBER_TEMPLATES: readonly Omit<SquadMemberStats, "playerId">[] = [
+  {
+    matchesLoggedThisPeriod: 6,
+    last5: ["win", "win", "win", "win", "win"],
+    forcedToUnforcedRatio: 2.1,
+    currentStreak: { outcome: "win", length: 5 },
+    daysSinceLastMatch: 2,
+    trackedStats: [
+      {
+        key: "forcedToUnforced",
+        label: "Forced : Unforced ratio",
+        unit: "ratio",
+        current: 2.1,
+        rollingMean: 1.6,
+        rollingStdDev: 0.3,
+      },
+      {
+        key: "firstServeIn",
+        label: "1st serve % in",
+        unit: "percent",
+        current: 66,
+        rollingMean: 64,
+        rollingStdDev: 5,
+      },
+    ],
+  },
+  {
+    matchesLoggedThisPeriod: 5,
+    last5: ["loss", "win", "loss", "loss", "win"],
+    forcedToUnforcedRatio: 0.7,
+    currentStreak: { outcome: "win", length: 1 },
+    daysSinceLastMatch: 3,
+    trackedStats: [
+      {
+        key: "forcedToUnforced",
+        label: "Forced : Unforced ratio",
+        unit: "ratio",
+        current: 0.7,
+        rollingMean: 0.65,
+        rollingStdDev: 0.2,
+      },
+      {
+        key: "firstServeIn",
+        label: "1st serve % in",
+        unit: "percent",
+        current: 58,
+        rollingMean: 60,
+        rollingStdDev: 6,
+      },
+    ],
+  },
+  {
+    matchesLoggedThisPeriod: 9,
+    last5: ["win", "loss", "loss", "loss", "loss"],
+    forcedToUnforcedRatio: 0.9,
+    currentStreak: { outcome: "loss", length: 4 },
+    daysSinceLastMatch: 1,
+    trackedStats: [
+      {
+        key: "forcedToUnforced",
+        label: "Forced : Unforced ratio",
+        unit: "ratio",
+        current: 0.9,
+        rollingMean: 1.1,
+        rollingStdDev: 0.3,
+      },
+    ],
+  },
+  {
+    matchesLoggedThisPeriod: 2,
+    last5: ["win"],
+    forcedToUnforcedRatio: 1.0,
+    currentStreak: { outcome: "win", length: 1 },
+    daysSinceLastMatch: 21,
+    trackedStats: [],
+  },
+  {
+    matchesLoggedThisPeriod: 7,
+    last5: ["win", "win", "loss", "win", "loss"],
+    forcedToUnforcedRatio: 1.3,
+    currentStreak: { outcome: "loss", length: 1 },
+    daysSinceLastMatch: 4,
+    trackedStats: [
+      {
+        key: "firstServeIn",
+        label: "1st serve % in",
+        unit: "percent",
+        current: 46,
+        rollingMean: 64,
+        rollingStdDev: 6,
+      },
+      {
+        key: "forcedToUnforced",
+        label: "Forced : Unforced ratio",
+        unit: "ratio",
+        current: 1.3,
+        rollingMean: 1.3,
+        rollingStdDev: 0.25,
+      },
+    ],
+  },
+  {
+    matchesLoggedThisPeriod: 5,
+    last5: ["win", "loss", "win", "loss", "win"],
+    forcedToUnforcedRatio: 1.1,
+    currentStreak: { outcome: "win", length: 1 },
+    daysSinceLastMatch: 5,
+    trackedStats: [
+      {
+        key: "forcedToUnforced",
+        label: "Forced : Unforced ratio",
+        unit: "ratio",
+        current: 1.1,
+        rollingMean: 1.15,
+        rollingStdDev: 0.3,
+      },
+      {
+        key: "firstServeIn",
+        label: "1st serve % in",
+        unit: "percent",
+        current: 61,
+        rollingMean: 62,
+        rollingStdDev: 5,
+      },
+    ],
+  },
+];
+
+export function squadMemberStatsFor(playerId: string, rosterIndex: number): SquadMemberStats {
+  const template = SQUAD_MEMBER_TEMPLATES[rosterIndex % SQUAD_MEMBER_TEMPLATES.length]!;
+  return { ...template, playerId };
+}

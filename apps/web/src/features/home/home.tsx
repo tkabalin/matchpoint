@@ -7,12 +7,25 @@ import {
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, Plus, Search, Settings, UserRound } from "lucide-react";
+import {
+  CalendarCheck,
+  ChevronRight,
+  History,
+  type LucideIcon,
+  Plus,
+  Search,
+  Settings,
+  Swords,
+  TrendingDown,
+  TrendingUp,
+  TriangleAlert,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { useState } from "react";
 
 import { AddPhotoNudge } from "@/components/add-photo-nudge";
 import { AddPlayerSheet } from "@/components/add-player-sheet";
-import { BulletBar } from "@/components/bullet-bar";
 import { OutcomeSwatch } from "@/components/outcome-swatch";
 import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
@@ -21,17 +34,23 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Item, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { InProgressBanner } from "@/components/in-progress-banner";
 import { InstallAppNudge } from "@/components/install-app-nudge";
-import { metricToBullet } from "@/lib/analytics/format";
-import type { AttentionFlag, Metric } from "@/lib/analytics/types.provisional";
+import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
 import {
   getPlayerOverviewOptions,
-  listAttentionFlagsOptions,
+  getRecentFormOptions,
+  squadMemberStatsFor,
 } from "@/lib/analytics/analytics-options";
 import { initialsFor } from "@/lib/coach-initials";
-import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
+import {
+  getLastViewedAt,
+  getLastViewedPlayerId,
+  setLastViewedPlayerId,
+} from "@/lib/last-viewed-player";
+import type { OutcomeName } from "@/lib/palette";
+import { relativeTimeFrom } from "@/lib/relative-time";
 import { cn } from "@/lib/utils";
 
 const MILLISECONDS_PER_DAY = 1000 * 60 * 60 * 24;
@@ -69,11 +88,14 @@ export function Home() {
   const searchResults = roster.filter((player) =>
     `${player.first_name} ${player.last_name}`.toLowerCase().includes(search.toLowerCase()),
   );
-  const { data: flags } = useQuery(listAttentionFlagsOptions());
-  const flagged = flags ?? [];
   const matchesThisWeek = (allMatches ?? []).filter((match) =>
     isWithinTheLastWeek(match.played_on),
   ).length;
+
+  const squadMembers = roster.map((player, index) => squadMemberStatsFor(player.id, index));
+  const formRank = rankForm(squadMembers);
+  const attention = pickSquadAttention(squadMembers);
+  const findPlayer = (playerId: string) => roster.find((player) => player.id === playerId) ?? null;
 
   return (
     <AppPage>
@@ -135,7 +157,7 @@ export function Home() {
       </InputGroup>
 
       {search !== "" && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" role="list" aria-label="Search results">
           {searchResults.length === 0 && <p className="text-muted-foreground">No players found.</p>}
           {searchResults.map((player) => (
             <Item
@@ -155,36 +177,82 @@ export function Home() {
         </div>
       )}
 
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm text-muted-foreground">Needs attention</h2>
-        {flagged.length === 0 ? (
-          // Empty until trend flagging is real. The wireframe shows this populated,
-          // but the cards state a finding about a named player ("double faults up
-          // 40%"), and inventing one of those is worse than showing nothing (#158).
-          <p className="text-sm text-muted-foreground">No flagged trends yet.</p>
-        ) : (
-          // Scrolls sideways rather than wrapping: the flagged list is a glanceable
-          // queue, and letting it grow downwards would push the roster off-screen.
-          <div className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1">
-            {flagged.map((flag) => {
-              const player = roster.find((candidate) => candidate.id === flag.playerId);
-              return player ? (
-                <AttentionCard
-                  key={flag.playerId}
-                  player={player}
-                  flag={flag}
-                  onSelect={setSelected}
-                />
-              ) : null;
-            })}
-          </div>
-        )}
+      <section aria-labelledby="squad-snapshot" className="flex flex-col gap-2">
+        <h2 id="squad-snapshot" className="text-lg font-bold">
+          Squad snapshot
+        </h2>
+        <Card>
+          <CardContent className="flex flex-col gap-3">
+            <div className="flex gap-5">
+              <div className="flex items-center gap-2">
+                <Users className="size-7 shrink-0 text-primary" aria-hidden="true" />
+                <div>
+                  <p className="text-xl font-bold tabular-nums">{roster.length}</p>
+                  <p className="text-[0.625rem] text-muted-foreground">
+                    {roster.length === 1 ? "player" : "players"}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="size-7 shrink-0 text-primary" aria-hidden="true" />
+                <div>
+                  <p className="text-xl font-bold tabular-nums">{matchesThisWeek}</p>
+                  <p className="text-[0.625rem] text-muted-foreground">
+                    {matchesThisWeek === 1 ? "match this week" : "matches this week"}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col">
+              <SquadRow
+                label="Best form"
+                icon={TrendingUp}
+                tone="win"
+                player={formRank.best ? findPlayer(formRank.best.playerId) : null}
+                detail={
+                  formRank.best &&
+                  `${formRank.best.last5Record} last 5 · ${formRank.best.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
+                }
+                emptyDetail="Not enough matches logged yet."
+                onSelect={setSelected}
+              />
+              <SquadRow
+                label="Worst form"
+                icon={TrendingDown}
+                tone="unforced"
+                player={formRank.worst ? findPlayer(formRank.worst.playerId) : null}
+                detail={
+                  formRank.worst &&
+                  `${formRank.worst.last5Record} last 5 · ${formRank.worst.forcedToUnforcedRatio.toFixed(1)} forced:unforced`
+                }
+                emptyDetail="Not enough matches logged yet."
+                onSelect={setSelected}
+              />
+              <SquadRow
+                label="Needs attention"
+                icon={TriangleAlert}
+                tone="forced"
+                player={attention ? findPlayer(attention.playerId) : null}
+                detail={attention?.reason ?? null}
+                emptyDetail="No flags this week."
+                onSelect={setSelected}
+              />
+            </div>
+
+            <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
+              Best/worst form ranks players with 3+ matches logged this period. &ldquo;Needs
+              attention&rdquo; flags a player&rsquo;s own decline vs their own average, not a squad
+              rank, so it can surface your strongest player too.
+            </p>
+          </CardContent>
+        </Card>
       </section>
 
       {lastViewedPlayer && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-sm text-muted-foreground">Last viewed player</h2>
-          <LastViewedCard player={lastViewedPlayer} />
+          <h2 className="text-lg font-bold">Continue with</h2>
+          <ContinueWithCard player={lastViewedPlayer} />
         </section>
       )}
 
@@ -212,24 +280,6 @@ export function Home() {
         </div>
       </section>
 
-      <section aria-labelledby="squad-snapshot">
-        <Card>
-          <CardContent className="flex flex-col gap-2">
-            <h2
-              id="squad-snapshot"
-              className="text-[0.625rem] tracking-wide text-muted-foreground uppercase"
-            >
-              Squad snapshot
-            </h2>
-            <dl className="grid grid-cols-3 gap-2 text-center">
-              <Snapshot value={roster.length} label="Players" />
-              <Snapshot value={matchesThisWeek} label="Matches this week" />
-              <Snapshot value={flagged.length} label="Need attention" tone="alert" />
-            </dl>
-          </CardContent>
-        </Card>
-      </section>
-
       <PlayerActionSheet
         player={selected}
         open={selected !== null}
@@ -241,83 +291,90 @@ export function Home() {
   );
 }
 
-function Snapshot({ value, label, tone }: { value: number; label: string; tone?: "alert" }) {
-  return (
-    // <dt> before <dd> is what pairs each value with its own label for assistive
-    // tech — a <dd> describes the *preceding* <dt>, so the reverse order would pair
-    // every number with the previous tile's label. flex-col-reverse keeps the
-    // value-on-top look without reordering the actual markup.
-    <div className="flex flex-col-reverse">
-      <dt className="text-[0.625rem] text-muted-foreground">{label}</dt>
-      <dd
-        className={cn(
-          "text-lg font-bold tabular-nums",
-          tone === "alert" && value > 0 && "text-outcome-unforced",
-        )}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
+/** Text color per outcome tone, for a row's icon — the icon's own shape is
+ *  already what tells "Best form" apart from "Needs attention" at a glance
+ *  (the large-and-unique-icon rule this row follows, same as the player
+ *  stats screens), so color here reinforces rather than carries the meaning
+ *  alone, and needs no swatch halo of its own. */
+const TONE_ICON_CLASS: Record<OutcomeName, string> = {
+  win: "text-outcome-win",
+  unforced: "text-outcome-unforced",
+  forced: "text-outcome-forced",
+};
 
-function AttentionCard({
+/** One row of the squad snapshot (best form / worst form / needs attention).
+ *  Renders as a plain, non-interactive line in its own muted tone when there's
+ *  no player to show — an empty result here (nobody eligible, nobody flagged)
+ *  is a legitimate outcome the row should say plainly, not paper over. */
+function SquadRow({
+  label,
+  icon: Icon,
+  tone,
   player,
-  flag,
+  detail,
+  emptyDetail,
   onSelect,
 }: {
-  player: PlayerRead;
-  flag: AttentionFlag;
+  label: string;
+  /** Large and distinct per row — no two rows on this card, or elsewhere on
+   *  the home screen, share an icon for a different meaning. */
+  icon: LucideIcon;
+  tone: OutcomeName;
+  player: PlayerRead | null;
+  detail: string | null;
+  emptyDetail: string;
   onSelect: (player: PlayerRead) => void;
 }) {
-  return (
-    <Card className="w-40 shrink-0">
-      <CardContent className="flex flex-col gap-2">
-        <button
-          type="button"
-          onClick={() => onSelect(player)}
-          className="flex items-center gap-2 text-left"
-        >
-          <PlayerAvatar player={player} size="sm" />
-          <span className="truncate text-xs font-bold">{player.first_name}</span>
-        </button>
-        <div className="flex gap-1">
-          {flag.recentResults.map((result, index) => (
-            <OutcomeSwatch
-              key={index}
-              size="sm"
-              pattern={result === "win" ? "win" : "unforced"}
-              label={result === "win" ? "W" : "L"}
-            />
-          ))}
+  const icon = <Icon className={cn("size-7 shrink-0", TONE_ICON_CLASS[tone])} aria-hidden="true" />;
+
+  if (!player || !detail) {
+    return (
+      <div className="flex items-center gap-2.5 border-t py-2.5 first:border-t-0 first:pt-0">
+        {icon}
+        <div className="min-w-0 flex-1">
+          <p className="text-[0.5625rem] font-bold tracking-wide text-muted-foreground uppercase">
+            {label}
+          </p>
+          <p className="text-xs text-muted-foreground">{emptyDetail}</p>
         </div>
-        <p className="text-[0.625rem] text-outcome-unforced">{flag.reason}</p>
-      </CardContent>
-    </Card>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(player)}
+      className="flex w-full items-center gap-2.5 border-t py-2.5 text-left first:border-t-0 first:pt-0"
+    >
+      {icon}
+      <div className="min-w-0 flex-1">
+        <p className="text-[0.5625rem] font-bold tracking-wide text-muted-foreground uppercase">
+          {label}
+        </p>
+        <p className="truncate text-sm font-semibold">{`${player.first_name} ${player.last_name}`}</p>
+        <p className="text-xs text-muted-foreground">{detail}</p>
+      </div>
+      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </button>
   );
 }
 
-/** The three headline numbers, as a W–L record rather than a bare percentage. */
-function recordMetric(wins: number, losses: number): Metric {
-  const played = wins + losses;
-  return {
-    label: "W–L (season)",
-    value: played === 0 ? 0 : (wins / played) * 100,
-    unit: "percent",
-    sampleSize: `n=${played}`,
-    baseline: null,
-    delta: null,
-    max: 100,
-    higherIsBetter: true,
-    display: `${wins}–${losses}`,
-  };
+function recordFrom(results: readonly ("win" | "loss")[]): string {
+  const wins = results.filter((result) => result === "win").length;
+  return `${wins}–${results.length - wins}`;
 }
 
-function LastViewedCard({ player }: { player: PlayerRead }) {
+function ContinueWithCard({ player }: { player: PlayerRead }) {
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
   const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: player.id } }));
+  const { data: recentForm } = useQuery(
+    getRecentFormOptions({ path: { player_id: player.id }, query: { opponentId: null } }),
+  );
 
   const lastMatch = matches?.[0];
+  const lastViewedAt = getLastViewedAt();
+  const last5 = recentForm?.results.slice(-5) ?? [];
 
   return (
     <Card>
@@ -337,25 +394,51 @@ function LastViewedCard({ player }: { player: PlayerRead }) {
           </ItemMedia>
           <ItemContent>
             <ItemTitle>{`${player.first_name} ${player.last_name}`}</ItemTitle>
-            <ItemDescription>
-              {lastMatch
-                ? `Last match: vs ${lastMatch.opponent_name ?? "unknown"}`
-                : "No matches yet"}
-            </ItemDescription>
+            <p className="text-xs text-muted-foreground">
+              {lastViewedAt !== null && `Last viewed ${relativeTimeFrom(lastViewedAt)}`}
+              {lastViewedAt !== null && lastMatch && " · "}
+              {lastMatch && `vs ${lastMatch.opponent_name ?? "unknown"}`}
+            </p>
           </ItemContent>
           <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
         </Item>
 
+        {last5.length > 0 && (
+          <div className="flex gap-1">
+            {last5.map((result, index) => (
+              <OutcomeSwatch
+                key={index}
+                size="sm"
+                pattern={result === "win" ? "win" : "unforced"}
+                label={result === "win" ? "W" : "L"}
+              />
+            ))}
+          </div>
+        )}
+
         {overview && (
-          <>
-            <BulletBar {...metricToBullet(overview.form)} />
-            <BulletBar {...metricToBullet(overview.holdPercentage)} />
-            <BulletBar
-              {...metricToBullet(
-                recordMetric(overview.seasonRecord.wins, overview.seasonRecord.losses),
-              )}
-            />
-          </>
+          <div className="flex gap-6">
+            <div className="flex items-center gap-2">
+              <History className="size-7 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xl font-bold tabular-nums">{recordFrom(last5)}</p>
+                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+                  Last 5
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xl font-bold tabular-nums">
+                  {overview.forcedToUnforced.value.toFixed(1)}
+                </p>
+                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+                  Forced : Unforced
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         <Link
@@ -364,7 +447,7 @@ function LastViewedCard({ player }: { player: PlayerRead }) {
           onClick={() => setLastViewedPlayerId(player.id)}
           className={cn(buttonVariants({ variant: "outline" }), "w-full")}
         >
-          View full profile
+          View full stats
         </Link>
       </CardContent>
     </Card>
