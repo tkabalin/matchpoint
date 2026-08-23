@@ -23,7 +23,6 @@ from matchpoint_api.models import (
     RallyBucket,
     ReturnOutcome,
     ServeOutcome,
-    ServeTarget,
     ShotType,
     UnusualReason,
     Wing,
@@ -41,18 +40,15 @@ from tests.factories import point_payload
 SECOND_SERVE: dict[str, Any] = {
     "serve1_outcome": "fault",
     "serve1_box": None,
-    "serve1_target": None,
     "serve1_fault_mode": "long",
     "serve2_outcome": "in",
     "serve2_box": "ad",
-    "serve2_target": "wide",
 }
 
 # The opponent serving: no placement is captured on any of their attempts.
 OPPONENT_SERVE: dict[str, Any] = {
     "server": "opponent",
     "serve1_box": None,
-    "serve1_target": None,
 }
 
 # Nothing was struck, so neither the last shot nor the final ball is recorded.
@@ -75,7 +71,6 @@ def test_the_default_shape_round_trips() -> None:
     assert point.server is MatchSide.TRACKED
     assert point.serve1_outcome is ServeOutcome.IN
     assert point.serve1_box is CourtSide.DEUCE
-    assert point.serve1_target is ServeTarget.T
     assert point.serve1_fault_mode is None
     assert point.serve2_outcome is None
     assert point.return_outcome is None
@@ -99,7 +94,7 @@ def test_the_default_shape_round_trips() -> None:
         pytest.param(SECOND_SERVE, id="second serve after a first-serve fault"),
         pytest.param(
             SECOND_SERVE
-            | {"serve2_outcome": "fault", "serve2_box": None, "serve2_target": None}
+            | {"serve2_outcome": "fault", "serve2_box": None}
             | {"serve2_fault_mode": "net", "end_reason": "double_fault", "won": False}
             | NO_CONTACT,
             id="double fault",
@@ -148,15 +143,14 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
     [
         pytest.param({"serve2_outcome": "in"}, id="a second serve after a first serve that landed"),
         pytest.param(
-            {"serve1_outcome": "fault", "serve1_box": None, "serve1_target": None}
+            {"serve1_outcome": "fault", "serve1_box": None}
             | {"serve1_fault_mode": "net", "end_reason": "double_fault"},
             id="a faulted first serve with no second attempt",
         ),
         pytest.param({"serve1_box": None}, id="a landed serve missing its box"),
-        pytest.param({"serve1_target": None}, id="a landed serve missing its target"),
         pytest.param(
-            SECOND_SERVE | {"serve1_box": "deuce", "serve1_target": "t"},
-            id="a faulted serve keeping its box and target",
+            SECOND_SERVE | {"serve1_box": "deuce"},
+            id="a faulted serve keeping its box",
         ),
         pytest.param(
             SECOND_SERVE | {"serve1_fault_mode": None},
@@ -174,7 +168,7 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
         pytest.param({"serve2_box": "ad"}, id="a location on a second serve that never happened"),
         pytest.param(
             SECOND_SERVE
-            | {"serve2_outcome": "fault", "serve2_box": None, "serve2_target": None}
+            | {"serve2_outcome": "fault", "serve2_box": None}
             | {"serve2_fault_mode": "net"}
             | NO_CONTACT,
             id="both serves faulted without the double-fault ending",

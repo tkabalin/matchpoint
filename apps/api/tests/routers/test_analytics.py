@@ -171,7 +171,6 @@ def test_overview_point_metrics(client: TestClient, db_session: Session, coach: 
         is_game_end=True,
         server=MatchSide.OPPONENT,
         serve1_box=None,
-        serve1_target=None,
         return_outcome=ReturnOutcome.IN,
     )
     make_point(
@@ -267,11 +266,9 @@ def test_serving_metrics_and_breakdown(
         sequence=3,
         serve1_outcome=ServeOutcome.FAULT,
         serve1_box=None,
-        serve1_target=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
         serve2_box=None,
-        serve2_target=None,
         shot_type=ShotType.VOLLEY,
     )
     make_point(
@@ -281,7 +278,6 @@ def test_serving_metrics_and_breakdown(
         won=False,
         serve1_outcome=ServeOutcome.FAULT,
         serve1_box=None,
-        serve1_target=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -342,7 +338,6 @@ def test_returning_metrics_and_breakdown(
     opponent_serve = {
         "server": MatchSide.OPPONENT,
         "serve1_box": None,
-        "serve1_target": None,
     }
     make_point(
         db_session,
@@ -635,11 +630,9 @@ def test_trends_distribution_buckets_are_contiguous(
         sequence=1,
         serve1_outcome=ServeOutcome.FAULT,
         serve1_box=None,
-        serve1_target=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
         serve2_box=None,
-        serve2_target=None,
     )
     quarters = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 2))
     for sequence in range(3):
@@ -650,11 +643,9 @@ def test_trends_distribution_buckets_are_contiguous(
         sequence=3,
         serve1_outcome=ServeOutcome.FAULT,
         serve1_box=None,
-        serve1_target=None,
         serve1_fault_mode=FailureMode.WIDE,
         serve2_outcome=ServeOutcome.IN,
         serve2_box=None,
-        serve2_target=None,
     )
 
     body = _get(client, player.id, "trends?window=last5")
@@ -873,7 +864,6 @@ def test_head_to_head_detail_with_points(
             sequence=2,
             server=MatchSide.OPPONENT,
             serve1_box=None,
-            serve1_target=None,
             return_outcome=ReturnOutcome.IN,
             is_break_point=True,
             won=converted,

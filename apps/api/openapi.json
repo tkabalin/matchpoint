@@ -1837,16 +1837,6 @@
           "serve1_outcome": {
             "$ref": "#/components/schemas/ServeOutcome"
           },
-          "serve1_target": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ServeTarget"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "serve2_box": {
             "anyOf": [
               {
@@ -1871,16 +1861,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ServeOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "serve2_target": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ServeTarget"
               },
               {
                 "type": "null"
@@ -2098,16 +2078,6 @@
           "serve1_outcome": {
             "$ref": "#/components/schemas/ServeOutcome"
           },
-          "serve1_target": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ServeTarget"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "serve2_box": {
             "anyOf": [
               {
@@ -2132,16 +2102,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ServeOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "serve2_target": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ServeTarget"
               },
               {
                 "type": "null"
@@ -2198,11 +2158,9 @@
           "won",
           "serve1_outcome",
           "serve1_box",
-          "serve1_target",
           "serve1_fault_mode",
           "serve2_outcome",
           "serve2_box",
-          "serve2_target",
           "serve2_fault_mode",
           "return_outcome",
           "end_reason",
@@ -2443,16 +2401,6 @@
         ],
         "title": "ServeStats",
         "type": "object"
-      },
-      "ServeTarget": {
-        "description": "Where a landed serve was aimed, coarse enough for a coach to call live.",
-        "enum": [
-          "wide",
-          "body",
-          "t"
-        ],
-        "title": "ServeTarget",
-        "type": "string"
       },
       "ShotShare": {
         "description": "One radar axis: a shot type's share of the player's point-winning shots.",

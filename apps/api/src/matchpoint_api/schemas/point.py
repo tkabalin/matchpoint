@@ -12,7 +12,6 @@ from matchpoint_api.models import (
     RallyBucket,
     ReturnOutcome,
     ServeOutcome,
-    ServeTarget,
     ShotType,
     UnusualReason,
     Wing,
@@ -40,24 +39,21 @@ def _check_serve_location(
     attempt: int,
     outcome: ServeOutcome | None,
     box: CourtSide | None,
-    target: ServeTarget | None,
     fault_mode: FailureMode | None,
     *,
     server: MatchSide,
 ) -> None:
-    """Where one serve attempt landed: a zone, a fault mode, or nothing at all."""
+    """Where one serve attempt landed: a box, a fault mode, or nothing at all."""
     if outcome is None or server is MatchSide.OPPONENT:
         # Either there was no such attempt, or it was the opponent's, whose placement
         # is out of scope for capture.
-        if box is not None or target is not None or fault_mode is not None:
+        if box is not None or fault_mode is not None:
             raise ValueError(f"serve {attempt} records no location on this point")
     elif outcome is ServeOutcome.FAULT:
-        if fault_mode is None or box is not None or target is not None:
+        if fault_mode is None or box is not None:
             raise ValueError(f"a faulted serve {attempt} records serve{attempt}_fault_mode alone")
-    elif box is None or target is None or fault_mode is not None:
-        raise ValueError(
-            f"a landed serve {attempt} records serve{attempt}_box and serve{attempt}_target"
-        )
+    elif box is None or fault_mode is not None:
+        raise ValueError(f"a landed serve {attempt} records serve{attempt}_box")
 
 
 class PointCreate(RequestModel):
@@ -81,11 +77,9 @@ class PointCreate(RequestModel):
 
     serve1_outcome: ServeOutcome
     serve1_box: CourtSide | None = None
-    serve1_target: ServeTarget | None = None
     serve1_fault_mode: FailureMode | None = None
     serve2_outcome: ServeOutcome | None = None
     serve2_box: CourtSide | None = None
-    serve2_target: ServeTarget | None = None
     serve2_fault_mode: FailureMode | None = None
 
     return_outcome: ReturnOutcome | None = None
@@ -125,7 +119,6 @@ class PointCreate(RequestModel):
             1,
             self.serve1_outcome,
             self.serve1_box,
-            self.serve1_target,
             self.serve1_fault_mode,
             server=self.server,
         )
@@ -133,7 +126,6 @@ class PointCreate(RequestModel):
             2,
             self.serve2_outcome,
             self.serve2_box,
-            self.serve2_target,
             self.serve2_fault_mode,
             server=self.server,
         )
@@ -232,11 +224,9 @@ class PointRead(BaseModel):
 
     serve1_outcome: ServeOutcome
     serve1_box: CourtSide | None
-    serve1_target: ServeTarget | None
     serve1_fault_mode: FailureMode | None
     serve2_outcome: ServeOutcome | None
     serve2_box: CourtSide | None
-    serve2_target: ServeTarget | None
     serve2_fault_mode: FailureMode | None
 
     return_outcome: ReturnOutcome | None

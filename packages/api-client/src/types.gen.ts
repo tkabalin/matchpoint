@@ -935,11 +935,9 @@ export type PointCreate = {
     serve1_box?: CourtSide | null;
     serve1_fault_mode?: FailureMode | null;
     serve1_outcome: ServeOutcome;
-    serve1_target?: ServeTarget | null;
     serve2_box?: CourtSide | null;
     serve2_fault_mode?: FailureMode | null;
     serve2_outcome?: ServeOutcome | null;
-    serve2_target?: ServeTarget | null;
     server: MatchSide;
     /**
      * Set Number
@@ -1026,11 +1024,9 @@ export type PointRead = {
     serve1_box: CourtSide | null;
     serve1_fault_mode: FailureMode | null;
     serve1_outcome: ServeOutcome;
-    serve1_target: ServeTarget | null;
     serve2_box: CourtSide | null;
     serve2_fault_mode: FailureMode | null;
     serve2_outcome: ServeOutcome | null;
-    serve2_target: ServeTarget | null;
     server: MatchSide;
     /**
      * Set Number
@@ -1150,13 +1146,6 @@ export type ServeStats = {
     returning: ServeSideStats;
     serving: ServeSideStats;
 };
-
-/**
- * ServeTarget
- *
- * Where a landed serve was aimed, coarse enough for a coach to call live.
- */
-export type ServeTarget = 'wide' | 'body' | 't';
 
 /**
  * ShotShare

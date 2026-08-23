@@ -29,14 +29,6 @@ class CourtSide(enum.StrEnum):
     AD = "ad"
 
 
-class ServeTarget(enum.StrEnum):
-    """Where a landed serve was aimed, coarse enough for a coach to call live."""
-
-    WIDE = "wide"
-    BODY = "body"
-    T = "t"
-
-
 # Backs the two serve fault modes and the final ball's; a missed return carries the same
 # three values through ReturnOutcome instead.
 class FailureMode(enum.StrEnum):
@@ -135,12 +127,6 @@ class Point(Base):
         # first-serve fault, end_reason vs unusual_reason, return_outcome only on
         # opponent serves) lives once in #107's ingestion schema instead, so it
         # cannot drift from a second SQL copy of the same rule.
-        CheckConstraint(
-            "num_nonnulls(serve1_box, serve1_target) <> 1", name="point_serve1_zone_paired"
-        ),
-        CheckConstraint(
-            "num_nonnulls(serve2_box, serve2_target) <> 1", name="point_serve2_zone_paired"
-        ),
         CheckConstraint("num_nonnulls(wing, shot_type) <> 1", name="point_shot_paired"),
         CheckConstraint("num_nonnulls(ball_half, ball_depth) <> 1", name="point_ball_zone_paired"),
     )
@@ -153,14 +139,11 @@ class Point(Base):
 
     # The contract always records at least one attempt; a second only ever follows a
     # first-serve fault. Location is null on an opponent serve, placement there being
-    # out of scope, and otherwise box+target when it landed or a FailureMode when not.
+    # out of scope, and otherwise the box when it landed or a FailureMode when not.
     serve1_outcome: Mapped[ServeOutcome] = mapped_column(
         str_enum(ServeOutcome, "point_serve1_outcome")
     )
     serve1_box: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_serve1_box"))
-    serve1_target: Mapped[ServeTarget | None] = mapped_column(
-        str_enum(ServeTarget, "point_serve1_target")
-    )
     serve1_fault_mode: Mapped[FailureMode | None] = mapped_column(
         str_enum(FailureMode, "point_serve1_fault_mode")
     )
@@ -168,9 +151,6 @@ class Point(Base):
         str_enum(ServeOutcome, "point_serve2_outcome")
     )
     serve2_box: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_serve2_box"))
-    serve2_target: Mapped[ServeTarget | None] = mapped_column(
-        str_enum(ServeTarget, "point_serve2_target")
-    )
     serve2_fault_mode: Mapped[FailureMode | None] = mapped_column(
         str_enum(FailureMode, "point_serve2_fault_mode")
     )

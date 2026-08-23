@@ -39,7 +39,6 @@ from matchpoint_api.models import (
     PlayerTransferCode,
     Point,
     ServeOutcome,
-    ServeTarget,
     ShotType,
     Wing,
 )
@@ -299,7 +298,6 @@ def make_point(session: Session, **overrides: Any) -> Point:
             "won": True,
             "serve1_outcome": ServeOutcome.IN,
             "serve1_box": CourtSide.DEUCE,
-            "serve1_target": ServeTarget.T,
             "end_reason": EndReason.FORCED,
             "wing": Wing.FOREHAND,
             "shot_type": ShotType.DRIVE,
@@ -335,7 +333,6 @@ def point_payload(**overrides: Any) -> dict[str, Any]:
         "won": True,
         "serve1_outcome": "in",
         "serve1_box": "deuce",
-        "serve1_target": "t",
         "end_reason": "forced",
         "wing": "forehand",
         "shot_type": "drive",

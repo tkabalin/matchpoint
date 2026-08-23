@@ -17,7 +17,6 @@ from matchpoint_api.models import (
     RallyBucket,
     ReturnOutcome,
     ServeOutcome,
-    ServeTarget,
     ShotType,
     UnusualReason,
     Wing,
@@ -40,7 +39,6 @@ def test_point_round_trips_with_the_minimal_shape(db_session: Session) -> None:
     assert saved.won is True
     assert saved.serve1_outcome is ServeOutcome.IN
     assert saved.serve1_box is CourtSide.DEUCE
-    assert saved.serve1_target is ServeTarget.T
     assert saved.serve1_fault_mode is None
     assert saved.serve2_outcome is None
     assert saved.return_outcome is None
@@ -75,7 +73,6 @@ def test_point_round_trips_with_a_full_two_serve_opponent_serve_point(
         won=True,
         serve1_outcome=ServeOutcome.FAULT,
         serve1_box=None,
-        serve1_target=None,
         serve1_fault_mode=None,
         serve2_outcome=ServeOutcome.IN,
         return_outcome=ReturnOutcome.IN,
@@ -108,7 +105,6 @@ def test_point_round_trips_with_a_full_two_serve_opponent_serve_point(
     # Location is null on an opponent serve regardless of outcome, placement there
     # being out of scope for capture.
     assert saved.serve1_box is None
-    assert saved.serve1_target is None
     assert saved.serve2_outcome is ServeOutcome.IN
     assert saved.return_outcome is ReturnOutcome.IN
     assert saved.wing is Wing.BACKHAND
@@ -195,7 +191,6 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
     point = make_point(
         db_session,
         serve1_box=None,
-        serve1_target=None,
         note=None,
         wing=None,
         shot_type=None,
@@ -207,7 +202,6 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
     saved = db_session.get(Point, point.id)
     assert saved is not None
     assert saved.serve1_box is None
-    assert saved.serve1_target is None
     assert saved.serve2_outcome is None
     assert saved.return_outcome is None
     assert saved.unusual_reason is None
@@ -242,11 +236,9 @@ def _insert_raw_point(session: Session, **columns: object) -> None:
         "won": True,
         "serve1_outcome": "in",
         "serve1_box": None,
-        "serve1_target": None,
         "serve1_fault_mode": None,
         "serve2_outcome": None,
         "serve2_box": None,
-        "serve2_target": None,
         "serve2_fault_mode": None,
         "return_outcome": None,
         "end_reason": "forced",
@@ -278,10 +270,6 @@ def _insert_raw_point(session: Session, **columns: object) -> None:
 @pytest.mark.parametrize(
     "half",
     [
-        {"serve1_box": "deuce"},
-        {"serve1_target": "t"},
-        {"serve2_box": "ad"},
-        {"serve2_target": "wide"},
         {"wing": "forehand"},
         {"shot_type": "drive"},
         {"ball_half": "deuce"},
@@ -289,16 +277,11 @@ def _insert_raw_point(session: Session, **columns: object) -> None:
     ],
 )
 def test_database_rejects_a_half_set_pair(db_session: Session, half: dict[str, object]) -> None:
-    """Each of the four pairs is one fact split over two columns: a serve zone with no
-    target, a shot with no wing, a final ball half with no depth, name a location that
-    is not really there."""
+    """Each of the two remaining pairs is one fact split over two columns: a shot
+    with no wing, a final ball half with no depth, name a location that is not
+    really there."""
     with pytest.raises(IntegrityError):
         _insert_raw_point(db_session, **half)
-
-
-def test_database_accepts_a_whole_serve1_zone(db_session: Session) -> None:
-    """The other side of the CHECK: both halves of a pair together are accepted."""
-    _insert_raw_point(db_session, serve1_box="ad", serve1_target="wide")
 
 
 def test_database_rejects_end_reason_outside_the_enum(db_session: Session) -> None:
@@ -315,12 +298,10 @@ def test_database_rejects_end_reason_outside_the_enum(db_session: Session) -> No
 ENUM_COLUMNS: list[tuple[str, type[enum.StrEnum], dict[str, str]]] = [
     ("server", MatchSide, {}),
     ("serve1_outcome", ServeOutcome, {}),
-    ("serve1_box", CourtSide, {"serve1_target": "t"}),
-    ("serve1_target", ServeTarget, {"serve1_box": "deuce"}),
+    ("serve1_box", CourtSide, {}),
     ("serve1_fault_mode", FailureMode, {}),
     ("serve2_outcome", ServeOutcome, {}),
-    ("serve2_box", CourtSide, {"serve2_target": "t"}),
-    ("serve2_target", ServeTarget, {"serve2_box": "deuce"}),
+    ("serve2_box", CourtSide, {}),
     ("serve2_fault_mode", FailureMode, {}),
     ("return_outcome", ReturnOutcome, {}),
     ("end_reason", EndReason, {}),

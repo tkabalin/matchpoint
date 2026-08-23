@@ -31,11 +31,11 @@ Expected CSV files, read from /tmp inside the container:
   matches.csv:  coach_email,player_first_name,player_last_name,opponent_name,played_on,
                 surface,event,scoring_system,result,match_key
   points.csv:   coach_email,match_key,sequence,server,won,serve1_outcome,serve1_box,
-                serve1_target,serve1_fault_mode,serve2_outcome,serve2_box,serve2_target,
-                serve2_fault_mode,return_outcome,end_reason,unusual_reason,note,wing,
-                shot_type,ball_in,ball_half,ball_depth,ball_out_mode,rally_length_bucket,
-                set_number,game_number,in_tiebreak,is_break_point,is_game_point,
-                is_game_end,is_set_point,is_set_end,is_match_point
+                serve1_fault_mode,serve2_outcome,serve2_box,serve2_fault_mode,
+                return_outcome,end_reason,unusual_reason,note,wing,shot_type,ball_in,
+                ball_half,ball_depth,ball_out_mode,rally_length_bucket,set_number,
+                game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,
+                is_set_point,is_set_end,is_match_point
 
 - date_of_birth / played_on: ISO format (YYYY-MM-DD).
 - dominant_hand: right | left (blank = unset)
@@ -54,8 +54,8 @@ Expected CSV files, read from /tmp inside the container:
   a match by (coach_email, match_key). Every enum/boolean column matches
   `schemas/point.py`'s `PointCreate` exactly, which is what validates each row (shape
   only, same as live capture) before it is stored — see that schema for which columns
-  pair up (e.g. serve1_box with serve1_target) and which are conditional on another
-  column (e.g. unusual_reason only on an `end_reason` of `unusual`). Booleans are
+  pair up (e.g. wing with shot_type) and which are conditional on another column
+  (e.g. unusual_reason only on an `end_reason` of `unusual`). Booleans are
   `true | false` (also accepts `1 | 0` and `yes | no`); blank means unset on an optional
   column. `match_sets` needs nothing of its own — it's recomputed from the imported
   points, same as a live sync would.
@@ -91,7 +91,6 @@ from matchpoint_api.models import (
     ReturnOutcome,
     ScoringSystem,
     ServeOutcome,
-    ServeTarget,
     ShotType,
     Surface,
     UnusualReason,
@@ -207,9 +206,6 @@ def main() -> None:
                             serve1_box=CourtSide(v)
                             if (v := _blank_to_none(row["serve1_box"]))
                             else None,
-                            serve1_target=ServeTarget(v)
-                            if (v := _blank_to_none(row["serve1_target"]))
-                            else None,
                             serve1_fault_mode=FailureMode(v)
                             if (v := _blank_to_none(row["serve1_fault_mode"]))
                             else None,
@@ -218,9 +214,6 @@ def main() -> None:
                             else None,
                             serve2_box=CourtSide(v)
                             if (v := _blank_to_none(row["serve2_box"]))
-                            else None,
-                            serve2_target=ServeTarget(v)
-                            if (v := _blank_to_none(row["serve2_target"]))
                             else None,
                             serve2_fault_mode=FailureMode(v)
                             if (v := _blank_to_none(row["serve2_fault_mode"]))

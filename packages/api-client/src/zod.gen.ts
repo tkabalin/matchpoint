@@ -459,17 +459,6 @@ export const zServeStats = z.object({
 });
 
 /**
- * ServeTarget
- *
- * Where a landed serve was aimed, coarse enough for a coach to call live.
- */
-export const zServeTarget = z.enum([
-    'wide',
-    'body',
-    't'
-]);
-
-/**
  * ShotShare
  *
  * One radar axis: a shot type's share of the player's point-winning shots.
@@ -761,11 +750,9 @@ export const zPointCreate = z.object({
     serve1_box: zCourtSide.nullish(),
     serve1_fault_mode: zFailureMode.nullish(),
     serve1_outcome: zServeOutcome,
-    serve1_target: zServeTarget.nullish(),
     serve2_box: zCourtSide.nullish(),
     serve2_fault_mode: zFailureMode.nullish(),
     serve2_outcome: zServeOutcome.nullish(),
-    serve2_target: zServeTarget.nullish(),
     server: zMatchSide,
     set_number: z.int().gte(1).lte(2147483647),
     shot_type: zShotType.nullish(),
@@ -822,11 +809,9 @@ export const zPointRead = z.object({
     serve1_box: zCourtSide.nullable(),
     serve1_fault_mode: zFailureMode.nullable(),
     serve1_outcome: zServeOutcome,
-    serve1_target: zServeTarget.nullable(),
     serve2_box: zCourtSide.nullable(),
     serve2_fault_mode: zFailureMode.nullable(),
     serve2_outcome: zServeOutcome.nullable(),
-    serve2_target: zServeTarget.nullable(),
     server: zMatchSide,
     set_number: z.int(),
     shot_type: zShotType.nullable(),
