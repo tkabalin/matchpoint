@@ -1,0 +1,99 @@
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { expect, test, vi } from "vitest";
+
+import { SkipAheadSheet } from "./skip-ahead-sheet";
+
+function renderSheet() {
+  const onSkipToScore = vi.fn();
+  const onEndMatch = vi.fn();
+  const onDismiss = vi.fn();
+  render(
+    <SkipAheadSheet
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onSkipToScore={onSkipToScore}
+      onEndMatch={onEndMatch}
+      onDismiss={onDismiss}
+    />,
+  );
+  return { onSkipToScore, onEndMatch, onDismiss, user: userEvent.setup() };
+}
+
+test("hands back the score the coach entered", async () => {
+  const { onSkipToScore, user } = renderSheet();
+
+  await user.clear(screen.getByLabelText("Rivera games"));
+  await user.type(screen.getByLabelText("Rivera games"), "3");
+  await user.clear(screen.getByLabelText("Okoye games"));
+  await user.type(screen.getByLabelText("Okoye games"), "2");
+  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+
+  expect(onSkipToScore).toHaveBeenCalledWith({
+    trackedGames: 3,
+    opponentGames: 2,
+    trackedPoints: "0",
+    opponentPoints: "0",
+    trackedServesNext: true,
+  });
+});
+
+test("the opponent can be the one serving next", async () => {
+  const { onSkipToScore, user } = renderSheet();
+
+  const serving = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(serving).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+
+  expect(onSkipToScore).toHaveBeenCalledWith(expect.objectContaining({ trackedServesNext: false }));
+});
+
+test("a score that cannot exist says why, and cannot be applied", async () => {
+  const { onSkipToScore, user } = renderSheet();
+
+  await user.clear(screen.getByLabelText("Rivera games"));
+  await user.type(screen.getByLabelText("Rivera games"), "150");
+
+  expect(screen.getByText(/whole number between 0 and 99/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Skip to score" })).toBeDisabled();
+  expect(onSkipToScore).not.toHaveBeenCalled();
+});
+
+test("ending the match is behind its own step, not offered outright", async () => {
+  const { user } = renderSheet();
+
+  expect(screen.queryByRole("radio")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "End match" }));
+
+  expect(screen.getAllByRole("radio")).toHaveLength(3);
+  expect(screen.getByRole("radio", { name: /Retirement/ })).toBeVisible();
+});
+
+test("ending the match needs both a reason and a winner", async () => {
+  const { onEndMatch, user } = renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "End match" }));
+  const confirm = screen.getByRole("button", { name: "Confirm end of match" });
+  expect(confirm).toBeDisabled();
+
+  await user.click(screen.getByRole("radio", { name: /Retirement/ }));
+  expect(confirm).toBeDisabled();
+
+  const awardedTo = screen.getByRole("group", { name: "Match awarded to" });
+  await user.click(within(awardedTo).getByRole("button", { name: "Rivera" }));
+  expect(confirm).toBeEnabled();
+
+  await user.click(confirm);
+  expect(onEndMatch).toHaveBeenCalledWith({ reason: "retirement", trackedPlayerWon: true });
+});
+
+test("cancelling closes without touching the match", async () => {
+  const { onDismiss, onSkipToScore, onEndMatch, user } = renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(onDismiss).toHaveBeenCalledTimes(1);
+  expect(onSkipToScore).not.toHaveBeenCalled();
+  expect(onEndMatch).not.toHaveBeenCalled();
+});
