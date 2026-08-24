@@ -1,4 +1,4 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -9,10 +9,13 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { MatchSetup } from "./match-setup";
+import { NewMatch } from "./new-match";
+
+// Capture appends to IndexedDB, which jsdom has none of; the flow itself is covered by
+// live-match.test.tsx.
+vi.mock("@/features/outbox/outbox", () => ({ append: vi.fn(() => new Promise(() => {})) }));
 
 const player: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000001",
@@ -30,14 +33,29 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-function stubFetch(response: () => Response = () => Response.json(player)) {
+const coach: CoachRead = {
+  id: "3f1c2b4e-0000-4000-8000-0000000000c1",
+  email: "jamie@example.com",
+  display_name: "Jamie Chen",
+  default_surface: null,
+  default_scoring_system: null,
+  photo_url: null,
+  created_at: "2026-08-11T09:00:00Z",
+  updated_at: "2026-08-11T09:00:00Z",
+};
+
+function stubFetch(playerResponse: () => Response = () => Response.json(player)) {
   vi.stubGlobal(
     "fetch",
-    vi.fn().mockImplementation(() => Promise.resolve(response())),
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/coaches/me") return Promise.resolve(Response.json(coach));
+      return Promise.resolve(playerResponse());
+    }),
   );
 }
 
-async function renderMatchSetup() {
+function renderNewMatch() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({
@@ -45,23 +63,18 @@ async function renderMatchSetup() {
     id: "/_authenticated",
     component: () => <Outlet />,
   });
-  const profileRoute = createRoute({
-    getParentRoute: () => authenticatedRoute,
-    path: "/players/$playerId",
-    component: () => <h1>Player Profile</h1>,
-  });
   const newMatchRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
     path: "/new-match/$playerId",
-    component: MatchSetup,
+    component: NewMatch,
   });
-  const rosterRoute = createRoute({
+  const homeRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
-    path: "/players",
-    component: () => <h1>Players</h1>,
+    path: "/home",
+    component: () => <h1>Home</h1>,
   });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([profileRoute, newMatchRoute, rosterRoute]),
+    authenticatedRoute.addChildren([newMatchRoute, homeRoute]),
   ]);
   const router = createRouter({
     routeTree,
@@ -78,33 +91,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the setup form for the player", async () => {
+test("hands the player and coach to capture, and starts at setup", async () => {
   stubFetch();
-  await renderMatchSetup();
+  renderNewMatch();
 
-  expect(await screen.findByRole("heading", { name: "New match — Amahle" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
+  expect(screen.getByText("Amahle")).toBeInTheDocument();
   expect(screen.getByLabelText("Opponent")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Hard" })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Best of 3" })).toBeInTheDocument();
-});
-
-test("the start match button is disabled — nowhere for it to go yet", async () => {
-  stubFetch();
-  await renderMatchSetup();
-
-  await screen.findByRole("heading", { name: "New match — Amahle" });
-  expect(screen.getByRole("button", { name: "Start match" })).toBeDisabled();
-});
-
-test("cancel returns to the player profile", async () => {
-  stubFetch();
-  const user = userEvent.setup();
-  await renderMatchSetup();
-  await screen.findByRole("heading", { name: "New match — Amahle" });
-
-  await user.click(screen.getByRole("link", { name: "Cancel" }));
-
-  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
 // Reachable by typing a url, or from a stale link after the player was deleted.
@@ -112,10 +105,8 @@ test("cancel returns to the player profile", async () => {
 // start a match for a player the coach cannot see.
 test("says not found instead of an unnamed form when the player isn't the coach's", async () => {
   stubFetch(() => new Response(JSON.stringify({ detail: "Player not found" }), { status: 404 }));
-
-  await renderMatchSetup();
+  renderNewMatch();
 
   expect(await screen.findByText("Player not found")).toBeInTheDocument();
-  expect(screen.queryByRole("heading", { name: /New match/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Start match" })).not.toBeInTheDocument();
 });

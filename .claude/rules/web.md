@@ -43,6 +43,11 @@ paths:
   (#214). It stays a slice rather than moving to `src/lib/` because it owns a database schema and
   its own durability rules, not a helper. This is not a precedent — anything else two slices share
   still goes in `src/components/` or `src/lib/`.
+- **`features/capture/` is imported by whoever launches or reads a match.** `features/sync/` imports
+  its `Match` and `Point` to build payloads, and `features/matches/new-match.tsx` imports
+  `LiveMatch` because capture cannot fetch the player and coach it needs itself — the API client is
+  banned inside that slice, so something outside it has to hand them in. Capture imports nothing
+  back, which is what keeps this one-way and safe.
 - `src/lib/local-data.ts` imports it too, the one place a `lib/` module depends on a slice. Deleting
   what the device holds for a coach spans the outbox and the persisted query cache, so it belongs to
   neither, and the keep-or-delete rules of a sign-out, a coach switch and a revoked session are only
