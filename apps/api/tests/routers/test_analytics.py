@@ -2245,7 +2245,7 @@ def test_squad_members_tracked_stats_measure_their_own_baseline(
     deviation sqrt(200/3) = 8.16.
     """
     player = make_player(db_session, coach_id=coach.id)
-    tallies = [(1, 1, 6, 4), (3, 1, 7, 3), (2, 1, 5, 5), (1, 2, 4, 6)]
+    tallies = [(5, 5, 12, 8), (15, 5, 14, 6), (10, 5, 10, 10), (5, 10, 8, 12)]
     for day, (forced, mistake, first_in, faults) in enumerate(tallies, start=1):
         _captured_match(
             db_session,
@@ -2292,12 +2292,12 @@ def test_squad_members_skip_a_match_a_stat_cannot_answer(
     """
     player = make_player(db_session, coach_id=coach.id)
     _captured_match(
-        db_session, player.id, date(THIS_YEAR, 7, 1), forced=2, mistake=1, first_in=6, faults=4
+        db_session, player.id, date(THIS_YEAR, 7, 1), forced=10, mistake=5, first_in=12, faults=8
     )
-    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=1, mistake=1)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=5, mistake=5)
     make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 3))
     _captured_match(
-        db_session, player.id, date(THIS_YEAR, 7, 4), forced=1, mistake=2, first_in=4, faults=6
+        db_session, player.id, date(THIS_YEAR, 7, 4), forced=5, mistake=10, first_in=8, faults=12
     )
 
     stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
@@ -2319,10 +2319,10 @@ def test_squad_members_omit_a_stat_without_a_baseline(
         db_session,
         player.id,
         date(THIS_YEAR, 7, 1),
-        forced=2,
-        mistake=1,
-        first_in=6,
-        faults=4,
+        forced=10,
+        mistake=5,
+        first_in=12,
+        faults=8,
         result=MatchResult.WIN,
     )
 
@@ -2343,10 +2343,10 @@ def test_squad_members_baseline_stops_at_ten_matches(
     is flat.
     """
     player = make_player(db_session, coach_id=coach.id)
-    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=9, mistake=1)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=18, mistake=2)
     for day in range(2, 12):
-        _captured_match(db_session, player.id, date(THIS_YEAR, 7, day), forced=2, mistake=1)
-    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 12), forced=1, mistake=1)
+        _captured_match(db_session, player.id, date(THIS_YEAR, 7, day), forced=10, mistake=5)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 12), forced=5, mistake=5)
 
     row = _squad(client)[0]
 
@@ -2377,12 +2377,13 @@ def test_squad_members_baseline_skips_a_match_with_no_unforced_errors(
 ) -> None:
     """The stand-in count is a display convention, so it stays out of the series.
 
-    Four matches, the second of them 8 forced and no unforced. Its stand-in value of
-    8.0 would put the baseline mean at 3.67 and the deviation at 3.09; left out, the
-    series is 0.5 against 2.0 and 1.0, so mean 1.5 and deviation 0.5.
+    Four matches, the second of them 12 forced and no unforced, which is points enough
+    to count and still no denominator. Its stand-in value of 12.0 would put the
+    baseline mean at 5.0 and the deviation at 4.97; left out, the series is 0.5 against
+    2.0 and 1.0, so mean 1.5 and deviation 0.5.
     """
     player = make_player(db_session, coach_id=coach.id)
-    for day, (forced, mistake) in enumerate([(1, 1), (8, 0), (2, 1), (1, 2)], start=1):
+    for day, (forced, mistake) in enumerate([(5, 5), (12, 0), (10, 5), (5, 10)], start=1):
         _captured_match(
             db_session, player.id, date(THIS_YEAR, 7, day), forced=forced, mistake=mistake
         )
@@ -2394,4 +2395,122 @@ def test_squad_members_baseline_skips_a_match_with_no_unforced_errors(
     assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
     # The period figure still sums the counts, where a zero denominator is the
     # whole period's rather than one match's.
-    assert _squad(client)[0]["forced_to_unforced_ratio"] == 3.0
+    assert _squad(client)[0]["forced_to_unforced_ratio"] == 1.6
+
+
+def test_squad_members_baseline_skips_a_match_of_too_few_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match of nine points is arithmetic, not a data point, so it stays out (#239).
+
+    Four matches, the second of them nine rally endings all lost and nine serves all
+    faulted. Counting its 0.0 ratio would move the baseline from a mean of 1.5 and a
+    deviation of 0.5 to 1.0 and 0.82, and the serve percentage's from 60 and 10 to 40
+    and 29.44. A wider deviation is the divisor of the client's z-score, so it hides
+    the decline the 0.5 and the 40 are.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    tallies = [(10, 5, 14, 6), (0, 9, 0, 9), (5, 5, 10, 10), (5, 10, 8, 12)]
+    for day, (forced, mistake, first_in, faults) in enumerate(tallies, start=1):
+        _captured_match(
+            db_session,
+            player.id,
+            date(THIS_YEAR, 7, day),
+            forced=forced,
+            mistake=mistake,
+            first_in=first_in,
+            faults=faults,
+        )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 0.5
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.5
+    assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
+    assert stats["first_serve_in"]["current"] == 40
+    assert stats["first_serve_in"]["rolling_mean"] == 60.0
+    assert stats["first_serve_in"]["rolling_std_dev"] == 10.0
+
+
+def test_squad_members_current_skips_a_match_of_too_few_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The floor governs the newest match too, so `current` is never a fragment (#239).
+
+    The latest match holds two rally endings and two serves, both of them bad. Counted,
+    its 0.0 ratio would report against a mean of 1.17 and a deviation of 0.62, a
+    z-score of 1.9 past the client's threshold of 1.5, on a match nobody really
+    captured. Skipped, the newest usable match reports instead: 0.5 against 1.5, and 40
+    against 60.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    tallies = [(10, 5, 14, 6), (5, 5, 10, 10), (5, 10, 8, 12), (0, 2, 0, 2)]
+    for day, (forced, mistake, first_in, faults) in enumerate(tallies, start=1):
+        _captured_match(
+            db_session,
+            player.id,
+            date(THIS_YEAR, 7, day),
+            forced=forced,
+            mistake=mistake,
+            first_in=first_in,
+            faults=faults,
+        )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 0.5
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.5
+    assert stats["first_serve_in"]["current"] == 40
+    assert stats["first_serve_in"]["rolling_mean"] == 60.0
+
+
+def test_squad_members_series_counts_a_match_at_the_point_floor(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Ten points is the floor and counts, each stat over its own ten.
+
+    The oldest of three matches has exactly ten rally endings and exactly ten serves.
+    In the baseline it makes the ratio's mean 1.5 with a deviation of 0.5 and the serve
+    percentage's 60 with 10; dropped, each baseline would be the one match left and
+    have no deviation at all.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    tallies = [(5, 5, 5, 5), (10, 5, 14, 6), (5, 10, 8, 12)]
+    for day, (forced, mistake, first_in, faults) in enumerate(tallies, start=1):
+        _captured_match(
+            db_session,
+            player.id,
+            date(THIS_YEAR, 7, day),
+            forced=forced,
+            mistake=mistake,
+            first_in=first_in,
+            faults=faults,
+        )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.5
+    assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
+    assert stats["first_serve_in"]["rolling_mean"] == 60.0
+    assert stats["first_serve_in"]["rolling_std_dev"] == 10.0
+
+
+def test_squad_members_omit_a_stat_left_with_one_countable_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two matches, one of them two points: nothing left to measure against (#239).
+
+    The floor can leave a stat with a single value, which is the same position as a
+    player on their first match, and the stat is left out rather than sent with a
+    baseline of itself.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=10, mistake=5)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=1, mistake=1)
+
+    row = _squad(client)[0]
+
+    assert row["tracked_stats"] == []
+    # The period ratio sums the counts, so the small match is still counted there,
+    # weighed at the two points it is worth.
+    assert row["forced_to_unforced_ratio"] == 1.83

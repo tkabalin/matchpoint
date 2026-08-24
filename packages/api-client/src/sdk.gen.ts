@@ -557,7 +557,8 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  * record is, and scopes `matches_logged_this_period` and the forced : unforced
  * ratio; the streak, the last five results and the days since the last match are
  * counted over every match, so a run that started in December is still a run in
- * January. A tracked stat's `current` is its value over the latest match that can
- * answer it, against a baseline of the ten matches before that one.
+ * January. A tracked stat's `current` is its value over the latest match that
+ * recorded enough of its own points to answer it, against a baseline of the ten
+ * such matches before that one.
  */
 export const listSquadMemberStats = <ThrowOnError extends boolean = false>(options?: Options<ListSquadMemberStatsData, ThrowOnError>): RequestResult<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError> => (options?.client ?? client).get<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError>({ url: '/squad/analytics/members', ...options });

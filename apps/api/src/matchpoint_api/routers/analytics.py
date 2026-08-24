@@ -147,6 +147,11 @@ SERVE_TREND_MATCHES = 6
 # that one match cannot set the deviation on its own, recent enough to still be normal.
 BASELINE_MATCHES = 10
 
+# The fewest points of its own kind a match must record before a tracked stat takes a
+# value from it: below ten, a proportion moves in steps of more than ten points of
+# percentage, and a figure that coarse only widens the deviation the client divides by.
+MIN_POINTS_FOR_TRACKED_STAT = 10
+
 _SHOT_LABEL = {
     ShotType.DRIVE: "drive",
     ShotType.VOLLEY: "volley",
@@ -1496,10 +1501,8 @@ def get_head_to_head(
     )
 
 
-def _percent_value(part: int, whole: int) -> float | None:
-    """A whole-number percentage, or None while nothing has been counted."""
-    if whole == 0:
-        return None
+def _percent_value(part: int, whole: int) -> float:
+    """A whole-number percentage, over a denominator the caller has already floored."""
     return round(100 * part / whole)
 
 
@@ -1517,12 +1520,19 @@ def _series_ratio(forced: int, unforced: int) -> float | None:
 
 @dataclass(frozen=True)
 class _TrackedStatSpec:
-    """One tracked stat: how it is labelled, and its value over one match's points."""
+    """One tracked stat: its label, its value over one match, and that value's sample.
+
+    No two stats count the same points, so each brings its own sample: the ratio's are
+    the rally endings that decided a point, the serve percentage's the points this
+    player served. A percentage samples the denominator it divides by, which is what
+    lets `_percent_value` divide without a zero check.
+    """
 
     key: TrackedStatKey
     label: str
     unit: MetricUnit
     value: Callable[[Row[Any]], float | None]
+    sample: Callable[[Row[Any]], int]
 
 
 # Two stats, both oriented so higher is better, which is what `TrackedStat` promises
@@ -1533,12 +1543,14 @@ _TRACKED_STATS = (
         FORCED_UNFORCED_LABEL,
         MetricUnit.RATIO,
         lambda counts: _series_ratio(counts.forced_won, counts.mistake_lost),
+        lambda counts: counts.forced_won + counts.mistake_lost,
     ),
     _TrackedStatSpec(
         TrackedStatKey.FIRST_SERVE_IN,
         FIRST_SERVE_IN_LABEL,
         MetricUnit.PERCENT,
         lambda counts: _percent_value(counts.first_in, counts.serve_points),
+        lambda counts: counts.serve_points,
     ),
 )
 
@@ -1608,14 +1620,16 @@ def _tracked_stat(
 ) -> TrackedStat | None:
     """The stat's latest value against the baseline before it, or None without both.
 
-    A match the stat cannot be computed over is skipped rather than counted as zero,
-    so the series holds the player's real values in order, and two of them are the
-    least a mean and a deviation can be taken from.
+    A match the stat cannot be computed over, or that would take it from fewer than
+    `MIN_POINTS_FOR_TRACKED_STAT` points, is skipped rather than counted as zero, the
+    newest on the same terms as the rest: too few points can neither widen the
+    deviation nor become the value divided by it. Two values are the least a mean and
+    a deviation can be taken from.
     """
     values: list[float] = []
     for row in matches_newest_first:
         counts = counts_by_match.get(row.id)
-        if counts is None:
+        if counts is None or spec.sample(counts) < MIN_POINTS_FOR_TRACKED_STAT:
             continue
         value = spec.value(counts)
         if value is not None:
@@ -1683,8 +1697,9 @@ def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMem
     record is, and scopes `matches_logged_this_period` and the forced : unforced
     ratio; the streak, the last five results and the days since the last match are
     counted over every match, so a run that started in December is still a run in
-    January. A tracked stat's `current` is its value over the latest match that can
-    answer it, against a baseline of the ten matches before that one.
+    January. A tracked stat's `current` is its value over the latest match that
+    recorded enough of its own points to answer it, against a baseline of the ten
+    such matches before that one.
     """
     roster = list(
         db.scalars(
