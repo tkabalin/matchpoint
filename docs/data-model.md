@@ -19,6 +19,7 @@ erDiagram
     players ||--o{ matches : plays
     matches ||--o{ match_sets : "is scored in"
     matches ||--o{ points : "is captured as"
+    coaches ||--o{ deleted_matches : "deleted"
 
     coaches {
         uuid id PK
