@@ -168,7 +168,10 @@ erDiagram
 A match carries metadata only. Point-level data is captured against a match rather than stored on
 it. `result` is the exception: capture is optional, so a match can carry an outcome with no point
 data to compute it from. A match is in progress while `result` is null, and complete once one is
-recorded.
+recorded. Completion freezes `result` and `scoring_system`, and only those two: the result is the
+completion signal itself, and the scoring system is the rulebook the client scored the points under,
+so changing it relabels a match already played. The descriptive fields stay editable afterwards, so
+correcting a typo'd opponent name does not cost the match and its points.
 
 The `capture_claim_` columns enforce single-writer capture: one device at a time, with a lapsing
 expiry the device must renew. The device id is not a foreign key to `coach_sessions`, because a
