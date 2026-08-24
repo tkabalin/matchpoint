@@ -45,7 +45,7 @@ test("metricValue and metricDisplay resolve each metric key", () => {
   expect(metricValue(alex, "forcedToUnforced")).toBe(1.6);
   expect(metricValue(alex, "firstServe")).toBe(68);
 
-  expect(metricDisplay(alex, "record")).toBe("8–2");
+  expect(metricDisplay(alex, "record")).toBe("8W – 2L");
   expect(metricDisplay(alex, "forcedToUnforced")).toBe("1.60");
   expect(metricDisplay(alex, "firstServe")).toBe("68%");
 });

@@ -4,6 +4,7 @@ import type { LucideIcon } from "lucide-react";
 import { StatCard } from "@/components/stat-card";
 import { squadHeadline } from "@/lib/analytics/squad-stats";
 import type { SquadStatsEntry } from "@/lib/analytics/types.provisional";
+import { formatRecord } from "@/lib/format-record";
 
 /** Icon + big number + small label, three across — `StatHero`'s own DNA at a
  *  size that actually fits three in a row at `max-w-md`. Not promoted to
@@ -34,7 +35,7 @@ export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
       <div className="flex justify-between gap-2">
         <HeadlineStat
           icon={Trophy}
-          value={`${headline.record.wins}–${headline.record.losses}`}
+          value={formatRecord(headline.record.wins, headline.record.losses)}
           label="Record"
         />
         <HeadlineStat

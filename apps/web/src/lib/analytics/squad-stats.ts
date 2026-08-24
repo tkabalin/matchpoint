@@ -6,6 +6,7 @@ import type {
   SquadMetricKey,
   SquadStatsEntry,
 } from "./types.provisional";
+import { formatRecord } from "@/lib/format-record";
 import type { CategoryName } from "@/lib/palette";
 
 /**
@@ -46,7 +47,7 @@ export function metricValue(entry: SquadStatsEntry, key: SquadMetricKey): number
 }
 
 export function metricDisplay(entry: SquadStatsEntry, key: SquadMetricKey): string {
-  if (key === "record") return `${entry.wins}–${entry.losses}`;
+  if (key === "record") return formatRecord(entry.wins, entry.losses);
   if (key === "forcedToUnforced") return metricValue(entry, key).toFixed(2);
   return `${Math.round(metricValue(entry, key))}%`;
 }

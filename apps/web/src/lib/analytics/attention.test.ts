@@ -294,8 +294,8 @@ test("rankForm returns the highest and lowest forced:unforced ratio", () => {
 
   const { best, worst } = rankForm([middle, top, bottom]);
 
-  expect(best).toEqual({ playerId: "top", last5Record: "3–0", forcedToUnforcedRatio: 2.4 });
-  expect(worst).toEqual({ playerId: "bottom", last5Record: "0–2", forcedToUnforcedRatio: 0.5 });
+  expect(best).toEqual({ playerId: "top", last5Record: "3W – 0L", forcedToUnforcedRatio: 2.4 });
+  expect(worst).toEqual({ playerId: "bottom", last5Record: "0W – 2L", forcedToUnforcedRatio: 0.5 });
 });
 
 test("rankForm shows a single eligible player once, not as both best and worst", () => {

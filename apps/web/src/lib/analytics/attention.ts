@@ -5,6 +5,7 @@ import type {
   SquadMemberStats,
   TrackedStat,
 } from "./types.provisional";
+import { formatRecord } from "@/lib/format-record";
 
 /**
  * The home screen's "needs attention" decision, and the best/worst form
@@ -126,7 +127,7 @@ export function pickSquadAttention(members: SquadMemberStats[]): AttentionResult
 
 function recordFrom(results: MatchOutcome[]): string {
   const wins = results.filter((result) => result === "win").length;
-  return `${wins}–${results.length - wins}`;
+  return formatRecord(wins, results.length - wins);
 }
 
 function toFormRankEntry(member: SquadMemberStats): FormRankEntry {

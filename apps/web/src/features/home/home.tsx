@@ -51,6 +51,7 @@ import {
 import type { AttentionResult } from "@/lib/analytics/types.provisional";
 import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
+import { formatRecord } from "@/lib/format-record";
 import {
   getLastViewedAt,
   getLastViewedPlayerId,
@@ -248,7 +249,11 @@ export function Home() {
             See all
           </Link>
         </div>
-        <div className="-mx-4 flex gap-4 overflow-x-auto px-4 pb-1">
+        {/* py-1, not pb-1: overflow-x-auto forces the cross axis to clip too (a
+            box-shadow-based halo, unlike a border, extends outside the element's
+            own box), so top padding is needed just as much as bottom to avoid
+            slicing off the top of each avatar's swatch-halo ring. */}
+        <div className="-mx-4 flex gap-4 overflow-x-auto px-4 py-1">
           {roster.map((player) => (
             <RosterTile key={player.id} player={player} onSelect={setSelected} />
           ))}
@@ -433,7 +438,7 @@ function AttentionCard({
 
 function recordFrom(results: readonly ("win" | "loss")[]): string {
   const wins = results.filter((result) => result === "win").length;
-  return `${wins}–${results.length - wins}`;
+  return formatRecord(wins, results.length - wins);
 }
 
 function ContinueWithCard({

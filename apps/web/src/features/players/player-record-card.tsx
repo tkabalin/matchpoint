@@ -9,6 +9,7 @@ import {
   getRecentFormOptions,
   listOpponentsOptions,
 } from "@/lib/analytics/analytics-options";
+import { formatRecord } from "@/lib/format-record";
 import { cn } from "@/lib/utils";
 
 /** All-time win/loss plus recent form, in one card: the two pieces of the old
@@ -40,7 +41,7 @@ export function PlayerRecordCard({
     <StatCard title="Win/loss record" className="h-full">
       <div className="flex justify-between text-xs">
         <span>All-time</span>
-        <span className="tabular-nums">{`${wins}–${losses}`}</span>
+        <span className="tabular-nums">{formatRecord(wins, losses)}</span>
       </div>
       <OutcomeStack
         className="mt-1"
@@ -73,7 +74,10 @@ export function PlayerRecordCard({
               ))}
             </div>
             <span className="shrink-0 text-xs font-bold tabular-nums">
-              {`${recentForm.results.filter((result) => result === "win").length}W – ${recentForm.results.filter((result) => result !== "win").length}L`}
+              {formatRecord(
+                recentForm.results.filter((result) => result === "win").length,
+                recentForm.results.filter((result) => result !== "win").length,
+              )}
             </span>
           </div>
         </div>

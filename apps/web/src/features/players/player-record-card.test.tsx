@@ -19,9 +19,9 @@ test("shows the all-time win/loss record, no season row", async () => {
 
   expect(await screen.findByText("Win/loss record")).toBeInTheDocument();
   expect(screen.getByText("All-time")).toBeInTheDocument();
-  expect(screen.getByText("52–28")).toBeInTheDocument();
+  expect(screen.getByText("52W – 28L")).toBeInTheDocument();
   expect(screen.queryByText("Season")).not.toBeInTheDocument();
-  expect(screen.queryByText("14–6")).not.toBeInTheDocument();
+  expect(screen.queryByText("14W – 6L")).not.toBeInTheDocument();
 });
 
 test("shows recent form in the same card, all-matches by default", async () => {

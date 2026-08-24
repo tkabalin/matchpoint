@@ -104,7 +104,7 @@ test("shows the squad headline with an icon per stat", async () => {
   expect(screen.getByText("Forced : Unforced")).toBeInTheDocument();
   expect(screen.getByText("1st serve %")).toBeInTheDocument();
   // Sum of the four templates' wins/losses (8+5+1+1 / 2+5+8+0).
-  expect(screen.getByText("15–15")).toBeInTheDocument();
+  expect(screen.getByText("15W – 15L")).toBeInTheDocument();
 });
 
 test("leaderboard defaults to Record order, sub-threshold player dimmed at the bottom", async () => {
