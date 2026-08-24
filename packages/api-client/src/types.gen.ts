@@ -214,6 +214,43 @@ export type ErrorDetail = {
 export type FailureMode = 'net' | 'long' | 'wide';
 
 /**
+ * FaultModeShares
+ *
+ * How one serve number's faults split between the three ways a serve misses.
+ *
+ * Percentages of that serve number's faults, each rounded on its own, so the three
+ * need not come to exactly 100.
+ */
+export type FaultModeShares = {
+    /**
+     * Long
+     */
+    long: number;
+    /**
+     * Net
+     */
+    net: number;
+    /**
+     * Wide
+     */
+    wide: number;
+};
+
+/**
+ * FaultModeSplit
+ *
+ * A side's fault modes, split by serve number.
+ *
+ * A half is null until that serve number has faulted, and both are null on the
+ * returning side throughout: capture records where the tracked player's own serve
+ * missed and nothing at all about the opponent's.
+ */
+export type FaultModeSplit = {
+    first_serve: FaultModeShares | null;
+    second_serve: FaultModeShares | null;
+};
+
+/**
  * ForgotPasswordRequest
  */
 export type ForgotPasswordRequest = {
@@ -1137,11 +1174,16 @@ export type ServeSideStats = {
      * Breakdown
      */
     breakdown: Array<BreakdownRow>;
+    fault_mode: FaultModeSplit;
     hero: Metric | null;
     /**
      * Metrics
      */
     metrics: Array<Metric>;
+    /**
+     * Trend
+     */
+    trend: Array<ServeTrendPoint>;
 };
 
 /**
@@ -1152,6 +1194,26 @@ export type ServeSideStats = {
 export type ServeStats = {
     returning: ServeSideStats;
     serving: ServeSideStats;
+};
+
+/**
+ * ServeTrendPoint
+ *
+ * One match's serve-in rates, as a point on the recent-matches trend line.
+ */
+export type ServeTrendPoint = {
+    /**
+     * First Serve In
+     */
+    first_serve_in: number;
+    /**
+     * Match
+     */
+    match: string;
+    /**
+     * Second Serve In
+     */
+    second_serve_in: number | null;
 };
 
 /**

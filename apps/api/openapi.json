@@ -363,6 +363,61 @@
         "title": "FailureMode",
         "type": "string"
       },
+      "FaultModeShares": {
+        "description": "How one serve number's faults split between the three ways a serve misses.\n\nPercentages of that serve number's faults, each rounded on its own, so the three\nneed not come to exactly 100.",
+        "properties": {
+          "long": {
+            "title": "Long",
+            "type": "number"
+          },
+          "net": {
+            "title": "Net",
+            "type": "number"
+          },
+          "wide": {
+            "title": "Wide",
+            "type": "number"
+          }
+        },
+        "required": [
+          "net",
+          "long",
+          "wide"
+        ],
+        "title": "FaultModeShares",
+        "type": "object"
+      },
+      "FaultModeSplit": {
+        "description": "A side's fault modes, split by serve number.\n\nA half is null until that serve number has faulted, and both are null on the\nreturning side throughout: capture records where the tracked player's own serve\nmissed and nothing at all about the opponent's.",
+        "properties": {
+          "first_serve": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FaultModeShares"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "second_serve": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FaultModeShares"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "first_serve",
+          "second_serve"
+        ],
+        "title": "FaultModeSplit",
+        "type": "object"
+      },
       "ForgotPasswordRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2374,6 +2429,9 @@
             "title": "Breakdown",
             "type": "array"
           },
+          "fault_mode": {
+            "$ref": "#/components/schemas/FaultModeSplit"
+          },
           "hero": {
             "anyOf": [
               {
@@ -2390,12 +2448,21 @@
             },
             "title": "Metrics",
             "type": "array"
+          },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/ServeTrendPoint"
+            },
+            "title": "Trend",
+            "type": "array"
           }
         },
         "required": [
           "hero",
           "metrics",
-          "breakdown"
+          "breakdown",
+          "fault_mode",
+          "trend"
         ],
         "title": "ServeSideStats",
         "type": "object"
@@ -2415,6 +2482,37 @@
           "returning"
         ],
         "title": "ServeStats",
+        "type": "object"
+      },
+      "ServeTrendPoint": {
+        "description": "One match's serve-in rates, as a point on the recent-matches trend line.",
+        "properties": {
+          "first_serve_in": {
+            "title": "First Serve In",
+            "type": "number"
+          },
+          "match": {
+            "title": "Match",
+            "type": "string"
+          },
+          "second_serve_in": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Second Serve In"
+          }
+        },
+        "required": [
+          "match",
+          "first_serve_in",
+          "second_serve_in"
+        ],
+        "title": "ServeTrendPoint",
         "type": "object"
       },
       "ShotShare": {

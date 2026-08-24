@@ -131,6 +131,34 @@ export const zFailureMode = z.enum([
 ]);
 
 /**
+ * FaultModeShares
+ *
+ * How one serve number's faults split between the three ways a serve misses.
+ *
+ * Percentages of that serve number's faults, each rounded on its own, so the three
+ * need not come to exactly 100.
+ */
+export const zFaultModeShares = z.object({
+    long: z.number(),
+    net: z.number(),
+    wide: z.number()
+});
+
+/**
+ * FaultModeSplit
+ *
+ * A side's fault modes, split by serve number.
+ *
+ * A half is null until that serve number has faulted, and both are null on the
+ * returning side throughout: capture records where the tracked player's own serve
+ * missed and nothing at all about the opponent's.
+ */
+export const zFaultModeSplit = z.object({
+    first_serve: zFaultModeShares.nullable(),
+    second_serve: zFaultModeShares.nullable()
+});
+
+/**
  * ForgotPasswordRequest
  */
 export const zForgotPasswordRequest = z.object({
@@ -454,14 +482,27 @@ export const zServeOutcome = z.enum([
 ]);
 
 /**
+ * ServeTrendPoint
+ *
+ * One match's serve-in rates, as a point on the recent-matches trend line.
+ */
+export const zServeTrendPoint = z.object({
+    first_serve_in: z.number(),
+    match: z.string(),
+    second_serve_in: z.number().nullable()
+});
+
+/**
  * ServeSideStats
  *
  * One side of the serve tab, serving or returning.
  */
 export const zServeSideStats = z.object({
     breakdown: z.array(zBreakdownRow),
+    fault_mode: zFaultModeSplit,
     hero: zMetric.nullable(),
-    metrics: z.array(zMetric)
+    metrics: z.array(zMetric),
+    trend: z.array(zServeTrendPoint)
 });
 
 /**

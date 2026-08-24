@@ -108,6 +108,41 @@ class PlayerOverview(BaseModel):
     all_time_record: WinLossRecord
 
 
+class FaultModeShares(BaseModel):
+    """How one serve number's faults split between the three ways a serve misses.
+
+    Percentages of that serve number's faults, each rounded on its own, so the three
+    need not come to exactly 100.
+    """
+
+    net: float
+    long: float
+    wide: float
+
+
+class FaultModeSplit(BaseModel):
+    """A side's fault modes, split by serve number.
+
+    A half is null until that serve number has faulted, and both are null on the
+    returning side throughout: capture records where the tracked player's own serve
+    missed and nothing at all about the opponent's.
+    """
+
+    first_serve: FaultModeShares | None
+    second_serve: FaultModeShares | None
+
+
+class ServeTrendPoint(BaseModel):
+    """One match's serve-in rates, as a point on the recent-matches trend line."""
+
+    # A short axis label: "M1" is the oldest match in the series.
+    match: str
+    # The share of that serve number's attempts that landed in, aces included.
+    first_serve_in: float
+    # Null in a match where this side never went to a second serve.
+    second_serve_in: float | None
+
+
 class ServeSideStats(BaseModel):
     """One side of the serve tab, serving or returning."""
 
@@ -117,6 +152,12 @@ class ServeSideStats(BaseModel):
     metrics: list[Metric]
     # How this side's points ended; empty until point data exists.
     breakdown: list[BreakdownRow]
+    # How this side's faulted serves missed.
+    fault_mode: FaultModeSplit
+    # This side's own serve-in rates, match by match and oldest first, so the
+    # returning card's are the opponent's. At most one entry on a match-scoped
+    # request, and none at all where this side never served.
+    trend: list[ServeTrendPoint]
 
 
 class ServeStats(BaseModel):

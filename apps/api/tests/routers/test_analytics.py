@@ -230,7 +230,13 @@ def test_serve_is_empty_before_any_points(
 
     body = _get(client, player.id, "serve")
 
-    empty_side = {"hero": None, "metrics": [], "breakdown": []}
+    empty_side = {
+        "hero": None,
+        "metrics": [],
+        "breakdown": [],
+        "fault_mode": {"first_serve": None, "second_serve": None},
+        "trend": [],
+    }
     assert body == {"serving": empty_side, "returning": empty_side}
 
 
@@ -407,6 +413,175 @@ def test_returning_metrics_and_breakdown(
         {"label": "Return error (net)", "value": 1, "secondary_value": None, "max": 3},
         {"label": "Return error (long)", "value": 0, "secondary_value": None, "max": 3},
         {"label": "Return error (wide)", "value": 0, "secondary_value": None, "max": 3},
+    ]
+
+
+def test_serving_fault_modes_split_by_serve_number(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Four faulted first serves (2 net, 1 long, 1 wide) and one faulted second."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    make_point(db_session, match_id=match.id, sequence=0)
+    for sequence, mode in enumerate(
+        [FailureMode.NET, FailureMode.LONG, FailureMode.WIDE, FailureMode.NET], start=1
+    ):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            **faulted,
+            serve1_fault_mode=mode,
+            serve2_outcome=ServeOutcome.IN,
+        )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=5,
+        **faulted,
+        serve1_fault_mode=FailureMode.WIDE,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.NET,
+        won=False,
+        end_reason=EndReason.DOUBLE_FAULT,
+        wing=None,
+        shot_type=None,
+    )
+
+    body = _get(client, player.id, "serve")
+
+    # Five faulted first serves: 2 net, 1 long, 2 wide. One faulted second, into the net.
+    assert body["serving"]["fault_mode"] == {
+        "first_serve": {"net": 40, "long": 20, "wide": 40},
+        "second_serve": {"net": 100, "long": 0, "wide": 0},
+    }
+
+
+def test_the_returning_side_reports_no_fault_modes(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A stored opponent fault mode is still not reported.
+
+    Ingestion refuses one (`schemas/point.py`), the column allows it, and the
+    returning card would be the opponent's placement if the query took the row.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=0,
+        server=MatchSide.OPPONENT,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.LONG,
+        serve2_outcome=ServeOutcome.IN,
+        return_outcome=ReturnOutcome.IN,
+    )
+
+    body = _get(client, player.id, "serve")
+
+    empty = {"first_serve": None, "second_serve": None}
+    assert body["returning"]["fault_mode"] == empty
+    assert body["serving"]["fault_mode"] == empty
+
+
+def test_serve_trend_runs_oldest_to_most_recent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Three matches on consecutive days, each side counted where it served.
+
+    Serving, by day: 2 first serves in; 1 of 2 in and its second landing; 1 of 2
+    in and its second faulting. The opponent served in the middle match alone, so
+    their series is that match by itself and starts at M1 too.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    matches = [
+        make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, day))
+        for day in (1, 2, 3)
+    ]
+    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    make_point(db_session, match_id=matches[0].id, sequence=0)
+    make_point(db_session, match_id=matches[0].id, sequence=1)
+    make_point(db_session, match_id=matches[1].id, sequence=0)
+    make_point(
+        db_session,
+        match_id=matches[1].id,
+        sequence=1,
+        **faulted,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=matches[1].id,
+        sequence=2,
+        server=MatchSide.OPPONENT,
+        serve1_box=None,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=matches[1].id,
+        sequence=3,
+        server=MatchSide.OPPONENT,
+        serve1_box=None,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve2_outcome=ServeOutcome.IN,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(db_session, match_id=matches[2].id, sequence=0)
+    make_point(
+        db_session,
+        match_id=matches[2].id,
+        sequence=1,
+        **faulted,
+        serve1_fault_mode=FailureMode.WIDE,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.NET,
+        won=False,
+        end_reason=EndReason.DOUBLE_FAULT,
+        wing=None,
+        shot_type=None,
+    )
+
+    body = _get(client, player.id, "serve")
+
+    assert body["serving"]["trend"] == [
+        {"match": "M1", "first_serve_in": 100, "second_serve_in": None},
+        {"match": "M2", "first_serve_in": 50, "second_serve_in": 100},
+        {"match": "M3", "first_serve_in": 50, "second_serve_in": 0},
+    ]
+    assert body["returning"]["trend"] == [
+        {"match": "M1", "first_serve_in": 50, "second_serve_in": 100}
+    ]
+
+
+def test_serve_trend_keeps_only_the_most_recent_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Seven matches, the oldest the only one whose first serve missed."""
+    player = make_player(db_session, coach_id=coach.id)
+    oldest = make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 1))
+    make_point(
+        db_session,
+        match_id=oldest.id,
+        sequence=0,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.IN,
+    )
+    for day in range(2, 8):
+        match = make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, day))
+        make_point(db_session, match_id=match.id, sequence=0)
+
+    body = _get(client, player.id, "serve")
+
+    assert body["serving"]["trend"] == [
+        {"match": f"M{position}", "first_serve_in": 100, "second_serve_in": None}
+        for position in range(1, 7)
     ]
 
 
@@ -869,6 +1044,21 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
     )
     assert (player_first_in["value"], player_first_in["sample_size"]) == (50, "n=2")
     assert player_wide["returning"]["breakdown"][1]["value"] == 1
+    # The fault mode and the trend run queries of their own, so each is asserted
+    # scoped and player-wide too.
+    assert body["serving"]["fault_mode"]["first_serve"] is None
+    assert body["serving"]["trend"] == [
+        {"match": "M1", "first_serve_in": 100, "second_serve_in": None}
+    ]
+    assert body["returning"]["trend"] == [
+        {"match": "M1", "first_serve_in": 100, "second_serve_in": None}
+    ]
+    assert player_wide["serving"]["fault_mode"]["first_serve"] == {
+        "net": 100,
+        "long": 0,
+        "wide": 0,
+    }
+    assert len(player_wide["serving"]["trend"]) == 2
 
 
 def test_match_rally_stats_leave_the_players_other_matches_out(

@@ -1,4 +1,5 @@
 import uuid
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -12,6 +13,7 @@ from matchpoint_api.auth import CurrentCoach
 from matchpoint_api.db import get_db
 from matchpoint_api.models import (
     EndReason,
+    FailureMode,
     Match,
     MatchResult,
     MatchSet,
@@ -27,6 +29,8 @@ from matchpoint_api.schemas.analytics import (
     BreakdownRow,
     CorrelationPoint,
     DistributionBucket,
+    FaultModeShares,
+    FaultModeSplit,
     HeadToHeadDetail,
     HeadToHeadSummary,
     Metric,
@@ -37,6 +41,7 @@ from matchpoint_api.schemas.analytics import (
     RallyStats,
     ServeSideStats,
     ServeStats,
+    ServeTrendPoint,
     ShotShare,
     SlopeLine,
     TrendStats,
@@ -97,6 +102,11 @@ ACES_CAP = 6.0
 RATIO_CAP = 3.0
 
 FORCED_UNFORCED_LABEL = "Forced : Unforced ratio"
+
+# How many matches the serve trend line carries. Six because the chart draws its
+# match labels at 9px on a phone, and a longer season would crowd them into each
+# other rather than say anything more about recent form.
+SERVE_TREND_MATCHES = 6
 
 _SHOT_LABEL = {
     ShotType.DRIVE: "drive",
@@ -431,7 +441,94 @@ def get_player_overview(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach
     )
 
 
-def _serving_stats(counts: Row[Any]) -> ServeSideStats:
+def _fault_shares(faults: Counter[FailureMode]) -> FaultModeShares | None:
+    """The three ways a serve misses, as percentages, or None while none has."""
+    total = sum(faults.values())
+    if total == 0:
+        return None
+    return FaultModeShares(
+        net=round(100 * faults[FailureMode.NET] / total),
+        long=round(100 * faults[FailureMode.LONG] / total),
+        wide=round(100 * faults[FailureMode.WIDE] / total),
+    )
+
+
+def _fault_modes(db: Session, player_id: uuid.UUID, scope: PointScope) -> FaultModeSplit:
+    """How the player's own faulted serves missed, per serve number.
+
+    Their own alone: capture records no placement for a serve the opponent hit
+    (`schemas/point.py`), so the returning side has none of this to show.
+    """
+    statement = (
+        select(
+            Point.serve1_fault_mode,
+            Point.serve2_fault_mode,
+            func.count().label("points"),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(Match.player_id == player_id, Point.server == MatchSide.TRACKED, *scope.conditions())
+        .group_by(Point.serve1_fault_mode, Point.serve2_fault_mode)
+    )
+
+    first: Counter[FailureMode] = Counter()
+    second: Counter[FailureMode] = Counter()
+    for row in db.execute(statement):
+        if row.serve1_fault_mode is not None:
+            first[row.serve1_fault_mode] += row.points
+        if row.serve2_fault_mode is not None:
+            second[row.serve2_fault_mode] += row.points
+    return FaultModeSplit(first_serve=_fault_shares(first), second_serve=_fault_shares(second))
+
+
+def _trend_points(rows_newest_first: Sequence[Row[Any]]) -> list[ServeTrendPoint]:
+    """One side's most recent matches as trend points, relabelled oldest first."""
+    window = list(reversed(rows_newest_first[:SERVE_TREND_MATCHES]))
+    return [
+        ServeTrendPoint(
+            match=f"M{position}",
+            first_serve_in=round(100 * row.first_in / row.served),
+            second_serve_in=round(100 * row.second_in / row.second) if row.second else None,
+        )
+        for position, row in enumerate(window, start=1)
+    ]
+
+
+def _serve_trends(
+    db: Session, player_id: uuid.UUID, scope: PointScope
+) -> dict[MatchSide, list[ServeTrendPoint]]:
+    """Both sides' serve-in rates, one entry per match either side served in.
+
+    Grouped by side as well as by match, so each count is a plain condition rather
+    than a filter carrying the side around with it.
+    """
+    second = Point.serve1_outcome == ServeOutcome.FAULT
+    statement = (
+        select(
+            Point.server,
+            func.count().label("served"),
+            func.count().filter(Point.serve1_outcome != ServeOutcome.FAULT).label("first_in"),
+            func.count().filter(second).label("second"),
+            func.count()
+            .filter(and_(second, Point.serve2_outcome != ServeOutcome.FAULT))
+            .label("second_in"),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(Match.player_id == player_id, *scope.conditions())
+        .group_by(Point.match_id, Point.server, Match.played_on, Match.created_at)
+        .order_by(Match.played_on.desc(), Match.created_at.desc())
+    )
+
+    newest_first: dict[MatchSide, list[Row[Any]]] = {side: [] for side in MatchSide}
+    for row in db.execute(statement):
+        newest_first[row.server].append(row)
+    return {side: _trend_points(rows) for side, rows in newest_first.items()}
+
+
+def _serving_stats(
+    counts: Row[Any], fault_mode: FaultModeSplit, trend: list[ServeTrendPoint]
+) -> ServeSideStats:
     sets_sample = f"n={counts.sets_played} sets"
     matches_sample = f"n={counts.matches_with_points}"
     metrics = [
@@ -476,11 +573,17 @@ def _serving_stats(counts: Row[Any]) -> ServeSideStats:
         hero=_percent("Hold % (service games won)", counts.hold_won, counts.hold_games),
         metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
+        fault_mode=fault_mode,
+        trend=trend,
     )
 
 
 def _returning_stats(
-    db: Session, player_id: uuid.UUID, counts: Row[Any], scope: PointScope
+    db: Session,
+    player_id: uuid.UUID,
+    counts: Row[Any],
+    trend: list[ServeTrendPoint],
+    scope: PointScope,
 ) -> ServeSideStats:
     metrics = [
         _percent("Break points converted", counts.bp_converted, counts.bp_chances),
@@ -518,15 +621,22 @@ def _returning_stats(
         hero=_percent("Return games won %", counts.return_won, counts.return_games),
         metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
+        # Empty rather than zeroed: the opponent's serve is captured as in or
+        # faulted and never placed, so there is no direction here to be wrong about.
+        fault_mode=FaultModeSplit(first_serve=None, second_serve=None),
+        trend=trend,
     )
 
 
 def _serve_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> ServeStats:
     """The serve tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
+    trends = _serve_trends(db, player_id, scope)
     return ServeStats(
-        serving=_serving_stats(counts),
-        returning=_returning_stats(db, player_id, counts, scope),
+        serving=_serving_stats(
+            counts, _fault_modes(db, player_id, scope), trends[MatchSide.TRACKED]
+        ),
+        returning=_returning_stats(db, player_id, counts, trends[MatchSide.OPPONENT], scope),
     )
 
 
