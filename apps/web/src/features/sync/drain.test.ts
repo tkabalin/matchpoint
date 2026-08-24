@@ -515,6 +515,31 @@ describe("refusals", () => {
     expect(row!.failure).toEqual({ status: null, message: expect.stringContaining("point") });
     expect(requests).toEqual([]);
   });
+
+  // The match row is mapped before any request goes out, so an unmappable one has to
+  // take its points down with it: ingesting them against a match that was never
+  // created is the failure this ordering exists to prevent.
+  test("parks an unmappable match with its own points, before any request", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(
+      {
+        id: MATCH_A,
+        coachId: COACH_ID,
+        matchId: MATCH_A,
+        kind: "match",
+        payload: { schema: "from-a-future-app-version" },
+      },
+      pointEntry("a1", MATCH_A, 0),
+    );
+
+    const result = await drain();
+
+    const parked = await readByMatch(MATCH_A);
+    expect(parked.map((row) => row.status)).toEqual(["failed", "failed"]);
+    expect(parked[0]!.failure).toEqual({ status: null, message: expect.any(String) });
+    expect(requests).toEqual([]);
+    expect(result.parked).toBe(2);
+  });
 });
 
 // Both statuses mean no retry can ever land these rows. Which one it is says
@@ -651,6 +676,26 @@ describe("halting and retrying", () => {
     });
   });
 
+  // The test above halts at the match create, because its queue starts with one. A
+  // match already acknowledged leaves point ingest as the first call the sweep makes,
+  // and that verdict is reached by its own switch.
+  test("halts on a 401 from point ingest too, with no match row ahead of it", async () => {
+    const requests = stubTransport(() => jsonResponse(401, { detail: "Not signed in" }));
+    await queue(pointEntry("a1", MATCH_A, 0), pointEntry("a2", MATCH_A, 1));
+
+    const result = await drain();
+
+    expect(requests).toHaveLength(1);
+    expect(await pendingIds()).toEqual([uid("a1"), uid("a2")]);
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: true,
+      skipped: false,
+    });
+  });
+
   test("retries a network failure on the backoff schedule, then succeeds", async () => {
     useFakeDelays();
     let failures = 2;
@@ -699,6 +744,27 @@ describe("halting and retrying", () => {
 
     expect(requests).toHaveLength(1 + BACKOFF_DELAYS_MS.length);
     expect(await pendingIds()).toEqual([uid("a1")]);
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
+  });
+
+  // Same schedule, but exhausted against the match create rather than point ingest:
+  // the create's own transient branch has to leave the match pending, or its points
+  // would later be ingested against a match that was never made.
+  test("gives up on a failing match create and leaves the match and its points pending", async () => {
+    useFakeDelays();
+    const requests = stubTransport(() => jsonResponse(503, { detail: "down" }));
+    await queue(matchEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    const result = await settle(drain());
+
+    expect(requests).toHaveLength(1 + BACKOFF_DELAYS_MS.length);
+    expect(await pendingIds()).toHaveLength(2);
     expect(result).toEqual({
       acknowledged: 0,
       discarded: 0,
