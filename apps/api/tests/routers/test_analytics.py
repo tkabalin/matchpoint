@@ -6,7 +6,7 @@ copy of the code's own answer.
 """
 
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 import pytest
@@ -2064,3 +2064,334 @@ def test_head_to_head_detail_classifies_a_tiebreak_loss_first(
         {"label": "Broken early", "value": 0, "secondary_value": None, "max": 1},
         {"label": "Tiebreak", "value": 1, "secondary_value": None, "max": 1},
     ]
+
+
+# --- squad members (#204) ---
+
+SQUAD_PATH = "/squad/analytics/members"
+
+FORCED_UNFORCED = "Forced : Unforced ratio"
+FIRST_SERVE_IN = "1st serve in %"
+
+
+def _squad(client: TestClient) -> Any:
+    response = client.get(SQUAD_PATH)
+    assert response.status_code == 200
+    return response.json()
+
+
+def _captured_match(
+    db_session: Session,
+    player_id: uuid.UUID,
+    played_on: date,
+    *,
+    forced: int = 0,
+    mistake: int = 0,
+    first_in: int = 0,
+    faults: int = 0,
+    result: MatchResult | None = None,
+) -> None:
+    """One match holding exactly the point tallies the two tracked stats read.
+
+    Rally endings are logged on the opponent's serve and serve attempts as aces or
+    double faults, so the forced : unforced ratio and the first-serve percentage can
+    be arranged independently of each other.
+    """
+    match = make_match(db_session, player_id=player_id, played_on=played_on, result=result)
+    sequence = 0
+    for won, reason in [(True, EndReason.FORCED)] * forced + [(False, EndReason.MISTAKE)] * mistake:
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            server=MatchSide.OPPONENT,
+            serve1_box=None,
+            return_outcome=ReturnOutcome.IN,
+            won=won,
+            end_reason=reason,
+        )
+        sequence += 1
+    for landed in [True] * first_in + [False] * faults:
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            won=landed,
+            serve1_outcome=ServeOutcome.IN if landed else ServeOutcome.FAULT,
+            serve1_box=CourtSide.DEUCE if landed else None,
+            serve1_fault_mode=None if landed else FailureMode.NET,
+            end_reason=EndReason.ACE if landed else EndReason.DOUBLE_FAULT,
+            wing=None,
+            shot_type=None,
+        )
+        sequence += 1
+
+
+def test_squad_members_requires_a_session(client: TestClient) -> None:
+    response = client.get(SQUAD_PATH)
+
+    assert response.status_code == 401
+
+
+def test_squad_members_is_empty_without_a_roster(client: TestClient, coach: Coach) -> None:
+    assert _squad(client) == []
+
+
+def test_squad_members_covers_a_player_with_no_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A roster row with nothing behind it: absent figures, never zeroed ones."""
+    player = make_player(db_session, coach_id=coach.id)
+
+    assert _squad(client) == [
+        {
+            "player_id": str(player.id),
+            "matches_logged_this_period": 0,
+            "last5": [],
+            "forced_to_unforced_ratio": None,
+            "current_streak": None,
+            "days_since_last_match": None,
+            "tracked_stats": [],
+        }
+    ]
+
+
+def test_squad_members_is_the_coachs_own_roster_by_name(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Surname order, as the roster list itself is, and nobody else's players."""
+    zubair = make_player(db_session, coach_id=coach.id, last_name="Zubair")
+    abbott = make_player(db_session, coach_id=coach.id, last_name="Abbott")
+    make_player(db_session)
+
+    body = _squad(client)
+
+    assert [row["player_id"] for row in body] == [str(abbott.id), str(zubair.id)]
+
+
+def test_squad_members_counts_the_period_and_the_streak(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The period is this calendar year; the streak and the results are not.
+
+    Two matches this year (one still without a result) and one last year. The period
+    counts two and its ratio is 2/1, last year's 5 forced wins left out of it. The
+    streak reads off every result, so it is the one win of 1 July.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session,
+        player.id,
+        date(THIS_YEAR, 7, 1),
+        forced=2,
+        mistake=1,
+        result=MatchResult.WIN,
+    )
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2))
+    _captured_match(db_session, player.id, date(LAST_YEAR, 5, 1), forced=5, result=MatchResult.LOSS)
+
+    row = _squad(client)[0]
+
+    assert row["matches_logged_this_period"] == 2
+    assert row["forced_to_unforced_ratio"] == 2.0
+    assert row["last5"] == ["loss", "win"]
+    assert row["current_streak"] == {"outcome": "win", "length": 1}
+    assert row["days_since_last_match"] == (date.today() - date(THIS_YEAR, 7, 2)).days
+
+
+def test_squad_members_streak_runs_while_the_result_repeats(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Won, then lost three: the run is the three losses, and stops at the win."""
+    player = make_player(db_session, coach_id=coach.id)
+    for day, result in enumerate(["win", "loss", "loss", "loss"], start=1):
+        make_match(
+            db_session,
+            player_id=player.id,
+            played_on=date(THIS_YEAR, 7, day),
+            result=MatchResult(result),
+        )
+
+    row = _squad(client)[0]
+
+    assert row["current_streak"] == {"outcome": "loss", "length": 3}
+    assert row["last5"] == ["win", "loss", "loss", "loss"]
+
+
+def test_squad_members_days_since_the_last_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Counted off the newest match whether or not it has a result."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(db_session, player_id=player.id, played_on=date.today() - timedelta(days=9))
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=date.today() - timedelta(days=3),
+        result=None,
+    )
+
+    assert _squad(client)[0]["days_since_last_match"] == 3
+
+
+def test_squad_members_tracked_stats_measure_their_own_baseline(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Four matches, both stats moving: the latest value against the three before it.
+
+    Ratios oldest first are 1.0, 3.0, 2.0, 0.5, so the current value is 0.5 and the
+    baseline is 2.0, 3.0, 1.0: mean 2.0, deviation sqrt(2/3) = 0.82. First serves in
+    are 60%, 70%, 50%, 40%, so 40 against a baseline of 50, 70, 60: mean 60,
+    deviation sqrt(200/3) = 8.16.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    tallies = [(1, 1, 6, 4), (3, 1, 7, 3), (2, 1, 5, 5), (1, 2, 4, 6)]
+    for day, (forced, mistake, first_in, faults) in enumerate(tallies, start=1):
+        _captured_match(
+            db_session,
+            player.id,
+            date(THIS_YEAR, 7, day),
+            forced=forced,
+            mistake=mistake,
+            first_in=first_in,
+            faults=faults,
+        )
+
+    row = _squad(client)[0]
+
+    assert row["tracked_stats"] == [
+        {
+            "key": "forced_to_unforced",
+            "label": FORCED_UNFORCED,
+            "unit": "ratio",
+            "current": 0.5,
+            "rolling_mean": 2.0,
+            "rolling_std_dev": 0.82,
+        },
+        {
+            "key": "first_serve_in",
+            "label": FIRST_SERVE_IN,
+            "unit": "percent",
+            "current": 40,
+            "rolling_mean": 60.0,
+            "rolling_std_dev": 8.16,
+        },
+    ]
+    # Summed over the period rather than averaged over the four ratios (1.62).
+    assert row["forced_to_unforced_ratio"] == 1.4
+
+
+def test_squad_members_skip_a_match_a_stat_cannot_answer(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A stat's series is the matches that can answer it, not every match.
+
+    Rallies only on 2 July and no points at all on 3 July, so the ratio's series is
+    0.5, 1.0, 2.0 while the serve percentage's is only 40 and 60. A baseline of one
+    match has no spread, which is a real zero rather than an absent figure.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session, player.id, date(THIS_YEAR, 7, 1), forced=2, mistake=1, first_in=6, faults=4
+    )
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=1, mistake=1)
+    make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 3))
+    _captured_match(
+        db_session, player.id, date(THIS_YEAR, 7, 4), forced=1, mistake=2, first_in=4, faults=6
+    )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 0.5
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.5
+    assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
+    assert stats["first_serve_in"]["current"] == 40
+    assert stats["first_serve_in"]["rolling_mean"] == 60.0
+    assert stats["first_serve_in"]["rolling_std_dev"] == 0.0
+
+
+def test_squad_members_omit_a_stat_without_a_baseline(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One match answers a stat but cannot be its own baseline, so neither is sent."""
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session,
+        player.id,
+        date(THIS_YEAR, 7, 1),
+        forced=2,
+        mistake=1,
+        first_in=6,
+        faults=4,
+        result=MatchResult.WIN,
+    )
+
+    row = _squad(client)[0]
+
+    assert row["tracked_stats"] == []
+    assert row["forced_to_unforced_ratio"] == 2.0
+    assert row["current_streak"] == {"outcome": "win", "length": 1}
+
+
+def test_squad_members_baseline_stops_at_ten_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Twelve matches: the ten before the latest are the baseline, the eleventh is not.
+
+    The oldest match is a 9.0 ratio against ten steady 2.0s. Counting it would put the
+    mean at 2.64 with a deviation of 2.01; the window leaves it out, so the baseline
+    is flat.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=9, mistake=1)
+    for day in range(2, 12):
+        _captured_match(db_session, player.id, date(THIS_YEAR, 7, day), forced=2, mistake=1)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 12), forced=1, mistake=1)
+
+    row = _squad(client)[0]
+
+    assert row["tracked_stats"] == [
+        {
+            "key": "forced_to_unforced",
+            "label": FORCED_UNFORCED,
+            "unit": "ratio",
+            "current": 1.0,
+            "rolling_mean": 2.0,
+            "rolling_std_dev": 0.0,
+        }
+    ]
+
+
+def test_squad_members_ratio_stands_in_for_a_missing_denominator(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """No unforced errors at all leaves no ratio to take, so the count stands in."""
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=3)
+
+    assert _squad(client)[0]["forced_to_unforced_ratio"] == 3.0
+
+
+def test_squad_members_baseline_skips_a_match_with_no_unforced_errors(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The stand-in count is a display convention, so it stays out of the series.
+
+    Four matches, the second of them 8 forced and no unforced. Its stand-in value of
+    8.0 would put the baseline mean at 3.67 and the deviation at 3.09; left out, the
+    series is 0.5 against 2.0 and 1.0, so mean 1.5 and deviation 0.5.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    for day, (forced, mistake) in enumerate([(1, 1), (8, 0), (2, 1), (1, 2)], start=1):
+        _captured_match(
+            db_session, player.id, date(THIS_YEAR, 7, day), forced=forced, mistake=mistake
+        )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 0.5
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.5
+    assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
+    # The period figure still sums the counts, where a zero denominator is the
+    # whole period's rather than one match's.
+    assert _squad(client)[0]["forced_to_unforced_ratio"] == 3.0

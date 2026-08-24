@@ -188,6 +188,19 @@ export type CourtZoneCount = {
 };
 
 /**
+ * CurrentStreak
+ *
+ * The latest result, and how many matches in a row it has run for.
+ */
+export type CurrentStreak = {
+    /**
+     * Length
+     */
+    length: number;
+    outcome: MatchResult;
+};
+
+/**
  * DistributionBucket
  *
  * One histogram bar: how many of the window's matches fell in this range.
@@ -1458,9 +1471,82 @@ export type SlopeLine = {
 };
 
 /**
+ * SquadMemberStats
+ *
+ * One roster player's inputs to the home screen's squad snapshot (#204).
+ *
+ * Inputs and never a verdict: which of these amounts to needing attention is the
+ * client's rule, so the thresholds live there and the windows live here.
+ */
+export type SquadMemberStats = {
+    current_streak: CurrentStreak | null;
+    /**
+     * Days Since Last Match
+     */
+    days_since_last_match: number | null;
+    /**
+     * Forced To Unforced Ratio
+     */
+    forced_to_unforced_ratio: number | null;
+    /**
+     * Last5
+     */
+    last5: Array<MatchResult>;
+    /**
+     * Matches Logged This Period
+     */
+    matches_logged_this_period: number;
+    /**
+     * Player Id
+     */
+    player_id: string;
+    /**
+     * Tracked Stats
+     */
+    tracked_stats: Array<TrackedStat>;
+};
+
+/**
  * Surface
  */
 export type Surface = 'hard' | 'clay' | 'grass' | 'carpet';
+
+/**
+ * TrackedStat
+ *
+ * One statistic's latest value beside the player's own recent baseline.
+ *
+ * Both stats here are oriented so a higher `current` is the better direction, which
+ * is what lets the client read a value below the mean as worse than usual for this
+ * player whichever stat it belongs to.
+ */
+export type TrackedStat = {
+    /**
+     * Current
+     */
+    current: number;
+    key: TrackedStatKey;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Rolling Mean
+     */
+    rolling_mean: number;
+    /**
+     * Rolling Std Dev
+     */
+    rolling_std_dev: number;
+    unit: MetricUnit;
+};
+
+/**
+ * TrackedStatKey
+ *
+ * Which statistic one tracked-stat row carries.
+ */
+export type TrackedStatKey = 'forced_to_unforced' | 'first_serve_in';
 
 /**
  * TrendStats
@@ -3502,3 +3588,34 @@ export type CreatePlayerTransferCodeResponses = {
 };
 
 export type CreatePlayerTransferCodeResponse = CreatePlayerTransferCodeResponses[keyof CreatePlayerTransferCodeResponses];
+
+export type ListSquadMemberStatsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/squad/analytics/members';
+};
+
+export type ListSquadMemberStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListSquadMemberStatsError = ListSquadMemberStatsErrors[keyof ListSquadMemberStatsErrors];
+
+export type ListSquadMemberStatsResponses = {
+    /**
+     * Response List Squad Member Stats
+     *
+     * Successful Response
+     */
+    200: Array<SquadMemberStats>;
+};
+
+export type ListSquadMemberStatsResponse = ListSquadMemberStatsResponses[keyof ListSquadMemberStatsResponses];

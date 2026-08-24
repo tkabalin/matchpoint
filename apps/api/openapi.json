@@ -320,6 +320,24 @@
         "title": "CourtZoneCount",
         "type": "object"
       },
+      "CurrentStreak": {
+        "description": "The latest result, and how many matches in a row it has run for.",
+        "properties": {
+          "length": {
+            "title": "Length",
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/MatchResult"
+          }
+        },
+        "required": [
+          "outcome",
+          "length"
+        ],
+        "title": "CurrentStreak",
+        "type": "object"
+      },
       "DistributionBucket": {
         "description": "One histogram bar: how many of the window's matches fell in this range.",
         "properties": {
@@ -2851,6 +2869,77 @@
         "title": "SlopeLine",
         "type": "object"
       },
+      "SquadMemberStats": {
+        "description": "One roster player's inputs to the home screen's squad snapshot (#204).\n\nInputs and never a verdict: which of these amounts to needing attention is the\nclient's rule, so the thresholds live there and the windows live here.",
+        "properties": {
+          "current_streak": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentStreak"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "days_since_last_match": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days Since Last Match"
+          },
+          "forced_to_unforced_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forced To Unforced Ratio"
+          },
+          "last5": {
+            "items": {
+              "$ref": "#/components/schemas/MatchResult"
+            },
+            "title": "Last5",
+            "type": "array"
+          },
+          "matches_logged_this_period": {
+            "title": "Matches Logged This Period",
+            "type": "integer"
+          },
+          "player_id": {
+            "format": "uuid",
+            "title": "Player Id",
+            "type": "string"
+          },
+          "tracked_stats": {
+            "items": {
+              "$ref": "#/components/schemas/TrackedStat"
+            },
+            "title": "Tracked Stats",
+            "type": "array"
+          }
+        },
+        "required": [
+          "player_id",
+          "matches_logged_this_period",
+          "last5",
+          "forced_to_unforced_ratio",
+          "current_streak",
+          "days_since_last_match",
+          "tracked_stats"
+        ],
+        "title": "SquadMemberStats",
+        "type": "object"
+      },
       "Surface": {
         "enum": [
           "hard",
@@ -2859,6 +2948,52 @@
           "carpet"
         ],
         "title": "Surface",
+        "type": "string"
+      },
+      "TrackedStat": {
+        "description": "One statistic's latest value beside the player's own recent baseline.\n\nBoth stats here are oriented so a higher `current` is the better direction, which\nis what lets the client read a value below the mean as worse than usual for this\nplayer whichever stat it belongs to.",
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "number"
+          },
+          "key": {
+            "$ref": "#/components/schemas/TrackedStatKey"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rolling_mean": {
+            "title": "Rolling Mean",
+            "type": "number"
+          },
+          "rolling_std_dev": {
+            "title": "Rolling Std Dev",
+            "type": "number"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/MetricUnit"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "unit",
+          "current",
+          "rolling_mean",
+          "rolling_std_dev"
+        ],
+        "title": "TrackedStat",
+        "type": "object"
+      },
+      "TrackedStatKey": {
+        "description": "Which statistic one tracked-stat row carries.",
+        "enum": [
+          "forced_to_unforced",
+          "first_serve_in"
+        ],
+        "title": "TrackedStatKey",
         "type": "string"
       },
       "TrendStats": {
@@ -6251,6 +6386,52 @@
         "summary": "Create Player Transfer Code",
         "tags": [
           "players"
+        ]
+      }
+    },
+    "/squad/analytics/members": {
+      "get": {
+        "description": "Per-player inputs to the home screen's squad snapshot, one row per roster player.\n\nThe thresholds that turn these numbers into a flag are the web app's\n(`lib/analytics/attention.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period` and the forced : unforced\nratio; the streak, the last five results and the days since the last match are\ncounted over every match, so a run that started in December is still a run in\nJanuary. A tracked stat's `current` is its value over the latest match that can\nanswer it, against a baseline of the ten matches before that one.",
+        "operationId": "list_squad_member_stats",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SquadMemberStats"
+                  },
+                  "title": "Response List Squad Member Stats",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Squad Member Stats",
+        "tags": [
+          "analytics"
         ]
       }
     }

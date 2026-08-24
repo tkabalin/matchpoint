@@ -9,6 +9,7 @@ as a terrible score rather than an absent one.
 """
 
 import enum
+import uuid
 
 from pydantic import BaseModel
 
@@ -391,3 +392,57 @@ class HeadToHeadDetail(HeadToHeadSummary):
     # The player's own point-winning shots alone, where the rally tab carries both
     # sides: this view has no won/lost toggle for a second set to answer.
     shot_frequency: list[ShotShare]
+
+
+class TrackedStatKey(enum.StrEnum):
+    """Which statistic one tracked-stat row carries."""
+
+    FORCED_TO_UNFORCED = "forced_to_unforced"
+    FIRST_SERVE_IN = "first_serve_in"
+
+
+class TrackedStat(BaseModel):
+    """One statistic's latest value beside the player's own recent baseline.
+
+    Both stats here are oriented so a higher `current` is the better direction, which
+    is what lets the client read a value below the mean as worse than usual for this
+    player whichever stat it belongs to.
+    """
+
+    key: TrackedStatKey
+    label: str
+    unit: MetricUnit
+    current: float
+    # This player's own recent average and spread, never the squad's and never a
+    # fixed target. Zero spread where the baseline matches never differed.
+    rolling_mean: float
+    rolling_std_dev: float
+
+
+class CurrentStreak(BaseModel):
+    """The latest result, and how many matches in a row it has run for."""
+
+    outcome: MatchResult
+    length: int
+
+
+class SquadMemberStats(BaseModel):
+    """One roster player's inputs to the home screen's squad snapshot (#204).
+
+    Inputs and never a verdict: which of these amounts to needing attention is the
+    client's rule, so the thresholds live there and the windows live here.
+    """
+
+    player_id: uuid.UUID
+    # Matches played this calendar year, whether or not a result was recorded.
+    matches_logged_this_period: int
+    # The most recent results, oldest first, at most five, as PlayerOverview's are.
+    last5: list[MatchResult]
+    # Over this period's matches; null until a rally has ended either way.
+    forced_to_unforced_ratio: float | None
+    # Null until one match carries a result, there being no run to measure.
+    current_streak: CurrentStreak | None
+    # Counted over every match, resulted or not: staleness is about data entry.
+    days_since_last_match: int | None
+    # Only the stats this player has the matches to have a baseline for.
+    tracked_stats: list[TrackedStat]

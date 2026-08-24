@@ -1,8 +1,10 @@
 import uuid
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from itertools import takewhile
+from statistics import fmean, pstdev
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -18,6 +20,7 @@ from matchpoint_api.models import (
     MatchResult,
     MatchSet,
     MatchSide,
+    Player,
     Point,
     RallyBucket,
     ReturnOutcome,
@@ -32,6 +35,7 @@ from matchpoint_api.schemas.analytics import (
     BreakdownRow,
     CorrelationPoint,
     CourtZoneCount,
+    CurrentStreak,
     DistributionBucket,
     FaultModeShares,
     FaultModeSplit,
@@ -57,6 +61,9 @@ from matchpoint_api.schemas.analytics import (
     ShotFrequencySides,
     ShotShare,
     SlopeLine,
+    SquadMemberStats,
+    TrackedStat,
+    TrackedStatKey,
     TrendStats,
     TrendWindow,
     WingSplit,
@@ -90,6 +97,18 @@ match_router = APIRouter(
     },
 )
 
+# The squad snapshot (#204) is the whole roster at once rather than one player, so it
+# cannot hang off either prefix above. Same tag and same declared responses: it is the
+# same read, over every player the coach owns.
+squad_router = APIRouter(
+    prefix="/squad/analytics",
+    tags=["analytics"],
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+
 DbSession = Annotated[Session, Depends(get_db)]
 
 # Five is the deepest set number any system in docs/scoring-systems.md reaches, the
@@ -116,11 +135,17 @@ ACES_CAP = 6.0
 RATIO_CAP = 3.0
 
 FORCED_UNFORCED_LABEL = "Forced : Unforced ratio"
+FIRST_SERVE_IN_LABEL = "1st serve in %"
 
 # How many matches the serve trend line carries. Six because the chart draws its
 # match labels at 9px on a phone, and a longer season would crowd them into each
 # other rather than say anything more about recent form.
 SERVE_TREND_MATCHES = 6
+
+# The baseline a squad-snapshot tracked stat's latest value is judged against: the ten
+# matches before it, the widest window the trends tab already counts over. Wide enough
+# that one match cannot set the deviation on its own, recent enough to still be normal.
+BASELINE_MATCHES = 10
 
 _SHOT_LABEL = {
     ShotType.DRIVE: "drive",
@@ -235,22 +260,34 @@ def _per(
     )
 
 
-def _forced_unforced(
-    forced: int, unforced: int, *, baseline: float | None = None, delta: float | None = None
-) -> Metric | None:
-    """The forced : unforced ratio, or None while no rally has ended either way.
+def _ratio_value(forced: int, unforced: int) -> float | None:
+    """The forced : unforced ratio as a bare number, or None with neither counted.
 
-    With no unforced errors at all the true ratio has no value, so the count itself
-    is shown ("4:0") while the bar fills to its ceiling.
+    With no unforced errors at all the true ratio has no value, so the forced count
+    stands in for it, which is what the "4:0" display below says out loud.
     """
     if forced + unforced == 0:
         return None
     if unforced == 0:
-        value = float(forced)
+        return float(forced)
+    return round(forced / unforced, 2)
+
+
+def _forced_unforced(
+    forced: int, unforced: int, *, baseline: float | None = None, delta: float | None = None
+) -> Metric | None:
+    """The forced : unforced ratio as a metric, or None while no rally has ended.
+
+    With no unforced errors the count itself is shown ("4:0") while the bar fills to
+    its ceiling.
+    """
+    value = _ratio_value(forced, unforced)
+    if value is None:
+        return None
+    if unforced == 0:
         display = f"{forced}:0"
         ceiling = value
     else:
-        value = round(forced / unforced, 2)
         display = None
         ceiling = max(RATIO_CAP, value)
     return Metric(
@@ -706,7 +743,7 @@ def _serving_stats(
     matches_sample = f"n={counts.matches_with_points}"
     metrics = [
         _percent("Break points saved", counts.bp_saved, counts.bp_faced),
-        _percent("1st serve in %", counts.first_in, counts.serve_points),
+        _percent(FIRST_SERVE_IN_LABEL, counts.first_in, counts.serve_points),
         _percent("1st serve points won", counts.first_in_won, counts.first_in),
         _percent("2nd serve points won", counts.second_won, counts.second_points),
         _per(
@@ -1188,7 +1225,7 @@ def get_trend_stats(
     current_ids = [row.id for row in current]
     return TrendStats(
         metrics=metrics,
-        distribution_label="1st serve in %",
+        distribution_label=FIRST_SERVE_IN_LABEL,
         distribution=_serve_in_distribution(db, current_ids),
         correlation=_error_correlation(db, current_ids),
     )
@@ -1457,3 +1494,207 @@ def get_head_to_head(
         won_by_shot=won_by_shot,
         shot_frequency=shot_frequency.you,
     )
+
+
+def _percent_value(part: int, whole: int) -> float | None:
+    """A whole-number percentage, or None while nothing has been counted."""
+    if whole == 0:
+        return None
+    return round(100 * part / whole)
+
+
+def _series_ratio(forced: int, unforced: int) -> float | None:
+    """The forced : unforced ratio only where the denominator is real.
+
+    Not `_ratio_value`: the forced count it stands in with is a display convention
+    ("4:0"), and as a series member it would set the spread for the whole baseline
+    off one clean match, which is a z-score the client cannot read.
+    """
+    if unforced == 0:
+        return None
+    return round(forced / unforced, 2)
+
+
+@dataclass(frozen=True)
+class _TrackedStatSpec:
+    """One tracked stat: how it is labelled, and its value over one match's points."""
+
+    key: TrackedStatKey
+    label: str
+    unit: MetricUnit
+    value: Callable[[Row[Any]], float | None]
+
+
+# Two stats, both oriented so higher is better, which is what `TrackedStat` promises
+# the client. A third would need that orientation before it could join them.
+_TRACKED_STATS = (
+    _TrackedStatSpec(
+        TrackedStatKey.FORCED_TO_UNFORCED,
+        FORCED_UNFORCED_LABEL,
+        MetricUnit.RATIO,
+        lambda counts: _series_ratio(counts.forced_won, counts.mistake_lost),
+    ),
+    _TrackedStatSpec(
+        TrackedStatKey.FIRST_SERVE_IN,
+        FIRST_SERVE_IN_LABEL,
+        MetricUnit.PERCENT,
+        lambda counts: _percent_value(counts.first_in, counts.serve_points),
+    ),
+)
+
+
+def _roster_matches(
+    db: Session, player_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, list[Row[Any]]]:
+    """Every match on the roster, newest first, grouped by player.
+
+    One query for the whole roster rather than one per player, and every player gets
+    an entry so a roster row is never dropped for having no matches.
+    """
+    grouped: dict[uuid.UUID, list[Row[Any]]] = {player_id: [] for player_id in player_ids}
+    for row in db.execute(
+        select(Match.player_id, Match.id, Match.played_on, Match.result)
+        .where(Match.player_id.in_(player_ids))
+        .order_by(Match.played_on.desc(), Match.created_at.desc())
+    ):
+        grouped[row.player_id].append(row)
+    return grouped
+
+
+def _tracked_counts_by_match(
+    db: Session, player_ids: Sequence[uuid.UUID]
+) -> dict[uuid.UUID, Row[Any]]:
+    """The tracked stats' tallies for every match on the roster, one row per match.
+
+    Grouped by match and not by player because each stat's baseline is a series of
+    per-match values; the period's own ratio is summed back off these rows.
+    """
+    tracked = Point.server == MatchSide.TRACKED
+    rows = db.execute(
+        select(
+            Point.match_id,
+            func.count()
+            .filter(and_(Point.won, Point.end_reason == EndReason.FORCED))
+            .label("forced_won"),
+            func.count()
+            .filter(and_(~Point.won, Point.end_reason == EndReason.MISTAKE))
+            .label("mistake_lost"),
+            func.count().filter(tracked).label("serve_points"),
+            func.count()
+            .filter(and_(tracked, Point.serve1_outcome != ServeOutcome.FAULT))
+            .label("first_in"),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(Match.player_id.in_(player_ids))
+        .group_by(Point.match_id)
+    ).all()
+    return {row.match_id: row for row in rows}
+
+
+def _current_streak(resulted_newest_first: Sequence[Row[Any]]) -> CurrentStreak | None:
+    """The latest result and its run, or None until one match carries a result."""
+    if not resulted_newest_first:
+        return None
+    outcome = resulted_newest_first[0].result
+    run = takewhile(lambda row: row.result == outcome, resulted_newest_first)
+    return CurrentStreak(outcome=outcome, length=sum(1 for _ in run))
+
+
+def _tracked_stat(
+    spec: _TrackedStatSpec,
+    matches_newest_first: Sequence[Row[Any]],
+    counts_by_match: dict[uuid.UUID, Row[Any]],
+) -> TrackedStat | None:
+    """The stat's latest value against the baseline before it, or None without both.
+
+    A match the stat cannot be computed over is skipped rather than counted as zero,
+    so the series holds the player's real values in order, and two of them are the
+    least a mean and a deviation can be taken from.
+    """
+    values: list[float] = []
+    for row in matches_newest_first:
+        counts = counts_by_match.get(row.id)
+        if counts is None:
+            continue
+        value = spec.value(counts)
+        if value is not None:
+            values.append(value)
+    if len(values) < 2:
+        return None
+    # The latest value is left out of its own baseline: counted in, a single match
+    # pulls the mean toward itself and caps how far from it the value can ever sit.
+    baseline = values[1 : 1 + BASELINE_MATCHES]
+    return TrackedStat(
+        key=spec.key,
+        label=spec.label,
+        unit=spec.unit,
+        current=values[0],
+        rolling_mean=round(fmean(baseline), 2),
+        # Population and not sample deviation: a baseline of one match has no sample
+        # deviation at all, where the population figure is zero and the client's own
+        # rule already skips a stat that never moved. Rounding a divisor is also the
+        # epsilon on that rule, a spread this small being noise to divide by.
+        rolling_std_dev=round(pstdev(baseline), 2),
+    )
+
+
+def _squad_member(
+    player_id: uuid.UUID,
+    matches_newest_first: Sequence[Row[Any]],
+    counts_by_match: dict[uuid.UUID, Row[Any]],
+) -> SquadMemberStats:
+    today = date.today()
+    period = [row for row in matches_newest_first if row.played_on.year == today.year]
+    resulted = [row for row in matches_newest_first if row.result is not None]
+    period_counts = [counts_by_match[row.id] for row in period if row.id in counts_by_match]
+    return SquadMemberStats(
+        player_id=player_id,
+        matches_logged_this_period=len(period),
+        last5=[row.result for row in reversed(resulted[:5])],
+        # Summed over the period's matches rather than averaged over their ratios, so
+        # a match of four points weighs what four points are worth.
+        forced_to_unforced_ratio=_ratio_value(
+            sum(counts.forced_won for counts in period_counts),
+            sum(counts.mistake_lost for counts in period_counts),
+        ),
+        current_streak=_current_streak(resulted),
+        days_since_last_match=(
+            (today - matches_newest_first[0].played_on).days if matches_newest_first else None
+        ),
+        tracked_stats=[
+            stat
+            for stat in (
+                _tracked_stat(spec, matches_newest_first, counts_by_match)
+                for spec in _TRACKED_STATS
+            )
+            if stat is not None
+        ],
+    )
+
+
+@squad_router.get("/members", response_model=list[SquadMemberStats])
+def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMemberStats]:
+    """Per-player inputs to the home screen's squad snapshot, one row per roster player.
+
+    The thresholds that turn these numbers into a flag are the web app's
+    (`lib/analytics/attention.ts`); what this endpoint owns is the windows they are
+    measured over. The period is the calendar year, as the overview tab's season
+    record is, and scopes `matches_logged_this_period` and the forced : unforced
+    ratio; the streak, the last five results and the days since the last match are
+    counted over every match, so a run that started in December is still a run in
+    January. A tracked stat's `current` is its value over the latest match that can
+    answer it, against a baseline of the ten matches before that one.
+    """
+    roster = list(
+        db.scalars(
+            select(Player.id)
+            .where(Player.coach_id == coach.id)
+            .order_by(Player.last_name, Player.first_name)
+        )
+    )
+    if not roster:
+        return []
+    matches = _roster_matches(db, roster)
+    counts_by_match = _tracked_counts_by_match(db, roster)
+    return [_squad_member(player_id, matches[player_id], counts_by_match) for player_id in roster]

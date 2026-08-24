@@ -223,6 +223,7 @@ def create_app() -> FastAPI:
     app.include_router(players.router)
     app.include_router(analytics.router)
     app.include_router(analytics.match_router)
+    app.include_router(analytics.squad_router)
     app.include_router(matches.router)
 
     # A Mount rather than a route, and so absent from the spec: only APIRoutes reach the

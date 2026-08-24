@@ -221,6 +221,16 @@ export const zMatchCaptureRead = z.object({
 export const zMatchResult = z.enum(['win', 'loss']);
 
 /**
+ * CurrentStreak
+ *
+ * The latest result, and how many matches in a row it has run for.
+ */
+export const zCurrentStreak = z.object({
+    length: z.int(),
+    outcome: zMatchResult
+});
+
+/**
  * MatchSide
  *
  * One side of a match, the coach's tracked player or their opponent.
@@ -716,6 +726,49 @@ export const zMatchUpdate = z.object({
     result: zMatchResult.nullish(),
     scoring_system: zScoringSystem.nullish(),
     surface: zSurface.nullish()
+});
+
+/**
+ * TrackedStatKey
+ *
+ * Which statistic one tracked-stat row carries.
+ */
+export const zTrackedStatKey = z.enum(['forced_to_unforced', 'first_serve_in']);
+
+/**
+ * TrackedStat
+ *
+ * One statistic's latest value beside the player's own recent baseline.
+ *
+ * Both stats here are oriented so a higher `current` is the better direction, which
+ * is what lets the client read a value below the mean as worse than usual for this
+ * player whichever stat it belongs to.
+ */
+export const zTrackedStat = z.object({
+    current: z.number(),
+    key: zTrackedStatKey,
+    label: z.string(),
+    rolling_mean: z.number(),
+    rolling_std_dev: z.number(),
+    unit: zMetricUnit
+});
+
+/**
+ * SquadMemberStats
+ *
+ * One roster player's inputs to the home screen's squad snapshot (#204).
+ *
+ * Inputs and never a verdict: which of these amounts to needing attention is the
+ * client's rule, so the thresholds live there and the windows live here.
+ */
+export const zSquadMemberStats = z.object({
+    current_streak: zCurrentStreak.nullable(),
+    days_since_last_match: z.int().nullable(),
+    forced_to_unforced_ratio: z.number().nullable(),
+    last5: z.array(zMatchResult),
+    matches_logged_this_period: z.int(),
+    player_id: z.uuid(),
+    tracked_stats: z.array(zTrackedStat)
 });
 
 /**
@@ -1494,3 +1547,10 @@ export const zCreatePlayerTransferCodePath = z.object({
  * Successful Response
  */
 export const zCreatePlayerTransferCodeResponse = zPlayerTransferCodeRead;
+
+/**
+ * Response List Squad Member Stats
+ *
+ * Successful Response
+ */
+export const zListSquadMemberStatsResponse = z.array(zSquadMemberStats);
