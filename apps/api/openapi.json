@@ -4179,6 +4179,196 @@
         ]
       }
     },
+    "/matches/{match_id}/analytics/rally": {
+      "get": {
+        "description": "The rally tab for one match, in the shape the player-wide route answers in.",
+        "operationId": "get_match_rally_stats",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Count only points from this set.",
+            "in": "query",
+            "name": "set_number",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 5,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only points from this set.",
+              "title": "Set Number"
+            }
+          },
+          {
+            "description": "Count only points the capture client stamped as this moment.",
+            "in": "query",
+            "name": "phase",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PointPhase",
+              "default": "full",
+              "description": "Count only points the capture client stamped as this moment."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RallyStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Match Rally Stats",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/matches/{match_id}/analytics/serve": {
+      "get": {
+        "description": "The serve tab for one match, in the shape the player-wide route answers in.",
+        "operationId": "get_match_serve_stats",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Count only points from this set.",
+            "in": "query",
+            "name": "set_number",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 5,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only points from this set.",
+              "title": "Set Number"
+            }
+          },
+          {
+            "description": "Count only points the capture client stamped as this moment.",
+            "in": "query",
+            "name": "phase",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PointPhase",
+              "default": "full",
+              "description": "Count only points the capture client stamped as this moment."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServeStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Match Serve Stats",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/matches/{match_id}/capture": {
       "post": {
         "description": "Claim a match for capture on this device, or renew a claim it already holds.",

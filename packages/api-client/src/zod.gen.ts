@@ -1059,6 +1059,34 @@ export const zUpdateMatchPath = z.object({
  */
 export const zUpdateMatchResponse = zMatchRead;
 
+export const zGetMatchRallyStatsPath = z.object({
+    match_id: z.uuid()
+});
+
+export const zGetMatchRallyStatsQuery = z.object({
+    set_number: z.int().gte(1).lte(5).nullish(),
+    phase: zPointPhase.optional().default('full')
+});
+
+/**
+ * Successful Response
+ */
+export const zGetMatchRallyStatsResponse = zRallyStats;
+
+export const zGetMatchServeStatsPath = z.object({
+    match_id: z.uuid()
+});
+
+export const zGetMatchServeStatsQuery = z.object({
+    set_number: z.int().gte(1).lte(5).nullish(),
+    phase: zPointPhase.optional().default('full')
+});
+
+/**
+ * Successful Response
+ */
+export const zGetMatchServeStatsResponse = zServeStats;
+
 export const zClaimCaptureBody = zMatchCaptureClaim;
 
 export const zClaimCapturePath = z.object({

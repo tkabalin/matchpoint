@@ -775,6 +775,133 @@ def test_filters_reject_a_value_outside_the_contract(
     assert response.status_code == 422
 
 
+# --- per-match scoping ---
+
+# The match-scoped router answers the same two tabs, so its tests cover the same pair.
+MATCH_ENDPOINTS = ["serve", "rally"]
+
+
+def _get_match(client: TestClient, match_id: uuid.UUID, suffix: str) -> Any:
+    response = client.get(f"/matches/{match_id}/analytics/{suffix}")
+    assert response.status_code == 200
+    return response.json()
+
+
+@pytest.mark.parametrize("suffix", MATCH_ENDPOINTS)
+def test_match_routes_require_a_session(client: TestClient, suffix: str) -> None:
+    response = client.get(f"/matches/{uuid.uuid4()}/analytics/{suffix}")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("suffix", MATCH_ENDPOINTS)
+def test_match_routes_hide_another_coachs_match(
+    client: TestClient, db_session: Session, coach: Coach, suffix: str
+) -> None:
+    other_coachs_match = make_match(db_session)
+
+    response = client.get(f"/matches/{other_coachs_match.id}/analytics/{suffix}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
+
+
+def test_match_serve_stats_leave_the_players_other_matches_out(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two matches, one point of each kind in each: the scoped answer sees one match.
+
+    Both sides are arranged, since the returning breakdown runs a query of its own
+    and would otherwise stay player-wide while the metrics narrowed.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    scoped = make_match(db_session, player_id=player.id)
+    other = make_match(db_session, player_id=player.id)
+    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    make_point(db_session, match_id=scoped.id, sequence=0)
+    make_point(
+        db_session,
+        match_id=scoped.id,
+        sequence=1,
+        **opponent_serve,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=other.id,
+        sequence=0,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=other.id,
+        sequence=1,
+        **opponent_serve,
+        return_outcome=ReturnOutcome.NET,
+        won=False,
+        end_reason=EndReason.MISTAKE,
+        wing=None,
+        shot_type=None,
+    )
+
+    body = _get_match(client, scoped.id, "serve")
+
+    first_in = next(
+        metric for metric in body["serving"]["metrics"] if metric["label"] == "1st serve in %"
+    )
+    assert (first_in["value"], first_in["sample_size"]) == (100, "n=1")
+    assert body["returning"]["breakdown"] == [
+        {"label": "Returned in", "value": 1, "secondary_value": None, "max": 1},
+        {"label": "Return error (net)", "value": 0, "secondary_value": None, "max": 1},
+        {"label": "Return error (long)", "value": 0, "secondary_value": None, "max": 1},
+        {"label": "Return error (wide)", "value": 0, "secondary_value": None, "max": 1},
+    ]
+    # The same two figures over both matches, so the scoping is what the assertions
+    # above are reading and not an arrangement that would answer the same either way.
+    player_wide = _get(client, player.id, "serve")
+    player_first_in = next(
+        metric
+        for metric in player_wide["serving"]["metrics"]
+        if metric["label"] == "1st serve in %"
+    )
+    assert (player_first_in["value"], player_first_in["sample_size"]) == (50, "n=2")
+    assert player_wide["returning"]["breakdown"][1]["value"] == 1
+
+
+def test_match_rally_stats_leave_the_players_other_matches_out(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A forced win in one match and an unforced loss in the other."""
+    player = make_player(db_session, coach_id=coach.id)
+    scoped = make_match(db_session, player_id=player.id)
+    other = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=scoped.id, sequence=0)
+    make_point(
+        db_session,
+        match_id=other.id,
+        sequence=0,
+        won=False,
+        end_reason=EndReason.MISTAKE,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.LOB,
+    )
+
+    body = _get_match(client, scoped.id, "rally")
+
+    assert body["won_by_shot"] == [
+        {"label": "Forehand drive", "value": 1, "secondary_value": None, "max": 1}
+    ]
+    assert body["lost_by_shot"] == []
+    assert body["outcome_mix"] == [{"label": "You", "forced": 100, "unforced": 0}]
+    assert body["errors_overall"]["sample_size"] == "n=1"
+    player_wide = _get(client, player.id, "rally")
+    assert len(player_wide["lost_by_shot"]) == 1
+    assert player_wide["errors_overall"]["sample_size"] == "n=2"
+
+
 # --- trends ---
 
 

@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getHeadToHead, getMatch, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getTrendStats, health, ingestPoints, listHeadToHead, listMatches, listPlayers, listPoints, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetHeadToHeadData, GetHeadToHeadError, GetHeadToHeadResponse, GetMatchData, GetMatchError, GetMatchResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetTrendStatsData, GetTrendStatsError, GetTrendStatsResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListHeadToHeadData, ListHeadToHeadError, ListHeadToHeadResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getHeadToHead, getMatch, getMatchRallyStats, getMatchServeStats, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getTrendStats, health, ingestPoints, listHeadToHead, listMatches, listPlayers, listPoints, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetHeadToHeadData, GetHeadToHeadError, GetHeadToHeadResponse, GetMatchData, GetMatchError, GetMatchRallyStatsData, GetMatchRallyStatsError, GetMatchRallyStatsResponse, GetMatchResponse, GetMatchServeStatsData, GetMatchServeStatsError, GetMatchServeStatsResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetTrendStatsData, GetTrendStatsError, GetTrendStatsResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListHeadToHeadData, ListHeadToHeadError, ListHeadToHeadResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -540,6 +540,46 @@ export const updateMatchMutation = (options?: Partial<Options<UpdateMatchData>>)
     };
     return mutationOptions;
 };
+
+export const getMatchRallyStatsQueryKey = (options: Options<GetMatchRallyStatsData>) => createQueryKey('getMatchRallyStats', options);
+
+/**
+ * Get Match Rally Stats
+ *
+ * The rally tab for one match, in the shape the player-wide route answers in.
+ */
+export const getMatchRallyStatsOptions = (options: Options<GetMatchRallyStatsData>) => queryOptions<GetMatchRallyStatsResponse, GetMatchRallyStatsError, GetMatchRallyStatsResponse, ReturnType<typeof getMatchRallyStatsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getMatchRallyStats({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getMatchRallyStatsQueryKey(options)
+});
+
+export const getMatchServeStatsQueryKey = (options: Options<GetMatchServeStatsData>) => createQueryKey('getMatchServeStats', options);
+
+/**
+ * Get Match Serve Stats
+ *
+ * The serve tab for one match, in the shape the player-wide route answers in.
+ */
+export const getMatchServeStatsOptions = (options: Options<GetMatchServeStatsData>) => queryOptions<GetMatchServeStatsResponse, GetMatchServeStatsError, GetMatchServeStatsResponse, ReturnType<typeof getMatchServeStatsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getMatchServeStats({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getMatchServeStatsQueryKey(options)
+});
 
 /**
  * Claim Capture

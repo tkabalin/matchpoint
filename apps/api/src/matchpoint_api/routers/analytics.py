@@ -21,6 +21,7 @@ from matchpoint_api.models import (
     ShotType,
     Wing,
 )
+from matchpoint_api.routers.matches import match_for_coach
 from matchpoint_api.routers.players import owned_player
 from matchpoint_api.schemas.analytics import (
     BreakdownRow,
@@ -50,6 +51,19 @@ from matchpoint_api.schemas.errors import ErrorDetail
 # so nothing here writes, and the ownership 404 stays undeclared as everywhere else.
 router = APIRouter(
     prefix="/players/{player_id}/analytics",
+    tags=["analytics"],
+    responses={
+        401: {"model": ErrorDetail, "description": "Not signed in"},
+        429: {"model": ErrorDetail, "description": "Too many requests"},
+    },
+)
+
+# The per-match tabs are the player's own two tabs scoped to one match, so they answer
+# in the same shapes and differ only in how ownership is reached and what the points
+# are filtered to. A route of their own rather than a match_id parameter on the player
+# routes, which would have to answer for a match belonging to some other player.
+match_router = APIRouter(
+    prefix="/matches/{match_id}/analytics",
     tags=["analytics"],
     responses={
         401: {"model": ErrorDetail, "description": "Not signed in"},
@@ -475,9 +489,9 @@ def _returning_stats(
     ]
     breakdown = []
     if counts.return_points:
-        returns = db.execute(
-            # Labelled "returned" and not "count": Row attribute access would find the
-            # tuple method count() first and hand back a callable instead of the tally.
+        # Labelled "returned" and not "count": Row attribute access would find the
+        # tuple method count() first and hand back a callable instead of the tally.
+        statement = (
             select(Point.return_outcome, func.count().label("returned"))
             .select_from(Point)
             .join(Match, Point.match_id == Match.id)
@@ -488,8 +502,8 @@ def _returning_stats(
                 *scope.conditions(),
             )
             .group_by(Point.return_outcome)
-        ).all()
-        by_outcome = {row.return_outcome.value: row.returned for row in returns}
+        )
+        by_outcome = {row.return_outcome.value: row.returned for row in db.execute(statement)}
         values = {
             "Returned in": by_outcome.get("in", 0),
             "Return error (net)": by_outcome.get("net", 0),
@@ -507,6 +521,15 @@ def _returning_stats(
     )
 
 
+def _serve_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> ServeStats:
+    """The serve tab over whichever of the player's matches the caller scoped to."""
+    counts = _point_counts(db, player_id, scope)
+    return ServeStats(
+        serving=_serving_stats(counts),
+        returning=_returning_stats(db, player_id, counts, scope),
+    )
+
+
 @router.get("/serve", response_model=ServeStats)
 def get_serve_stats(
     player_id: uuid.UUID,
@@ -517,12 +540,21 @@ def get_serve_stats(
 ) -> ServeStats:
     """The serve tab, both sides at once so toggling costs no second request."""
     owned_player(db, player_id, coach.id)
-    scope = PointScope(set_number=set_number, phase=phase)
-    counts = _point_counts(db, player_id, scope)
-    return ServeStats(
-        serving=_serving_stats(counts),
-        returning=_returning_stats(db, player_id, counts, scope),
-    )
+    return _serve_tab(db, player_id, PointScope(set_number=set_number, phase=phase))
+
+
+@match_router.get("/serve", response_model=ServeStats)
+def get_match_serve_stats(
+    match_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    set_number: SetFilter = None,
+    phase: PhaseFilter = PointPhase.FULL,
+) -> ServeStats:
+    """The serve tab for one match, in the shape the player-wide route answers in."""
+    match = match_for_coach(db, match_id, coach.id)
+    scope = PointScope(match_ids=[match.id], set_number=set_number, phase=phase)
+    return _serve_tab(db, match.player_id, scope)
 
 
 def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
@@ -553,17 +585,8 @@ def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
     return rows
 
 
-@router.get("/rally", response_model=RallyStats)
-def get_rally_stats(
-    player_id: uuid.UUID,
-    db: DbSession,
-    coach: CurrentCoach,
-    set_number: SetFilter = None,
-    phase: PhaseFilter = PointPhase.FULL,
-) -> RallyStats:
-    """The rally tab: how points end once the ball is in play."""
-    owned_player(db, player_id, coach.id)
-    scope = PointScope(set_number=set_number, phase=phase)
+def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallyStats:
+    """The rally tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
     won_by_shot, lost_by_shot, shot_frequency = _shot_breakdowns(db, player_id, scope)
     return RallyStats(
@@ -582,6 +605,33 @@ def get_rally_stats(
         ),
         shot_frequency=shot_frequency,
     )
+
+
+@router.get("/rally", response_model=RallyStats)
+def get_rally_stats(
+    player_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    set_number: SetFilter = None,
+    phase: PhaseFilter = PointPhase.FULL,
+) -> RallyStats:
+    """The rally tab: how points end once the ball is in play."""
+    owned_player(db, player_id, coach.id)
+    return _rally_tab(db, player_id, PointScope(set_number=set_number, phase=phase))
+
+
+@match_router.get("/rally", response_model=RallyStats)
+def get_match_rally_stats(
+    match_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    set_number: SetFilter = None,
+    phase: PhaseFilter = PointPhase.FULL,
+) -> RallyStats:
+    """The rally tab for one match, in the shape the player-wide route answers in."""
+    match = match_for_coach(db, match_id, coach.id)
+    scope = PointScope(match_ids=[match.id], set_number=set_number, phase=phase)
+    return _rally_tab(db, match.player_id, scope)
 
 
 def _window_values(

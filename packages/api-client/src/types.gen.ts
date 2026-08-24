@@ -2285,6 +2285,104 @@ export type UpdateMatchResponses = {
 
 export type UpdateMatchResponse = UpdateMatchResponses[keyof UpdateMatchResponses];
 
+export type GetMatchRallyStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: {
+        /**
+         * Set Number
+         *
+         * Count only points from this set.
+         */
+        set_number?: number | null;
+        /**
+         * Count only points the capture client stamped as this moment.
+         */
+        phase?: PointPhase;
+    };
+    url: '/matches/{match_id}/analytics/rally';
+};
+
+export type GetMatchRallyStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetMatchRallyStatsError = GetMatchRallyStatsErrors[keyof GetMatchRallyStatsErrors];
+
+export type GetMatchRallyStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: RallyStats;
+};
+
+export type GetMatchRallyStatsResponse = GetMatchRallyStatsResponses[keyof GetMatchRallyStatsResponses];
+
+export type GetMatchServeStatsData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: {
+        /**
+         * Set Number
+         *
+         * Count only points from this set.
+         */
+        set_number?: number | null;
+        /**
+         * Count only points the capture client stamped as this moment.
+         */
+        phase?: PointPhase;
+    };
+    url: '/matches/{match_id}/analytics/serve';
+};
+
+export type GetMatchServeStatsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetMatchServeStatsError = GetMatchServeStatsErrors[keyof GetMatchServeStatsErrors];
+
+export type GetMatchServeStatsResponses = {
+    /**
+     * Successful Response
+     */
+    200: ServeStats;
+};
+
+export type GetMatchServeStatsResponse = GetMatchServeStatsResponses[keyof GetMatchServeStatsResponses];
+
 export type ClaimCaptureData = {
     body: MatchCaptureClaim;
     path: {
