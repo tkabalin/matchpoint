@@ -192,3 +192,73 @@ test("no Remove photo option when there is no photo to remove", async () => {
   expect(await screen.findByRole("button", { name: "Choose photo" })).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
 });
+
+// The photo hook's failure paths surface as an Alert on this page, and nothing made
+// either request fail — so `photoError` was never non-null anywhere in the suite, and
+// the Alert that reports it had never rendered.
+
+test("a failed photo upload says so, in the server's own words", async () => {
+  stubFetch({
+    "POST /api/coaches/me/photo": () =>
+      Response.json({ detail: "That image is too large" }, { status: 413 }),
+  });
+  const user = userEvent.setup();
+  await renderProfile();
+
+  await user.click(screen.getByRole("button", { name: "Change profile photo" }));
+  await user.click(await screen.findByRole("button", { name: "Choose photo" }));
+  const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+  await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+  expect(await screen.findByText("That image is too large")).toBeInTheDocument();
+  expect(screen.getByText("JC")).toBeInTheDocument();
+});
+
+test("a failed photo removal leaves the photo and explains itself", async () => {
+  stubFetch({
+    "DELETE /api/coaches/me/photo": () => new Response(null, { status: 500 }),
+  });
+  const user = userEvent.setup();
+  await renderProfile({ ...coach, photo_url: "/api/media/abc.webp" });
+
+  await user.click(screen.getByRole("button", { name: "Change profile photo" }));
+  await user.click(await screen.findByRole("button", { name: "Remove photo" }));
+
+  expect(await screen.findByText("Could not remove that photo.")).toBeInTheDocument();
+  expect(screen.getByAltText("")).toHaveAttribute("src", "/api/media/abc.webp");
+});
+
+test("a refused name change keeps the sheet open with the typed name", async () => {
+  stubFetch({
+    "PATCH /api/coaches/me": () =>
+      Response.json({ detail: "That name is not allowed" }, { status: 422 }),
+  });
+  const user = userEvent.setup();
+  await renderProfile();
+
+  await user.click(screen.getByRole("button", { name: "Edit display name" }));
+  const nameField = await screen.findByRole("textbox", { name: "Display name" });
+  await user.clear(nameField);
+  await user.type(nameField, "Jamie C.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(await screen.findByText("That name is not allowed")).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Display name" })).toHaveValue("Jamie C.");
+});
+
+// Dismissing has to drop the draft: the name is re-seeded from the coach record each
+// time the sheet opens, so an abandoned edit reappearing would look saved.
+test("dismissing the edit sheet discards the typed name", async () => {
+  const user = userEvent.setup();
+  await renderProfile();
+
+  await user.click(screen.getByRole("button", { name: "Edit display name" }));
+  const nameField = await screen.findByRole("textbox", { name: "Display name" });
+  await user.clear(nameField);
+  await user.type(nameField, "Someone Else");
+  await user.click(screen.getByRole("button", { name: "Close" }));
+
+  await user.click(screen.getByRole("button", { name: "Edit display name" }));
+
+  expect(await screen.findByRole("textbox", { name: "Display name" })).toHaveValue("Jamie Chen");
+});

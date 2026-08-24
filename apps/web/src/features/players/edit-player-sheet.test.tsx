@@ -288,3 +288,37 @@ test("a refused save keeps the sheet open and shows the server's reason", async 
   expect(await screen.findByText("That username is taken")).toBeInTheDocument();
   expect(screen.getByLabelText("First name")).toHaveValue("Amahlé");
 });
+
+// The photo hook's failure paths surface as an Alert here, and nothing made either
+// request fail, so that Alert had never rendered for a player either.
+
+test("a failed photo upload says so and leaves the initials showing", async () => {
+  stubFetch({
+    [`POST /api/players/${player.id}/photo`]: () =>
+      Response.json({ detail: "That image is too large" }, { status: 413 }),
+  });
+  const user = userEvent.setup();
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));
+  await user.click(await screen.findByRole("button", { name: "Choose photo" }));
+  const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+  await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+  expect(await screen.findByText("That image is too large")).toBeInTheDocument();
+  expect(screen.getByText("AN")).toBeInTheDocument();
+});
+
+test("a failed photo removal explains itself rather than appearing to succeed", async () => {
+  const withPhoto = { ...player, photo_url: "/api/media/abc.webp" };
+  stubFetch({
+    [`DELETE /api/players/${player.id}/photo`]: () => new Response(null, { status: 500 }),
+  });
+  const user = userEvent.setup();
+  await renderSheet(withPhoto);
+
+  await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));
+  await user.click(await screen.findByRole("button", { name: "Remove photo" }));
+
+  expect(await screen.findByText("Could not remove that photo.")).toBeInTheDocument();
+});
