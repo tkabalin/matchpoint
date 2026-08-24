@@ -17,7 +17,7 @@ import {
   Swords,
   TrendingDown,
   TrendingUp,
-  TriangleAlert,
+  CircleAlert,
   UserRound,
   Users,
   X,
@@ -413,7 +413,10 @@ function AttentionCard({
         className="flex-1"
       >
         <ItemMedia>
-          <TriangleAlert className="size-5 text-outcome-forced" aria-hidden="true" />
+          {/* CircleAlert, not TriangleAlert — TriangleAlert already means "unforced
+              error" point-ender style (rally-tab.tsx), per
+              .claude/rules/web-icons.md's canonical registry. */}
+          <CircleAlert className="size-5 text-outcome-forced" aria-hidden="true" />
         </ItemMedia>
         <ItemContent>
           <ItemTitle>{`${player.first_name} ${player.last_name}`}</ItemTitle>

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Activity } from "lucide-react";
+import { History } from "lucide-react";
 
 import { OutcomeStack } from "@/components/outcome-swatch";
 import { StatCard } from "@/components/stat-card";
@@ -54,7 +54,9 @@ export function PlayerRecordCard({
       {recentForm && (
         <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
           <div className="flex items-center gap-2">
-            <Activity className="size-6 shrink-0 text-primary" aria-hidden="true" />
+            {/* History, not Activity — matches home.tsx's own "Last 5" icon for the
+                same "recent form" concept, per .claude/rules/web-icons.md. */}
+            <History className="size-6 shrink-0 text-primary" aria-hidden="true" />
             <span className="text-xs font-semibold text-muted-foreground">
               {`Recent form · last ${recentForm.results.length}${opponentName ? ` vs ${opponentName}` : ""}`}
             </span>

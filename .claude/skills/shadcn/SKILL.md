@@ -19,6 +19,16 @@ A framework for building ui, components and design systems. Components are added
 
 The JSON above contains the project config and installed components. Use `npx shadcn@latest docs <component>` to get documentation and example URLs for any component.
 
+**MatchPoint-specific:** the injected JSON above will show `"style": "base-luma"`, `"baseColor":
+"mist"`, `"menuColor": "default"`, `"menuAccent": "subtle"` — this project's actual choices, not
+generic defaults. For what each of those means in practice, the radius scale actually in use
+(not the stock `rounded-lg`/`rounded-md` this skill's own docs describe), the color/icon rules
+specific to this project, and other prescriptive overrides beyond what shadcn ships, read
+[`.claude/rules/web-shadcn-defaults.md`](../../rules/web-shadcn-defaults.md),
+[`.claude/rules/web-color.md`](../../rules/web-color.md), and
+[`.claude/rules/web-icons.md`](../../rules/web-icons.md) before assuming this skill's generic
+guidance is the last word.
+
 ## Principles
 
 1. **Use existing components first.** Use `npx shadcn@latest search` to check registries before writing custom UI. Check community registries too.

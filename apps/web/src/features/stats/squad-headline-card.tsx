@@ -1,4 +1,4 @@
-import { Flag, Target, Trophy } from "lucide-react";
+import { Flag, Swords, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { StatCard } from "@/components/stat-card";
@@ -38,8 +38,11 @@ export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
           value={formatRecord(headline.record.wins, headline.record.losses)}
           label="Record"
         />
+        {/* Swords, not Target — Target already means "your serve" (serve-tab.tsx's
+            hero icon); Swords matches home.tsx's own Forced:Unforced rows, per
+            .claude/rules/web-icons.md's canonical registry. */}
         <HeadlineStat
-          icon={Target}
+          icon={Swords}
           value={headline.forcedToUnforcedRatio.toFixed(1)}
           label="Forced : Unforced"
         />

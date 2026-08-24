@@ -39,17 +39,37 @@ Every color follows the `name` / `name-foreground` convention. The base variable
 | `--border`                                   | Default border color             |
 | `--input`                                    | Form input borders               |
 | `--ring`                                     | Focus ring color                 |
-| `--chart-1` through `--chart-5`              | Chart/data visualization         |
+| `--chart-1` through `--chart-5`              | Chart/data visualization — **MatchPoint-specific caveat below** |
 | `--sidebar-*`                                | Sidebar-specific colors          |
 | `--surface` / `--surface-foreground`         | Secondary surface                |
 
 Colors use OKLCH: `--primary: oklch(0.205 0 0)` where values are lightness (0–1), chroma (0 = gray), and hue (0–360).
 
+> **MatchPoint-specific:** `--chart-1` through `--chart-5` are installed but currently a single
+> blue hue at five lightness steps, not five distinct categorical colors — they're the *default*
+> treatment for a single-series or non-categorical chart. The moment a chart needs to represent one
+> of MatchPoint's real categories (point outcomes, a squad metric, anything
+> [`.claude/rules/web-color.md`](../../rules/web-color.md) already assigns a hex to), use that
+> seven-color categorical palette instead, never `--chart-*` — see that file's "Dashboard color
+> roles" section and [`.claude/rules/web-shadcn-defaults.md`](../../rules/web-shadcn-defaults.md)'s
+> "Chart colors" section for the exact rule.
+
 ---
 
 ## Dark Mode
 
-Class-based toggle via `.dark` on the root element. In Next.js, use `next-themes`:
+Class-based toggle via `.dark` on the root element — this part matches MatchPoint. **Do not use
+`next-themes`, and do not offer a "System" option that reads `prefers-color-scheme`, in this
+project specifically.** MatchPoint's theme is decided solely by an in-app toggle
+(`apps/web/src/lib/theme.ts`'s `useTheme`/`applyTheme`, wired to Settings > App > Appearance) with
+no OS-preference read anywhere — see [`.claude/rules/web.md`](../../rules/web.md)'s "Dark mode —
+toggle-only" section for why (two independent OS-preference reads drifted out of sync under PWA
+caching, which is what originally broke this). `next-themes` was pulled in once by this skill's own
+generated `sonner.tsx` wrapper and removed — that wrapper now reads `useTheme()` from `theme.ts`
+instead, the pattern to follow for any other component needing the resolved theme.
+
+The snippet below is the generic/stock pattern this skill otherwise ships — useful context for how
+`next-themes` normally works, not something to install here:
 
 ```tsx
 import { ThemeProvider } from "next-themes"
@@ -134,7 +154,20 @@ module.exports = {
 
 ## Border Radius
 
-`--radius` controls border radius globally. Components derive values from it (`rounded-lg` = `var(--radius)`, `rounded-md` = `calc(var(--radius) - 2px)`).
+`--radius` controls border radius globally. Stock shadcn derives a small handful of values from it
+(`rounded-lg` = `var(--radius)`, `rounded-md` = `calc(var(--radius) - 2px)`) — **that stock scale is
+not what MatchPoint uses.**
+
+`apps/web/src/app.css` defines an extended seven-step scale, each a multiple of one base
+`--radius: 0.45rem`: `--radius-sm` (`0.6×`) through `--radius-4xl` (`2.6×`). And per
+[`.claude/rules/web-shadcn-defaults.md`](../../rules/web-shadcn-defaults.md)'s "Radius" section,
+every rectangular component in this project is prescribed to use `rounded-sm` specifically — the
+small end of that scale, not `rounded-lg`/`rounded-md` as the stock example above implies is
+typical — with `rounded-full` reserved for genuinely circular elements. That migration isn't fully
+finished: `apps/web/src/components/ui/card.tsx`'s `CardHeader`/`CardFooter` are a known, tracked
+straggler still on `rounded-t-4xl`/`rounded-b-4xl`, a live example of the drift to watch for when
+touching any `components/ui/` file. Check `.claude/rules/web-shadcn-defaults.md` before assuming
+any radius value you see in an existing component is the pattern to copy.
 
 ---
 

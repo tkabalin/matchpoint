@@ -168,6 +168,19 @@ Apply this to every categorical swatch and every pattern mark. Check every new o
 against both a light and a dark background before it ships — this applies to every future addition
 to this file, not just the colors that look risky at first glance.
 
+**"Check" means compute the actual WCAG contrast ratio, not eyeball it.** A color that looks fine in
+an editor's swatch preview can still measure under 3:1 (the WCAG minimum for a graphical object like
+a chart line or icon) against this app's actual dark-mode background — `oklch(0.148 0.004 228.8)`, ≈
+`#090b0c`. This is exactly how indigo's original `#2E1A47` (1.27:1, a real failure) went unnoticed
+until reported, while violet's `#D9569E` (5.42:1) turned out to already be fine. Compute it: convert
+both colors to sRGB (an OKLCH color needs its L/C/H run through the standard OKLab→linear-sRGB
+matrices first), take each color's relative luminance, and apply the standard WCAG contrast formula
+`(L1 + 0.05) / (L2 + 0.05)` with `L1` the lighter of the two. Do this for both the light-mode and
+dark-mode background before deciding a new or edited color is safe — a quick script (Python, or a
+browser contrast-checker) is enough; don't rely on visual impression alone, since a color's apparent
+brightness on screen and its computed contrast ratio can disagree by a wide margin, especially for
+saturated purples and blues.
+
 **Applies to Recharts marks too, not just HTML swatches.** A thin chart `Line` stroke, `Bar` fill
 edge, or point dot needs the same separation from its background that `swatch-halo` gives an HTML
 box — a `box-shadow` ring doesn't apply to an SVG stroke, so the equivalent there is a halo pass:

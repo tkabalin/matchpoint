@@ -11,6 +11,24 @@ paths:
 - New tokens (colours, spacing, fonts) go in `@theme` and are used via the generated utilities.
   Don't hardcode hex values in `className`.
 
+## Dark mode — toggle-only, never OS-detected
+
+- Light/dark is decided **solely** by the coach's own choice in Settings > App > Appearance,
+  persisted and resolved by `src/lib/theme.ts` (`useTheme`/`applyTheme`). Never call
+  `matchMedia("(prefers-color-scheme: dark)")`, and never read `prefers-color-scheme` from CSS, to
+  decide the app's own light/dark state — not even as a first-run default. This was tried once (an
+  OS-preference read as the initial default, with the toggle only overriding it) and reverted: two
+  independent OS-preference reads existed briefly (the `index.html` bootstrap script and a
+  since-deleted `usePrefersDark` hook the logo used) and drifted out of sync under PWA caching,
+  which is what originally made the logo and the rest of the UI disagree on theme (#200).
+- Any component that needs to know the resolved theme (e.g. to pick between two whole image assets,
+  like `Logo` does) calls `useTheme()` from `src/lib/theme.ts` — never its own `matchMedia` query.
+  One source of truth, no second read to drift out of sync with it.
+- `index.html`'s inline bootstrap script (`.dark` on `<html>` before first paint) reads
+  `localStorage` directly rather than importing `theme.ts` — it has to run before any module loads,
+  so its own resolve logic is deliberately duplicated there. Keep the two in sync by hand if either
+  changes.
+
 ## Feature Slices
 
 - `src/` is sliced by **feature**, not file type, so rules can be scoped to a directory. A feature's
