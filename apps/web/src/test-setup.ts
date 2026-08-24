@@ -22,12 +22,23 @@ configure({ asyncUtilTimeout: 5_000 });
 // (see error-interceptor.ts) would run against an unregistered interceptor.
 registerErrorStatusInterceptor();
 
-// jsdom implements no layout, so it has no ResizeObserver — the input-otp package
-// (shadcn's InputOTP, #148) uses one internally to size itself, and every test
-// rendering it throws "ResizeObserver is not defined" without this. A no-op stub is
-// enough: nothing under test asserts on a real resize.
+// jsdom implements no layout, so it has no ResizeObserver — input-otp (shadcn's
+// InputOTP, #148) uses one internally to size itself, and every test rendering it
+// throws "ResizeObserver is not defined" without this.
+//
+// It reports a size rather than being a no-op, because recharts' ResponsiveContainer
+// keeps its `initialDimension` only while ResizeObserver is *undefined*. With a no-op
+// stub it instead measured jsdom's 0×0 and rendered null, so no chart in the suite drew
+// anything at all — axes, ticks, lines and tooltips were silently absent.
+const OBSERVED_SIZE = { width: 640, height: 320 } as const;
 class ResizeObserverStub {
-  observe() {}
+  constructor(private readonly callback: ResizeObserverCallback) {}
+  observe(target: Element) {
+    this.callback(
+      [{ target, contentRect: { ...OBSERVED_SIZE } } as ResizeObserverEntry],
+      this as unknown as ResizeObserver,
+    );
+  }
   unobserve() {}
   disconnect() {}
 }

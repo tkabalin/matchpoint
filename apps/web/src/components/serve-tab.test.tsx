@@ -101,3 +101,17 @@ test("switching 1st/2nd serve also updates the headline and outcome stack above 
   expect(screen.getByText("88%")).toBeInTheDocument();
   expect(screen.queryByText("76%")).not.toBeInTheDocument();
 });
+
+// Guards the jsdom chart harness itself, not just this chart. recharts'
+// ResponsiveContainer keeps its initial size only while ResizeObserver is undefined, so
+// the no-op stub `test-setup.ts` used to install left every chart in the suite measuring
+// 0×0 and rendering null. Nothing failed — the charts were simply absent, and the axis
+// formatter asserted on here had never once run.
+test("each side's trend chart draws, with its y axis formatted as percentages", async () => {
+  renderTab();
+  await screen.findByText("Your serve");
+
+  // One per side, and "100%" rather than "0%" because the latter also occurs as a
+  // legitimate stat value elsewhere on the tab.
+  expect(await screen.findAllByText("100%")).toHaveLength(2);
+});
