@@ -7,6 +7,13 @@ const DEFAULT_THEME: Theme = "light";
 
 const listeners = new Set<() => void>();
 let cachedTheme: Theme = readStoredTheme();
+// index.html's inline bootstrap script sets .dark on <html> before this module
+// ever loads, so this is normally a no-op — but if that script is ever skipped
+// or falls out of sync with it (a stale cached copy, for instance), this is
+// what keeps the DOM class from disagreeing with what useTheme() reports, which
+// is exactly the failure mode where the logo (JS-driven) and the rest of the
+// UI (CSS-class-driven) would otherwise show two different themes.
+applyTheme(cachedTheme);
 
 function readStoredTheme(): Theme {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
