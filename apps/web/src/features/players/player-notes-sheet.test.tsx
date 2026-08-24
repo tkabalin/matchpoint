@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { expect, test, vi } from "vitest";
 
 import { PlayerNotesSheet } from "./player-notes-sheet";
@@ -96,4 +97,61 @@ test("Cancel on the delete confirmation keeps the note", async () => {
 
   expect(screen.queryByText("Delete this note?")).not.toBeInTheDocument();
   expect(screen.getByText(/Worked on toss height on 2nd serve today/)).toBeInTheDocument();
+});
+
+/**
+ * The tests above hold `open` fixed, which no real caller does. This harness owns it
+ * the way the profile page does, so the sheet can actually be closed and reopened —
+ * the only way to observe what a dismissal is supposed to clear.
+ */
+function ControlledNotes() {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Reopen notes
+      </button>
+      <PlayerNotesSheet playerId="player-1" open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+function renderControlled() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <ControlledNotes />
+    </QueryClientProvider>,
+  );
+}
+
+test("Cancel backs out of the composer without saving", async () => {
+  const user = userEvent.setup();
+  renderControlled();
+  await screen.findByRole("heading", { name: "Notes" });
+
+  await user.click(screen.getByRole("button", { name: "Quick note" }));
+  await user.type(screen.getByPlaceholderText("What did you notice?"), "Half a thought");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(screen.queryByPlaceholderText("What did you notice?")).not.toBeInTheDocument();
+  expect(screen.queryByText("Half a thought")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Quick note" })).toBeInTheDocument();
+});
+
+// An abandoned draft has to go with the sheet. Reopening onto someone else's half-typed
+// note would read as a note the coach had started about this player.
+test("closing mid-compose discards the draft rather than restoring it", async () => {
+  const user = userEvent.setup();
+  renderControlled();
+  await screen.findByRole("heading", { name: "Notes" });
+
+  await user.click(screen.getByRole("button", { name: "Quick note" }));
+  await user.type(screen.getByPlaceholderText("What did you notice?"), "Half a thought");
+  await user.click(screen.getByRole("button", { name: "Close" }));
+
+  await user.click(screen.getByRole("button", { name: "Reopen notes" }));
+
+  expect(await screen.findByRole("button", { name: "Quick note" })).toBeInTheDocument();
+  expect(screen.queryByPlaceholderText("What did you notice?")).not.toBeInTheDocument();
 });

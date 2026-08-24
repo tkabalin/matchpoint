@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { RedeemTransferCodeSheet } from "./redeem-transfer-code-sheet";
@@ -143,4 +144,84 @@ test("a 429 shows a retry countdown", async () => {
   await user.click(screen.getByRole("button", { name: "Redeem" }));
 
   expect(await screen.findByText(/Try again in 30s\./)).toBeInTheDocument();
+});
+
+/**
+ * The harness above pins `open`, which nothing real does. The roster owns it, so this
+ * mirrors that: without a caller that can actually close the sheet, neither Done nor
+ * the reset that a dismissal performs can be observed.
+ */
+function ControlledRedeem() {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}>
+        Reopen redeem
+      </button>
+      <RedeemTransferCodeSheet open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
+
+async function renderControlled() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const playersRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players",
+    component: ControlledRedeem,
+  });
+  const playerProfileRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players/$playerId",
+    component: () => <h1>Player Profile</h1>,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([playersRoute, playerProfileRoute]),
+    history: createMemoryHistory({ initialEntries: ["/players"] }),
+  });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
+  await screen.findByRole("heading", { name: "Redeem a transfer code" });
+}
+
+test("Done dismisses the sheet from the success step, without visiting the player", async () => {
+  stubFetch({
+    "POST /api/players/redeem-transfer-code": () => Response.json(transferredPlayer),
+  });
+  const user = userEvent.setup();
+  await renderControlled();
+
+  await user.type(screen.getByLabelText("Code"), "GOODCODE");
+  await user.click(screen.getByRole("button", { name: "Redeem" }));
+  await user.click(await screen.findByRole("button", { name: "Done" }));
+
+  expect(screen.queryByRole("heading", { name: "Player Profile" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
+});
+
+// A refusal is about the code that was typed, so it must not outlive it: reopening onto
+// the last attempt's error reads as a verdict on a code the coach hasn't entered yet.
+test("reopening after a refused code starts from a clean form", async () => {
+  stubFetch({
+    "POST /api/players/redeem-transfer-code": () =>
+      Response.json({ detail: "That code is invalid or has already been used." }, { status: 400 }),
+  });
+  const user = userEvent.setup();
+  await renderControlled();
+
+  await user.type(screen.getByLabelText("Code"), "STALE123");
+  await user.click(screen.getByRole("button", { name: "Redeem" }));
+  await screen.findByText("That code is invalid or has already been used.");
+
+  await user.click(screen.getByRole("button", { name: "Close" }));
+  await user.click(screen.getByRole("button", { name: "Reopen redeem" }));
+
+  expect(await screen.findByLabelText("Code")).toHaveValue("");
+  expect(
+    screen.queryByText("That code is invalid or has already been used."),
+  ).not.toBeInTheDocument();
 });

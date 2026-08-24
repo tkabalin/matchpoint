@@ -221,3 +221,70 @@ test("generating a new code while one is pending", async () => {
 
   expect(await screen.findByLabelText("Transfer code")).toHaveValue("FRESH9999");
 });
+
+// Each of the sheet's steps is a dead end until something walks back out of it. These
+// three exits were the paths no test took, so a step that trapped the coach — or one
+// that kept a minted code on screen after Done — would not have failed anything.
+
+test("OK returns to the form from the can't-delete-yet step", async () => {
+  const user = userEvent.setup();
+  await renderSheet({ ...player, has_transfer_code: true });
+
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+  await screen.findByRole("heading", { name: "Can't delete Amahle yet" });
+  await user.click(screen.getByRole("button", { name: "OK" }));
+
+  expect(await screen.findByLabelText("First name")).toHaveValue("Amahle");
+});
+
+test("Cancel backs out of the transfer explanation without minting a code", async () => {
+  let minted = 0;
+  stubFetch({
+    [`POST /api/players/${player.id}/transfer-code`]: () => {
+      minted += 1;
+      return Response.json({ code: "ABCD1234" });
+    },
+  });
+  const user = userEvent.setup();
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
+  await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+  expect(await screen.findByLabelText("First name")).toHaveValue("Amahle");
+  expect(minted).toBe(0);
+});
+
+// "This is the only time it's shown" is a promise the sheet has to keep: Done must
+// clear the code, not just close over it.
+test("Done clears the minted code rather than leaving it on screen", async () => {
+  stubFetch({
+    [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "ABCD1234" }),
+  });
+  const user = userEvent.setup();
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
+  await user.click(await screen.findByRole("button", { name: "Generate code" }));
+  await screen.findByLabelText("Transfer code");
+  await user.click(screen.getByRole("button", { name: "Done" }));
+
+  expect(screen.queryByLabelText("Transfer code")).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue("ABCD1234")).not.toBeInTheDocument();
+});
+
+test("a refused save keeps the sheet open and shows the server's reason", async () => {
+  stubFetch({
+    [`PATCH /api/players/${player.id}`]: () =>
+      Response.json({ detail: "That username is taken" }, { status: 409 }),
+  });
+  const user = userEvent.setup();
+  await renderSheet();
+
+  await user.clear(screen.getByLabelText("First name"));
+  await user.type(screen.getByLabelText("First name"), "Amahlé");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  expect(await screen.findByText("That username is taken")).toBeInTheDocument();
+  expect(screen.getByLabelText("First name")).toHaveValue("Amahlé");
+});
