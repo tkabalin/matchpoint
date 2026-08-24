@@ -58,8 +58,11 @@ export const WINGS: readonly Wing[] = ["FOREHAND", "BACKHAND"];
 export type ShotType = "DRIVE" | "VOLLEY" | "DROPSHOT" | "LOB";
 export const SHOT_TYPES: readonly ShotType[] = ["DRIVE", "VOLLEY", "DROPSHOT", "LOB"];
 
-export type ServeOutcome = "IN" | "FAULT" | "ACE";
-export const SERVE_OUTCOMES: readonly ServeOutcome[] = ["IN", "FAULT", "ACE"];
+// UNKNOWN is a serve nobody recorded, not a fourth thing a serve can do: the coach
+// skipped the point rather than captured it. It exists so serve percentages can
+// exclude those points instead of counting a guess as a real first serve in.
+export type ServeOutcome = "IN" | "FAULT" | "ACE" | "UNKNOWN";
+export const SERVE_OUTCOMES: readonly ServeOutcome[] = ["IN", "FAULT", "ACE", "UNKNOWN"];
 
 // Shared by Point.courtSide and CourtZone.half — the same two physical sides of the court.
 export type CourtSide = "DEUCE" | "AD";
@@ -99,7 +102,8 @@ export interface ServeAttempt {
   // faulted (why it missed), and optionally a ServeTarget when it went in or aced —
   // null there means placement wasn't captured, which is what the one-tap capture
   // screen records: that the ball landed in the box, not where inside it.
-  // Always null for an OPPONENT serve — placement there is out of scope. Which
+  // Always null for an UNKNOWN serve, which by definition has nothing to place, and
+  // for an OPPONENT serve — placement there is out of scope. Which
   // physical side (deuce/ad) the serve came from is Point.courtSide, not part of
   // this — that fact belongs to the whole point, not just the tracked player's serve.
   location: ServeTarget | FailureMode | null;
@@ -270,6 +274,10 @@ export class Point {
         if (raw.location !== null) {
           throw new Error(`serves[${index}].location must be null when server is OPPONENT`);
         }
+      } else if (raw.outcome === "UNKNOWN") {
+        if (raw.location !== null) {
+          throw new Error(`serves[${index}].location must be null when outcome is UNKNOWN`);
+        }
       } else if (raw.outcome === "FAULT") {
         if (!isFailureMode(raw.location)) {
           throw new Error(`serves[${index}].location must be a FailureMode when outcome is FAULT`);
@@ -318,6 +326,13 @@ export class Point {
     }
     if (endReason === "DOUBLE_FAULT" && !bothFaulted) {
       throw new Error("endReason DOUBLE_FAULT requires both serves to have faulted");
+    }
+
+    // A serve nobody saw can only belong to a point nobody saw the end of either.
+    // Nothing structural is needed to keep UNKNOWN last: the second-attempt rule above
+    // already rejects anything following it.
+    if (serves.some((serve) => serve.outcome === "UNKNOWN") && endReason !== "UNUSUAL") {
+      throw new Error("a point with an unrecorded serve must have endReason UNUSUAL");
     }
 
     if (
@@ -455,8 +470,10 @@ export class Point {
     return this.won ? "TRACKED" : "OPPONENT";
   }
 
-  /** Derived, not stored. */
-  get firstServeIn(): boolean {
+  /** Derived, not stored — null when the first serve was never recorded, which is not
+   * the same as it having missed. Serve percentages must drop those, not count them. */
+  get firstServeIn(): boolean | null {
+    if (this.serves[0]?.outcome === "UNKNOWN") return null;
     return this.serves.length === 1;
   }
 

@@ -158,6 +158,50 @@ describe("Point.create structural validation", () => {
       expect(point.serves[0]?.location).toBeNull();
     });
 
+    test("accepts an unrecorded serve on an unusual point", () => {
+      const point = Point.create(
+        pointData({
+          serves: [{ number: 1, outcome: "UNKNOWN", location: null }],
+          endReason: "UNUSUAL",
+          ...NO_CONTACT,
+        }),
+      );
+      expect(point.serves[0]?.outcome).toBe("UNKNOWN");
+    });
+
+    test("rejects a location on an unrecorded serve — there is nothing to place", () => {
+      expect(() =>
+        Point.create(
+          pointData({
+            serves: [{ number: 1, outcome: "UNKNOWN", location: "T" }],
+            endReason: "UNUSUAL",
+            ...NO_CONTACT,
+          }),
+        ),
+      ).toThrow(/must be null when outcome is UNKNOWN/);
+    });
+
+    test("rejects an unrecorded serve on a point whose ending was recorded", () => {
+      expect(() =>
+        Point.create(pointData({ serves: [{ number: 1, outcome: "UNKNOWN", location: null }] })),
+      ).toThrow(/must have endReason UNUSUAL/);
+    });
+
+    test("rejects an attempt following an unrecorded serve", () => {
+      expect(() =>
+        Point.create(
+          pointData({
+            serves: [
+              { number: 1, outcome: "UNKNOWN", location: null },
+              { number: 2, outcome: "IN", location: "T" },
+            ],
+            endReason: "UNUSUAL",
+            ...NO_CONTACT,
+          }),
+        ),
+      ).toThrow(/requires the first serve to have faulted/);
+    });
+
     test("rejects a non-FailureMode location on a TRACKED serve that faulted", () => {
       expect(() =>
         Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: "T" }] })),
@@ -545,6 +589,31 @@ describe("firstServeIn", () => {
           { number: 1, outcome: "FAULT", location: "NET" },
           { number: 2, outcome: "IN", location: "T" },
         ],
+      }),
+    );
+    expect(point.firstServeIn).toBe(false);
+  });
+
+  test("null when the serve was never recorded — not the same as it having missed", () => {
+    const point = Point.create(
+      pointData({
+        serves: [{ number: 1, outcome: "UNKNOWN", location: null }],
+        endReason: "UNUSUAL",
+        ...NO_CONTACT,
+      }),
+    );
+    expect(point.firstServeIn).toBeNull();
+  });
+
+  test("false when the first serve faulted and the second went unrecorded", () => {
+    const point = Point.create(
+      pointData({
+        serves: [
+          { number: 1, outcome: "FAULT", location: "NET" },
+          { number: 2, outcome: "UNKNOWN", location: null },
+        ],
+        endReason: "UNUSUAL",
+        ...NO_CONTACT,
       }),
     );
     expect(point.firstServeIn).toBe(false);
