@@ -31,7 +31,15 @@ export default defineConfig({
   // tanstackRouter must run before react() — it generates routeTree.gen.ts from
   // src/routes/ that react()'s Babel transform then compiles.
   plugins: [
-    tanstackRouter({ target: "react", autoCodeSplitting: true, quoteStyle: "double" }),
+    tanstackRouter({
+      target: "react",
+      autoCodeSplitting: true,
+      quoteStyle: "double",
+      // Vitest is not a build, so the plugin's own production check leaves HMR injection on and
+      // appends an `import.meta.hot` block to every route file. It can never run under `vitest
+      // run`, but coverage still counts it: one uncovered statement, function and branch each.
+      codeSplittingOptions: { addHmr: !process.env.VITEST },
+    }),
     react(),
     tailwindcss(),
     VitePWA(pwaOptions),
@@ -77,6 +85,9 @@ export default defineConfig({
         "src/test-setup.ts",
         "src/routeTree.gen.ts",
         "src/components/ui/**",
+        // Type-only: every importer uses `import type`, so it is erased before runtime and
+        // never enters the module graph at all, which reads as 0% forever.
+        "src/lib/analytics/types.provisional.ts",
       ],
     },
   },
