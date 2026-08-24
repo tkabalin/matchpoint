@@ -10,6 +10,16 @@
 @theme {
   --color-court: oklch(0.55 0.13 160);
 
+  /* What the court is actually made of, not a category: a coach recognises a clay
+     court by its colour, so capture paints one. Hard and unspecified keep
+     --color-court above. Values from the capture-flow handoff, except grass, which
+     it puts at oklch(0.68 0.135 145) — white court lines measure 2.73:1 there,
+     under the 3:1 a graphical object needs (see .claude/rules/web-color.md). This
+     is the lightest green that still clears it, at 3.45:1. */
+  --color-court-grass: oklch(0.62 0.135 145);
+  --color-court-clay: oklch(0.56 0.145 45);
+  --color-court-carpet: oklch(0.47 0.115 252);
+
   /* The categorical palette from .claude/rules/web-color.md, named by role rather
      than by hue so the rule's restrictions are visible at the call site: the three
      outcome-* colors are reserved for point outcomes and hero score bands, and only

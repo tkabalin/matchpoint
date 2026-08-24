@@ -23,7 +23,7 @@ import type { CaptureAction, CaptureState } from "./capture-flow";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
 import { Match } from "./match";
-import type { MatchEndReason } from "./match";
+import type { MatchEndReason, SurfaceType } from "./match";
 import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
@@ -38,6 +38,15 @@ import { SkipAheadSheet } from "./skip-ahead-sheet";
 import { skipAhead } from "./skip-ahead";
 import type { SkipAheadTarget } from "./skip-ahead";
 import { UnusualPointSheet } from "./unusual-point-sheet";
+
+// The court is painted the surface it is played on. Hard and unspecified are absent
+// rather than mapped: court-diagram.tsx already falls back to --color-court, so leaving
+// the property unset is the same answer with nothing to keep in step.
+const COURT_SURFACES: Partial<Record<SurfaceType, string>> = {
+  grass: "var(--color-court-grass)",
+  clay: "var(--color-court-clay)",
+  carpet: "var(--color-court-carpet)",
+};
 
 // `played_on` is a calendar date, so it is built from local parts — `toISOString()`
 // would date a late-evening match tomorrow east of UTC (see .claude/rules/web.md).
@@ -217,7 +226,13 @@ export function LiveMatch({
   const { step, draft } = capture;
 
   return (
-    <>
+    // `display: contents` because custom properties inherit down the DOM tree rather
+    // than the box tree: the surface reaches every court below without this wrapper
+    // becoming a box that the screens' own flex sizing would then have to account for.
+    <div
+      className="contents"
+      style={{ "--court-surface": COURT_SURFACES[match.surfaceType] } as React.CSSProperties}
+    >
       <MatchHeader
         match={match}
         points={points}
@@ -277,6 +292,6 @@ export function LiveMatch({
           }}
         />
       )}
-    </>
+    </div>
   );
 }

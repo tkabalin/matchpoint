@@ -59,6 +59,31 @@ test("the opponent serving first opens the return screen instead", async () => {
   expect(screen.getByRole("heading", { name: "Return" })).toBeVisible();
 });
 
+test.each([
+  ["Grass", "var(--color-court-grass)"],
+  ["Clay", "var(--color-court-clay)"],
+  ["Carpet", "var(--color-court-carpet)"],
+])("a %s match paints the court that surface", async (surface, expected) => {
+  const { user } = renderMatch();
+
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("combobox", { name: /Court type/ }));
+  await user.click(screen.getByRole("option", { name: surface }));
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  const court = screen.getByRole("button", { name: "Deuce service box" }).closest("div[style]");
+  expect(court?.closest("[style*='--court-surface']")).toHaveStyle({
+    "--court-surface": expected,
+  });
+});
+
+test("a hard court keeps the default green, with nothing to override it", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  expect(document.querySelector("[style*='--court-surface']")).toBeNull();
+});
+
 test("a point threads serve to final ball and lands on the scoreboard", async () => {
   const { user } = renderMatch();
   await startMatch(user);
