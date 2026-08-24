@@ -123,3 +123,73 @@ test("a photo-upload failure still creates the player and closes the sheet", asy
   await vi.waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
   expect(screen.queryByText(/Could not add that player/)).not.toBeInTheDocument();
 });
+
+// Hand and notes are the two fields no other test fills, and notes carries a trim: an
+// untouched box has to reach the API as null, not as an empty string.
+test("hand and notes reach the request, and an untouched notes box sends null", async () => {
+  const created: Record<string, unknown>[] = [];
+  stubFetch({
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      created.push(body);
+      return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
+    },
+  });
+  const user = userEvent.setup();
+  renderSheet();
+
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: "Left" }));
+  await user.type(screen.getByLabelText("Notes"), "Prefers early sessions");
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  await vi.waitFor(() => expect(created).toHaveLength(1));
+  expect(created[0]!.dominant_hand).toBe("left");
+  expect(created[0]!.notes).toBe("Prefers early sessions");
+  expect(zCreatePlayerBody.safeParse(created[0]).success).toBe(true);
+});
+
+test("a refused creation keeps the sheet open and shows the server's reason", async () => {
+  stubFetch({
+    "POST /api/players": () => Response.json({ detail: "That username is taken" }, { status: 409 }),
+  });
+  const user = userEvent.setup();
+  const { onOpenChange } = renderSheet();
+
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  expect(await screen.findByText("That username is taken")).toBeInTheDocument();
+  expect(onOpenChange).not.toHaveBeenCalledWith(false);
+});
+
+// Dismissing has to clear the draft: the sheet is remounted open by the roster, so a
+// half-typed player left behind would reappear as though the coach had started it.
+test("dismissing the sheet clears what was typed", async () => {
+  const user = userEvent.setup();
+  const { onOpenChange } = renderSheet();
+  await user.type(screen.getByLabelText("First name"), "Amahle");
+
+  await user.click(screen.getByRole("button", { name: "Close" }));
+
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+  expect(screen.getByLabelText("First name")).toHaveValue("");
+});
+
+test("a pending photo can be removed again before the player exists", async () => {
+  const user = userEvent.setup();
+  renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Add a player photo" }));
+  await user.click(await screen.findByRole("button", { name: "Choose photo" }));
+  const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+  await user.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file);
+
+  // Reopening now offers Remove, which it did not before a photo was chosen.
+  await user.click(screen.getByRole("button", { name: "Add a player photo" }));
+  await user.click(await screen.findByRole("button", { name: "Remove photo" }));
+
+  await user.click(screen.getByRole("button", { name: "Add a player photo" }));
+  expect(await screen.findByRole("button", { name: "Choose photo" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
+});
