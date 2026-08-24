@@ -48,6 +48,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 # on the player routes does.
 MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
 MATCH_WAS_DELETED = "Match was deleted"
+COMPLETED_MATCH_IS_LOCKED = "A completed match's result and scoring system cannot be changed"
 POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
 POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
 
@@ -63,6 +64,14 @@ CAPTURE_CLAIM_TTL = timedelta(hours=4)
 # away. 30 days is auth.py's SESSION_LIFETIME, the figure already chosen here for how long
 # an app left alone stays live. Expiry is lazy: an aged row stops matching (#214).
 DELETED_MATCH_TTL = timedelta(days=30)
+
+# What completing a match freezes (#228). The result is the completion signal itself, and
+# the scoring system is the rulebook the client scored the points under (the server only
+# stores the label, `docs/scoring-systems.md`), so moving it relabels a match already
+# played. The descriptive fields reach analytics too, played_on splitting the year and
+# opponent_name bucketing the head-to-head, but correcting one fixes those figures rather
+# than rewriting them, which is what keeps a typo cheaper than the match and its points.
+COMPLETION_LOCKED_FIELDS = ("result", "scoring_system")
 
 
 def match_for_coach(
@@ -196,13 +205,18 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
     return match_for_coach(db, match_id, coach.id)
 
 
-# The 409 is declared because the client branches on it: a recorded result closes the
-# match to edits, so an edit screen has to send the coach to delete-and-re-record
-# rather than retry.
+# The 409 is declared because the client branches on it: a completed match refuses a
+# change to either locked field, so an edit screen offers those two only while they are
+# still unset rather than as controls whose save will always fail.
 @router.patch(
     "/{match_id}",
     response_model=MatchRead,
-    responses={409: {"model": ErrorDetail, "description": "Match is completed"}},
+    responses={
+        409: {
+            "model": ErrorDetail,
+            "description": "A completed match's result or scoring system cannot be changed",
+        }
+    },
 )
 def update_match(
     match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
@@ -211,20 +225,25 @@ def update_match(
     # clearing below both read then write, so an unlocked read lets a second result
     # land, and leaves a claim taken since the read standing.
     match = match_for_coach(db, match_id, coach.id, for_update=True)
-    # A recorded result completes the match and locks it (#108). Re-sending the values
-    # already stored is not an edit and answers 200: the client queues its writes
-    # offline and retries them, and a retried finish must not come back as a failure.
+    submitted = data.model_dump(exclude_unset=True)
+    # A recorded result completes the match (#108) and freezes the locked fields alone
+    # (#228). A field still null has never been set, so it can be filled in afterwards,
+    # the way the result itself was. Re-sending a value already stored is not an edit
+    # and answers 200: the client queues its writes offline and retries them, and a
+    # retried finish must not come back as a failure.
     if match.result is not None and any(
-        getattr(match, field) != value
-        for field, value in data.model_dump(exclude_unset=True).items()
+        submitted[field] != getattr(match, field)
+        for field in COMPLETION_LOCKED_FIELDS
+        if field in submitted and getattr(match, field) is not None
     ):
-        raise HTTPException(status_code=409, detail="Match is completed")
+        raise HTTPException(status_code=409, detail=COMPLETED_MATCH_IS_LOCKED)
     # player_id is not on MatchUpdate, so apply_to cannot move a match to another
     # player. updated_at is the column's onupdate, never set here.
     data.apply_to(match)
     if match.result is not None:
         # Finishing the match ends capture, so the claim goes with it rather than
-        # standing until it lapses over a match nothing can capture.
+        # standing until it lapses over a match nothing can capture. A metadata edit on
+        # an already-complete match re-clears two null columns, which is no write at all.
         match.capture_claim_device_id = None
         match.capture_claim_expires_at = None
     db.commit()

@@ -2254,7 +2254,7 @@ export type UpdateMatchErrors = {
      */
     401: ErrorDetail;
     /**
-     * Match is completed
+     * A completed match's result or scoring system cannot be changed
      */
     409: ErrorDetail;
     /**

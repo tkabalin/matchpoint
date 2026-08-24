@@ -20,10 +20,12 @@ from matchpoint_api.models import (
     Point,
     RallyBucket,
     ReturnOutcome,
+    ScoringSystem,
     Surface,
 )
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
+    COMPLETED_MATCH_IS_LOCKED,
     DELETED_MATCH_TTL,
     MATCH_IS_BEING_CAPTURED,
     MATCH_WAS_DELETED,
@@ -779,34 +781,70 @@ def test_update_match_records_a_result(
     assert saved.result is MatchResult.WIN
 
 
-def test_update_match_on_a_completed_match_is_409(
+def test_update_match_edits_the_metadata_of_a_completed_match(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """A recorded result locks the match: the coach's remedy for a wrong one is to
-    delete the match and record it again, which is why the row has to come through
-    the refusal untouched."""
+    """The split lock (#228): the descriptive fields feed no computed statistic, so a
+    typo'd opponent name stays correctable once the result is in, where the only way
+    back before was deleting the match and the points captured against it."""
     match = make_match(
         db_session,
         player_id=make_player(db_session, coach_id=coach.id).id,
         opponent_name="Aryna",
+        surface=Surface.HARD,
         result=MatchResult.WIN,
     )
     db_session.commit()
 
-    response = client.patch(f"/matches/{match.id}", json={"opponent_name": "Iga"})
+    response = client.patch(
+        f"/matches/{match.id}",
+        json={
+            "opponent_name": "Iga",
+            "surface": "clay",
+            "event": "Wimbledon",
+            "played_on": "2026-07-30",
+        },
+    )
 
-    assert response.status_code == 409
+    assert response.status_code == 200
 
     saved = db_session.get(Match, match.id)
     assert saved is not None
-    assert saved.opponent_name == "Aryna"
+    assert saved.opponent_name == "Iga"
+    assert saved.surface is Surface.CLAY
+    assert saved.event == "Wimbledon"
+    assert saved.played_on == date(2026, 7, 30)
+    assert saved.result is MatchResult.WIN
+
+
+def test_update_match_with_an_empty_body_leaves_a_completed_match_alone(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A completed match now reaches the claim clearing on any edit, where before only
+    the edit recording the result did. It clears two columns already null, which is no
+    write at all, and updated_at standing still is what says so."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+    before = match.updated_at
+
+    response = client.patch(f"/matches/{match.id}", json={})
+
+    assert response.status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.updated_at == before
 
 
 def test_update_match_cannot_change_a_recorded_result(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The result is the field that completes the match, so it is locked by the same
-    rule as the rest and not exempt from it."""
+    """The result is the field that completes the match, and flipping one after the
+    fact rewrites every statistic the match is counted in, so it stays locked."""
     match = make_match(
         db_session,
         player_id=make_player(db_session, coach_id=coach.id).id,
@@ -817,10 +855,77 @@ def test_update_match_cannot_change_a_recorded_result(
     response = client.patch(f"/matches/{match.id}", json={"result": "loss"})
 
     assert response.status_code == 409
+    assert response.json() == {"detail": COMPLETED_MATCH_IS_LOCKED}
 
     saved = db_session.get(Match, match.id)
     assert saved is not None
     assert saved.result is MatchResult.WIN
+
+
+def test_update_match_cannot_change_a_completed_matchs_scoring_system(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The scoring system is locked beside the result: it is how the points already
+    captured are read, so moving it retroactively changes what they say."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        scoring_system=ScoringSystem.TRADITIONAL,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"scoring_system": "pro_set"})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.scoring_system is ScoringSystem.TRADITIONAL
+
+
+def test_update_match_cannot_clear_a_completed_matchs_scoring_system(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Emptying a locked field is a change like any other, which is what keeps the
+    "locked once set" reading from being one-way."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        scoring_system=ScoringSystem.TRADITIONAL,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"scoring_system": None})
+
+    assert response.status_code == 409
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.scoring_system is ScoringSystem.TRADITIONAL
+
+
+def test_update_match_fills_in_a_missing_scoring_system_after_completion(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Locked once set, and a null field was never set: a match recorded without a
+    scoring system can still be told which one it was played under, the way the result
+    itself was recorded after the fact."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"scoring_system": "pro_set"})
+
+    assert response.status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.scoring_system is ScoringSystem.PRO_SET
 
 
 def test_update_match_resending_the_stored_values_is_a_no_op(
@@ -1095,8 +1200,8 @@ def test_delete_match_malformed_id_is_422(client: TestClient) -> None:
 def test_delete_match_is_allowed_on_a_completed_match(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The one thing the completed lock leaves open, and the reason the lock can be as
-    strict as it is: a match recorded wrongly is cleared away and entered again."""
+    """Completion locks two fields rather than the match, and delete is what is left
+    for the one it still refuses to correct in place: a wrongly recorded result."""
     match = make_match(
         db_session,
         player_id=make_player(db_session, coach_id=coach.id).id,

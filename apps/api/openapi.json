@@ -4135,7 +4135,7 @@
                 }
               }
             },
-            "description": "Match is completed"
+            "description": "A completed match's result or scoring system cannot be changed"
           },
           "422": {
             "content": {
