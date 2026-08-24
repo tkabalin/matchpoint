@@ -41,6 +41,10 @@ depend on.
 - `src/test-setup.ts` (registered via `test.setupFiles`) wires the jest-dom matchers, and registers
   `fake-indexeddb` because jsdom implements none: without it the offline outbox has no database to
   open. It is global rather than per-file since Dexie reads the global at open time.
+- The same file stands in for the browser APIs jsdom lacks. One of them is not a stub of
+  convenience: `ResizeObserver` reports a real size, because recharts keeps a chart's own initial
+  dimensions only while `ResizeObserver` is undefined. A no-op stub makes it measure jsdom's 0×0 and
+  render nothing, so whether any chart draws in a test at all depends on this.
 - Interactions go through `@testing-library/user-event`; queries prefer accessible roles
   (`getByRole("button", { name: "Save" })`), so tests double as a basic accessibility check.
 
@@ -155,8 +159,25 @@ legitimate for genuine third-party dependencies should MatchPoint ever acquire o
 CI runs the same commands as `scripts/check.sh` in verify mode, plus the Playwright suite. Both apps
 collect coverage and emit JUnit reports, so merge requests are annotated with failures and a
 coverage figure. `apps/api` is kept at 100% statement and branch coverage. `apps/web` reports the
-same figures with no such target: a route shell or a generated file can sit far below it while still
-being exercised through what imports it.
+same figures with no such target, since a generated file can sit far below one while still being
+exercised through what imports it.
+
+### What the tooling counts that we didn't write
+
+Two build-time transforms put code into the web app's modules that no test can reach, and coverage
+counts it against us unless it is turned off:
+
+- The router plugin appends an `import.meta.hot` block to every file in `src/routes/`, because it
+  suppresses that only for a production build and Vitest is not one. `import.meta.hot` is undefined
+  under `vitest run`, so the block is inert and permanently uncovered. `codeSplittingOptions.addHmr`
+  in `vite.config.ts` turns it off for the test run alone, which is what lets a route shell report
+  the two or three statements it actually contains.
+- A module of nothing but types is erased before runtime, so it never enters the module graph and
+  reports as 0% forever. Those are excluded by path rather than counted.
+
+Neither is a lever to reach for when a number looks low. The test is whether a line could run at
+all: exclude only what the tooling introduced or the compiler deletes, never source we chose not to
+cover.
 
 ### Coverage doesn't prove a test can fail
 
