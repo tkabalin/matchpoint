@@ -32,14 +32,14 @@ export function PasswordInput({ id, value, onChange, autoComplete, name }: Passw
         autoComplete={autoComplete}
         name={name}
       />
-      {/* has-[>button]:mr-3 overrides the addon's default has-[>button]:-mr-1 (which pulls
+      {/* has-[>button]:mr-1.5 overrides the addon's default has-[>button]:-mr-1 (which pulls
           an icon-only button flush into the corner) — a browser or password-manager
           extension renders its own icon overlay in that exact corner, so this toggle needs
-          clearance from it, not to sit flush against it (#153). Re-targeting the same
-          has-[>button]: variant is required: a plain mr-3 loses to -mr-1 on CSS
-          specificity, since a :has() variant selector outranks a plain utility class
-          regardless of source order. */}
-      <InputGroupAddon align="inline-end" className="has-[>button]:mr-3">
+          some clearance from it (#153), tightened close to the edge per #182 while still
+          clearing that overlay. Re-targeting the same has-[>button]: variant is required: a
+          plain mr-1.5 loses to -mr-1 on CSS specificity, since a :has() variant selector
+          outranks a plain utility class regardless of source order. */}
+      <InputGroupAddon align="inline-end" className="has-[>button]:mr-1.5">
         <InputGroupButton
           size="icon-sm"
           aria-label={visible ? "Hide password" : "Show password"}

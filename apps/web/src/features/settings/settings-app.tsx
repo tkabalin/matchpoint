@@ -1,17 +1,22 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Moon, Sun } from "lucide-react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { buttonVariants } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useTheme } from "@/lib/theme";
 
 import { StubRow } from "./stub-row";
 
 /** App (#178, wireframe 1c). Install MatchPoint is real — #130 already built
  * `/install`, this just gives it a styled row instead of the old plain-text link.
- * Appearance and Notifications are stubs: dark mode today is OS-driven only (no
- * manual override exists), and there's no notifications system to configure yet. */
+ * Appearance is a real Light/Dark toggle (#182, #200) — no "System" option, since
+ * the theme is decided solely by this choice, never by the OS preference.
+ * Notifications is still a stub: no notifications system to configure yet. */
 export function SettingsApp() {
+  const [theme, setTheme] = useTheme();
+
   return (
     <AppPage nav={false}>
       <PageHeader
@@ -36,7 +41,27 @@ export function SettingsApp() {
             <ChevronRight className="size-4 text-muted-foreground" />
           </ItemActions>
         </Item>
-        <StubRow label="Appearance" />
+        <Item variant="outline">
+          <ItemContent>
+            <ItemTitle>Appearance</ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ToggleGroup
+              value={[theme]}
+              onValueChange={(next) => {
+                if (next[0] === "light" || next[0] === "dark") setTheme(next[0]);
+              }}
+              variant="outline"
+            >
+              <ToggleGroupItem value="light" aria-label="Light">
+                <Sun />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="dark" aria-label="Dark">
+                <Moon />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </ItemActions>
+        </Item>
         <StubRow label="Notifications" />
       </ItemGroup>
     </AppPage>

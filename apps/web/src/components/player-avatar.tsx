@@ -9,7 +9,7 @@ export function PlayerAvatar({
   className,
 }: {
   player: Pick<PlayerRead, "id" | "first_name" | "last_name" | "photo_url">;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   /** Forwarded to PhotoAvatar's camera badge (#192) — only Add/Edit player pass
    * this; roster tiles and action sheets stay read-only. */
   editable?: boolean;

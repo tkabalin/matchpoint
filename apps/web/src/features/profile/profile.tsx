@@ -49,7 +49,7 @@ export function Profile() {
               id={coach.id}
               initials={initialsFor(coach.display_name)}
               photoUrl={coach.photo_url}
-              size="xl"
+              size="2xl"
               shape="circle"
               editable
             />

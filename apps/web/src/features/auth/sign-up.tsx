@@ -283,6 +283,9 @@ export function SignUp() {
             <h1 className="text-center text-2xl tracking-wide">Sign Up</h1>
           </CardTitle>
           <CardDescription className="text-center">We sent a code to {email}.</CardDescription>
+          <p className="text-center text-xs text-muted-foreground">
+            Check your inbox. If it doesn't arrive in a minute or two, check spam or junk too.
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleOtpSubmit}>

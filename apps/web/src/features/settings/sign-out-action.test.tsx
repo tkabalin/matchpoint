@@ -7,10 +7,11 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { Toaster } from "@/components/ui/sonner";
 import { outboxDb } from "@/features/outbox/db";
 import { append, readPending } from "@/features/outbox/outbox";
 import { queryPersistOptions } from "@/lib/query-persist";
@@ -34,7 +35,17 @@ async function renderSignOutAction() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(["players"], [{ id: "1", first_name: "Amahle" }]);
 
-  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  // Toaster lives at the root, same as root-layout.tsx's real composition —
+  // mounting it inside the settings route would unmount it (and any toast it's
+  // showing) the moment sign-out navigates away.
+  const rootRoute = createRootRoute({
+    component: () => (
+      <>
+        <Outlet />
+        <Toaster />
+      </>
+    ),
+  });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
@@ -94,7 +105,7 @@ test("Cancel closes the dialog without signing out", async () => {
   expect(fetch).not.toHaveBeenCalled();
 });
 
-test("confirming signs out, clears the query cache, and shows a success dialog", async () => {
+test("confirming signs out, clears the query cache, and navigates to sign-in directly", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
   // The IndexedDB copy of the cache outlives the tab, so clearing memory alone would
   // still leave this coach's roster on a device the next coach signs in on.
@@ -110,7 +121,8 @@ test("confirming signs out, clears the query cache, and shows a success dialog",
   const dialog = await screen.findByRole("alertdialog");
   await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
 
-  expect(await screen.findByText("You've been signed out.")).toBeInTheDocument();
+  // No second dialog to dismiss — confirming takes the coach straight to sign-in.
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
   expect(queryClient.getQueryData(["players"])).toBeUndefined();
   expect(await queryPersistOptions.persister.restoreClient()).toBeUndefined();
   expect(fetch).toHaveBeenCalledTimes(1);
@@ -133,7 +145,7 @@ test("confirming also deletes the points that never synced", async () => {
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
   const dialog = await screen.findByRole("alertdialog");
   await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
-  await screen.findByText("You've been signed out.");
+  await screen.findByRole("heading", { name: "Sign In" });
 
   // The one path on which unsynced points go: a coach who signs out has said this
   // device is no longer theirs, and a queue left behind is a queue the next coach
@@ -141,10 +153,10 @@ test("confirming also deletes the points that never synced", async () => {
   expect(await readPending(COACH_ID)).toHaveLength(0);
 });
 
-test("says so when the device could not be cleared", async () => {
+test("says so with a toast when the device could not be cleared, but still signs out", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
-  // What a browser with storage blocked does. The session is gone by then, so the
-  // dialog has to finish either way, and finishing silently would claim a clean device.
+  // What a browser with storage blocked does. The session is gone by then, so
+  // sign-out has to finish either way, rather than claim a clean device.
   vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
     throw new Error("storage blocked");
   });
@@ -158,65 +170,5 @@ test("says so when the device could not be cleared", async () => {
   expect(
     await screen.findByText("Some of your data could not be cleared from this device."),
   ).toBeInTheDocument();
-});
-
-test("retrying a failed purge clears the failure message once storage recovers", async () => {
-  stubFetch(() => new Response(null, { status: 204 }));
-  const removeItem = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
-    throw new Error("storage blocked");
-  });
-  const user = userEvent.setup();
-  await renderSignOutAction();
-
-  await user.click(screen.getByRole("button", { name: "Sign Out" }));
-  const dialog = await screen.findByRole("alertdialog");
-  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
-  await screen.findByText("Some of your data could not be cleared from this device.");
-
-  removeItem.mockRestore();
-  await user.click(screen.getByRole("button", { name: "Retry" }));
-
-  await waitFor(() => {
-    expect(
-      screen.queryByText("Some of your data could not be cleared from this device."),
-    ).not.toBeInTheDocument();
-  });
-});
-
-test("a second failed retry leaves the failure dialog exactly as it was", async () => {
-  stubFetch(() => new Response(null, { status: 204 }));
-  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
-    throw new Error("storage blocked");
-  });
-  const user = userEvent.setup();
-  await renderSignOutAction();
-
-  await user.click(screen.getByRole("button", { name: "Sign Out" }));
-  const dialog = await screen.findByRole("alertdialog");
-  await user.click(within(dialog).getByRole("button", { name: "Sign Out" }));
-  await screen.findByText("Some of your data could not be cleared from this device.");
-
-  await user.click(screen.getByRole("button", { name: "Retry" }));
-
-  expect(
-    await screen.findByText("Some of your data could not be cleared from this device."),
-  ).toBeInTheDocument();
-  expect(
-    await screen.findByRole("heading", { name: "You've been signed out." }),
-  ).toBeInTheDocument();
-});
-
-test("acknowledging the success dialog navigates to sign in", async () => {
-  stubFetch(() => new Response(null, { status: 204 }));
-  const user = userEvent.setup();
-  await renderSignOutAction();
-
-  await user.click(screen.getByRole("button", { name: "Sign Out" }));
-  const confirmDialog = await screen.findByRole("alertdialog");
-  await user.click(within(confirmDialog).getByRole("button", { name: "Sign Out" }));
-  await screen.findByText("You've been signed out.");
-
-  await user.click(screen.getByRole("button", { name: "OK" }));
-
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });

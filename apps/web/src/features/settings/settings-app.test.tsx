@@ -62,10 +62,27 @@ test("Install MatchPoint links to the real install guide", async () => {
   expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
 });
 
-test("Appearance and Notifications are stubs, not interactive", async () => {
+test("Notifications is still a stub, not interactive", async () => {
   await renderPage();
 
-  expect(screen.getByText("Appearance")).toBeInTheDocument();
   expect(screen.getByText("Notifications")).toBeInTheDocument();
-  expect(screen.getAllByText("soon")).toHaveLength(2);
+  expect(screen.getByText("soon")).toBeInTheDocument();
+});
+
+test("Appearance toggles between light and dark, and persists the choice", async () => {
+  localStorage.removeItem("matchpoint:theme");
+  const user = userEvent.setup();
+  await renderPage();
+
+  expect(document.documentElement).not.toHaveClass("dark");
+
+  await user.click(screen.getByRole("button", { name: "Dark" }));
+
+  expect(document.documentElement).toHaveClass("dark");
+  expect(localStorage.getItem("matchpoint:theme")).toBe("dark");
+
+  await user.click(screen.getByRole("button", { name: "Light" }));
+
+  expect(document.documentElement).not.toHaveClass("dark");
+  expect(localStorage.getItem("matchpoint:theme")).toBe("light");
 });

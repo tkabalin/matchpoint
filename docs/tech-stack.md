@@ -31,6 +31,7 @@ latest, since community support and documentation coverage peak there.
 | Server state      | TanStack Query                             |
 | Read-cache store  | persistQueryClient + idb-keyval            |
 | Charts            | Recharts 3 (via shadcn/ui `chart`)         |
+| Toasts            | Sonner 2 (via shadcn/ui)                   |
 | Offline outbox    | Dexie 4 (IndexedDB)                        |
 | Package manager   | pnpm 11.18 workspace                       |
 | Lint / format     | ESLint 10 + Prettier 3                     |
@@ -80,6 +81,14 @@ written SVG (no dependency, but every chart re-derives axes, scales and responsi
 **TanStack Query.** Built-in `networkMode`/`onlineManager` for offline handling, cache persistence
 to IndexedDB via `persistQueryClient`, optimistic updates. Used for server-state reads and
 optimistic UI.
+
+**Sonner, via shadcn/ui's own toast component.** A rare, non-blocking failure needs a way to say so
+without a dialog the coach has to dismiss (e.g. sign-out completing even though the local data purge
+on this device failed). Sonner is shadcn's current recommended toast primitive and installs through
+the same CLI as every other component. Its own generated wrapper defaults to `next-themes` for
+light/dark switching, which this project doesn't use (`src/lib/theme.ts` is the single source of
+truth instead) — the wrapper is edited to read that hook, and `next-themes` itself isn't a
+dependency.
 
 **Read-cache persistence through `persistQueryClient` and `idb-keyval`.** Match setup happens at the
 court, often with no connection, so the query cache is written to IndexedDB and restored at

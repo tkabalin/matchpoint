@@ -47,6 +47,14 @@ categories, series, or values need distinct colors — charts, tags, legends, st
 > the way Yellow, Indigo, and Violet are. See **Dashboard color roles** below for exactly which
 > chart gets which colors.
 
+**Indigo's dark-mode variant: `#9B7FC4`.** `#2E1A47` measures 1.27:1 against the app's dark-mode
+background — a real WCAG failure (a graphical object needs at least 3:1), not just a dim shade.
+`#9B7FC4` measures 5.85:1 there, lighter while staying clearly indigo/purple rather than drifting
+toward violet's rose/pink. Same semantic role, two tokens, same reasoning as nav blue above — use
+`#9B7FC4` for indigo whenever dark mode is active, `#2E1A47` in light mode. The other six colors in
+this table need no dark-mode variant: yellow measures 14.2:1 and violet measures 5.42:1 against the
+same dark background, both already comfortably clear.
+
 ### Pattern rule
 
 Color alone never guarantees separation for every severity of color vision deficiency. Every
@@ -159,3 +167,14 @@ black page.
 Apply this to every categorical swatch and every pattern mark. Check every new or edited color
 against both a light and a dark background before it ships — this applies to every future addition
 to this file, not just the colors that look risky at first glance.
+
+**Applies to Recharts marks too, not just HTML swatches.** A thin chart `Line` stroke, `Bar` fill
+edge, or point dot needs the same separation from its background that `swatch-halo` gives an HTML
+box — a `box-shadow` ring doesn't apply to an SVG stroke, so the equivalent there is a halo pass:
+render the mark twice, a wider `stroke="var(--background)"` pass first (self-adjusting per theme,
+reusing the existing background token rather than a fixed color), then the real colored mark on top
+at its normal width. A filled dot gets the same effect from its own `stroke` set to the background
+color at a couple of pixels, no second element needed. This is why violet (`#D9569E`, already 5.42:1
+against the dark background) can still read as "hard to see" as a 2px line despite passing the raw
+contrast check on its own — thin strokes lose effective contrast that a filled swatch of the same
+color doesn't, and the halo is what recovers it.

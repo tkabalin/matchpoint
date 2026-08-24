@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import { Item, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
+import { Item, ItemContent, ItemGroup, ItemSeparator, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 
 import { DeleteAccountSheet } from "./delete-account-sheet";
@@ -95,6 +95,12 @@ export function SettingsAccount() {
             </Item>
           )}
         />
+
+        {/* A plain sign-out and "sign out everywhere else" sitting flush against each
+            other with no divider is exactly the mis-tap risk web-principles.md's
+            Fitts's Law section calls out by name — this internal separator is the fix,
+            not relocating either action out of Account & Security. */}
+        <ItemSeparator />
 
         <Item
           variant="outline"

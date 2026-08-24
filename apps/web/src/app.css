@@ -13,16 +13,19 @@
   /* The categorical palette from .claude/rules/web-color.md, named by role rather
      than by hue so the rule's restrictions are visible at the call site: the three
      outcome-* colors are reserved for point outcomes and hero score bands, and only
-     the cat-* set is free for general categorical use. */
+     the cat-* set is free for general categorical use. Yellow needs no dark-mode
+     variant (14.2:1 against the dark background already) and stays hardcoded here;
+     indigo and violet route through :root/.dark tokens below, same pattern as
+     --primary, since indigo's light-mode hex fails contrast in dark mode outright. */
   --color-outcome-win: #1fbf8c;
   --color-outcome-forced: #e69f00;
   --color-outcome-unforced: #9c3d0a;
   --color-cat-yellow: #eddd6e;
-  --color-cat-indigo: #2e1a47;
-  --color-cat-violet: #d9569e;
 }
 
 @theme inline {
+  --color-cat-indigo: var(--cat-indigo);
+  --color-cat-violet: var(--cat-violet);
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -76,6 +79,10 @@
      shadcn default was a nearby but different blue (lighter, hue-shifted). */
   --primary: oklch(0.455 0.106 241.939);
   --primary-foreground: oklch(0.984 0.019 200.873);
+  /* Same hex as before this pass — no dark-mode failure in light mode, so light
+     mode's own value is unchanged. See the .dark block for the dark-mode pair. */
+  --cat-indigo: #2e1a47;
+  --cat-violet: #d9569e;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.963 0.002 197.1);
@@ -115,6 +122,15 @@
      same light-primary/dark-foreground pairing --sidebar-primary already uses below. */
   --primary: oklch(0.6 0.131 241.532);
   --primary-foreground: oklch(0.2 0.056 241.532);
+  /* #2E1A47 measures 1.27:1 against this mode's --background — a real contrast
+     failure, not a stylistic quibble (WCAG wants at least 3:1 for a graphical
+     object like a chart line). #9B7FC4 measures 5.85:1: lighter, still clearly
+     indigo/purple rather than violet's rose/pink, per .claude/rules/web-color.md.
+     Violet's own #D9569E already measures 5.42:1 here and needs no change — a
+     violet chart line reading as hard to see is a thin-stroke problem, addressed
+     by the halo technique on the Line/dot marks themselves, not a wrong hex. */
+  --cat-indigo: #9b7fc4;
+  --cat-violet: #d9569e;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.275 0.011 216.9);

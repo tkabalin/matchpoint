@@ -159,12 +159,12 @@ test("renders the bottom nav with Players active", async () => {
   expect(screen.getByRole("link", { name: "Players" })).toHaveAttribute("aria-current", "page");
 });
 
-test("the header button opens the redeem-transfer-code sheet", async () => {
+test("the labelled row opens the redeem-transfer-code sheet", async () => {
   stubFetch(() => Response.json([]));
   const user = userEvent.setup();
   await renderPlayersPage();
 
-  await user.click(screen.getByRole("button", { name: "Redeem transfer code" }));
+  await user.click(screen.getByRole("button", { name: "Have a transfer code?" }));
 
   expect(
     await screen.findByRole("heading", { name: "Redeem a transfer code" }),

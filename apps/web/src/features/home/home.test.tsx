@@ -435,7 +435,7 @@ test("shows the squad's player count", async () => {
 // neither trips a needs-attention flag, which is itself the point: an empty
 // result is what "nobody needs attention this week" should look like, not a
 // fallback to whichever player happens to be worst.
-test("ranks best and worst form, and shows a legitimate empty needs-attention state", async () => {
+test("ranks best and worst form, and shows nothing at all for a legitimate empty needs-attention state", async () => {
   stubAuthenticatedHome();
   await renderHome();
 
@@ -444,8 +444,54 @@ test("ranks best and worst form, and shows a legitimate empty needs-attention st
   expect(snapshot.getByText("Amahle Nkosi")).toBeInTheDocument();
   expect(snapshot.getByText("Worst form")).toBeInTheDocument();
   expect(snapshot.getByText("Sipho Dlamini")).toBeInTheDocument();
-  expect(snapshot.getByText("Needs attention")).toBeInTheDocument();
-  expect(snapshot.getByText("No flags this week.")).toBeInTheDocument();
+  // No placeholder text, no card — matches how AddPhotoNudge/InstallAppNudge
+  // render nothing when there's nothing to say (#205).
+  expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
+});
+
+// A third roster slot deterministically maps to the losing-streak template
+// (see SQUAD_MEMBER_TEMPLATES[2] in fixtures.ts), a hard flag.
+const flaggedPlayer: PlayerRead = {
+  ...players[1]!,
+  id: "3f1c2b4e-0000-4000-8000-000000000003",
+  first_name: "Zanele",
+  last_name: "Khumalo",
+};
+
+test("shows a dismissible card when a player is flagged", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json([...players, flaggedPlayer]),
+    "/api/matches": () => Response.json([]),
+  });
+  await renderHome();
+
+  expect(await screen.findByText("Zanele Khumalo")).toBeInTheDocument();
+  expect(screen.getByText("4-match losing streak")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Dismiss the attention flag for Zanele Khumalo" }),
+  ).toBeInTheDocument();
+});
+
+test("dismissing the attention card hides it", async () => {
+  localStorage.removeItem("matchpoint:attention-dismissed");
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json([...players, flaggedPlayer]),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup();
+  await renderHome();
+  await screen.findByText("Zanele Khumalo");
+
+  await user.click(
+    screen.getByRole("button", { name: "Dismiss the attention flag for Zanele Khumalo" }),
+  );
+
+  expect(screen.queryByText("Zanele Khumalo")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Dismiss the attention flag for Zanele Khumalo" }),
+  ).not.toBeInTheDocument();
 });
 
 test("best/worst form show last-5 and forced:unforced as icon+number pairs, like Continue with", async () => {

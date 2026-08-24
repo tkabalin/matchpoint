@@ -1,6 +1,7 @@
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { Outlet, useRouteContext } from "@tanstack/react-router";
 
+import { Toaster } from "@/components/ui/sonner";
 import { queryPersistOptions } from "@/lib/query-persist";
 
 export function RootLayout() {
@@ -16,6 +17,7 @@ export function RootLayout() {
     // before this mounts, so it fetches ahead of the restore and says why.
     <PersistQueryClientProvider client={queryClient} persistOptions={queryPersistOptions}>
       <Outlet />
+      <Toaster />
     </PersistQueryClientProvider>
   );
 }

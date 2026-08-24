@@ -17,8 +17,11 @@ const AVATAR_SIZE = {
   sm: "size-7 text-[0.625rem]",
   md: "size-9 text-xs",
   lg: "size-11 text-sm",
+  // Roster tiles and the coach's own header avatar (#182) — a moderate step up
+  // from lg without jumping straight to the hero size below.
+  xl: "size-16 text-lg",
   // The Profile hero band's avatar (#179) — nothing else needs it yet.
-  xl: "size-24 text-2xl",
+  "2xl": "size-24 text-2xl",
 } as const;
 
 function colorFor(id: string): string {
@@ -68,8 +71,11 @@ export function PhotoAvatar({
         src={photoUrl}
         alt=""
         onError={() => setBroken(true)}
+        // object-top over the object-cover default's center crop (#182): with no
+        // pre-crop guarantee on an uploaded photo, centering cuts off the forehead
+        // and hair of a typical portrait at these sizes more often than it helps.
         className={cn(
-          "swatch-halo shrink-0 object-cover",
+          "swatch-halo shrink-0 object-cover object-top",
           shapeClass,
           AVATAR_SIZE[size],
           className,

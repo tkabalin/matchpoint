@@ -20,6 +20,7 @@ import {
   TriangleAlert,
   UserRound,
   Users,
+  X,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -29,10 +30,17 @@ import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerActionSheet } from "@/components/player-action-sheet";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Item, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { InstallAppNudge } from "@/components/install-app-nudge";
 import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
 import {
@@ -40,6 +48,8 @@ import {
   getRecentFormOptions,
   squadMemberStatsFor,
 } from "@/lib/analytics/analytics-options";
+import type { AttentionResult } from "@/lib/analytics/types.provisional";
+import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
 import {
   getLastViewedAt,
@@ -74,6 +84,12 @@ export function Home() {
   const formRank = rankForm(squadMembers);
   const attention = pickSquadAttention(squadMembers);
   const findPlayer = (playerId: string) => roster.find((player) => player.id === playerId) ?? null;
+  // localStorage isn't itself reactive, so dismissing bumps this to force a
+  // re-read of isAttentionFlagDismissed on the next render.
+  const [, forceAttentionRerender] = useState(0);
+  const attentionDismissed = attention
+    ? isAttentionFlagDismissed(attention.playerId, attention.tier)
+    : false;
 
   return (
     <AppPage>
@@ -101,7 +117,7 @@ export function Home() {
                 id={coach.id}
                 initials={initialsFor(coach.display_name)}
                 photoUrl={coach.photo_url}
-                size="md"
+                size="xl"
                 shape="circle"
               />
             ) : (
@@ -191,15 +207,24 @@ export function Home() {
                 stats={formRank.worst ?? undefined}
                 emptyDetail="Not enough matches logged yet."
               />
-              <SquadRow
-                label="Needs attention"
-                icon={TriangleAlert}
-                tone="forced"
-                player={attention ? findPlayer(attention.playerId) : null}
-                detail={attention?.reason ?? null}
-                emptyDetail="No flags this week."
-              />
             </div>
+
+            {/* A genuine flag to act on, not a ranking like the two rows above —
+                the bordered, dismissible treatment (matching AddPhotoNudge/
+                InstallAppNudge) is what tells them apart, rather than the same
+                plain divider-row style all three used before (#205). Renders
+                nothing at all when there's nothing flagged, same as those nudges
+                do when inapplicable, rather than a placeholder line. */}
+            {attention && !attentionDismissed && (
+              <AttentionCard
+                attention={attention}
+                player={findPlayer(attention.playerId)}
+                onDismiss={() => {
+                  dismissAttentionFlag(attention.playerId, attention.tier);
+                  forceAttentionRerender((tick) => tick + 1);
+                }}
+              />
+            )}
 
             <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
               Based on each player&rsquo;s last few matches. &ldquo;Needs attention&rdquo; can flag
@@ -232,7 +257,7 @@ export function Home() {
             onClick={() => setAdding(true)}
             className="flex shrink-0 flex-col items-center gap-1"
           >
-            <span className="flex size-11 items-center justify-center rounded-sm border border-dashed text-muted-foreground">
+            <span className="flex size-16 items-center justify-center rounded-sm border border-dashed text-muted-foreground">
               <Plus className="size-4" />
             </span>
             <span className="text-xs text-muted-foreground">Add</span>
@@ -353,6 +378,59 @@ function SquadRow({
   );
 }
 
+/** The "Needs attention" flag, once one exists — a bordered, dismissible card
+ *  (#205) matching AddPhotoNudge/InstallAppNudge's visual language, since this
+ *  is a genuine flag to act on rather than a ranking. The row and the dismiss
+ *  button are siblings, not nested, matching MatchRow's own reasoning
+ *  (match-list.tsx): a button inside a Link is invalid HTML. */
+function AttentionCard({
+  attention,
+  player,
+  onDismiss,
+}: {
+  attention: AttentionResult;
+  player: PlayerRead | null;
+  onDismiss: () => void;
+}) {
+  if (!player) return null;
+
+  return (
+    <div className="flex items-stretch gap-1">
+      <Item
+        variant="outline"
+        render={
+          <Link
+            to="/players/$playerId"
+            params={{ playerId: player.id }}
+            onClick={() => setLastViewedPlayerId(player.id)}
+          />
+        }
+        className="flex-1"
+      >
+        <ItemMedia>
+          <TriangleAlert className="size-5 text-outcome-forced" aria-hidden="true" />
+        </ItemMedia>
+        <ItemContent>
+          <ItemTitle>{`${player.first_name} ${player.last_name}`}</ItemTitle>
+          <ItemDescription>{attention.reason}</ItemDescription>
+        </ItemContent>
+        <ItemActions>
+          <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+        </ItemActions>
+      </Item>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-sm"
+        aria-label={`Dismiss the attention flag for ${player.first_name} ${player.last_name}`}
+        onClick={onDismiss}
+      >
+        <X className="size-4" />
+      </Button>
+    </div>
+  );
+}
+
 function recordFrom(results: readonly ("win" | "loss")[]): string {
   const wins = results.filter((result) => result === "win").length;
   return `${wins}–${results.length - wins}`;
@@ -469,8 +547,8 @@ function RosterTile({
       onClick={() => onSelect(player)}
       className="flex shrink-0 flex-col items-center gap-1"
     >
-      <PlayerAvatar player={player} />
-      <span className={cn("h-0.5 w-11 rounded-sm", tone)} aria-hidden="true" />
+      <PlayerAvatar player={player} size="xl" />
+      <span className={cn("h-0.5 w-16 rounded-sm", tone)} aria-hidden="true" />
       <span className="text-xs">{player.first_name}</span>
     </button>
   );

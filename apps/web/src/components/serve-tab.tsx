@@ -282,7 +282,28 @@ function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStat
             }
           />
           <ChartLegend content={<ChartLegendContent />} />
+          {/* A background-colored halo pass under each real line (web-color.md's dual-ring
+              halo, the SVG-stroke equivalent): a 2px line loses effective contrast a
+              filled swatch of the same color doesn't, even when the raw color already
+              passes WCAG on its own. legendType/tooltipType "none" keeps the halo out of
+              both, so it never appears as a second series. */}
+          <Line
+            dataKey="firstServeIn"
+            stroke="var(--background)"
+            strokeWidth={4}
+            dot={false}
+            legendType="none"
+            tooltipType="none"
+          />
           <Line dataKey="firstServeIn" stroke={PATTERN_VAR.yellow} strokeWidth={2} dot={false} />
+          <Line
+            dataKey="secondServeIn"
+            stroke="var(--background)"
+            strokeWidth={4}
+            dot={false}
+            legendType="none"
+            tooltipType="none"
+          />
           <Line dataKey="secondServeIn" stroke={PATTERN_VAR.indigo} strokeWidth={2} dot={false} />
         </LineChart>
       </ChartContainer>

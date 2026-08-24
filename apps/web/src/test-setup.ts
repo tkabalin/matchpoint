@@ -81,9 +81,8 @@ async function requestLock(
 } as LockManager;
 
 // jsdom has no rendering engine, so it has no notion of media queries either —
-// window.matchMedia is entirely absent. usePrefersDark (#176) calls it on every
-// render, so every test touching Logo needs this. Defaults to "not matched" (light):
-// no test currently asserts on the OS being in dark mode.
+// window.matchMedia is entirely absent. device-platform.ts calls it to detect a
+// standalone PWA, so any test touching that needs this. Defaults to "not matched".
 window.matchMedia ??= (query: string) =>
   ({
     matches: false,

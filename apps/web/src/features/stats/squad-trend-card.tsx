@@ -73,13 +73,25 @@ export function SquadTrendCard({
             {/* A hatch fill would be invisible on a 2px stroke, so the line's
                 own non-color channel is its dash style — solid/dashed/dotted
                 per metric, the standard accessible substitute for a stroked
-                mark (see chart-patterns.tsx's own doc comment). */}
+                mark (see chart-patterns.tsx's own doc comment). The background-
+                colored pass underneath is the halo web-color.md's dual-ring rule
+                asks for on a chart mark (indigo/violet lose effective contrast
+                as a thin stroke even when the raw color passes WCAG on its
+                own) — legendType/tooltipType "none" keeps it out of both. */}
+            <Line
+              dataKey="value"
+              stroke="var(--background)"
+              strokeWidth={4}
+              dot={false}
+              legendType="none"
+              tooltipType="none"
+            />
             <Line
               dataKey="value"
               stroke={color}
               strokeWidth={2}
               strokeDasharray={dash}
-              dot={{ r: 3, fill: color }}
+              dot={{ r: 3, fill: color, stroke: "var(--background)", strokeWidth: 2 }}
             />
           </LineChart>
         </ChartContainer>
