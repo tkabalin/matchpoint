@@ -337,6 +337,12 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     case "RALLY": {
       if (action.type === "TAP_RALLY_OUTCOME") {
         const nextDraft: PointDraft = { ...draft, won: action.won, endReason: action.endReason };
+        // An unforced error skips the shot: which stroke produced a miss tells a coach
+        // less than where it missed, and asking costs a tap on the commonest ending.
+        // wing/shotType stay null, a shape Point.create already accepts on a MISTAKE.
+        if (action.endReason === "MISTAKE") {
+          return advance(state, { name: "BALL_LOCATION" }, nextDraft);
+        }
         return advance(state, { name: "SHOT_DETAIL" }, nextDraft);
       }
       throw invalidAction(action, step);

@@ -214,15 +214,30 @@ describe("rally screen", () => {
   // A copy-paste bug wiring the same (won, endReason) to more than one button would
   // pass a single-case test — this guards that all four combinations stay distinct.
   test.each([
-    [true, "FORCED"],
-    [false, "FORCED"],
-    [true, "MISTAKE"],
-    [false, "MISTAKE"],
-  ] as const)("won=%s endReason=%s → SHOT_DETAIL with those fields set", (won, endReason) => {
+    [true, "FORCED", "SHOT_DETAIL"],
+    [false, "FORCED", "SHOT_DETAIL"],
+    [true, "MISTAKE", "BALL_LOCATION"],
+    [false, "MISTAKE", "BALL_LOCATION"],
+  ] as const)("won=%s endReason=%s → %s with those fields set", (won, endReason, nextStep) => {
     const state = transition(start(), { type: "TAP_RALLY_OUTCOME", won, endReason });
-    expect(state.step).toEqual({ name: "SHOT_DETAIL" });
+    expect(state.step).toEqual({ name: nextStep });
     expect(state.draft.won).toBe(won);
     expect(state.draft.endReason).toBe(endReason);
+  });
+
+  test("an unforced error commits with no shot recorded, which Point.create allows", () => {
+    let state = transition(start(), {
+      type: "TAP_RALLY_OUTCOME",
+      won: false,
+      endReason: "MISTAKE",
+    });
+    state = transition(state, { type: "TAP_BALL_LOCATION", ballIn: false, location: "NET" });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    expect(point.wing).toBeNull();
+    expect(point.shotType).toBeNull();
+    expect(point.ballLocation).toBe("NET");
   });
 });
 
