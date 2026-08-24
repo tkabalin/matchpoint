@@ -247,16 +247,32 @@ describe("full happy path — serve through commit", () => {
 });
 
 describe("unusual point", () => {
-  test("rejects Unusual on the first serve — nothing committable exists yet", () => {
-    expect(() => transition(startTracked(), { type: "TAP_UNUSUAL" })).toThrow(/not valid on step/);
+  test("from the first serve, the serve is recorded as unwatched rather than assumed", () => {
+    const state = transition(startTracked(), { type: "TAP_UNUSUAL" });
+    expect(state.step).toEqual({ name: "UNUSUAL_OUTCOME" });
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "UNKNOWN", location: null }]);
   });
 
-  test("rejects Unusual on the second serve too — a lone fault still can't commit", () => {
-    // Point.create requires a faulted first serve to have a second attempt. Reaching
-    // UNUSUAL_OUTCOME from here would produce a draft commitDraft can never turn into
-    // a Point, so this stays blocked even though a serve outcome (the fault) exists.
+  test("from the second serve, the fault already recorded survives", () => {
     const afterFault = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
-    expect(() => transition(afterFault, { type: "TAP_UNUSUAL" })).toThrow(/not valid on step/);
+    const state = transition(afterFault, { type: "TAP_UNUSUAL" });
+    expect(state.draft.serves).toEqual([
+      { number: 1, outcome: "FAULT", location: "NET" },
+      { number: 2, outcome: "UNKNOWN", location: null },
+    ]);
+  });
+
+  test("a point skipped from the serve commits with its winner and nothing else", () => {
+    let state = transition(startTracked(), { type: "TAP_UNUSUAL" });
+    state = transition(state, { type: "TAP_UNUSUAL_OUTCOME", won: false });
+    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: null, note: null });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: null });
+    expect(state.step).toEqual({ name: "READY" });
+
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    expect(point.won).toBe(false);
+    expect(point.firstServeIn).toBeNull();
+    expect(point.rallyLengthBucket).toBeNull();
   });
 
   test("reachable from the rally screen, win/loss is mandatory, reason is optional", () => {

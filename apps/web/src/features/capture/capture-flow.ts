@@ -159,7 +159,8 @@ export type CaptureAction =
   // origin resets.
   | { type: "TAP_LET" }
   | { type: "TAP_RALLY_OUTCOME"; won: boolean; endReason: "FORCED" | "MISTAKE" }
-  // RALLY only, not also SERVE — see transition()'s own comment on why.
+  // Valid from a SERVE or RALLY step — from a serve it records the attempt as
+  // UNKNOWN, see transition()'s own comment.
   | { type: "TAP_UNUSUAL" }
   | { type: "TAP_UNUSUAL_OUTCOME"; won: boolean }
   | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null; note: string | null }
@@ -243,13 +244,18 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
   }
 
   if (action.type === "TAP_UNUSUAL") {
+    if (step.name === "SERVE") {
+      // A SERVE step has nothing committable yet (no attempt, or a lone fault still
+      // awaiting its second), so the attempt in hand is recorded as UNKNOWN rather
+      // than assumed — the one shape that says the serve went unwatched.
+      const nextDraft = withServe(draft, {
+        number: step.number,
+        outcome: "UNKNOWN",
+        location: null,
+      });
+      return advance(state, { name: "UNUSUAL_OUTCOME" }, nextDraft);
+    }
     if (step.name !== "RALLY") {
-      // Point.create only ever accepts a serves array that's already a committable
-      // shape (one non-fault attempt, or two attempts) — every SERVE step sits in a
-      // shape that can't commit on its own (no attempt yet, or a lone fault still
-      // awaiting its second attempt), so Unusual only becomes actionable once the
-      // serve has resolved into a rally. Narrower than "before a ball is struck" —
-      // see the commit message for why.
       throw invalidAction(action, step);
     }
     return advance(state, { name: "UNUSUAL_OUTCOME" }, draft);
