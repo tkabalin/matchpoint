@@ -337,6 +337,35 @@ def test_a_matchs_blank_columns_land_as_null(db_session: Session, tmp_path: Path
     assert match.result is None
 
 
+def test_a_match_row_with_no_played_on_names_its_line(db_session: Session, tmp_path: Path) -> None:
+    """played_on is the one mandatory match column, and a blank one used to arrive as a
+    NOT NULL violation naming the column but not the row."""
+    _write_dataset(tmp_path, matches=[match_row(), match_row(played_on="", match_key="m2")])
+
+    with pytest.raises(ValueError, match=r"matches\.csv line 3: played_on is required"):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_match_row_with_a_malformed_date_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, matches=[match_row(played_on="24/08/2026")])
+
+    with pytest.raises(ValueError, match=r"matches\.csv line 2"):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_match_row_with_an_unknown_enum_value_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, matches=[match_row(surface="astroturf")])
+
+    with pytest.raises(ValueError, match=r"matches\.csv line 2") as caught:
+        run_import(db_session, tmp_path, STUB_HASH)
+
+    assert "astroturf" in str(caught.value)
+
+
 def test_a_match_with_no_match_key_still_imports(db_session: Session, tmp_path: Path) -> None:
     """match_key exists only to join points.csv, so a match without points needs none."""
     _write_dataset(tmp_path, matches=[match_row(match_key="")])

@@ -37,7 +37,9 @@ Expected CSV files, read from /tmp inside the container:
                 game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,
                 is_set_point,is_set_end,is_match_point
 
-- date_of_birth / played_on: ISO format (YYYY-MM-DD).
+- date_of_birth: ISO format (YYYY-MM-DD), blank = unset.
+- played_on: ISO format (YYYY-MM-DD), and required — a match is filed by the date it
+  was played, so there is no such thing as a match without one.
 - dominant_hand: right | left (blank = unset)
 - gender: male | female | other (blank = unset)
 - surface: hard | clay | grass | carpet (blank = unset)
@@ -180,24 +182,33 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     matches_created = 0
     match_by_key: dict[tuple[str, str], Match] = {}
     with (csv_dir / "matches.csv").open(newline="") as f:
-        for row in csv.DictReader(f):
+        for line_number, row in enumerate(csv.DictReader(f), start=2):
             key = (
                 row["coach_email"].lower(),
                 row["player_first_name"],
                 row["player_last_name"],
             )
             player = player_by_key[key]
-            match = Match(
-                player_id=player.id,
-                opponent_name=_blank_to_none(row["opponent_name"]),
-                played_on=_parse_date(row["played_on"]),
-                surface=Surface(v) if (v := _blank_to_none(row["surface"])) else None,
-                event=_blank_to_none(row["event"]),
-                scoring_system=ScoringSystem(v)
-                if (v := _blank_to_none(row["scoring_system"]))
-                else None,
-                result=MatchResult(v) if (v := _blank_to_none(row["result"])) else None,
-            )
+            # Wrapped the way the points loop is: a bad date or enum value here would
+            # otherwise surface as a constraint violation naming a column, with nothing
+            # to say which of a few hundred hand-edited rows produced it.
+            try:
+                played_on = _parse_date(row["played_on"])
+                if played_on is None:
+                    raise ValueError("played_on is required, since a match is filed by date")
+                match = Match(
+                    player_id=player.id,
+                    opponent_name=_blank_to_none(row["opponent_name"]),
+                    played_on=played_on,
+                    surface=Surface(v) if (v := _blank_to_none(row["surface"])) else None,
+                    event=_blank_to_none(row["event"]),
+                    scoring_system=ScoringSystem(v)
+                    if (v := _blank_to_none(row["scoring_system"]))
+                    else None,
+                    result=MatchResult(v) if (v := _blank_to_none(row["result"])) else None,
+                )
+            except ValueError as exc:
+                raise ValueError(f"matches.csv line {line_number}: {exc}") from exc
             db.add(match)
             matches_created += 1
             if match_key := _blank_to_none(row["match_key"]):
