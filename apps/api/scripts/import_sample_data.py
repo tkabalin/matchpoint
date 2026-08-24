@@ -100,6 +100,7 @@ from matchpoint_api.models import (
 )
 from matchpoint_api.schemas.point import PointCreate
 from matchpoint_api.security import hash_password
+from matchpoint_api.usernames import next_username
 
 CSV_DIR = "/tmp"
 
@@ -160,6 +161,11 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                 coach_id=coach.id,
                 first_name=row["first_name"],
                 last_name=row["last_name"],
+                # NOT NULL and never client-chosen, so the import mints one the same way
+                # the create route does. Its query autoflushes the players added earlier
+                # in this loop, which is what numbers two names that fold alike 001 then
+                # 002 rather than both 001.
+                username=next_username(db, row["first_name"], row["last_name"]),
                 date_of_birth=_parse_date(row["date_of_birth"]),
                 dominant_hand=DominantHand(v)
                 if (v := _blank_to_none(row["dominant_hand"]))
