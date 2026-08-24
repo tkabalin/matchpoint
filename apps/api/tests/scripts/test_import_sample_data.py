@@ -497,8 +497,8 @@ def test_an_import_with_no_points_file_writes_no_points(
 
     summary = run_import(db_session, tmp_path, STUB_HASH)
 
-    assert summary.points == 0
-    assert summary.matches_with_points == 0
+    assert summary.points_created == 0
+    assert summary.matches_recomputed == 0
     assert db_session.scalar(select(func.count()).select_from(Point)) == 0
     assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
 
@@ -514,8 +514,241 @@ def test_the_summary_counts_what_it_wrote(db_session: Session, tmp_path: Path) -
     summary = run_import(db_session, tmp_path, STUB_HASH)
 
     assert summary == import_sample_data.ImportSummary(
-        coaches=1, players=2, matches=2, points=2, matches_with_points=1
+        coaches_created=1,
+        coaches_reused=0,
+        players_created=2,
+        players_reused=0,
+        matches_created=2,
+        matches_reused=0,
+        points_created=2,
+        points_skipped=0,
+        matches_recomputed=1,
     )
+
+
+# --- re-running -------------------------------------------------------------------
+
+
+def _usernames_by_first_name(db: Session) -> dict[str, str]:
+    return {
+        row.first_name: row.username
+        for row in db.execute(select(Player.first_name, Player.username))
+    }
+
+
+def _row_counts(db: Session) -> dict[str, int | None]:
+    return {
+        "coaches": db.scalar(select(func.count()).select_from(Coach)),
+        "players": db.scalar(select(func.count()).select_from(Player)),
+        "matches": db.scalar(select(func.count()).select_from(Match)),
+        "points": db.scalar(select(func.count()).select_from(Point)),
+        "match_sets": db.scalar(select(func.count()).select_from(MatchSet)),
+    }
+
+
+def test_the_same_csvs_twice_write_one_copy_of_everything(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """The property the whole reuse path exists for: the import is safe to repeat.
+
+    Before this, a second run died on the unique index over coaches.email, and the only
+    way back was the pg_dump the runbook tells you to take first.
+    """
+    _write_dataset(
+        tmp_path,
+        players=[player_row(), player_row(first_name="Thoko")],
+        matches=[match_row(), match_row(opponent_name="Nobody", match_key="m2")],
+        points=[point_row(is_game_end="true"), point_row(sequence="1")],
+    )
+    run_import(db_session, tmp_path, STUB_HASH)
+    after_first = _row_counts(db_session)
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert _row_counts(db_session) == after_first
+    assert summary == import_sample_data.ImportSummary(
+        coaches_created=0,
+        coaches_reused=1,
+        players_created=0,
+        players_reused=2,
+        matches_created=0,
+        matches_reused=2,
+        points_created=0,
+        points_skipped=2,
+        matches_recomputed=1,
+    )
+
+
+def test_a_re_run_keeps_each_players_username(db_session: Session, tmp_path: Path) -> None:
+    """A username is what the player signs in with, so re-minting one would lock them
+    out of an account that still works."""
+    _write_dataset(tmp_path, players=[player_row(), player_row(first_name="Thoko")])
+    run_import(db_session, tmp_path, STUB_HASH)
+    minted = _usernames_by_first_name(db_session)
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    assert _usernames_by_first_name(db_session) == minted
+
+
+def test_a_re_run_leaves_a_stored_point_untouched(db_session: Session, tmp_path: Path) -> None:
+    """The ids are minted per run, so a rewritten point would show up as a new id."""
+    _write_dataset(tmp_path, points=[point_row()])
+    run_import(db_session, tmp_path, STUB_HASH)
+    stored = db_session.scalars(select(Point)).one()
+    original_id, original_note = stored.id, stored.note
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    reread = db_session.scalars(select(Point)).one()
+    assert reread.id == original_id
+    assert reread.note == original_note
+
+
+def test_a_point_whose_sequence_is_taken_is_skipped_not_rewritten(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """A corrected point is the one correction a re-run does not apply: the ingest route
+    treats a point as immutable once stored, and this follows it."""
+    _write_dataset(tmp_path, points=[point_row(note="As captured")])
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    _write_dataset(tmp_path, points=[point_row(note="Rewritten", rally_length_bucket="b4")])
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    point = db_session.scalars(select(Point)).one()
+    assert point.note == "As captured"
+    assert point.rally_length_bucket is RallyBucket.B1
+    assert summary.points_skipped == 1
+
+
+def test_a_re_run_adds_only_the_rows_the_csvs_gained(db_session: Session, tmp_path: Path) -> None:
+    _write_dataset(tmp_path, points=[point_row()])
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    _write_dataset(
+        tmp_path,
+        players=[player_row(), player_row(first_name="Thoko")],
+        matches=[match_row(), match_row(player_first_name="Thoko", match_key="m2")],
+        points=[point_row(), point_row(sequence="1"), point_row(match_key="m2")],
+    )
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert summary.players_created == 1
+    assert summary.players_reused == 1
+    assert summary.matches_created == 1
+    assert summary.matches_reused == 1
+    assert summary.points_created == 2
+    assert summary.points_skipped == 1
+    assert _row_counts(db_session)["points"] == 3
+
+
+def test_a_re_run_refreshes_a_corrected_player_and_match(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """Correcting the dataset and importing it again is the point of re-running, so the
+    CSV wins on everything past the key that identifies the row."""
+    _write_dataset(tmp_path)
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    _write_dataset(
+        tmp_path,
+        players=[player_row(dominant_hand="left", notes="Left-handed after all.")],
+        matches=[match_row(surface="grass", result="loss")],
+    )
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    player = db_session.scalars(select(Player)).one()
+    match = db_session.scalars(select(Match)).one()
+    assert player.dominant_hand is DominantHand.LEFT
+    assert player.notes == "Left-handed after all."
+    assert match.surface is Surface.GRASS
+    assert match.result is MatchResult.LOSS
+
+
+def test_a_re_run_rehashes_the_coaches_it_reused(db_session: Session, tmp_path: Path) -> None:
+    """main() prints one password and says it works for every imported coach, which would
+    be a lie for the coaches that were already there."""
+    _write_dataset(tmp_path)
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    run_import(db_session, tmp_path, "$argon2-second-run")
+
+    assert db_session.scalars(select(Coach)).one().password_hash == "$argon2-second-run"
+
+
+def test_two_matches_one_day_apart_only_by_opponent_stay_two(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """opponent_name and event are in the key precisely so a player's two matches on one
+    day are two rows, and stay two rather than collapsing on the second run."""
+    _write_dataset(
+        tmp_path,
+        matches=[
+            match_row(opponent_name="First Rival", match_key="m1"),
+            match_row(opponent_name="Second Rival", match_key="m2"),
+        ],
+    )
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert _row_counts(db_session)["matches"] == 2
+    assert summary.matches_reused == 2
+
+
+def test_a_re_run_restates_the_set_scores_of_a_match_that_gained_points(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, points=[point_row(is_game_end="true")])
+    run_import(db_session, tmp_path, STUB_HASH)
+    assert db_session.scalars(select(MatchSet)).one().games_won_tracked == 1
+
+    _write_dataset(
+        tmp_path,
+        points=[
+            point_row(is_game_end="true"),
+            point_row(sequence="1", won="false", is_game_end="true"),
+        ],
+    )
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    match_set = db_session.scalars(select(MatchSet)).one()
+    assert match_set.games_won_tracked == 1
+    assert match_set.games_won_opponent == 1
+
+
+def test_a_repeated_row_inside_one_points_file_lands_once(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """Postgres applies DO NOTHING within the statement too, so a row pasted twice is
+    skipped rather than failing the whole import on the unique index."""
+    _write_dataset(tmp_path, points=[point_row(), point_row()])
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert summary.points_created == 1
+    assert summary.points_skipped == 1
+    assert _row_counts(db_session)["points"] == 1
+
+
+def test_more_points_than_one_statement_can_carry_still_land(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """A point spends over 30 bind parameters and the protocol allows 65535, so a single
+    VALUES list caps out near 2,300 points — under twenty matches' worth of capture.
+
+    Every row is here twice as well, because the pages are separate statements: a repeat
+    in a later one meets the row an earlier one already inserted rather than itself.
+    """
+    points = [point_row(sequence=str(n)) for n in range(2_500)]
+    _write_dataset(tmp_path, points=points + points)
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert summary.points_created == 2_500
+    assert summary.points_skipped == 2_500
+    assert _row_counts(db_session)["points"] == 2_500
 
 
 # --- main() -----------------------------------------------------------------------
@@ -541,8 +774,8 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     import_sample_data.main()
 
     printed = capfd.readouterr().out
-    assert "Imported 1 coaches, 1 players, 1 matches." in printed
-    assert "Imported 1 points across 1 matches." in printed
+    assert "Coaches: 1 new, 0 already there." in printed
+    assert "Points: 1 new, 0 already there, across 1 matches." in printed
     password = printed.rsplit("Demo coach password (same for every imported coach): ", 1)[1]
     assert password.strip()
     assert db_session.scalars(select(Coach)).one().password_hash == STUB_HASH

@@ -49,6 +49,7 @@ Expected CSV files, read from /tmp inside the container:
 - match_key: an arbitrary label, unique per coach (blank = this match has no points).
   It exists only to join points.csv to a match here; it is never stored, so a match
   created without points never needs one.
+
 - players.csv/matches.csv link back to coaches.csv by coach_email; matches.csv links to
   players.csv by (coach_email, player_first_name, player_last_name) — there's no id
   column in the source data, so that triple has to be unique per coach.
@@ -64,6 +65,17 @@ Expected CSV files, read from /tmp inside the container:
 
 All imported coaches share one password, printed at the end, since sample coaches are
 never signed up for real and the CSV carries no password to hash.
+
+Re-running is safe: the same CSVs a second time reuse what is already stored rather than
+duplicating it, so a corrected dataset can simply be imported again. A row is recognised
+by its natural key — a coach by email, a player by (coach, first_name, last_name), a
+match by (player, played_on, opponent_name, event), a point by (match, sequence) — and
+everything past that key is refreshed from the CSV, which is what makes a correction
+land. A match cannot be recognised by its match_key, since that is never stored, which
+is why those four columns have to tell one of a player's matches from another. Two things
+are deliberately not refreshed: a player keeps the username minted on its first import,
+being what that player signs in with, and a point already stored is left as it is rather
+than rewritten, the rule the ingest route follows for a repeated point.
 """
 
 import csv
@@ -74,6 +86,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from matchpoint_api.db import session_factory
@@ -111,11 +125,21 @@ _FALSE_VALUES = {"false", "0", "no"}
 
 
 class ImportSummary(NamedTuple):
-    coaches: int
-    players: int
-    matches: int
-    points: int
-    matches_with_points: int
+    """What one run wrote, split by whether the row was already there.
+
+    The reused counts are what tell an operator a re-run converged rather than doubling
+    the dataset.
+    """
+
+    coaches_created: int
+    coaches_reused: int
+    players_created: int
+    players_reused: int
+    matches_created: int
+    matches_reused: int
+    points_created: int
+    points_skipped: int
+    matches_recomputed: int
 
 
 def _blank_to_none(value: str) -> str | None:
@@ -143,22 +167,51 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     unwritten. The password hash is a parameter because every imported coach shares one,
     and it is the caller that mints the password and prints it afterwards.
     """
-    coach_by_email: dict[str, Coach] = {}
     with (csv_dir / "coaches.csv").open(newline="") as f:
-        for row in csv.DictReader(f):
-            coach = Coach(
-                email=row["email"],
-                display_name=row["display_name"],
-                password_hash=password_hash,
-            )
+        coach_rows = list(csv.DictReader(f))
+    # Coach.email is lowercased by the model on write and by a CHECK in the table, so a
+    # lowercased cell is the stored value and needs no folding beyond this.
+    coach_by_email: dict[str, Coach] = {
+        coach.email: coach
+        for coach in db.scalars(
+            select(Coach).where(Coach.email.in_([row["email"].lower() for row in coach_rows]))
+        )
+    }
+    coaches_created = coaches_reused = 0
+    for row in coach_rows:
+        email = row["email"].lower()
+        coach = coach_by_email.get(email)
+        if coach is None:
+            coach = Coach(email=row["email"], display_name=row["display_name"])
             db.add(coach)
-            coach_by_email[coach.email.lower()] = coach
+            coaches_created += 1
+        else:
+            coaches_reused += 1
+        # Set on a reused coach too: main() prints one password and says it works for
+        # every imported coach, which would be false for the ones already there.
+        coach.display_name = row["display_name"]
+        coach.password_hash = password_hash
+        coach_by_email[email] = coach
     db.flush()
 
-    player_by_key: dict[tuple[str, str, str], Player] = {}
     with (csv_dir / "players.csv").open(newline="") as f:
-        for row in csv.DictReader(f):
-            coach = coach_by_email[row["coach_email"].lower()]
+        player_rows = list(csv.DictReader(f))
+    coach_ids = {coach.id for coach in coach_by_email.values()}
+    player_by_identity: dict[tuple[uuid.UUID, str, str], Player] = {
+        (player.coach_id, player.first_name, player.last_name): player
+        for player in db.scalars(select(Player).where(Player.coach_id.in_(coach_ids)))
+    }
+    players_created = players_reused = 0
+    player_by_key: dict[tuple[str, str, str], Player] = {}
+    for row in player_rows:
+        coach = coach_by_email[row["coach_email"].lower()]
+        date_of_birth = _parse_date(row["date_of_birth"])
+        dominant_hand = DominantHand(v) if (v := _blank_to_none(row["dominant_hand"])) else None
+        gender = Gender(v) if (v := _blank_to_none(row["gender"])) else None
+        notes = _blank_to_none(row["notes"])
+        identity = (coach.id, row["first_name"], row["last_name"])
+        player = player_by_identity.get(identity)
+        if player is None:
             player = Player(
                 coach_id=coach.id,
                 first_name=row["first_name"],
@@ -166,58 +219,83 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                 # NOT NULL and never client-chosen, so the import mints one the same way
                 # the create route does. Its query autoflushes the players added earlier
                 # in this loop, which is what numbers two names that fold alike 001 then
-                # 002 rather than both 001.
+                # 002 rather than both 001. A reused player keeps the one it has: it is
+                # that player's sign-in identifier.
                 username=next_username(db, row["first_name"], row["last_name"]),
-                date_of_birth=_parse_date(row["date_of_birth"]),
-                dominant_hand=DominantHand(v)
-                if (v := _blank_to_none(row["dominant_hand"]))
-                else None,
-                gender=Gender(v) if (v := _blank_to_none(row["gender"])) else None,
-                notes=_blank_to_none(row["notes"]),
             )
             db.add(player)
-            player_by_key[(coach.email.lower(), player.first_name, player.last_name)] = player
+            players_created += 1
+        else:
+            players_reused += 1
+        player.date_of_birth = date_of_birth
+        player.dominant_hand = dominant_hand
+        player.gender = gender
+        player.notes = notes
+        player_by_identity[identity] = player
+        player_by_key[(coach.email.lower(), player.first_name, player.last_name)] = player
     db.flush()
 
-    matches_created = 0
-    match_by_key: dict[tuple[str, str], Match] = {}
     with (csv_dir / "matches.csv").open(newline="") as f:
-        for line_number, row in enumerate(csv.DictReader(f), start=2):
-            key = (
+        match_rows = list(csv.DictReader(f))
+    player_ids = {player.id for player in player_by_key.values()}
+    # A match carries no natural key of its own, so it is identified by the four columns
+    # that distinguish one of a player's matches from another. match_key cannot serve:
+    # it is never stored, so a second run has nothing to recognise.
+    match_by_identity: dict[tuple[uuid.UUID, date, str | None, str | None], Match] = {
+        (match.player_id, match.played_on, match.opponent_name, match.event): match
+        for match in db.scalars(select(Match).where(Match.player_id.in_(player_ids)))
+    }
+    matches_created = matches_reused = 0
+    match_by_key: dict[tuple[str, str], Match] = {}
+    for line_number, row in enumerate(match_rows, start=2):
+        player = player_by_key[
+            (
                 row["coach_email"].lower(),
                 row["player_first_name"],
                 row["player_last_name"],
             )
-            player = player_by_key[key]
-            # Wrapped the way the points loop is: a bad date or enum value here would
-            # otherwise surface as a constraint violation naming a column, with nothing
-            # to say which of a few hundred hand-edited rows produced it.
-            try:
-                played_on = _parse_date(row["played_on"])
-                if played_on is None:
-                    raise ValueError("played_on is required, since a match is filed by date")
-                match = Match(
-                    player_id=player.id,
-                    opponent_name=_blank_to_none(row["opponent_name"]),
-                    played_on=played_on,
-                    surface=Surface(v) if (v := _blank_to_none(row["surface"])) else None,
-                    event=_blank_to_none(row["event"]),
-                    scoring_system=ScoringSystem(v)
-                    if (v := _blank_to_none(row["scoring_system"]))
-                    else None,
-                    result=MatchResult(v) if (v := _blank_to_none(row["result"])) else None,
-                )
-            except ValueError as exc:
-                raise ValueError(f"matches.csv line {line_number}: {exc}") from exc
+        ]
+        # Wrapped the way the points loop is: a bad date or enum value here would
+        # otherwise surface as a constraint violation naming a column, with nothing
+        # to say which of a few hundred hand-edited rows produced it.
+        try:
+            played_on = _parse_date(row["played_on"])
+            if played_on is None:
+                raise ValueError("played_on is required, since a match is filed by date")
+            surface = Surface(v) if (v := _blank_to_none(row["surface"])) else None
+            scoring_system = (
+                ScoringSystem(v) if (v := _blank_to_none(row["scoring_system"])) else None
+            )
+            result = MatchResult(v) if (v := _blank_to_none(row["result"])) else None
+        except ValueError as exc:
+            raise ValueError(f"matches.csv line {line_number}: {exc}") from exc
+        opponent_name = _blank_to_none(row["opponent_name"])
+        event = _blank_to_none(row["event"])
+        identity = (player.id, played_on, opponent_name, event)
+        match = match_by_identity.get(identity)
+        if match is None:
+            match = Match(
+                player_id=player.id,
+                opponent_name=opponent_name,
+                played_on=played_on,
+                event=event,
+            )
             db.add(match)
             matches_created += 1
-            if match_key := _blank_to_none(row["match_key"]):
-                match_by_key[(row["coach_email"].lower(), match_key)] = match
+        else:
+            matches_reused += 1
+        match.surface = surface
+        match.scoring_system = scoring_system
+        match.result = result
+        match_by_identity[identity] = match
+        if match_key := _blank_to_none(row["match_key"]):
+            match_by_key[(row["coach_email"].lower(), match_key)] = match
     # match.id is a Python-side default, only assigned to the instance on flush;
     # points.csv needs it to set match_id below.
     db.flush()
 
-    points_created = 0
+    points_created = points_skipped = 0
+    point_values: list[dict[str, object]] = []
     matches_with_points: set[uuid.UUID] = set()
     points_path = csv_dir / "points.csv"
     if points_path.exists():
@@ -280,21 +358,43 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                     )
                 except (ValidationError, ValueError) as exc:
                     raise ValueError(f"points.csv line {line_number}: {exc}") from exc
-                db.add(Point(**point_data.model_dump(), match_id=match.id))
+                point_values.append({**point_data.model_dump(), "match_id": match.id})
                 matches_with_points.add(match.id)
-                points_created += 1
 
-        # Flush so the recompute's own SQL select sees the points just added.
-        db.flush()
+        if point_values:
+            # Keyed on (match_id, sequence) rather than on id: the CSV carries no point
+            # id, so a fresh uuid4 per row would never recognise a point a previous run
+            # already stored. DO NOTHING leaves that stored point as it is, which is the
+            # rule the ingest route follows for a repeated one.
+            #
+            # The rows are passed as execute() parameters rather than to values(), which
+            # would render them as one VALUES list: a point spends over 30 bind
+            # parameters and the wire protocol allows 65535, so a dataset past roughly
+            # 2,300 points would fail the whole import. As parameters, SQLAlchemy pages
+            # them into statements that fit.
+            landed = db.execute(
+                insert(Point)
+                .on_conflict_do_nothing(index_elements=[Point.match_id, Point.sequence])
+                .returning(Point.id),
+                point_values,
+            ).all()
+            points_created = len(landed)
+            points_skipped = len(point_values) - points_created
+        # Every match named in points.csv, not only those that gained a point: a re-run
+        # that added points to a match already imported has to restate its set scores.
         for match_id in matches_with_points:
             recompute_match_sets(db, match_id)
 
     return ImportSummary(
-        coaches=len(coach_by_email),
-        players=len(player_by_key),
-        matches=matches_created,
-        points=points_created,
-        matches_with_points=len(matches_with_points),
+        coaches_created=coaches_created,
+        coaches_reused=coaches_reused,
+        players_created=players_created,
+        players_reused=players_reused,
+        matches_created=matches_created,
+        matches_reused=matches_reused,
+        points_created=points_created,
+        points_skipped=points_skipped,
+        matches_recomputed=len(matches_with_points),
     )
 
 
@@ -306,10 +406,15 @@ def main() -> None:
         db.commit()
 
     print(
-        f"Imported {summary.coaches} coaches, {summary.players} players, {summary.matches} matches."
+        f"Coaches: {summary.coaches_created} new, {summary.coaches_reused} already there. "
+        f"Players: {summary.players_created} new, {summary.players_reused} already there. "
+        f"Matches: {summary.matches_created} new, {summary.matches_reused} already there."
     )
     if (csv_dir / "points.csv").exists():
-        print(f"Imported {summary.points} points across {summary.matches_with_points} matches.")
+        print(
+            f"Points: {summary.points_created} new, {summary.points_skipped} already there, "
+            f"across {summary.matches_recomputed} matches."
+        )
     print(f"Demo coach password (same for every imported coach): {demo_password}")
 
 
