@@ -503,6 +503,22 @@ def test_an_import_with_no_points_file_writes_no_points(
     assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0
 
 
+def test_a_points_file_with_only_a_header_writes_no_points(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """A points.csv that exists but holds nothing is the shape of a dataset exported
+    before any capture had happened, and it must not reach the insert with no rows."""
+    _write_dataset(tmp_path)
+    (tmp_path / "points.csv").write_text(",".join(point_row()) + "\n")
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    assert summary.points_created == 0
+    assert summary.points_skipped == 0
+    assert summary.matches_recomputed == 0
+    assert _row_counts(db_session)["points"] == 0
+
+
 def test_the_summary_counts_what_it_wrote(db_session: Session, tmp_path: Path) -> None:
     _write_dataset(
         tmp_path,
@@ -779,3 +795,21 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     password = printed.rsplit("Demo coach password (same for every imported coach): ", 1)[1]
     assert password.strip()
     assert db_session.scalars(select(Coach)).one().password_hash == STUB_HASH
+
+
+def test_main_says_nothing_about_points_when_there_is_no_points_file(
+    db_session: Session,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    _write_dataset(tmp_path)
+    monkeypatch.setattr(import_sample_data, "CSV_DIR", str(tmp_path))
+    monkeypatch.setattr(import_sample_data, "session_factory", lambda: nullcontext(db_session))
+    monkeypatch.setattr(import_sample_data, "hash_password", lambda password: STUB_HASH)
+
+    import_sample_data.main()
+
+    printed = capfd.readouterr().out
+    assert "Coaches: 1 new, 0 already there." in printed
+    assert "Points:" not in printed

@@ -70,16 +70,16 @@ select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "S608"]
 testpaths = ["tests"]
 
 [tool.coverage.run]
-source = ["src/matchpoint_api"]
+source = ["src/matchpoint_api", "scripts"]
 # Statement coverage alone counts an `if` as covered once either arm runs, which
 # will start to matter as the analytics queries grow branches worth missing.
 branch = true
 
 [tool.coverage.report]
-exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:"]
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "if __name__ == .__main__.:"]
 
 [tool.pyright]
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
