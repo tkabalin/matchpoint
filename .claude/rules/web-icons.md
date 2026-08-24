@@ -82,6 +82,7 @@ whether an icon means "go to detail" or "expand this section" from its shape alo
 | Filter                   | `SlidersHorizontal`                     | Match list, stats scope panel.                                                                                                                                                                                                           |
 | Copy to clipboard        | `Copy`, swapping to `Check` once copied | Transfer-code display.                                                                                                                                                                                                                   |
 | Let (replay the point)   | `RotateCcw`                             | Capture's serve screen, and the rally screen when it lands. A let replays the point and never changes the score.                                                                                                                         |
+| Skip a point             | `SkipForward`                           | Capture's match header. Tap records the point winner-only, press-and-hold opens Skip ahead.                                                                                                                                              |
 
 ## Before picking a new icon
 
