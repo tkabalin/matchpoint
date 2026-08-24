@@ -1,6 +1,14 @@
 import type { PlayerRead } from "@matchpoint/api-client";
 import { getPlayerOptions } from "@matchpoint/api-client/react-query";
 import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
+import {
+  Outlet,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+} from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
@@ -41,13 +49,41 @@ function stubFetch(routes: Record<string, () => Response | Promise<Response>>) {
   );
 }
 
-function renderSheet(seed: PlayerRead = player) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+/**
+ * The sheet calls `useNavigate` — deleting a player leaves its profile — so it needs a
+ * router around it, not just a query client. Without one TanStack Router warns on every
+ * render and `navigate` is inert, so a deletion could not be followed anywhere.
+ */
+function renderInRouter(ui: React.ReactNode, queryClient: QueryClient) {
+  const rootRoute = createRootRoute({ component: () => <Outlet /> });
+  const profileRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players/$playerId",
+    component: () => <>{ui}</>,
+  });
+  const rosterRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players",
+    component: () => <h1>Players</h1>,
+  });
+  const routeTree = rootRoute.addChildren([profileRoute, rosterRoute]);
+  const router = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [`/players/${player.id}`] }),
+  });
+  render(
     <QueryClientProvider client={queryClient}>
-      <EditPlayerSheet player={seed} open onOpenChange={() => {}} />
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   );
+  // Await the router's own load rather than leaving the first paint inside a findBy*
+  // poll, whose budget is the narrowest in the suite: docs/testing.md.
+  return router.load();
+}
+
+async function renderSheet(seed: PlayerRead = player) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  await renderInRouter(<EditPlayerSheet player={seed} open onOpenChange={() => {}} />, queryClient);
 }
 
 /**
@@ -64,21 +100,17 @@ function PlayerProfileHarness({ playerId }: { playerId: string }) {
   return <EditPlayerSheet player={data} open onOpenChange={() => {}} />;
 }
 
-function renderWithOwnedQuery(seed: PlayerRead = player) {
+async function renderWithOwnedQuery(seed: PlayerRead = player) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
-    <QueryClientProvider client={queryClient}>
-      <PlayerProfileHarness playerId={seed.id} />
-    </QueryClientProvider>,
-  );
+  await renderInRouter(<PlayerProfileHarness playerId={seed.id} />, queryClient);
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("shows initials when the player has no photo", () => {
-  renderSheet();
+test("shows initials when the player has no photo", async () => {
+  await renderSheet();
 
   expect(screen.getByText("AN")).toBeInTheDocument();
 });
@@ -93,7 +125,7 @@ test("choosing a photo uploads it and shows it in place of initials", async () =
     },
   });
   const user = userEvent.setup();
-  renderWithOwnedQuery();
+  await renderWithOwnedQuery();
 
   await user.click(await screen.findByRole("button", { name: "Change Amahle's photo" }));
   await user.click(await screen.findByRole("button", { name: "Choose photo" }));
@@ -117,7 +149,7 @@ test("removing a photo restores initials", async () => {
     },
   });
   const user = userEvent.setup();
-  renderWithOwnedQuery(withPhoto);
+  await renderWithOwnedQuery(withPhoto);
 
   await user.click(await screen.findByRole("button", { name: "Change Amahle's photo" }));
   await user.click(await screen.findByRole("button", { name: "Remove photo" }));
@@ -127,7 +159,7 @@ test("removing a photo restores initials", async () => {
 
 test("no Remove photo option when there is no photo to remove", async () => {
   const user = userEvent.setup();
-  renderSheet();
+  await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));
 
@@ -144,7 +176,7 @@ test("generating a transfer code shows it once, with a copy button", async () =>
     [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "ABCD1234" }),
   });
   const user = userEvent.setup();
-  renderSheet();
+  await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
   await user.click(await screen.findByRole("button", { name: "Generate code" }));
@@ -167,7 +199,7 @@ test("shows 'Manage transfer code' and lets the coach cancel a pending one", asy
     },
   });
   const user = userEvent.setup();
-  renderWithOwnedQuery(pending);
+  await renderWithOwnedQuery(pending);
 
   await user.click(await screen.findByRole("button", { name: "Manage transfer code" }));
   await user.click(await screen.findByRole("button", { name: "Cancel transfer" }));
@@ -182,7 +214,7 @@ test("generating a new code while one is pending", async () => {
   stubFetch({
     [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "FRESH9999" }),
   });
-  renderSheet({ ...player, has_transfer_code: true });
+  await renderSheet({ ...player, has_transfer_code: true });
 
   await user.click(screen.getByRole("button", { name: "Manage transfer code" }));
   await user.click(await screen.findByRole("button", { name: "Generate a new code instead" }));

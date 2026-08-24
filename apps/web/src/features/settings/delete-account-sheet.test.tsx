@@ -47,7 +47,10 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
   );
 }
 
-async function renderSheet({ players = [] as PlayerRead[] } = {}) {
+async function renderSheet({
+  players = [] as PlayerRead[],
+  onOpenChange = () => {},
+}: { players?: PlayerRead[]; onOpenChange?: (open: boolean) => void } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   queryClient.setQueryData(listPlayersQueryKey(), players);
 
@@ -55,7 +58,7 @@ async function renderSheet({ players = [] as PlayerRead[] } = {}) {
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings/account",
-    component: () => <DeleteAccountSheet open onOpenChange={() => {}} />,
+    component: () => <DeleteAccountSheet open onOpenChange={onOpenChange} />,
   });
   const signInRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -103,14 +106,7 @@ test("says nothing about transfer codes when the roster has none outstanding", a
 test("Cancel on the first step closes the sheet", async () => {
   const user = userEvent.setup();
   const onOpenChange = vi.fn();
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(listPlayersQueryKey(), []);
-  render(
-    <QueryClientProvider client={queryClient}>
-      <DeleteAccountSheet open onOpenChange={onOpenChange} />
-    </QueryClientProvider>,
-  );
-  await screen.findByRole("heading", { name: "Deleting your account also deletes your players" });
+  await renderSheet({ onOpenChange });
 
   await user.click(screen.getByRole("button", { name: "Cancel" }));
 
