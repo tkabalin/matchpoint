@@ -1,9 +1,10 @@
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Row, and_, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,7 @@ from matchpoint_api.schemas.analytics import (
     MetricUnit,
     OutcomeMixRow,
     PlayerOverview,
+    PointPhase,
     RallyStats,
     ServeSideStats,
     ServeStats,
@@ -56,6 +58,19 @@ router = APIRouter(
 )
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+# Five is the deepest set number any system in docs/scoring-systems.md reaches, the
+# men's Grand Slam format being best-of-five; every other system decides in three or
+# fewer. Ingest stores whatever set the client stamps, so this bound is the filter's
+# own and not a claim about what the table holds.
+MAX_SET_NUMBER = 5
+
+SetFilter = Annotated[
+    int | None, Query(ge=1, le=MAX_SET_NUMBER, description="Count only points from this set.")
+]
+PhaseFilter = Annotated[
+    PointPhase, Query(description="Count only points the capture client stamped as this moment.")
+]
 
 # Mirrored by the head-to-head tab's caption: below this many meetings the list shows
 # the raw record and no rate, a percentage of two matches being noise wearing a unit.
@@ -159,14 +174,53 @@ def _forced_unforced(
     )
 
 
-def _point_counts(
-    db: Session, player_id: uuid.UUID, match_ids: Sequence[uuid.UUID] | None = None
-) -> Row[Any]:
+# Every phase a caller can ask for is a boolean the capture client already stamped on
+# the point (#175), so narrowing to one is a column test and never a replay of the
+# score. PointPhase.FULL is absent because it narrows nothing.
+_PHASE_COLUMN: dict[PointPhase, Any] = {
+    PointPhase.TIEBREAKS: Point.in_tiebreak,
+    PointPhase.BREAK_POINTS: Point.is_break_point,
+    PointPhase.GAME_POINTS: Point.is_game_point,
+    PointPhase.SET_POINTS: Point.is_set_point,
+    PointPhase.MATCH_POINTS: Point.is_match_point,
+    PointPhase.GAME_ENDING: Point.is_game_end,
+    PointPhase.SET_ENDING: Point.is_set_end,
+}
+
+
+@dataclass(frozen=True)
+class PointScope:
+    """Which of a player's points a figure is computed over, on every axis at once.
+
+    One object rather than a parameter per axis: each helper below aggregates points
+    and every one of them must narrow by the same rule, or a filtered headline ends
+    up sitting beside an unfiltered breakdown.
+    """
+
+    # None means every match the player has, which is what the unfiltered tabs ask for.
+    match_ids: Sequence[uuid.UUID] | None = None
+    set_number: int | None = None
+    phase: PointPhase = PointPhase.FULL
+
+    def conditions(self) -> list[Any]:
+        """The `points` terms this scope adds, empty where it narrows nothing."""
+        terms: list[Any] = []
+        if self.match_ids is not None:
+            terms.append(Point.match_id.in_(self.match_ids))
+        if self.set_number is not None:
+            terms.append(Point.set_number == self.set_number)
+        if self.phase is not PointPhase.FULL:
+            terms.append(_PHASE_COLUMN[self.phase])
+        return terms
+
+
+def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[Any]:
     """Every point tally the endpoints aggregate over, in one FILTER query.
 
     A superset on purpose: one shape whatever the endpoint, so the arithmetic on top
     is the only thing that differs and the query is exercised whole by every test.
-    Aggregating over no rows still returns one row of zero counts.
+    Aggregating over no rows still returns one row of zero counts, and the per-set and
+    per-match denominators are counted off the scoped rows so they stay in step.
     """
 
     # Conditions are Any because a bare boolean column (Point.won) arrives as an
@@ -221,15 +275,13 @@ def _point_counts(
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
-        .where(Match.player_id == player_id)
+        .where(Match.player_id == player_id, *scope.conditions())
     )
-    if match_ids is not None:
-        statement = statement.where(Point.match_id.in_(match_ids))
     return db.execute(statement).one()
 
 
 def _shot_breakdowns(
-    db: Session, player_id: uuid.UUID, match_ids: Sequence[uuid.UUID] | None = None
+    db: Session, player_id: uuid.UUID, scope: PointScope
 ) -> tuple[list[BreakdownRow], list[BreakdownRow], list[ShotShare]]:
     """The by-final-shot bars for wins and losses, plus the radar's shares.
 
@@ -249,11 +301,9 @@ def _shot_breakdowns(
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
-        .where(Match.player_id == player_id, Point.wing.is_not(None))
+        .where(Match.player_id == player_id, Point.wing.is_not(None), *scope.conditions())
         .group_by(Point.won, Point.wing, Point.shot_type)
     )
-    if match_ids is not None:
-        statement = statement.where(Point.match_id.in_(match_ids))
     rows = db.execute(statement).all()
 
     won_rows = [row for row in rows if row.won]
@@ -342,10 +392,15 @@ def _form_metric(results: Sequence[Row[Any]]) -> Metric | None:
 
 @router.get("/overview", response_model=PlayerOverview)
 def get_player_overview(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> PlayerOverview:
-    """The overview tab: form, the headline rates, and the win/loss record."""
+    """The overview tab: form, the headline rates, and the win/loss record.
+
+    Whole-career only, and takes no set or phase filter (#227): four of its seven
+    fields are counted over matches rather than points, so a scoped request would
+    answer with three narrowed numbers beside four that quietly ignored the scope.
+    """
     owned_player(db, player_id, coach.id)
     results = _results_newest_first(db, player_id)
-    counts = _point_counts(db, player_id)
+    counts = _point_counts(db, player_id, PointScope())
 
     this_year = [row for row in results if row.played_on.year == date.today().year]
     recent = results[:5]
@@ -410,7 +465,9 @@ def _serving_stats(counts: Row[Any]) -> ServeSideStats:
     )
 
 
-def _returning_stats(db: Session, player_id: uuid.UUID, counts: Row[Any]) -> ServeSideStats:
+def _returning_stats(
+    db: Session, player_id: uuid.UUID, counts: Row[Any], scope: PointScope
+) -> ServeSideStats:
     metrics = [
         _percent("Break points converted", counts.bp_converted, counts.bp_chances),
         _percent("1st serve return points won", counts.their_first_in_won, counts.their_first_in),
@@ -428,6 +485,7 @@ def _returning_stats(db: Session, player_id: uuid.UUID, counts: Row[Any]) -> Ser
                 Match.player_id == player_id,
                 Point.server == MatchSide.OPPONENT,
                 Point.return_outcome.is_not(None),
+                *scope.conditions(),
             )
             .group_by(Point.return_outcome)
         ).all()
@@ -450,13 +508,20 @@ def _returning_stats(db: Session, player_id: uuid.UUID, counts: Row[Any]) -> Ser
 
 
 @router.get("/serve", response_model=ServeStats)
-def get_serve_stats(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> ServeStats:
+def get_serve_stats(
+    player_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    set_number: SetFilter = None,
+    phase: PhaseFilter = PointPhase.FULL,
+) -> ServeStats:
     """The serve tab, both sides at once so toggling costs no second request."""
     owned_player(db, player_id, coach.id)
-    counts = _point_counts(db, player_id)
+    scope = PointScope(set_number=set_number, phase=phase)
+    counts = _point_counts(db, player_id, scope)
     return ServeStats(
         serving=_serving_stats(counts),
-        returning=_returning_stats(db, player_id, counts),
+        returning=_returning_stats(db, player_id, counts, scope),
     )
 
 
@@ -489,11 +554,18 @@ def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
 
 
 @router.get("/rally", response_model=RallyStats)
-def get_rally_stats(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> RallyStats:
+def get_rally_stats(
+    player_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    set_number: SetFilter = None,
+    phase: PhaseFilter = PointPhase.FULL,
+) -> RallyStats:
     """The rally tab: how points end once the ball is in play."""
     owned_player(db, player_id, coach.id)
-    counts = _point_counts(db, player_id)
-    won_by_shot, lost_by_shot, shot_frequency = _shot_breakdowns(db, player_id)
+    scope = PointScope(set_number=set_number, phase=phase)
+    counts = _point_counts(db, player_id, scope)
+    won_by_shot, lost_by_shot, shot_frequency = _shot_breakdowns(db, player_id, scope)
     return RallyStats(
         hero=_forced_unforced(counts.forced_won, counts.mistake_lost),
         won_by_shot=won_by_shot,
@@ -593,12 +665,13 @@ def get_trend_stats(
     def values_over(rows: Sequence[Row[Any]]) -> dict[str, tuple[float, str] | None]:
         ids = [row.id for row in rows]
         with_result = [row for row in rows if row.result is not None]
-        return _window_values(_point_counts(db, player_id, ids), with_result)
+        return _window_values(_point_counts(db, player_id, PointScope(match_ids=ids)), with_result)
 
     current_values = values_over(current)
     previous_values = values_over(previous) if previous else dict.fromkeys(current_values)
     all_time = _window_values(
-        _point_counts(db, player_id), [row for row in matches if row.result is not None]
+        _point_counts(db, player_id, PointScope()),
+        [row for row in matches if row.result is not None],
     )
 
     metrics = []
@@ -758,10 +831,14 @@ def _slope(
     if len(meetings_oldest_first) < 4:
         return None
     first = _half_slope_values(
-        _point_counts(db, player_id, [row.id for row in meetings_oldest_first[:2]])
+        _point_counts(
+            db, player_id, PointScope(match_ids=[row.id for row in meetings_oldest_first[:2]])
+        )
     )
     last = _half_slope_values(
-        _point_counts(db, player_id, [row.id for row in meetings_oldest_first[-2:]])
+        _point_counts(
+            db, player_id, PointScope(match_ids=[row.id for row in meetings_oldest_first[-2:]])
+        )
     )
     if first is None or last is None:
         return None
@@ -836,8 +913,9 @@ def get_head_to_head(
 
     oldest_first = list(reversed(meetings))
     meeting_ids = [row.id for row in oldest_first]
-    counts = _point_counts(db, player_id, meeting_ids)
-    won_by_shot, _, shot_frequency = _shot_breakdowns(db, player_id, meeting_ids)
+    meeting_scope = PointScope(match_ids=meeting_ids)
+    counts = _point_counts(db, player_id, meeting_scope)
+    won_by_shot, _, shot_frequency = _shot_breakdowns(db, player_id, meeting_scope)
     loss_ids = [row.id for row in meetings if row.result == MatchResult.LOSS]
 
     your_serve = [

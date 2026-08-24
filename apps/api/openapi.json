@@ -1931,6 +1931,21 @@
         "title": "PointCreate",
         "type": "object"
       },
+      "PointPhase": {
+        "description": "Which stamped moment of a match a points query counts.",
+        "enum": [
+          "full",
+          "tiebreaks",
+          "break_points",
+          "game_points",
+          "set_points",
+          "match_points",
+          "game_ending",
+          "set_ending"
+        ],
+        "title": "PointPhase",
+        "type": "string"
+      },
       "PointRead": {
         "description": "One stored point, as the analytics dashboard and the capture client's sync\nreconciliation read it back.\n\nCarries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not\ncreated_at or updated_at: a point is never corrected after it lands, so those would\nonly restate when the row was ingested, which is bookkeeping neither reader needs.",
         "properties": {
@@ -4997,7 +5012,7 @@
     },
     "/players/{player_id}/analytics/overview": {
       "get": {
-        "description": "The overview tab: form, the headline rates, and the win/loss record.",
+        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nWhole-career only, and takes no set or phase filter (#227): four of its seven\nfields are counted over matches rather than points, so a scoped request would\nanswer with three narrowed numbers beside four that quietly ignored the scope.",
         "operationId": "get_player_overview",
         "parameters": [
           {
@@ -5073,6 +5088,37 @@
               "title": "Player Id",
               "type": "string"
             }
+          },
+          {
+            "description": "Count only points from this set.",
+            "in": "query",
+            "name": "set_number",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 5,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only points from this set.",
+              "title": "Set Number"
+            }
+          },
+          {
+            "description": "Count only points the capture client stamped as this moment.",
+            "in": "query",
+            "name": "phase",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PointPhase",
+              "default": "full",
+              "description": "Count only points the capture client stamped as this moment."
+            }
           }
         ],
         "responses": {
@@ -5136,6 +5182,37 @@
               "format": "uuid",
               "title": "Player Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Count only points from this set.",
+            "in": "query",
+            "name": "set_number",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 5,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only points from this set.",
+              "title": "Set Number"
+            }
+          },
+          {
+            "description": "Count only points the capture client stamped as this moment.",
+            "in": "query",
+            "name": "phase",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/PointPhase",
+              "default": "full",
+              "description": "Count only points the capture client stamped as this moment."
             }
           }
         ],

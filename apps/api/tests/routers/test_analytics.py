@@ -511,6 +511,270 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
     ]
 
 
+# --- set and phase filters ---
+
+# One point per phase, plus the plain point below, so a phase query has both a row it
+# must reach and seven it must leave out. Every name here is a column the capture
+# client stamps; nothing in this list is derived by the server (#227).
+PHASE_STAMPS = [
+    ("tiebreaks", "in_tiebreak"),
+    ("break_points", "is_break_point"),
+    ("game_points", "is_game_point"),
+    ("set_points", "is_set_point"),
+    ("match_points", "is_match_point"),
+    ("game_ending", "is_game_end"),
+    ("set_ending", "is_set_end"),
+]
+
+
+def test_serve_narrows_to_one_set(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Four service points over two sets: set 1 holds a game, set 2 double-faults once.
+
+    The per-set denominator is counted off the same narrowed rows, so a one-set query
+    divides by one set and not by the two the match holds.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0)
+    make_point(db_session, match_id=match.id, sequence=1, is_game_end=True)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=2,
+        set_number=2,
+        won=False,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.LONG,
+        end_reason=EndReason.DOUBLE_FAULT,
+        wing=None,
+        shot_type=None,
+    )
+    make_point(db_session, match_id=match.id, sequence=3, set_number=2)
+
+    first = _get(client, player.id, "serve?set_number=1")["serving"]
+    second = _get(client, player.id, "serve?set_number=2")["serving"]
+
+    assert first["hero"]["value"] == 100
+    assert [
+        (metric["label"], metric["value"], metric["sample_size"]) for metric in first["metrics"]
+    ] == [
+        ("1st serve in %", 100, "n=2"),
+        ("1st serve points won", 100, "n=2"),
+        ("Double faults / set", 0.0, "n=1 sets"),
+        ("Aces / match", 0.0, "n=1"),
+    ]
+    # No game ended inside set 2, so its hold percentage has nothing to count.
+    assert second["hero"] is None
+    assert [
+        (metric["label"], metric["value"], metric["sample_size"]) for metric in second["metrics"]
+    ] == [
+        ("1st serve in %", 50, "n=2"),
+        ("1st serve points won", 100, "n=1"),
+        ("2nd serve points won", 0, "n=1"),
+        ("Double faults / set", 1.0, "n=1 sets"),
+        ("Aces / match", 0.0, "n=1"),
+    ]
+
+
+def test_rally_narrows_to_one_set(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """A forehand drive won in set 1, a backhand volley won in set 2."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        set_number=2,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.VOLLEY,
+    )
+
+    body = _get(client, player.id, "rally?set_number=2")
+
+    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert body["won_by_shot"] == [
+        {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
+    ]
+    assert body["shot_frequency"] == [
+        {"shot": "Drive", "share": 0},
+        {"shot": "Volley", "share": 1.0},
+        {"shot": "Drop shot", "share": 0},
+        {"shot": "Lob", "share": 0},
+    ]
+
+
+@pytest.mark.parametrize(
+    ("phase", "counted"), [("full", 8), *((phase, 1) for phase, _ in PHASE_STAMPS)]
+)
+def test_phase_counts_only_the_points_carrying_its_stamp(
+    client: TestClient, db_session: Session, coach: Coach, phase: str, counted: int
+) -> None:
+    """One point per stamp plus one carrying none; full match reaches all eight."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0)
+    for sequence, (_, column) in enumerate(PHASE_STAMPS, start=1):
+        make_point(db_session, match_id=match.id, sequence=sequence, **{column: True})
+
+    body = _get(client, player.id, f"rally?phase={phase}")
+
+    assert body["errors_overall"]["sample_size"] == f"n={counted}"
+
+
+def test_serve_narrows_to_a_phase(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Two break points served and one ordinary point, all won."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, is_break_point=True)
+    make_point(db_session, match_id=match.id, sequence=1, is_break_point=True)
+    make_point(db_session, match_id=match.id, sequence=2)
+
+    serving = _get(client, player.id, "serve?phase=break_points")["serving"]
+
+    assert serving["metrics"][0] == {
+        "label": "Break points saved",
+        "value": 100,
+        "unit": "percent",
+        "sample_size": "n=2",
+        "baseline": None,
+        "delta": None,
+        "max": 100,
+        "higher_is_better": True,
+        "display": None,
+    }
+
+
+def test_tiebreak_phase_leaves_hold_percentage_null_rather_than_zero(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Nobody holds serve in a tiebreak, the players alternating inside one.
+
+    So the hold percentage has no games to count and stays null, which the schema
+    reserves for "the data to compute it does not exist". A zero would instead read
+    as every service game lost.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        game_number=13,
+        in_tiebreak=True,
+        is_game_end=True,
+        is_set_end=True,
+    )
+
+    serving = _get(client, player.id, "serve?phase=tiebreaks")["serving"]
+
+    assert serving["hero"] is None
+    # The tiebreak point was counted, so the null above is the missing game and not
+    # an empty scope.
+    assert [(metric["label"], metric["value"]) for metric in serving["metrics"]] == [
+        ("1st serve in %", 100),
+        ("1st serve points won", 100),
+        ("Double faults / set", 0.0),
+        ("Aces / match", 0.0),
+    ]
+
+
+def test_returning_breakdown_narrows_with_the_rest_of_the_payload(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A return in play in set 1, a return netted in set 2.
+
+    The breakdown is its own query over the points rather than a slice of the tallies
+    above it, so an unscoped one would sit a filtered hero beside every return the
+    player has ever hit.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=0,
+        **opponent_serve,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        set_number=2,
+        **opponent_serve,
+        return_outcome=ReturnOutcome.NET,
+        won=False,
+        end_reason=EndReason.MISTAKE,
+        wing=None,
+        shot_type=None,
+    )
+
+    returning = _get(client, player.id, "serve?set_number=2")["returning"]
+
+    assert returning["breakdown"] == [
+        {"label": "Returned in", "value": 0, "secondary_value": None, "max": 1},
+        {"label": "Return error (net)", "value": 1, "secondary_value": None, "max": 1},
+        {"label": "Return error (long)", "value": 0, "secondary_value": None, "max": 1},
+        {"label": "Return error (wide)", "value": 0, "secondary_value": None, "max": 1},
+    ]
+
+
+def test_set_and_phase_narrow_together(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A break point in each set, and an ordinary point in set 2."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, is_break_point=True)
+    make_point(db_session, match_id=match.id, sequence=1, set_number=2, is_break_point=True)
+    make_point(db_session, match_id=match.id, sequence=2, set_number=2)
+
+    serving = _get(client, player.id, "serve?set_number=2&phase=break_points")["serving"]
+
+    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
+        "Break points saved",
+        "n=1",
+    )
+
+
+def test_overview_ignores_a_scope_it_does_not_offer(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The overview declares no filter, so a scope sent to it changes nothing (#227).
+
+    Four of its fields are counted over matches rather than points and could not
+    honour one; answering the whole payload unscoped is the deliberate choice.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
+    make_point(db_session, match_id=match.id, sequence=1, set_number=2, is_game_end=True, won=False)
+
+    assert _get(client, player.id, "overview?set_number=1&phase=tiebreaks") == _get(
+        client, player.id, "overview"
+    )
+
+
+@pytest.mark.parametrize("suffix", ["serve", "rally"])
+@pytest.mark.parametrize(
+    "query", ["set_number=0", "set_number=6", "set_number=first", "phase=deciding_set"]
+)
+def test_filters_reject_a_value_outside_the_contract(
+    client: TestClient, db_session: Session, coach: Coach, suffix: str, query: str
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+
+    response = client.get(f"/players/{player.id}/analytics/{suffix}?{query}")
+
+    assert response.status_code == 422
+
+
 # --- trends ---
 
 

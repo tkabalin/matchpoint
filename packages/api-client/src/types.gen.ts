@@ -953,6 +953,13 @@ export type PointCreate = {
 };
 
 /**
+ * PointPhase
+ *
+ * Which stamped moment of a match a points query counts.
+ */
+export type PointPhase = 'full' | 'tiebreaks' | 'break_points' | 'game_points' | 'set_points' | 'match_points' | 'game_ending' | 'set_ending';
+
+/**
  * PointRead
  *
  * One stored point, as the analytics dashboard and the capture client's sync
@@ -2798,7 +2805,18 @@ export type GetRallyStatsData = {
          */
         player_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Set Number
+         *
+         * Count only points from this set.
+         */
+        set_number?: number | null;
+        /**
+         * Count only points the capture client stamped as this moment.
+         */
+        phase?: PointPhase;
+    };
     url: '/players/{player_id}/analytics/rally';
 };
 
@@ -2836,7 +2854,18 @@ export type GetServeStatsData = {
          */
         player_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Set Number
+         *
+         * Count only points from this set.
+         */
+        set_number?: number | null;
+        /**
+         * Count only points the capture client stamped as this moment.
+         */
+        phase?: PointPhase;
+    };
     url: '/players/{player_id}/analytics/serve';
 };
 

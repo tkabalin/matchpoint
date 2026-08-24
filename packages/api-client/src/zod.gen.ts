@@ -373,6 +373,22 @@ export const zPlayerUpdate = z.object({
 });
 
 /**
+ * PointPhase
+ *
+ * Which stamped moment of a match a points query counts.
+ */
+export const zPointPhase = z.enum([
+    'full',
+    'tiebreaks',
+    'break_points',
+    'game_points',
+    'set_points',
+    'match_points',
+    'game_ending',
+    'set_ending'
+]);
+
+/**
  * RallyBucket
  *
  * A coarse rally-length bucket.
@@ -1174,6 +1190,11 @@ export const zGetRallyStatsPath = z.object({
     player_id: z.uuid()
 });
 
+export const zGetRallyStatsQuery = z.object({
+    set_number: z.int().gte(1).lte(5).nullish(),
+    phase: zPointPhase.optional().default('full')
+});
+
 /**
  * Successful Response
  */
@@ -1181,6 +1202,11 @@ export const zGetRallyStatsResponse = zRallyStats;
 
 export const zGetServeStatsPath = z.object({
     player_id: z.uuid()
+});
+
+export const zGetServeStatsQuery = z.object({
+    set_number: z.int().gte(1).lte(5).nullish(),
+    phase: zPointPhase.optional().default('full')
 });
 
 /**

@@ -32,6 +32,22 @@ class TrendWindow(enum.StrEnum):
     SEASON = "season"
 
 
+# Each member below TIEBREAKS names a boolean the capture client already stamps on
+# every point (`models/point.py`), so narrowing to one is a column test rather than a
+# replay of the score. FULL is the absence of a filter and stamps nothing.
+class PointPhase(enum.StrEnum):
+    """Which stamped moment of a match a points query counts."""
+
+    FULL = "full"
+    TIEBREAKS = "tiebreaks"
+    BREAK_POINTS = "break_points"
+    GAME_POINTS = "game_points"
+    SET_POINTS = "set_points"
+    MATCH_POINTS = "match_points"
+    GAME_ENDING = "game_ending"
+    SET_ENDING = "set_ending"
+
+
 class Metric(BaseModel):
     """One number a coach is shown, with everything needed to judge it."""
 

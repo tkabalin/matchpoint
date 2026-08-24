@@ -789,6 +789,10 @@ export const getPlayerOverviewQueryKey = (options: Options<GetPlayerOverviewData
  * Get Player Overview
  *
  * The overview tab: form, the headline rates, and the win/loss record.
+ *
+ * Whole-career only, and takes no set or phase filter (#227): four of its seven
+ * fields are counted over matches rather than points, so a scoped request would
+ * answer with three narrowed numbers beside four that quietly ignored the scope.
  */
 export const getPlayerOverviewOptions = (options: Options<GetPlayerOverviewData>) => queryOptions<GetPlayerOverviewResponse, GetPlayerOverviewError, GetPlayerOverviewResponse, ReturnType<typeof getPlayerOverviewQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
