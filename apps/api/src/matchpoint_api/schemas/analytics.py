@@ -179,6 +179,72 @@ class OutcomeMixRow(BaseModel):
     unforced: float
 
 
+class PointEnderKind(enum.StrEnum):
+    """Which of the three ways a rally-ending point ended a style card counts."""
+
+    FORCED = "forced"
+    UNFORCED = "unforced"
+    UNUSUAL = "unusual"
+
+
+class WingSplit(BaseModel):
+    """One style's setup shots, counted by the wing they were struck off."""
+
+    forehand: int
+    backhand: int
+
+
+class CourtZoneCount(BaseModel):
+    """How many of a style's final balls landed in one zone of the court.
+
+    Nine zones: the six in-court cells, deuce or ad by short, mid or deep, and the
+    three ways a ball goes out, net, long and wide.
+    """
+
+    zone: str
+    count: int
+
+
+class PointEnderStyleDetail(BaseModel):
+    """What one style's points looked like, where there is anything to describe.
+
+    Wing and shot type are the last successful shot (#175); the zone is where the
+    final ball landed, a different fact. A point that recorded neither, a missed
+    return among them, still counts toward the style and appears in no breakdown.
+    """
+
+    # Null exactly on the unusual style, which is how the card knows it is that one.
+    wing: WingSplit | None
+    shot_type: list[BreakdownRow]
+    court_zones: list[CourtZoneCount]
+    # Set only where wing is null: what kind of unusual point each one was.
+    unusual_reasons: list[BreakdownRow] | None
+
+
+class PointEnderStyle(BaseModel):
+    """One point-ender card, with the drill-down behind it."""
+
+    kind: PointEnderKind
+    # Names which side applied the pressure or gave the point away, so the wording
+    # swaps between the two halves of the toggle.
+    label: str
+    count: int
+    detail: PointEnderStyleDetail
+
+
+class PointEnderStyles(BaseModel):
+    """Point enders for both halves of the won/lost toggle.
+
+    `you` counts the points the player won and `opponents` the ones they lost, each
+    as three styles in the order forced, unforced, unusual. Aces and double faults
+    are serve endings and belong to the serve tab, so a side's three counts
+    deliberately fall short of its points.
+    """
+
+    you: list[PointEnderStyle]
+    opponents: list[PointEnderStyle]
+
+
 class RallyStats(BaseModel):
     """The rally tab: how points end once the ball is in play.
 
@@ -191,6 +257,7 @@ class RallyStats(BaseModel):
     won_by_shot: list[BreakdownRow]
     lost_by_shot: list[BreakdownRow]
     outcome_mix: list[OutcomeMixRow]
+    styles: PointEnderStyles
     errors_under_pressure: Metric | None
     errors_overall: Metric | None
     shot_frequency: list[ShotShare]

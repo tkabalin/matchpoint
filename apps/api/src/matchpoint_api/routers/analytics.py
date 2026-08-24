@@ -1,7 +1,7 @@
 import uuid
 from collections import Counter
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Annotated, Any
 
@@ -21,6 +21,7 @@ from matchpoint_api.models import (
     Point,
     ServeOutcome,
     ShotType,
+    UnusualReason,
     Wing,
 )
 from matchpoint_api.routers.matches import match_for_coach
@@ -28,6 +29,7 @@ from matchpoint_api.routers.players import owned_player
 from matchpoint_api.schemas.analytics import (
     BreakdownRow,
     CorrelationPoint,
+    CourtZoneCount,
     DistributionBucket,
     FaultModeShares,
     FaultModeSplit,
@@ -37,6 +39,10 @@ from matchpoint_api.schemas.analytics import (
     MetricUnit,
     OutcomeMixRow,
     PlayerOverview,
+    PointEnderKind,
+    PointEnderStyle,
+    PointEnderStyleDetail,
+    PointEnderStyles,
     PointPhase,
     RallyStats,
     ServeSideStats,
@@ -46,6 +52,7 @@ from matchpoint_api.schemas.analytics import (
     SlopeLine,
     TrendStats,
     TrendWindow,
+    WingSplit,
     WinLossRecord,
 )
 from matchpoint_api.schemas.errors import ErrorDetail
@@ -114,6 +121,39 @@ _SHOT_LABEL = {
     ShotType.DROPSHOT: "drop shot",
     ShotType.LOB: "lob",
 }
+
+# Which point-ender card an end reason lands on. Aces and double faults are missing
+# on purpose: a serve settled them, so they are counted on the serve tab instead.
+_POINT_ENDER_KIND = {
+    EndReason.FORCED: PointEnderKind.FORCED,
+    EndReason.MISTAKE: PointEnderKind.UNFORCED,
+    EndReason.UNUSUAL: PointEnderKind.UNUSUAL,
+}
+
+# Each label names whose pressure or whose error decided the point, so the wording
+# swaps with the side. Keyed on whether the tracked player won it.
+_POINT_ENDER_LABEL = {
+    (True, PointEnderKind.FORCED): "Forced (your pressure)",
+    (True, PointEnderKind.UNFORCED): "Unforced (their free error)",
+    (True, PointEnderKind.UNUSUAL): "Unusual (in your favor)",
+    (False, PointEnderKind.FORCED): "Forced (their pressure)",
+    (False, PointEnderKind.UNFORCED): "Unforced (your free error)",
+    (False, PointEnderKind.UNUSUAL): "Unusual (against you)",
+}
+
+# The nine zones a final ball can land in, in the order the court diagram reads
+# them: each half from the net outward, then the three ways a ball goes out.
+COURT_ZONES = (
+    "Deuce short",
+    "Deuce mid",
+    "Deuce deep",
+    "Ad short",
+    "Ad mid",
+    "Ad deep",
+    "Net",
+    "Long",
+    "Wide",
+)
 
 
 def _percent(
@@ -667,6 +707,136 @@ def get_match_serve_stats(
     return _serve_tab(db, match.player_id, scope)
 
 
+@dataclass
+class _StyleTally:
+    """One style's points, and the three breakdowns drawn underneath it."""
+
+    count: int = 0
+    wings: Counter[Wing] = field(default_factory=Counter)
+    shots: Counter[ShotType] = field(default_factory=Counter)
+    zones: Counter[str] = field(default_factory=Counter)
+    reasons: Counter[UnusualReason] = field(default_factory=Counter)
+
+
+def _zone_label(row: Row[Any]) -> str | None:
+    """Where a point's final ball landed, or None where none was recorded.
+
+    Read off the placement columns themselves rather than off ball_in, which the
+    table pairs with neither of them.
+    """
+    if row.ball_half is not None:
+        return f"{row.ball_half.value.capitalize()} {row.ball_depth.value}"
+    if row.ball_out_mode is not None:
+        return row.ball_out_mode.value.capitalize()
+    return None
+
+
+def _shot_type_rows(shots: Counter[ShotType]) -> list[BreakdownRow]:
+    """Every shot type, or nothing at all while this style has recorded no shot."""
+    if not shots:
+        return []
+    ceiling = max(shots.values())
+    # "Dropshot", where _SHOT_LABEL above says "drop shot": the rally tab keys its
+    # shot icons on these exact strings, and the two lists are read by different
+    # components.
+    return [
+        BreakdownRow(label=shot.value.capitalize(), value=shots[shot], max=ceiling)
+        for shot in ShotType
+    ]
+
+
+def _unusual_reason_rows(reasons: Counter[UnusualReason]) -> list[BreakdownRow]:
+    """The unusual endings actually seen, most frequent first."""
+    ceiling = max(reasons.values(), default=0)
+    return [
+        BreakdownRow(label=reason.value.replace("_", " ").capitalize(), value=count, max=ceiling)
+        for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0].value))
+    ]
+
+
+def _point_ender_style(
+    won: bool, kind: PointEnderKind, tallies: dict[tuple[bool, PointEnderKind], _StyleTally]
+) -> PointEnderStyle:
+    """One card, present at zero so the toggle always has its three to draw."""
+    tally = tallies.get((won, kind), _StyleTally())
+    unusual = kind is PointEnderKind.UNUSUAL
+    wing = None
+    if not unusual:
+        # Zeroes rather than null on a style whose points recorded no shot: null is
+        # how a card says it is the unusual one, which has no shot of its own.
+        wing = WingSplit(forehand=tally.wings[Wing.FOREHAND], backhand=tally.wings[Wing.BACKHAND])
+    return PointEnderStyle(
+        kind=kind,
+        label=_POINT_ENDER_LABEL[won, kind],
+        count=tally.count,
+        detail=PointEnderStyleDetail(
+            wing=wing,
+            shot_type=_shot_type_rows(tally.shots),
+            court_zones=[CourtZoneCount(zone=zone, count=tally.zones[zone]) for zone in COURT_ZONES]
+            if tally.zones
+            else [],
+            unusual_reasons=_unusual_reason_rows(tally.reasons) if unusual else None,
+        ),
+    )
+
+
+def _point_ender_styles(db: Session, player_id: uuid.UUID, scope: PointScope) -> PointEnderStyles:
+    """The three point-ender cards per side, each with its drill-down.
+
+    One grouped query over every column a card draws from, folded in Python: the
+    breakdowns count the same points under different keys, so a query apiece would
+    read those points three times over.
+    """
+    statement = (
+        select(
+            Point.won,
+            Point.end_reason,
+            Point.wing,
+            Point.shot_type,
+            Point.ball_half,
+            Point.ball_depth,
+            Point.ball_out_mode,
+            Point.unusual_reason,
+            func.count().label("points"),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(
+            Match.player_id == player_id,
+            Point.end_reason.in_(tuple(_POINT_ENDER_KIND)),
+            *scope.conditions(),
+        )
+        .group_by(
+            Point.won,
+            Point.end_reason,
+            Point.wing,
+            Point.shot_type,
+            Point.ball_half,
+            Point.ball_depth,
+            Point.ball_out_mode,
+            Point.unusual_reason,
+        )
+    )
+
+    tallies: dict[tuple[bool, PointEnderKind], _StyleTally] = {}
+    for row in db.execute(statement):
+        tally = tallies.setdefault((row.won, _POINT_ENDER_KIND[row.end_reason]), _StyleTally())
+        tally.count += row.points
+        if row.wing is not None:
+            tally.wings[row.wing] += row.points
+            tally.shots[row.shot_type] += row.points
+        zone = _zone_label(row)
+        if zone is not None:
+            tally.zones[zone] += row.points
+        if row.unusual_reason is not None:
+            tally.reasons[row.unusual_reason] += row.points
+
+    return PointEnderStyles(
+        you=[_point_ender_style(True, kind, tallies) for kind in PointEnderKind],
+        opponents=[_point_ender_style(False, kind, tallies) for kind in PointEnderKind],
+    )
+
+
 def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
     """Each side's own last actions, split between forcing shots and errors.
 
@@ -704,6 +874,7 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
         won_by_shot=won_by_shot,
         lost_by_shot=lost_by_shot,
         outcome_mix=_outcome_mix(counts),
+        styles=_point_ender_styles(db, player_id, scope),
         errors_under_pressure=_percent(
             "Errors under pressure (BP)",
             counts.bp_mistakes,

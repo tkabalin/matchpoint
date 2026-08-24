@@ -169,6 +169,25 @@ export type CourtDepth = 'short' | 'mid' | 'deep';
 export type CourtSide = 'deuce' | 'ad';
 
 /**
+ * CourtZoneCount
+ *
+ * How many of a style's final balls landed in one zone of the court.
+ *
+ * Nine zones: the six in-court cells, deuce or ad by short, mid or deep, and the
+ * three ways a ball goes out, net, long and wide.
+ */
+export type CourtZoneCount = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Zone
+     */
+    zone: string;
+};
+
+/**
  * DistributionBucket
  *
  * One histogram bar: how many of the window's matches fell in this range.
@@ -990,6 +1009,77 @@ export type PointCreate = {
 };
 
 /**
+ * PointEnderKind
+ *
+ * Which of the three ways a rally-ending point ended a style card counts.
+ */
+export type PointEnderKind = 'forced' | 'unforced' | 'unusual';
+
+/**
+ * PointEnderStyle
+ *
+ * One point-ender card, with the drill-down behind it.
+ */
+export type PointEnderStyle = {
+    /**
+     * Count
+     */
+    count: number;
+    detail: PointEnderStyleDetail;
+    kind: PointEnderKind;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * PointEnderStyleDetail
+ *
+ * What one style's points looked like, where there is anything to describe.
+ *
+ * Wing and shot type are the last successful shot (#175); the zone is where the
+ * final ball landed, a different fact. A point that recorded neither, a missed
+ * return among them, still counts toward the style and appears in no breakdown.
+ */
+export type PointEnderStyleDetail = {
+    /**
+     * Court Zones
+     */
+    court_zones: Array<CourtZoneCount>;
+    /**
+     * Shot Type
+     */
+    shot_type: Array<BreakdownRow>;
+    /**
+     * Unusual Reasons
+     */
+    unusual_reasons: Array<BreakdownRow> | null;
+    wing: WingSplit | null;
+};
+
+/**
+ * PointEnderStyles
+ *
+ * Point enders for both halves of the won/lost toggle.
+ *
+ * `you` counts the points the player won and `opponents` the ones they lost, each
+ * as three styles in the order forced, unforced, unusual. Aces and double faults
+ * are serve endings and belong to the serve tab, so a side's three counts
+ * deliberately fall short of its points.
+ */
+export type PointEnderStyles = {
+    /**
+     * Opponents
+     */
+    opponents: Array<PointEnderStyle>;
+    /**
+     * You
+     */
+    you: Array<PointEnderStyle>;
+};
+
+/**
  * PointPhase
  *
  * Which stamped moment of a match a points query counts.
@@ -1117,6 +1207,7 @@ export type RallyStats = {
      * Shot Frequency
      */
     shot_frequency: Array<ShotShare>;
+    styles: PointEnderStyles;
     /**
      * Won By Shot
      */
@@ -1370,6 +1461,22 @@ export type WinLossRecord = {
  * Wing
  */
 export type Wing = 'forehand' | 'backhand';
+
+/**
+ * WingSplit
+ *
+ * One style's setup shots, counted by the wing they were struck off.
+ */
+export type WingSplit = {
+    /**
+     * Backhand
+     */
+    backhand: number;
+    /**
+     * Forehand
+     */
+    forehand: number;
+};
 
 /**
  * CoachCreate

@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 
 from matchpoint_api.models import (
     Coach,
+    CourtDepth,
+    CourtSide,
     EndReason,
     FailureMode,
     MatchResult,
@@ -22,6 +24,7 @@ from matchpoint_api.models import (
     ReturnOutcome,
     ServeOutcome,
     ShotType,
+    UnusualReason,
     Wing,
 )
 from tests.factories import (
@@ -587,6 +590,65 @@ def test_serve_trend_keeps_only_the_most_recent_matches(
 
 # --- rally ---
 
+# The three helpers below spell out the fixed rows a point-ender card always carries,
+# so an assertion states only the counts the arranged points actually produced.
+SHOT_TYPES = ("Drive", "Volley", "Dropshot", "Lob")
+COURT_ZONES = (
+    "Deuce short",
+    "Deuce mid",
+    "Deuce deep",
+    "Ad short",
+    "Ad mid",
+    "Ad deep",
+    "Net",
+    "Long",
+    "Wide",
+)
+
+
+def _shot_rows(ceiling: int, **counts: int) -> list[dict[str, Any]]:
+    return [
+        {
+            "label": label,
+            "value": counts.get(label.lower(), 0),
+            "secondary_value": None,
+            "max": ceiling,
+        }
+        for label in SHOT_TYPES
+    ]
+
+
+def _zone_rows(**counts: int) -> list[dict[str, Any]]:
+    return [
+        {"zone": zone, "count": counts.get(zone.lower().replace(" ", "_"), 0)}
+        for zone in COURT_ZONES
+    ]
+
+
+def _styles_at_zero(forced: str, unforced: str, unusual: str) -> list[dict[str, Any]]:
+    """One side's three cards with nothing counted on any of them."""
+    empty = {
+        "wing": {"forehand": 0, "backhand": 0},
+        "shot_type": [],
+        "court_zones": [],
+        "unusual_reasons": None,
+    }
+    return [
+        {"kind": "forced", "label": forced, "count": 0, "detail": empty},
+        {"kind": "unforced", "label": unforced, "count": 0, "detail": empty},
+        {
+            "kind": "unusual",
+            "label": unusual,
+            "count": 0,
+            "detail": {
+                "wing": None,
+                "shot_type": [],
+                "court_zones": [],
+                "unusual_reasons": [],
+            },
+        },
+    ]
+
 
 def test_rally_is_empty_before_any_points(
     client: TestClient, db_session: Session, coach: Coach
@@ -600,6 +662,18 @@ def test_rally_is_empty_before_any_points(
         "won_by_shot": [],
         "lost_by_shot": [],
         "outcome_mix": [],
+        "styles": {
+            "you": _styles_at_zero(
+                "Forced (your pressure)",
+                "Unforced (their free error)",
+                "Unusual (in your favor)",
+            ),
+            "opponents": _styles_at_zero(
+                "Forced (their pressure)",
+                "Unforced (your free error)",
+                "Unusual (against you)",
+            ),
+        },
         "errors_under_pressure": None,
         "errors_overall": None,
         "shot_frequency": [],
@@ -683,6 +757,183 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
         {"shot": "Volley", "share": 0.2},
         {"shot": "Drop shot", "share": 0},
         {"shot": "Lob", "share": 0},
+    ]
+
+
+def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Ten points, one of every shape a style card has to survive.
+
+    Won: 3 forced (2 forehand drives and a backhand volley, landing deuce mid, ad
+    deep and in the net), 1 unforced backhand lob landing deuce short, and 3
+    unusual, one of which never recorded why. Lost: a forced backhand lob that went
+    long, and a missed return that records no shot at all. The ace belongs to the
+    serve tab and is on none of the six cards.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    in_court = {"ball_in": True}
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=0,
+        **in_court,
+        ball_half=CourtSide.DEUCE,
+        ball_depth=CourtDepth.MID,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.VOLLEY,
+        ball_in=False,
+        ball_out_mode=FailureMode.NET,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=2,
+        **in_court,
+        ball_half=CourtSide.AD,
+        ball_depth=CourtDepth.DEEP,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=3,
+        end_reason=EndReason.MISTAKE,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.LOB,
+        **in_court,
+        ball_half=CourtSide.DEUCE,
+        ball_depth=CourtDepth.SHORT,
+    )
+    unusual = {"end_reason": EndReason.UNUSUAL, "wing": None, "shot_type": None}
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=4,
+        **unusual,
+        unusual_reason=UnusualReason.NET_TOUCH,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=5,
+        **unusual,
+        unusual_reason=UnusualReason.HINDRANCE,
+    )
+    make_point(db_session, match_id=match.id, sequence=6, **unusual)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=7,
+        won=False,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.LOB,
+        ball_in=False,
+        ball_out_mode=FailureMode.LONG,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=8,
+        won=False,
+        server=MatchSide.OPPONENT,
+        serve1_box=None,
+        return_outcome=ReturnOutcome.NET,
+        end_reason=EndReason.MISTAKE,
+        wing=None,
+        shot_type=None,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=9,
+        serve1_outcome=ServeOutcome.ACE,
+        end_reason=EndReason.ACE,
+        wing=None,
+        shot_type=None,
+    )
+
+    body = _get(client, player.id, "rally")
+
+    assert body["styles"]["you"] == [
+        {
+            "kind": "forced",
+            "label": "Forced (your pressure)",
+            "count": 3,
+            "detail": {
+                "wing": {"forehand": 2, "backhand": 1},
+                "shot_type": _shot_rows(2, drive=2, volley=1),
+                "court_zones": _zone_rows(deuce_mid=1, ad_deep=1, net=1),
+                "unusual_reasons": None,
+            },
+        },
+        {
+            "kind": "unforced",
+            "label": "Unforced (their free error)",
+            "count": 1,
+            "detail": {
+                "wing": {"forehand": 0, "backhand": 1},
+                "shot_type": _shot_rows(1, lob=1),
+                "court_zones": _zone_rows(deuce_short=1),
+                "unusual_reasons": None,
+            },
+        },
+        {
+            "kind": "unusual",
+            "label": "Unusual (in your favor)",
+            "count": 3,
+            "detail": {
+                "wing": None,
+                "shot_type": [],
+                "court_zones": [],
+                # Tied counts fall back to the reason's own name, so this order is
+                # the same on every run.
+                "unusual_reasons": [
+                    {"label": "Hindrance", "value": 1, "secondary_value": None, "max": 1},
+                    {"label": "Net touch", "value": 1, "secondary_value": None, "max": 1},
+                ],
+            },
+        },
+    ]
+    assert body["styles"]["opponents"] == [
+        {
+            "kind": "forced",
+            "label": "Forced (their pressure)",
+            "count": 1,
+            "detail": {
+                "wing": {"forehand": 0, "backhand": 1},
+                "shot_type": _shot_rows(1, lob=1),
+                "court_zones": _zone_rows(long=1),
+                "unusual_reasons": None,
+            },
+        },
+        {
+            "kind": "unforced",
+            "label": "Unforced (your free error)",
+            "count": 1,
+            # The missed return is counted, and describes nothing: its placement is
+            # return_outcome's, so no shot and no final ball were recorded for it.
+            "detail": {
+                "wing": {"forehand": 0, "backhand": 0},
+                "shot_type": [],
+                "court_zones": [],
+                "unusual_reasons": None,
+            },
+        },
+        {
+            "kind": "unusual",
+            "label": "Unusual (against you)",
+            "count": 0,
+            "detail": {
+                "wing": None,
+                "shot_type": [],
+                "court_zones": [],
+                "unusual_reasons": [],
+            },
+        },
     ]
 
 
@@ -1087,9 +1338,12 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert body["lost_by_shot"] == []
     assert body["outcome_mix"] == [{"label": "You", "forced": 100, "unforced": 0}]
     assert body["errors_overall"]["sample_size"] == "n=1"
+    assert [style["count"] for style in body["styles"]["you"]] == [1, 0, 0]
+    assert [style["count"] for style in body["styles"]["opponents"]] == [0, 0, 0]
     player_wide = _get(client, player.id, "rally")
     assert len(player_wide["lost_by_shot"]) == 1
     assert player_wide["errors_overall"]["sample_size"] == "n=2"
+    assert [style["count"] for style in player_wide["styles"]["opponents"]] == [0, 1, 0]
 
 
 # --- trends ---

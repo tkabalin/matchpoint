@@ -85,6 +85,19 @@ export const zCourtDepth = z.enum([
 export const zCourtSide = z.enum(['deuce', 'ad']);
 
 /**
+ * CourtZoneCount
+ *
+ * How many of a style's final balls landed in one zone of the court.
+ *
+ * Nine zones: the six in-court cells, deuce or ad by short, mid or deep, and the
+ * three ways a ball goes out, net, long and wide.
+ */
+export const zCourtZoneCount = z.object({
+    count: z.int(),
+    zone: z.string()
+});
+
+/**
  * DistributionBucket
  *
  * One histogram bar: how many of the window's matches fell in this range.
@@ -401,6 +414,17 @@ export const zPlayerUpdate = z.object({
 });
 
 /**
+ * PointEnderKind
+ *
+ * Which of the three ways a rally-ending point ended a style card counts.
+ */
+export const zPointEnderKind = z.enum([
+    'forced',
+    'unforced',
+    'unusual'
+]);
+
+/**
  * PointPhase
  *
  * Which stamped moment of a match a points query counts.
@@ -523,25 +547,6 @@ export const zServeStats = z.object({
 export const zShotShare = z.object({
     share: z.number(),
     shot: z.string()
-});
-
-/**
- * RallyStats
- *
- * The rally tab: how points end once the ball is in play.
- *
- * The stored shot is the last successful one, so `won_by_shot` describes the
- * player's own point-winning shots and `lost_by_shot` the opponent's shots the
- * player lost points on, never the player's own misses (#175).
- */
-export const zRallyStats = z.object({
-    errors_overall: zMetric.nullable(),
-    errors_under_pressure: zMetric.nullable(),
-    hero: zMetric.nullable(),
-    lost_by_shot: z.array(zBreakdownRow),
-    outcome_mix: z.array(zOutcomeMixRow),
-    shot_frequency: z.array(zShotShare),
-    won_by_shot: z.array(zBreakdownRow)
 });
 
 /**
@@ -875,6 +880,79 @@ export const zPointRead = z.object({
     unusual_reason: zUnusualReason.nullable(),
     wing: zWing.nullable(),
     won: z.boolean()
+});
+
+/**
+ * WingSplit
+ *
+ * One style's setup shots, counted by the wing they were struck off.
+ */
+export const zWingSplit = z.object({
+    backhand: z.int(),
+    forehand: z.int()
+});
+
+/**
+ * PointEnderStyleDetail
+ *
+ * What one style's points looked like, where there is anything to describe.
+ *
+ * Wing and shot type are the last successful shot (#175); the zone is where the
+ * final ball landed, a different fact. A point that recorded neither, a missed
+ * return among them, still counts toward the style and appears in no breakdown.
+ */
+export const zPointEnderStyleDetail = z.object({
+    court_zones: z.array(zCourtZoneCount),
+    shot_type: z.array(zBreakdownRow),
+    unusual_reasons: z.array(zBreakdownRow).nullable(),
+    wing: zWingSplit.nullable()
+});
+
+/**
+ * PointEnderStyle
+ *
+ * One point-ender card, with the drill-down behind it.
+ */
+export const zPointEnderStyle = z.object({
+    count: z.int(),
+    detail: zPointEnderStyleDetail,
+    kind: zPointEnderKind,
+    label: z.string()
+});
+
+/**
+ * PointEnderStyles
+ *
+ * Point enders for both halves of the won/lost toggle.
+ *
+ * `you` counts the points the player won and `opponents` the ones they lost, each
+ * as three styles in the order forced, unforced, unusual. Aces and double faults
+ * are serve endings and belong to the serve tab, so a side's three counts
+ * deliberately fall short of its points.
+ */
+export const zPointEnderStyles = z.object({
+    opponents: z.array(zPointEnderStyle),
+    you: z.array(zPointEnderStyle)
+});
+
+/**
+ * RallyStats
+ *
+ * The rally tab: how points end once the ball is in play.
+ *
+ * The stored shot is the last successful one, so `won_by_shot` describes the
+ * player's own point-winning shots and `lost_by_shot` the opponent's shots the
+ * player lost points on, never the player's own misses (#175).
+ */
+export const zRallyStats = z.object({
+    errors_overall: zMetric.nullable(),
+    errors_under_pressure: zMetric.nullable(),
+    hero: zMetric.nullable(),
+    lost_by_shot: z.array(zBreakdownRow),
+    outcome_mix: z.array(zOutcomeMixRow),
+    shot_frequency: z.array(zShotShare),
+    styles: zPointEnderStyles,
+    won_by_shot: z.array(zBreakdownRow)
 });
 
 /**

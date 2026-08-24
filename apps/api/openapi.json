@@ -301,6 +301,25 @@
         "title": "CourtSide",
         "type": "string"
       },
+      "CourtZoneCount": {
+        "description": "How many of a style's final balls landed in one zone of the court.\n\nNine zones: the six in-court cells, deuce or ad by short, mid or deep, and the\nthree ways a ball goes out, net, long and wide.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "zone": {
+            "title": "Zone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "zone",
+          "count"
+        ],
+        "title": "CourtZoneCount",
+        "type": "object"
+      },
       "DistributionBucket": {
         "description": "One histogram bar: how many of the window's matches fell in this range.",
         "properties": {
@@ -1986,6 +2005,119 @@
         "title": "PointCreate",
         "type": "object"
       },
+      "PointEnderKind": {
+        "description": "Which of the three ways a rally-ending point ended a style card counts.",
+        "enum": [
+          "forced",
+          "unforced",
+          "unusual"
+        ],
+        "title": "PointEnderKind",
+        "type": "string"
+      },
+      "PointEnderStyle": {
+        "description": "One point-ender card, with the drill-down behind it.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "detail": {
+            "$ref": "#/components/schemas/PointEnderStyleDetail"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PointEnderKind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "count",
+          "detail"
+        ],
+        "title": "PointEnderStyle",
+        "type": "object"
+      },
+      "PointEnderStyleDetail": {
+        "description": "What one style's points looked like, where there is anything to describe.\n\nWing and shot type are the last successful shot (#175); the zone is where the\nfinal ball landed, a different fact. A point that recorded neither, a missed\nreturn among them, still counts toward the style and appears in no breakdown.",
+        "properties": {
+          "court_zones": {
+            "items": {
+              "$ref": "#/components/schemas/CourtZoneCount"
+            },
+            "title": "Court Zones",
+            "type": "array"
+          },
+          "shot_type": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Shot Type",
+            "type": "array"
+          },
+          "unusual_reasons": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/BreakdownRow"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unusual Reasons"
+          },
+          "wing": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WingSplit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "wing",
+          "shot_type",
+          "court_zones",
+          "unusual_reasons"
+        ],
+        "title": "PointEnderStyleDetail",
+        "type": "object"
+      },
+      "PointEnderStyles": {
+        "description": "Point enders for both halves of the won/lost toggle.\n\n`you` counts the points the player won and `opponents` the ones they lost, each\nas three styles in the order forced, unforced, unusual. Aces and double faults\nare serve endings and belong to the serve tab, so a side's three counts\ndeliberately fall short of its points.",
+        "properties": {
+          "opponents": {
+            "items": {
+              "$ref": "#/components/schemas/PointEnderStyle"
+            },
+            "title": "Opponents",
+            "type": "array"
+          },
+          "you": {
+            "items": {
+              "$ref": "#/components/schemas/PointEnderStyle"
+            },
+            "title": "You",
+            "type": "array"
+          }
+        },
+        "required": [
+          "you",
+          "opponents"
+        ],
+        "title": "PointEnderStyles",
+        "type": "object"
+      },
       "PointPhase": {
         "description": "Which stamped moment of a match a points query counts.",
         "enum": [
@@ -2321,6 +2453,9 @@
             "title": "Shot Frequency",
             "type": "array"
           },
+          "styles": {
+            "$ref": "#/components/schemas/PointEnderStyles"
+          },
           "won_by_shot": {
             "items": {
               "$ref": "#/components/schemas/BreakdownRow"
@@ -2334,6 +2469,7 @@
           "won_by_shot",
           "lost_by_shot",
           "outcome_mix",
+          "styles",
           "errors_under_pressure",
           "errors_overall",
           "shot_frequency"
@@ -2757,6 +2893,25 @@
         ],
         "title": "Wing",
         "type": "string"
+      },
+      "WingSplit": {
+        "description": "One style's setup shots, counted by the wing they were struck off.",
+        "properties": {
+          "backhand": {
+            "title": "Backhand",
+            "type": "integer"
+          },
+          "forehand": {
+            "title": "Forehand",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "forehand",
+          "backhand"
+        ],
+        "title": "WingSplit",
+        "type": "object"
       }
     }
   },
