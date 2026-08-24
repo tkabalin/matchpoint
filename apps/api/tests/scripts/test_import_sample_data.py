@@ -366,6 +366,19 @@ def test_a_match_row_with_an_unknown_enum_value_names_its_line(
     assert "astroturf" in str(caught.value)
 
 
+def test_a_match_row_naming_an_unknown_player_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """A misspelt name is the likeliest slip in a hand-edited file, and it used to arrive
+    as a KeyError over the triple with nothing to say which row held it."""
+    _write_dataset(tmp_path, matches=[match_row(player_last_name="Kabalinn")])
+
+    with pytest.raises(ValueError, match=r"matches\.csv line 2: no players\.csv row for") as caught:
+        run_import(db_session, tmp_path, STUB_HASH)
+
+    assert "Kabalinn" in str(caught.value)
+
+
 def test_a_match_with_no_match_key_still_imports(db_session: Session, tmp_path: Path) -> None:
     """match_key exists only to join points.csv, so a match without points needs none."""
     _write_dataset(tmp_path, matches=[match_row(match_key="")])
@@ -469,6 +482,20 @@ def test_a_point_row_with_an_unreadable_boolean_names_its_line(
 
     with pytest.raises(ValueError, match=r"points\.csv line 2: expected a boolean value"):
         run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_point_row_with_an_unknown_match_key_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """The join is by hand-typed label, so a label with no match behind it is a typo."""
+    _write_dataset(tmp_path, points=[point_row(match_key="m7")])
+
+    with pytest.raises(
+        ValueError, match=r"points\.csv line 2: no matches\.csv row with match_key"
+    ) as caught:
+        run_import(db_session, tmp_path, STUB_HASH)
+
+    assert "m7" in str(caught.value)
 
 
 def test_match_sets_are_recomputed_only_for_matches_with_points(

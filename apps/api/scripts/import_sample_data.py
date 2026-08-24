@@ -248,13 +248,16 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     matches_created = matches_reused = 0
     match_by_key: dict[tuple[str, str], Match] = {}
     for line_number, row in enumerate(match_rows, start=2):
-        player = player_by_key[
-            (
-                row["coach_email"].lower(),
-                row["player_first_name"],
-                row["player_last_name"],
-            )
-        ]
+        player_key = (
+            row["coach_email"].lower(),
+            row["player_first_name"],
+            row["player_last_name"],
+        )
+        # Named for the same reason the parse errors below are: a name that matches no
+        # players.csv row is the likeliest slip in a hand-edited file, and a bare
+        # KeyError over the triple says nothing about which line carried it.
+        if (player := player_by_key.get(player_key)) is None:
+            raise ValueError(f"matches.csv line {line_number}: no players.csv row for {player_key}")
         # Wrapped the way the points loop is: a bad date or enum value here would
         # otherwise surface as a constraint violation naming a column, with nothing
         # to say which of a few hundred hand-edited rows produced it.
@@ -301,7 +304,14 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     if points_path.exists():
         with points_path.open(newline="") as f:
             for line_number, row in enumerate(csv.DictReader(f), start=2):
-                match = match_by_key[(row["coach_email"].lower(), row["match_key"])]
+                # Named for the reason the player lookup above is: a match_key with no
+                # matches.csv row behind it is a typo, and the line is what finds it.
+                match_lookup = (row["coach_email"].lower(), row["match_key"])
+                if (match := match_by_key.get(match_lookup)) is None:
+                    raise ValueError(
+                        f"points.csv line {line_number}: no matches.csv row with "
+                        f"match_key {match_lookup}"
+                    )
                 ball_in = _blank_to_none(row["ball_in"])
                 try:
                     point_data = PointCreate(
