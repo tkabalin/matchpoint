@@ -129,6 +129,47 @@ test("signing out of all other sessions shows a confirm then a success dialog", 
   expect(await screen.findByText("Signed out of all other sessions.")).toBeInTheDocument();
 });
 
+test("dismissing the success dialog leaves the settings page as it was", async () => {
+  stubFetch(() => new Response(null, { status: 204 }));
+  const user = userEvent.setup();
+  await renderSettingsAccount();
+
+  await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
+  await user.click(await screen.findByRole("button", { name: "Sign Out" }));
+  await screen.findByText("Signed out of all other sessions.");
+
+  await user.click(screen.getByRole("button", { name: "OK" }));
+
+  expect(screen.queryByText("Signed out of all other sessions.")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign out of all other sessions" })).toBeEnabled();
+});
+
+// Revoking is the one action here that can fail on the server and still leave the coach
+// signed in on this device, so the failure has to be said out loud rather than looking
+// like it worked.
+test("a failed revoke closes the dialog and says why, in the server's own words", async () => {
+  stubFetch(() => Response.json({ detail: "Session store unavailable" }, { status: 503 }));
+  const user = userEvent.setup();
+  await renderSettingsAccount();
+
+  await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
+  await user.click(await screen.findByRole("button", { name: "Sign Out" }));
+
+  expect(await screen.findByText("Session store unavailable")).toBeInTheDocument();
+  expect(screen.queryByText("Signed out of all other sessions.")).not.toBeInTheDocument();
+});
+
+test("a failure with nothing to quote still explains itself", async () => {
+  stubFetch(() => new Response(null, { status: 500 }));
+  const user = userEvent.setup();
+  await renderSettingsAccount();
+
+  await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
+  await user.click(await screen.findByRole("button", { name: "Sign Out" }));
+
+  expect(await screen.findByText("Could not sign out of other sessions.")).toBeInTheDocument();
+});
+
 test("cancelling the sign-out-all-sessions confirm makes no request", async () => {
   const user = userEvent.setup();
   await renderSettingsAccount();
