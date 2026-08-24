@@ -95,6 +95,16 @@ function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
  * (`.claude/rules/web-color.md`, per-chart assignment). A single-player view uses
  * the nav colour; an H2H overlay passes two series from the safe non-outcome set.
  */
+/**
+ * A series' key becomes a CSS custom property name — `ChartContainer` emits
+ * `--color-<key>` into a <style> block — so it has to be an identifier. A series named
+ * "Share of point-enders" produced `--color-Share of point-enders`, which invalidates
+ * the whole stylesheet rather than just that declaration. The label keeps the name.
+ */
+function seriesKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
 export function ShotRadar({
   series,
   className,
@@ -109,13 +119,13 @@ export function ShotRadar({
   const data = first.points.map((point, index) => {
     const row: Record<string, string | number> = { shot: point.shot };
     for (const entry of series) {
-      row[entry.name] = (entry.points[index]?.share ?? 0) * 100;
+      row[seriesKey(entry.name)] = (entry.points[index]?.share ?? 0) * 100;
     }
     return row;
   });
 
   const config: ChartConfig = Object.fromEntries(
-    series.map((entry) => [entry.name, { label: entry.name, color: entry.color }]),
+    series.map((entry) => [seriesKey(entry.name), { label: entry.name, color: entry.color }]),
   );
 
   return (
@@ -130,7 +140,7 @@ export function ShotRadar({
         {series.map((entry) => (
           <Radar
             key={entry.name}
-            dataKey={entry.name}
+            dataKey={seriesKey(entry.name)}
             stroke={entry.color}
             fill={entry.color}
             fillOpacity={0.25}
