@@ -21,6 +21,7 @@ from matchpoint_api.models import (
     FailureMode,
     MatchResult,
     MatchSide,
+    RallyBucket,
     ReturnOutcome,
     ServeOutcome,
     ShotType,
@@ -237,7 +238,9 @@ def test_serve_is_empty_before_any_points(
         "hero": None,
         "metrics": [],
         "breakdown": [],
+        "outcome": {"first_serve": None, "second_serve": None},
         "fault_mode": {"first_serve": None, "second_serve": None},
+        "return_outcome": {"first_serve": [], "second_serve": []},
         "trend": [],
     }
     assert body == {"serving": empty_side, "returning": empty_side}
@@ -490,6 +493,167 @@ def test_the_returning_side_reports_no_fault_modes(
     assert body["serving"]["fault_mode"] == empty
 
 
+def test_serve_outcome_shares_split_by_serve_number(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Both sides' serve attempts as in/fault/ace, per serve number.
+
+    Serving: four first serves, one in, one an ace and two faulted, then the two
+    second serves those faults led to, one in and one faulted. Returning: three of
+    the opponent's first serves, one in, one an ace and one faulted, then the second
+    serve that fault led to, in.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    no_shot = {"wing": None, "shot_type": None}
+    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    make_point(db_session, match_id=match.id, sequence=0)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        serve1_outcome=ServeOutcome.ACE,
+        end_reason=EndReason.ACE,
+        **no_shot,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=2,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=3,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.LONG,
+        won=False,
+        end_reason=EndReason.DOUBLE_FAULT,
+        **no_shot,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=4,
+        **opponent_serve,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=5,
+        **opponent_serve,
+        serve1_outcome=ServeOutcome.ACE,
+        won=False,
+        end_reason=EndReason.ACE,
+        **no_shot,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=6,
+        **opponent_serve,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve2_outcome=ServeOutcome.IN,
+        return_outcome=ReturnOutcome.NET,
+        won=False,
+        end_reason=EndReason.MISTAKE,
+        **no_shot,
+    )
+
+    body = _get(client, player.id, "serve")
+
+    assert body["serving"]["outcome"] == {
+        "first_serve": {"landed": 25, "fault": 50, "ace": 25},
+        "second_serve": {"landed": 50, "fault": 50, "ace": 0},
+    }
+    # Two of the opponent's three first serves landed, which is 67% to the same
+    # rounding the "1st serve in %" metric uses, and a third of them were aces. The
+    # landed share is what is left of the 67 once the aces come out of it, so the
+    # three still total 100 exactly.
+    assert body["returning"]["outcome"] == {
+        "first_serve": {"landed": 34, "fault": 33, "ace": 33},
+        "second_serve": {"landed": 100, "fault": 0, "ace": 0},
+    }
+
+
+def test_return_outcomes_split_by_serve_number(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Six of the opponent's serves returned, four of them first serves.
+
+    First serves: two returned in, one netted, one long. Second serves: one in, one
+    wide. The player's own service point carries no return of anyone's.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    missed = {"won": False, "end_reason": EndReason.MISTAKE, "wing": None, "shot_type": None}
+    second_serve = {"serve1_outcome": ServeOutcome.FAULT, "serve2_outcome": ServeOutcome.IN}
+    for sequence in range(2):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            **opponent_serve,
+            return_outcome=ReturnOutcome.IN,
+        )
+    for sequence, outcome in enumerate([ReturnOutcome.NET, ReturnOutcome.LONG], start=2):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            **opponent_serve,
+            return_outcome=outcome,
+            **missed,
+        )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=4,
+        **opponent_serve,
+        **second_serve,
+        return_outcome=ReturnOutcome.IN,
+    )
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=5,
+        **opponent_serve,
+        **second_serve,
+        return_outcome=ReturnOutcome.WIDE,
+        **missed,
+    )
+    make_point(db_session, match_id=match.id, sequence=6)
+
+    body = _get(client, player.id, "serve")
+
+    def rows(**percentages: int) -> list[dict[str, Any]]:
+        return [
+            {
+                "label": label,
+                "value": percentages.get(label.lower(), 0),
+                "secondary_value": None,
+                "max": 100,
+            }
+            for label in ("In", "Net", "Long", "Wide")
+        ]
+
+    assert body["returning"]["return_outcome"] == {
+        "first_serve": rows(**{"in": 50, "net": 25, "long": 25}),
+        "second_serve": rows(**{"in": 50, "wide": 50}),
+    }
+    # The serving card asks about the opponent's return, which capture never records.
+    assert body["serving"]["return_outcome"] == {"first_serve": [], "second_serve": []}
+
+
 def test_serve_trend_runs_oldest_to_most_recent(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -659,6 +823,8 @@ def test_rally_is_empty_before_any_points(
 
     assert body == {
         "hero": None,
+        "won": 0,
+        "lost": 0,
         "won_by_shot": [],
         "lost_by_shot": [],
         "outcome_mix": [],
@@ -676,7 +842,8 @@ def test_rally_is_empty_before_any_points(
         },
         "errors_under_pressure": None,
         "errors_overall": None,
-        "shot_frequency": [],
+        "shot_frequency": {"you": [], "opponents": []},
+        "rally_length": [],
     }
 
 
@@ -733,6 +900,11 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
 
     assert body["hero"]["value"] == 1.5
     assert body["hero"]["sample_size"] == "n=5"
+    # Every point, the ace included, where the styles below count rally endings alone.
+    assert (body["won"], body["lost"]) == (6, 3)
+    # Nine points and not one of them bucketed, so the histogram stays empty rather
+    # than drawing four zeros.
+    assert body["rally_length"] == []
     assert body["won_by_shot"] == [
         {"label": "Forehand drive", "value": 4, "secondary_value": None, "max": 4},
         {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 4},
@@ -752,11 +924,42 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
     assert body["errors_under_pressure"]["higher_is_better"] is False
     assert body["errors_overall"]["value"] == 22
     assert body["errors_overall"]["sample_size"] == "n=9"
-    assert body["shot_frequency"] == [
-        {"shot": "Drive", "share": 0.8},
-        {"shot": "Volley", "share": 0.2},
-        {"shot": "Drop shot", "share": 0},
-        {"shot": "Lob", "share": 0},
+    # Five wins carried a shot (4 drives and a volley) against three losses (2 drives
+    # and a lob), each side's shares taken over its own total.
+    assert body["shot_frequency"] == {
+        "you": [
+            {"shot": "Drive", "share": 0.8},
+            {"shot": "Volley", "share": 0.2},
+            {"shot": "Drop shot", "share": 0},
+            {"shot": "Lob", "share": 0},
+        ],
+        "opponents": [
+            {"shot": "Drive", "share": 0.67},
+            {"shot": "Volley", "share": 0},
+            {"shot": "Drop shot", "share": 0},
+            {"shot": "Lob", "share": 0.33},
+        ],
+    }
+
+
+def test_rally_length_buckets_are_reported_whole(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two points in the shortest bucket, one in the third, and one with no bucket."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    for sequence, bucket in enumerate([RallyBucket.B1, RallyBucket.B1, RallyBucket.B3]):
+        make_point(db_session, match_id=match.id, sequence=sequence, rally_length_bucket=bucket)
+    make_point(db_session, match_id=match.id, sequence=3)
+
+    body = _get(client, player.id, "rally")
+
+    # All four bars, the empty ones included: the gaps are the shape a coach reads.
+    assert body["rally_length"] == [
+        {"label": "1–3 shots", "count": 2},
+        {"label": "4–6 shots", "count": 0},
+        {"label": "7–9 shots", "count": 1},
+        {"label": "10+ shots", "count": 0},
     ]
 
 
@@ -1025,12 +1228,15 @@ def test_rally_narrows_to_one_set(client: TestClient, db_session: Session, coach
     assert body["won_by_shot"] == [
         {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
     ]
-    assert body["shot_frequency"] == [
-        {"shot": "Drive", "share": 0},
-        {"shot": "Volley", "share": 1.0},
-        {"shot": "Drop shot", "share": 0},
-        {"shot": "Lob", "share": 0},
-    ]
+    assert body["shot_frequency"] == {
+        "you": [
+            {"shot": "Drive", "share": 0},
+            {"shot": "Volley", "share": 1.0},
+            {"shot": "Drop shot", "share": 0},
+            {"shot": "Lob", "share": 0},
+        ],
+        "opponents": [],
+    }
 
 
 @pytest.mark.parametrize(
@@ -1310,6 +1516,23 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
         "wide": 0,
     }
     assert len(player_wide["serving"]["trend"]) == 2
+    # The serve outcomes and the return outcomes are two more queries of their own.
+    assert body["serving"]["outcome"] == {
+        "first_serve": {"landed": 100, "fault": 0, "ace": 0},
+        "second_serve": None,
+    }
+    assert body["returning"]["return_outcome"]["first_serve"][0] == {
+        "label": "In",
+        "value": 100,
+        "secondary_value": None,
+        "max": 100,
+    }
+    assert player_wide["serving"]["outcome"]["first_serve"] == {
+        "landed": 50,
+        "fault": 50,
+        "ace": 0,
+    }
+    assert player_wide["returning"]["return_outcome"]["first_serve"][0]["value"] == 50
 
 
 def test_match_rally_stats_leave_the_players_other_matches_out(
@@ -1336,12 +1559,14 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
         {"label": "Forehand drive", "value": 1, "secondary_value": None, "max": 1}
     ]
     assert body["lost_by_shot"] == []
+    assert (body["won"], body["lost"]) == (1, 0)
     assert body["outcome_mix"] == [{"label": "You", "forced": 100, "unforced": 0}]
     assert body["errors_overall"]["sample_size"] == "n=1"
     assert [style["count"] for style in body["styles"]["you"]] == [1, 0, 0]
     assert [style["count"] for style in body["styles"]["opponents"]] == [0, 0, 0]
     player_wide = _get(client, player.id, "rally")
     assert len(player_wide["lost_by_shot"]) == 1
+    assert (player_wide["won"], player_wide["lost"]) == (1, 1)
     assert player_wide["errors_overall"]["sample_size"] == "n=2"
     assert [style["count"] for style in player_wide["styles"]["opponents"]] == [0, 1, 0]
 

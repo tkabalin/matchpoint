@@ -19,6 +19,8 @@ from matchpoint_api.models import (
     MatchSet,
     MatchSide,
     Point,
+    RallyBucket,
+    ReturnOutcome,
     ServeOutcome,
     ShotType,
     UnusualReason,
@@ -44,10 +46,15 @@ from matchpoint_api.schemas.analytics import (
     PointEnderStyleDetail,
     PointEnderStyles,
     PointPhase,
+    RallyLengthBucket,
     RallyStats,
+    ReturnOutcomeSplit,
+    ServeOutcomeShares,
+    ServeOutcomeSplit,
     ServeSideStats,
     ServeStats,
     ServeTrendPoint,
+    ShotFrequencySides,
     ShotShare,
     SlopeLine,
     TrendStats,
@@ -154,6 +161,27 @@ COURT_ZONES = (
     "Long",
     "Wide",
 )
+
+
+# Short where the returning card's own breakdown spells the same four outcomes out in
+# full: these label the bars inside the 1st/2nd serve drill-down, where the heading
+# already says they are returns and the column is a phone's width.
+_RETURN_OUTCOME_LABEL = {
+    ReturnOutcome.IN: "In",
+    ReturnOutcome.NET: "Net",
+    ReturnOutcome.LONG: "Long",
+    ReturnOutcome.WIDE: "Wide",
+}
+
+# The shot range each stored bucket stands for. Capture stores b1..b4 and nothing
+# about their bounds (#175), so the ranges are settled here, matching the ones the
+# rally tab's histogram is already captioned with.
+_RALLY_LENGTH_LABEL = {
+    RallyBucket.B1: "1–3 shots",
+    RallyBucket.B2: "4–6 shots",
+    RallyBucket.B3: "7–9 shots",
+    RallyBucket.B4: "10+ shots",
+}
 
 
 def _percent(
@@ -305,6 +333,7 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
     statement = (
         select(
             func.count().label("total"),
+            _count(Point.won).label("won"),
             _count(game, tracked).label("hold_games"),
             _count(game, tracked, Point.won).label("hold_won"),
             _count(game, opponent).label("return_games"),
@@ -334,6 +363,10 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(~Point.won, mistake).label("mistake_lost"),
             _count(Point.is_break_point, ~Point.won, mistake).label("bp_mistakes"),
             _count(Point.is_break_point).label("bp_points"),
+            *(
+                _count(Point.rally_length_bucket == bucket).label(f"rally_{bucket.value}")
+                for bucket in RallyBucket
+            ),
             func.count(distinct(tuple_(Point.match_id, Point.set_number))).label("sets_played"),
             func.count(distinct(Point.match_id)).label("matches_with_points"),
         )
@@ -346,14 +379,14 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
 
 def _shot_breakdowns(
     db: Session, player_id: uuid.UUID, scope: PointScope
-) -> tuple[list[BreakdownRow], list[BreakdownRow], list[ShotShare]]:
+) -> tuple[list[BreakdownRow], list[BreakdownRow], ShotFrequencySides]:
     """The by-final-shot bars for wins and losses, plus the radar's shares.
 
     The stored shot is the last successful one (#175): on a win it is the player's
-    own, so the win rows and the radar describe the player; on a loss it is the
-    opponent's, so the loss rows describe the shots points were lost to, split into
-    the player's unforced errors after them (value) and being beaten outright
-    (secondary_value).
+    own, so the win rows and the radar's `you` describe the player; on a loss it is
+    the opponent's, so the loss rows and `opponents` describe the shots points were
+    lost to, the loss rows splitting the player's unforced errors after them (value)
+    from being beaten outright (secondary_value).
     """
     statement = (
         select(
@@ -399,17 +432,24 @@ def _shot_breakdowns(
         key=lambda row: (-(row.value + (row.secondary_value or 0)), row.label),
     )
 
-    won_total = sum(row.mistakes + row.forced for row in won_rows)
-    shot_frequency = []
-    if won_total:
-        by_type = {shot: 0 for shot in ShotType}
-        for row in won_rows:
-            by_type[row.shot_type] += row.mistakes + row.forced
-        shot_frequency = [
-            ShotShare(shot=_SHOT_LABEL[shot].capitalize(), share=round(count / won_total, 2))
-            for shot, count in by_type.items()
-        ]
+    shot_frequency = ShotFrequencySides(
+        you=_shot_shares(won_rows), opponents=_shot_shares(lost_rows)
+    )
     return won_by_shot, lost_by_shot, shot_frequency
+
+
+def _shot_shares(rows: Sequence[Row[Any]]) -> list[ShotShare]:
+    """One side's point-ending shots as shares of its own total, or nothing yet."""
+    total = sum(row.mistakes + row.forced for row in rows)
+    if not total:
+        return []
+    by_type = {shot: 0 for shot in ShotType}
+    for row in rows:
+        by_type[row.shot_type] += row.mistakes + row.forced
+    return [
+        ShotShare(shot=_SHOT_LABEL[shot].capitalize(), share=round(count / total, 2))
+        for shot, count in by_type.items()
+    ]
 
 
 def _shot_row_label(wing: Wing, shot_type: ShotType) -> str:
@@ -521,6 +561,96 @@ def _fault_modes(db: Session, player_id: uuid.UUID, scope: PointScope) -> FaultM
     return FaultModeSplit(first_serve=_fault_shares(first), second_serve=_fault_shares(second))
 
 
+def _serve_shares(outcomes: Counter[ServeOutcome]) -> ServeOutcomeShares | None:
+    """One serve number's three outcomes as percentages, or None if never attempted.
+
+    The in share is taken ace-inclusive and the ace share subtracted out of it, so the
+    three total exactly 100 and `landed + ace` is the same number as the "1st serve
+    in %" metric on the same card.
+    """
+    total = sum(outcomes.values())
+    if total == 0:
+        return None
+    served_in = round(100 * (outcomes[ServeOutcome.IN] + outcomes[ServeOutcome.ACE]) / total)
+    ace = round(100 * outcomes[ServeOutcome.ACE] / total)
+    return ServeOutcomeShares(landed=served_in - ace, fault=100 - served_in, ace=ace)
+
+
+def _serve_outcomes(
+    db: Session, player_id: uuid.UUID, scope: PointScope
+) -> dict[MatchSide, ServeOutcomeSplit]:
+    """Both sides' serve outcomes, split by serve number.
+
+    Read off the serve columns rather than off end_reason: an ace is a property of the
+    serve, and only these columns say which attempt it was.
+    """
+    statement = (
+        select(
+            Point.server,
+            Point.serve1_outcome,
+            Point.serve2_outcome,
+            func.count().label("points"),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(Match.player_id == player_id, *scope.conditions())
+        .group_by(Point.server, Point.serve1_outcome, Point.serve2_outcome)
+    )
+
+    first: dict[MatchSide, Counter[ServeOutcome]] = {side: Counter() for side in MatchSide}
+    second: dict[MatchSide, Counter[ServeOutcome]] = {side: Counter() for side in MatchSide}
+    for row in db.execute(statement):
+        first[row.server][row.serve1_outcome] += row.points
+        if row.serve2_outcome is not None:
+            second[row.server][row.serve2_outcome] += row.points
+    return {
+        side: ServeOutcomeSplit(
+            first_serve=_serve_shares(first[side]), second_serve=_serve_shares(second[side])
+        )
+        for side in MatchSide
+    }
+
+
+def _return_rows(outcomes: Counter[ReturnOutcome]) -> list[BreakdownRow]:
+    """Every return outcome as a percentage bar, or nothing until one is recorded."""
+    total = sum(outcomes.values())
+    if total == 0:
+        return []
+    return [
+        BreakdownRow(label=label, value=round(100 * outcomes[outcome] / total), max=100)
+        for outcome, label in _RETURN_OUTCOME_LABEL.items()
+    ]
+
+
+def _returns_by_serve(
+    db: Session, player_id: uuid.UUID, scope: PointScope
+) -> dict[bool, Counter[ReturnOutcome]]:
+    """The player's recorded returns, counted per outcome and per serve number.
+
+    The player's own alone: a return is recorded only on a point the opponent served
+    (`schemas/point.py`). One read feeds both the card's totals and its per-serve
+    bars, the bars being these same rows grouped a level finer.
+    """
+    second_serve = (Point.serve1_outcome == ServeOutcome.FAULT).label("second_serve")
+    statement = (
+        select(second_serve, Point.return_outcome, func.count().label("returned"))
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(
+            Match.player_id == player_id,
+            Point.server == MatchSide.OPPONENT,
+            Point.return_outcome.is_not(None),
+            *scope.conditions(),
+        )
+        .group_by(second_serve, Point.return_outcome)
+    )
+
+    by_serve: dict[bool, Counter[ReturnOutcome]] = {False: Counter(), True: Counter()}
+    for row in db.execute(statement):
+        by_serve[row.second_serve][row.return_outcome] += row.returned
+    return by_serve
+
+
 def _trend_points(rows_newest_first: Sequence[Row[Any]]) -> list[ServeTrendPoint]:
     """One side's most recent matches as trend points, relabelled oldest first."""
     window = list(reversed(rows_newest_first[:SERVE_TREND_MATCHES]))
@@ -567,7 +697,10 @@ def _serve_trends(
 
 
 def _serving_stats(
-    counts: Row[Any], fault_mode: FaultModeSplit, trend: list[ServeTrendPoint]
+    counts: Row[Any],
+    outcome: ServeOutcomeSplit,
+    fault_mode: FaultModeSplit,
+    trend: list[ServeTrendPoint],
 ) -> ServeSideStats:
     sets_sample = f"n={counts.sets_played} sets"
     matches_sample = f"n={counts.matches_with_points}"
@@ -613,7 +746,12 @@ def _serving_stats(
         hero=_percent("Hold % (service games won)", counts.hold_won, counts.hold_games),
         metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
+        outcome=outcome,
         fault_mode=fault_mode,
+        # Empty rather than zeroed, for the mirror of the reason the returning card
+        # has no fault modes: the opponent's return of the player's serve is not
+        # captured at all.
+        return_outcome=ReturnOutcomeSplit(first_serve=[], second_serve=[]),
         trend=trend,
     )
 
@@ -622,6 +760,7 @@ def _returning_stats(
     db: Session,
     player_id: uuid.UUID,
     counts: Row[Any],
+    outcome: ServeOutcomeSplit,
     trend: list[ServeTrendPoint],
     scope: PointScope,
 ) -> ServeSideStats:
@@ -630,28 +769,15 @@ def _returning_stats(
         _percent("1st serve return points won", counts.their_first_in_won, counts.their_first_in),
         _percent("2nd serve return points won", counts.their_second_won, counts.their_second),
     ]
+    returns = _returns_by_serve(db, player_id, scope)
     breakdown = []
     if counts.return_points:
-        # Labelled "returned" and not "count": Row attribute access would find the
-        # tuple method count() first and hand back a callable instead of the tally.
-        statement = (
-            select(Point.return_outcome, func.count().label("returned"))
-            .select_from(Point)
-            .join(Match, Point.match_id == Match.id)
-            .where(
-                Match.player_id == player_id,
-                Point.server == MatchSide.OPPONENT,
-                Point.return_outcome.is_not(None),
-                *scope.conditions(),
-            )
-            .group_by(Point.return_outcome)
-        )
-        by_outcome = {row.return_outcome.value: row.returned for row in db.execute(statement)}
+        totals = returns[False] + returns[True]
         values = {
-            "Returned in": by_outcome.get("in", 0),
-            "Return error (net)": by_outcome.get("net", 0),
-            "Return error (long)": by_outcome.get("long", 0),
-            "Return error (wide)": by_outcome.get("wide", 0),
+            "Returned in": totals[ReturnOutcome.IN],
+            "Return error (net)": totals[ReturnOutcome.NET],
+            "Return error (long)": totals[ReturnOutcome.LONG],
+            "Return error (wide)": totals[ReturnOutcome.WIDE],
         }
         ceiling = max(values.values())
         breakdown = [
@@ -661,9 +787,13 @@ def _returning_stats(
         hero=_percent("Return games won %", counts.return_won, counts.return_games),
         metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
+        outcome=outcome,
         # Empty rather than zeroed: the opponent's serve is captured as in or
         # faulted and never placed, so there is no direction here to be wrong about.
         fault_mode=FaultModeSplit(first_serve=None, second_serve=None),
+        return_outcome=ReturnOutcomeSplit(
+            first_serve=_return_rows(returns[False]), second_serve=_return_rows(returns[True])
+        ),
         trend=trend,
     )
 
@@ -672,11 +802,22 @@ def _serve_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> ServeSta
     """The serve tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
     trends = _serve_trends(db, player_id, scope)
+    outcomes = _serve_outcomes(db, player_id, scope)
     return ServeStats(
         serving=_serving_stats(
-            counts, _fault_modes(db, player_id, scope), trends[MatchSide.TRACKED]
+            counts,
+            outcomes[MatchSide.TRACKED],
+            _fault_modes(db, player_id, scope),
+            trends[MatchSide.TRACKED],
         ),
-        returning=_returning_stats(db, player_id, counts, trends[MatchSide.OPPONENT], scope),
+        returning=_returning_stats(
+            db,
+            player_id,
+            counts,
+            outcomes[MatchSide.OPPONENT],
+            trends[MatchSide.OPPONENT],
+            scope,
+        ),
     )
 
 
@@ -865,12 +1006,29 @@ def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
     return rows
 
 
+def _rally_length(counts: Row[Any]) -> list[RallyLengthBucket]:
+    """The four buckets whole, or nothing while no point carries one.
+
+    Whole so the histogram shows the shape of the distribution, gaps included, as the
+    trends tab's own buckets do; points that recorded no bucket are simply absent.
+    """
+    counted = [
+        (_RALLY_LENGTH_LABEL[bucket], getattr(counts, f"rally_{bucket.value}"))
+        for bucket in RallyBucket
+    ]
+    if not sum(count for _, count in counted):
+        return []
+    return [RallyLengthBucket(label=label, count=count) for label, count in counted]
+
+
 def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallyStats:
     """The rally tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
     won_by_shot, lost_by_shot, shot_frequency = _shot_breakdowns(db, player_id, scope)
     return RallyStats(
         hero=_forced_unforced(counts.forced_won, counts.mistake_lost),
+        won=counts.won,
+        lost=counts.total - counts.won,
         won_by_shot=won_by_shot,
         lost_by_shot=lost_by_shot,
         outcome_mix=_outcome_mix(counts),
@@ -885,6 +1043,7 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
             "Errors overall", counts.mistake_lost, counts.total, higher_is_better=False
         ),
         shot_frequency=shot_frequency,
+        rally_length=_rally_length(counts),
     )
 
 
@@ -1296,5 +1455,5 @@ def get_head_to_head(
         your_serve=[metric for metric in your_serve if metric is not None],
         their_serve=[metric for metric in their_serve if metric is not None],
         won_by_shot=won_by_shot,
-        shot_frequency=shot_frequency,
+        shot_frequency=shot_frequency.you,
     )

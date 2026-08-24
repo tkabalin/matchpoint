@@ -1183,6 +1183,25 @@ export type PointRead = {
 export type RallyBucket = 'b1' | 'b2' | 'b3' | 'b4';
 
 /**
+ * RallyLengthBucket
+ *
+ * How many points ran to roughly this many shots before ending.
+ *
+ * Not scoped to who won them: the read this exists for, serve and return pressure
+ * against fitness, cuts across that.
+ */
+export type RallyLengthBucket = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
  * RallyStats
  *
  * The rally tab: how points end once the ball is in play.
@@ -1196,6 +1215,10 @@ export type RallyStats = {
     errors_under_pressure: Metric | null;
     hero: Metric | null;
     /**
+     * Lost
+     */
+    lost: number;
+    /**
      * Lost By Shot
      */
     lost_by_shot: Array<BreakdownRow>;
@@ -1204,10 +1227,15 @@ export type RallyStats = {
      */
     outcome_mix: Array<OutcomeMixRow>;
     /**
-     * Shot Frequency
+     * Rally Length
      */
-    shot_frequency: Array<ShotShare>;
+    rally_length: Array<RallyLengthBucket>;
+    shot_frequency: ShotFrequencySides;
     styles: PointEnderStyles;
+    /**
+     * Won
+     */
+    won: number;
     /**
      * Won By Shot
      */
@@ -1242,6 +1270,26 @@ export type ResetPasswordRequest = {
 export type ReturnOutcome = 'in' | 'net' | 'long' | 'wide';
 
 /**
+ * ReturnOutcomeSplit
+ *
+ * The tracked player's own return outcomes, split by the serve returned.
+ *
+ * Percentages of that serve number's recorded returns. Empty on the serving side
+ * throughout: capture records the player's return of the opponent's serve and
+ * nothing about the opponent's return of theirs.
+ */
+export type ReturnOutcomeSplit = {
+    /**
+     * First Serve
+     */
+    first_serve: Array<BreakdownRow>;
+    /**
+     * Second Serve
+     */
+    second_serve: Array<BreakdownRow>;
+};
+
+/**
  * ScoringSystem
  *
  * The scoring system the match is played under.
@@ -1254,6 +1302,44 @@ export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'womens_grand_sl
  * How a single serve attempt landed.
  */
 export type ServeOutcome = 'in' | 'fault' | 'ace';
+
+/**
+ * ServeOutcomeShares
+ *
+ * How one serve number's attempts split between the three ways one lands.
+ *
+ * Three disjoint percentages totalling 100, so `landed` counts a serve that went in
+ * without being an ace. The share of that serve number that landed in at all, the
+ * figure the card headlines, is `landed + ace`.
+ */
+export type ServeOutcomeShares = {
+    /**
+     * Ace
+     */
+    ace: number;
+    /**
+     * Fault
+     */
+    fault: number;
+    /**
+     * Landed
+     */
+    landed: number;
+};
+
+/**
+ * ServeOutcomeSplit
+ *
+ * A side's serve outcomes, split by serve number.
+ *
+ * Whoever served on a side's points owns them, as the trend line does, so the
+ * returning card's describe the opponent's serve. A half is null until that serve
+ * number has been attempted.
+ */
+export type ServeOutcomeSplit = {
+    first_serve: ServeOutcomeShares | null;
+    second_serve: ServeOutcomeShares | null;
+};
 
 /**
  * ServeSideStats
@@ -1271,6 +1357,8 @@ export type ServeSideStats = {
      * Metrics
      */
     metrics: Array<Metric>;
+    outcome: ServeOutcomeSplit;
+    return_outcome: ReturnOutcomeSplit;
     /**
      * Trend
      */
@@ -1308,9 +1396,28 @@ export type ServeTrendPoint = {
 };
 
 /**
+ * ShotFrequencySides
+ *
+ * The radar's shares for both halves of the won/lost toggle.
+ *
+ * `you` describes the shots that won the player points and `opponents` the shots
+ * they lost points to, each a share of that side's own total.
+ */
+export type ShotFrequencySides = {
+    /**
+     * Opponents
+     */
+    opponents: Array<ShotShare>;
+    /**
+     * You
+     */
+    you: Array<ShotShare>;
+};
+
+/**
  * ShotShare
  *
- * One radar axis: a shot type's share of the player's point-winning shots.
+ * One radar axis: a shot type's share of one side's point-ending shots.
  */
 export type ShotShare = {
     /**

@@ -2399,6 +2399,25 @@
         "title": "RallyBucket",
         "type": "string"
       },
+      "RallyLengthBucket": {
+        "description": "How many points ran to roughly this many shots before ending.\n\nNot scoped to who won them: the read this exists for, serve and return pressure\nagainst fitness, cuts across that.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "RallyLengthBucket",
+        "type": "object"
+      },
       "RallyStats": {
         "description": "The rally tab: how points end once the ball is in play.\n\nThe stored shot is the last successful one, so `won_by_shot` describes the\nplayer's own point-winning shots and `lost_by_shot` the opponent's shots the\nplayer lost points on, never the player's own misses (#175).",
         "properties": {
@@ -2432,6 +2451,10 @@
               }
             ]
           },
+          "lost": {
+            "title": "Lost",
+            "type": "integer"
+          },
           "lost_by_shot": {
             "items": {
               "$ref": "#/components/schemas/BreakdownRow"
@@ -2446,15 +2469,22 @@
             "title": "Outcome Mix",
             "type": "array"
           },
-          "shot_frequency": {
+          "rally_length": {
             "items": {
-              "$ref": "#/components/schemas/ShotShare"
+              "$ref": "#/components/schemas/RallyLengthBucket"
             },
-            "title": "Shot Frequency",
+            "title": "Rally Length",
             "type": "array"
+          },
+          "shot_frequency": {
+            "$ref": "#/components/schemas/ShotFrequencySides"
           },
           "styles": {
             "$ref": "#/components/schemas/PointEnderStyles"
+          },
+          "won": {
+            "title": "Won",
+            "type": "integer"
           },
           "won_by_shot": {
             "items": {
@@ -2466,13 +2496,16 @@
         },
         "required": [
           "hero",
+          "won",
+          "lost",
           "won_by_shot",
           "lost_by_shot",
           "outcome_mix",
           "styles",
           "errors_under_pressure",
           "errors_overall",
-          "shot_frequency"
+          "shot_frequency",
+          "rally_length"
         ],
         "title": "RallyStats",
         "type": "object"
@@ -2530,6 +2563,31 @@
         "title": "ReturnOutcome",
         "type": "string"
       },
+      "ReturnOutcomeSplit": {
+        "description": "The tracked player's own return outcomes, split by the serve returned.\n\nPercentages of that serve number's recorded returns. Empty on the serving side\nthroughout: capture records the player's return of the opponent's serve and\nnothing about the opponent's return of theirs.",
+        "properties": {
+          "first_serve": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "First Serve",
+            "type": "array"
+          },
+          "second_serve": {
+            "items": {
+              "$ref": "#/components/schemas/BreakdownRow"
+            },
+            "title": "Second Serve",
+            "type": "array"
+          }
+        },
+        "required": [
+          "first_serve",
+          "second_serve"
+        ],
+        "title": "ReturnOutcomeSplit",
+        "type": "object"
+      },
       "ScoringSystem": {
         "description": "The scoring system the match is played under.",
         "enum": [
@@ -2554,6 +2612,61 @@
         ],
         "title": "ServeOutcome",
         "type": "string"
+      },
+      "ServeOutcomeShares": {
+        "description": "How one serve number's attempts split between the three ways one lands.\n\nThree disjoint percentages totalling 100, so `landed` counts a serve that went in\nwithout being an ace. The share of that serve number that landed in at all, the\nfigure the card headlines, is `landed + ace`.",
+        "properties": {
+          "ace": {
+            "title": "Ace",
+            "type": "number"
+          },
+          "fault": {
+            "title": "Fault",
+            "type": "number"
+          },
+          "landed": {
+            "title": "Landed",
+            "type": "number"
+          }
+        },
+        "required": [
+          "landed",
+          "fault",
+          "ace"
+        ],
+        "title": "ServeOutcomeShares",
+        "type": "object"
+      },
+      "ServeOutcomeSplit": {
+        "description": "A side's serve outcomes, split by serve number.\n\nWhoever served on a side's points owns them, as the trend line does, so the\nreturning card's describe the opponent's serve. A half is null until that serve\nnumber has been attempted.",
+        "properties": {
+          "first_serve": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcomeShares"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "second_serve": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcomeShares"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "first_serve",
+          "second_serve"
+        ],
+        "title": "ServeOutcomeSplit",
+        "type": "object"
       },
       "ServeSideStats": {
         "description": "One side of the serve tab, serving or returning.",
@@ -2585,6 +2698,12 @@
             "title": "Metrics",
             "type": "array"
           },
+          "outcome": {
+            "$ref": "#/components/schemas/ServeOutcomeSplit"
+          },
+          "return_outcome": {
+            "$ref": "#/components/schemas/ReturnOutcomeSplit"
+          },
           "trend": {
             "items": {
               "$ref": "#/components/schemas/ServeTrendPoint"
@@ -2597,7 +2716,9 @@
           "hero",
           "metrics",
           "breakdown",
+          "outcome",
           "fault_mode",
+          "return_outcome",
           "trend"
         ],
         "title": "ServeSideStats",
@@ -2651,8 +2772,33 @@
         "title": "ServeTrendPoint",
         "type": "object"
       },
+      "ShotFrequencySides": {
+        "description": "The radar's shares for both halves of the won/lost toggle.\n\n`you` describes the shots that won the player points and `opponents` the shots\nthey lost points to, each a share of that side's own total.",
+        "properties": {
+          "opponents": {
+            "items": {
+              "$ref": "#/components/schemas/ShotShare"
+            },
+            "title": "Opponents",
+            "type": "array"
+          },
+          "you": {
+            "items": {
+              "$ref": "#/components/schemas/ShotShare"
+            },
+            "title": "You",
+            "type": "array"
+          }
+        },
+        "required": [
+          "you",
+          "opponents"
+        ],
+        "title": "ShotFrequencySides",
+        "type": "object"
+      },
       "ShotShare": {
-        "description": "One radar axis: a shot type's share of the player's point-winning shots.",
+        "description": "One radar axis: a shot type's share of one side's point-ending shots.",
         "properties": {
           "share": {
             "title": "Share",

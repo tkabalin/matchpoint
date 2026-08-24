@@ -453,6 +453,19 @@ export const zRallyBucket = z.enum([
 ]);
 
 /**
+ * RallyLengthBucket
+ *
+ * How many points ran to roughly this many shots before ending.
+ *
+ * Not scoped to who won them: the read this exists for, serve and return pressure
+ * against fitness, cuts across that.
+ */
+export const zRallyLengthBucket = z.object({
+    count: z.int(),
+    label: z.string()
+});
+
+/**
  * RedeemTransferCodeRequest
  */
 export const zRedeemTransferCodeRequest = z.object({
@@ -477,6 +490,20 @@ export const zReturnOutcome = z.enum([
     'long',
     'wide'
 ]);
+
+/**
+ * ReturnOutcomeSplit
+ *
+ * The tracked player's own return outcomes, split by the serve returned.
+ *
+ * Percentages of that serve number's recorded returns. Empty on the serving side
+ * throughout: capture records the player's return of the opponent's serve and
+ * nothing about the opponent's return of theirs.
+ */
+export const zReturnOutcomeSplit = z.object({
+    first_serve: z.array(zBreakdownRow),
+    second_serve: z.array(zBreakdownRow)
+});
 
 /**
  * ScoringSystem
@@ -506,6 +533,35 @@ export const zServeOutcome = z.enum([
 ]);
 
 /**
+ * ServeOutcomeShares
+ *
+ * How one serve number's attempts split between the three ways one lands.
+ *
+ * Three disjoint percentages totalling 100, so `landed` counts a serve that went in
+ * without being an ace. The share of that serve number that landed in at all, the
+ * figure the card headlines, is `landed + ace`.
+ */
+export const zServeOutcomeShares = z.object({
+    ace: z.number(),
+    fault: z.number(),
+    landed: z.number()
+});
+
+/**
+ * ServeOutcomeSplit
+ *
+ * A side's serve outcomes, split by serve number.
+ *
+ * Whoever served on a side's points owns them, as the trend line does, so the
+ * returning card's describe the opponent's serve. A half is null until that serve
+ * number has been attempted.
+ */
+export const zServeOutcomeSplit = z.object({
+    first_serve: zServeOutcomeShares.nullable(),
+    second_serve: zServeOutcomeShares.nullable()
+});
+
+/**
  * ServeTrendPoint
  *
  * One match's serve-in rates, as a point on the recent-matches trend line.
@@ -526,6 +582,8 @@ export const zServeSideStats = z.object({
     fault_mode: zFaultModeSplit,
     hero: zMetric.nullable(),
     metrics: z.array(zMetric),
+    outcome: zServeOutcomeSplit,
+    return_outcome: zReturnOutcomeSplit,
     trend: z.array(zServeTrendPoint)
 });
 
@@ -542,11 +600,24 @@ export const zServeStats = z.object({
 /**
  * ShotShare
  *
- * One radar axis: a shot type's share of the player's point-winning shots.
+ * One radar axis: a shot type's share of one side's point-ending shots.
  */
 export const zShotShare = z.object({
     share: z.number(),
     shot: z.string()
+});
+
+/**
+ * ShotFrequencySides
+ *
+ * The radar's shares for both halves of the won/lost toggle.
+ *
+ * `you` describes the shots that won the player points and `opponents` the shots
+ * they lost points to, each a share of that side's own total.
+ */
+export const zShotFrequencySides = z.object({
+    opponents: z.array(zShotShare),
+    you: z.array(zShotShare)
 });
 
 /**
@@ -948,10 +1019,13 @@ export const zRallyStats = z.object({
     errors_overall: zMetric.nullable(),
     errors_under_pressure: zMetric.nullable(),
     hero: zMetric.nullable(),
+    lost: z.int(),
     lost_by_shot: z.array(zBreakdownRow),
     outcome_mix: z.array(zOutcomeMixRow),
-    shot_frequency: z.array(zShotShare),
+    rally_length: z.array(zRallyLengthBucket),
+    shot_frequency: zShotFrequencySides,
     styles: zPointEnderStyles,
+    won: z.int(),
     won_by_shot: z.array(zBreakdownRow)
 });
 

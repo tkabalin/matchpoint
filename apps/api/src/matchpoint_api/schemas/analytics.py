@@ -87,7 +87,7 @@ class BreakdownRow(BaseModel):
 
 
 class ShotShare(BaseModel):
-    """One radar axis: a shot type's share of the player's point-winning shots."""
+    """One radar axis: a shot type's share of one side's point-ending shots."""
 
     shot: str
     share: float
@@ -132,6 +132,43 @@ class FaultModeSplit(BaseModel):
     second_serve: FaultModeShares | None
 
 
+class ServeOutcomeShares(BaseModel):
+    """How one serve number's attempts split between the three ways one lands.
+
+    Three disjoint percentages totalling 100, so `landed` counts a serve that went in
+    without being an ace. The share of that serve number that landed in at all, the
+    figure the card headlines, is `landed + ace`.
+    """
+
+    landed: float
+    fault: float
+    ace: float
+
+
+class ServeOutcomeSplit(BaseModel):
+    """A side's serve outcomes, split by serve number.
+
+    Whoever served on a side's points owns them, as the trend line does, so the
+    returning card's describe the opponent's serve. A half is null until that serve
+    number has been attempted.
+    """
+
+    first_serve: ServeOutcomeShares | None
+    second_serve: ServeOutcomeShares | None
+
+
+class ReturnOutcomeSplit(BaseModel):
+    """The tracked player's own return outcomes, split by the serve returned.
+
+    Percentages of that serve number's recorded returns. Empty on the serving side
+    throughout: capture records the player's return of the opponent's serve and
+    nothing about the opponent's return of theirs.
+    """
+
+    first_serve: list[BreakdownRow]
+    second_serve: list[BreakdownRow]
+
+
 class ServeTrendPoint(BaseModel):
     """One match's serve-in rates, as a point on the recent-matches trend line."""
 
@@ -152,8 +189,11 @@ class ServeSideStats(BaseModel):
     metrics: list[Metric]
     # How this side's points ended; empty until point data exists.
     breakdown: list[BreakdownRow]
-    # How this side's faulted serves missed.
+    # How this side's serves landed, and how the faulted ones missed.
+    outcome: ServeOutcomeSplit
     fault_mode: FaultModeSplit
+    # How the player returned this side's serves.
+    return_outcome: ReturnOutcomeSplit
     # This side's own serve-in rates, match by match and oldest first, so the
     # returning card's are the opponent's. At most one entry on a match-scoped
     # request, and none at all where this side never served.
@@ -245,6 +285,28 @@ class PointEnderStyles(BaseModel):
     opponents: list[PointEnderStyle]
 
 
+class ShotFrequencySides(BaseModel):
+    """The radar's shares for both halves of the won/lost toggle.
+
+    `you` describes the shots that won the player points and `opponents` the shots
+    they lost points to, each a share of that side's own total.
+    """
+
+    you: list[ShotShare]
+    opponents: list[ShotShare]
+
+
+class RallyLengthBucket(BaseModel):
+    """How many points ran to roughly this many shots before ending.
+
+    Not scoped to who won them: the read this exists for, serve and return pressure
+    against fitness, cuts across that.
+    """
+
+    label: str
+    count: int
+
+
 class RallyStats(BaseModel):
     """The rally tab: how points end once the ball is in play.
 
@@ -254,13 +316,19 @@ class RallyStats(BaseModel):
     """
 
     hero: Metric | None
+    # Every point the player won and lost, aces and double faults included, so the
+    # two deliberately outrun the styles below, which count rally endings alone.
+    won: int
+    lost: int
     won_by_shot: list[BreakdownRow]
     lost_by_shot: list[BreakdownRow]
     outcome_mix: list[OutcomeMixRow]
     styles: PointEnderStyles
     errors_under_pressure: Metric | None
     errors_overall: Metric | None
-    shot_frequency: list[ShotShare]
+    shot_frequency: ShotFrequencySides
+    # The four buckets whole, or empty while no point carries one.
+    rally_length: list[RallyLengthBucket]
 
 
 class DistributionBucket(BaseModel):
@@ -320,4 +388,6 @@ class HeadToHeadDetail(HeadToHeadSummary):
     your_serve: list[Metric]
     their_serve: list[Metric]
     won_by_shot: list[BreakdownRow]
+    # The player's own point-winning shots alone, where the rally tab carries both
+    # sides: this view has no won/lost toggle for a second set to answer.
     shot_frequency: list[ShotShare]
