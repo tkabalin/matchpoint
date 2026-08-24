@@ -8,7 +8,7 @@ import { Point } from "./point";
 const MATCH_ID = "match-1";
 const SERVE_TARGET = "T";
 const AD_TARGET = "WIDE";
-const COURT_ZONE = { half: "DEUCE", depth: "MID" } as const;
+const COURT_ZONE = { half: "DEUCE", depth: "DEEP" } as const;
 
 /** Starts a tracked-serving point — courtSide defaults to DEUCE. */
 function startTracked(courtSide: CourtSide = "DEUCE") {

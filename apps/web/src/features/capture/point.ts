@@ -79,8 +79,11 @@ export const FAILURE_MODES: readonly FailureMode[] = ["NET", "LONG", "WIDE"];
 export type ReturnOutcome = "IN" | FailureMode;
 export const RETURN_OUTCOMES: readonly ReturnOutcome[] = ["IN", ...FAILURE_MODES];
 
-export type CourtDepth = "SHORT" | "MID" | "DEEP";
-export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "MID", "DEEP"];
+// Two bands, not three: players asked for short vs deep, which is the call a coach can
+// make reliably from the sideline. DEEP rather than "long" deliberately — LONG is a
+// FailureMode, a ball that missed beyond the baseline, and these are balls that landed.
+export type CourtDepth = "SHORT" | "DEEP";
+export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "DEEP"];
 
 export type RallyBucket = "B1" | "B2" | "B3" | "B4";
 export const RALLY_BUCKETS: readonly RallyBucket[] = ["B1", "B2", "B3", "B4"];
@@ -180,8 +183,13 @@ export class Point {
   readonly unusualNote: string | null;
   // Null on ACE / DOUBLE_FAULT / UNUSUAL (no contact) and on a return error (returnOutcome
   // already describes it). Otherwise describes whichever player hit last — see lastShotPlayer.
+  // Also null on an unforced error, whose stroke capture doesn't ask for.
   readonly wing: Wing | null;
   readonly shotType: ShotType | null;
+  // Where the last ball to *land* finished, which on an unforced error is the shot
+  // before the miss, not the miss itself: capture records the rally's shape, and where
+  // an error went is a fact coaches said they don't act on. So ballIn is always true
+  // from the capture path; false plus a FailureMode stays legal for imported data.
   readonly ballIn: boolean | null;
   readonly ballLocation: CourtZone | FailureMode | null;
   // Null means genuinely unknown — never a stand-in for a rally of length 0.

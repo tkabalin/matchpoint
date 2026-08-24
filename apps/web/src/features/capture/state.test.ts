@@ -180,7 +180,7 @@ function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {
     wing: null,
     shotType: null,
     ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "MID" },
+    ballLocation: { half: "DEUCE", depth: "DEEP" },
     rallyLengthBucket: null,
     ...overrides,
   });

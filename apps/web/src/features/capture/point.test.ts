@@ -24,7 +24,7 @@ function pointData(overrides: Record<string, unknown> = {}) {
     wing: null,
     shotType: null,
     ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "MID" },
+    ballLocation: { half: "DEUCE", depth: "DEEP" },
     rallyLengthBucket: null,
     ...overrides,
   };
@@ -533,14 +533,14 @@ describe("immutability", () => {
   });
 
   test("mutating toJSON()'s ballLocation object does not affect the Point", () => {
-    const point = Point.create(pointData({ ballLocation: { half: "DEUCE", depth: "MID" } }));
+    const point = Point.create(pointData({ ballLocation: { half: "DEUCE", depth: "DEEP" } }));
 
     const snapshot = point.toJSON();
     if (snapshot.ballLocation !== null && typeof snapshot.ballLocation !== "string") {
       snapshot.ballLocation.depth = "DEEP";
     }
 
-    expect(point.ballLocation).toEqual({ half: "DEUCE", depth: "MID" });
+    expect(point.ballLocation).toEqual({ half: "DEUCE", depth: "DEEP" });
   });
 });
 

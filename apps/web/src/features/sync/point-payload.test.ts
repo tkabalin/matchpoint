@@ -21,7 +21,7 @@ function point() {
     wing: null,
     shotType: null,
     ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "MID" },
+    ballLocation: { half: "DEUCE", depth: "DEEP" },
     rallyLengthBucket: null,
   });
 }

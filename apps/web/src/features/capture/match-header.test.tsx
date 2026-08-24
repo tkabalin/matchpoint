@@ -44,7 +44,7 @@ function pointWonBy(winner: string) {
     wing: "FOREHAND",
     shotType: "DRIVE",
     ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "MID" },
+    ballLocation: { half: "DEUCE", depth: "DEEP" },
     rallyLengthBucket: null,
   });
 }

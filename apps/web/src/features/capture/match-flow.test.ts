@@ -40,7 +40,7 @@ function pointWonBy(matchId: string, winner: string, sequence?: number) {
     wing: null,
     shotType: null,
     ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "MID" },
+    ballLocation: { half: "DEUCE", depth: "DEEP" },
     rallyLengthBucket: null,
   });
 }
