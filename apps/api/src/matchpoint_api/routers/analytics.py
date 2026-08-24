@@ -2,8 +2,8 @@ import uuid
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date
-from itertools import takewhile
+from datetime import date, timedelta
+from itertools import chain, takewhile
 from statistics import fmean, pstdev
 from typing import Annotated, Any
 
@@ -62,6 +62,8 @@ from matchpoint_api.schemas.analytics import (
     ShotShare,
     SlopeLine,
     SquadMemberStats,
+    SquadMetric,
+    SquadTrendPoint,
     TrackedStat,
     TrackedStatKey,
     TrendStats,
@@ -1506,6 +1508,13 @@ def _percent_value(part: int, whole: int) -> float:
     return round(100 * part / whole)
 
 
+def _percent_value_or_none(part: int, whole: int) -> float | None:
+    """`_percent_value`, for a denominator that can genuinely be zero."""
+    if whole == 0:
+        return None
+    return _percent_value(part, whole)
+
+
 def _series_ratio(forced: int, unforced: int) -> float | None:
     """The forced : unforced ratio only where the denominator is real.
 
@@ -1555,18 +1564,35 @@ _TRACKED_STATS = (
 )
 
 
+# A range of match dates, both ends counted.
+_DateWindow = tuple[date, date]
+
+
+def _within(window: _DateWindow | None) -> list[Any]:
+    """The window as conditions, or nothing at all where a caller wants the lot.
+
+    Bounded at both ends, so a read that draws a fixed number of buckets gets rows
+    it has a bucket for, whatever date a row happens to carry.
+    """
+    if window is None:
+        return []
+    first, last = window
+    return [Match.played_on >= first, Match.played_on <= last]
+
+
 def _roster_matches(
-    db: Session, player_ids: Sequence[uuid.UUID]
+    db: Session, player_ids: Sequence[uuid.UUID], window: _DateWindow | None = None
 ) -> dict[uuid.UUID, list[Row[Any]]]:
     """Every match on the roster, newest first, grouped by player.
 
     One query for the whole roster rather than one per player, and every player gets
-    an entry so a roster row is never dropped for having no matches.
+    an entry so a roster row is never dropped for having no matches. `window` bounds
+    the read to a caller that draws one span rather than a whole career.
     """
     grouped: dict[uuid.UUID, list[Row[Any]]] = {player_id: [] for player_id in player_ids}
     for row in db.execute(
         select(Match.player_id, Match.id, Match.played_on, Match.result)
-        .where(Match.player_id.in_(player_ids))
+        .where(Match.player_id.in_(player_ids), *_within(window))
         .order_by(Match.played_on.desc(), Match.created_at.desc())
     ):
         grouped[row.player_id].append(row)
@@ -1574,7 +1600,7 @@ def _roster_matches(
 
 
 def _tracked_counts_by_match(
-    db: Session, player_ids: Sequence[uuid.UUID]
+    db: Session, player_ids: Sequence[uuid.UUID], window: _DateWindow | None = None
 ) -> dict[uuid.UUID, Row[Any]]:
     """The tracked stats' tallies for every match on the roster, one row per match.
 
@@ -1598,7 +1624,7 @@ def _tracked_counts_by_match(
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
-        .where(Match.player_id.in_(player_ids))
+        .where(Match.player_id.in_(player_ids), *_within(window))
         .group_by(Point.match_id)
     ).all()
     return {row.match_id: row for row in rows}
@@ -1661,16 +1687,24 @@ def _squad_member(
     today = date.today()
     period = [row for row in matches_newest_first if row.played_on.year == today.year]
     resulted = [row for row in matches_newest_first if row.result is not None]
+    period_resulted = [row for row in period if row.result is not None]
     period_counts = [counts_by_match[row.id] for row in period if row.id in counts_by_match]
     return SquadMemberStats(
         player_id=player_id,
         matches_logged_this_period=len(period),
+        period_record=WinLossRecord(
+            wins=_wins(period_resulted), losses=len(period_resulted) - _wins(period_resulted)
+        ),
         last5=[row.result for row in reversed(resulted[:5])],
         # Summed over the period's matches rather than averaged over their ratios, so
         # a match of four points weighs what four points are worth.
         forced_to_unforced_ratio=_ratio_value(
             sum(counts.forced_won for counts in period_counts),
             sum(counts.mistake_lost for counts in period_counts),
+        ),
+        first_serve_in_percent=_percent_value_or_none(
+            sum(counts.first_in for counts in period_counts),
+            sum(counts.serve_points for counts in period_counts),
         ),
         current_streak=_current_streak(resulted),
         days_since_last_match=(
@@ -1689,17 +1723,22 @@ def _squad_member(
 
 @squad_router.get("/members", response_model=list[SquadMemberStats])
 def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMemberStats]:
-    """Per-player inputs to the home screen's squad snapshot, one row per roster player.
+    """Per-player squad figures, one row per roster player.
 
-    The thresholds that turn these numbers into a flag are the web app's
-    (`lib/analytics/attention.ts`); what this endpoint owns is the windows they are
+    Serves both screens that rank a squad: the home screen's snapshot (#204) and the
+    Squad stats leaderboard and headline (#237). The thresholds that turn these
+    numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
+    `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
     measured over. The period is the calendar year, as the overview tab's season
-    record is, and scopes `matches_logged_this_period` and the forced : unforced
-    ratio; the streak, the last five results and the days since the last match are
-    counted over every match, so a run that started in December is still a run in
-    January. A tracked stat's `current` is its value over the latest match that
-    recorded enough of its own points to answer it, against a baseline of the ten
-    such matches before that one.
+    record is, and scopes `matches_logged_this_period`, `period_record`, the
+    forced : unforced ratio and the first-serve percentage; the streak, the last five
+    results and the days since the last match are counted over every match, so a run
+    that started in December is still a run in January. A tracked stat's `current` is
+    its value over the latest match that can answer it, against a baseline of the ten
+    matches before that one.
+
+    Both period rates pool the period's points rather than averaging its matches, so
+    a four-point match weighs what four points are worth.
     """
     roster = list(
         db.scalars(
@@ -1713,3 +1752,95 @@ def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMem
     matches = _roster_matches(db, roster)
     counts_by_match = _tracked_counts_by_match(db, roster)
     return [_squad_member(player_id, matches[player_id], counts_by_match) for player_id in roster]
+
+
+# Six weeks because the trend card is captioned with that window, and because a
+# roster playing weekly fixtures fills six buckets where a longer window would
+# mostly draw the gaps between terms.
+SQUAD_TREND_WEEKS = 6
+
+
+@dataclass
+class _WeekTally:
+    """One week's counts, pooled across every match the roster played in it."""
+
+    wins: int = 0
+    losses: int = 0
+    forced: int = 0
+    unforced: int = 0
+    first_in: int = 0
+    serve_points: int = 0
+
+
+# Each metric off one week's pooled counts. `_series_ratio` rather than
+# `_ratio_value` for the reason a tracked stat's series uses it: the forced count
+# standing in for a missing denominator is a display convention, and as a point on a
+# line it would read as a real value.
+_SQUAD_METRIC_VALUE: dict[SquadMetric, Callable[[_WeekTally], float | None]] = {
+    SquadMetric.RECORD: lambda week: _percent_value_or_none(week.wins, week.wins + week.losses),
+    SquadMetric.FORCED_TO_UNFORCED: lambda week: _series_ratio(week.forced, week.unforced),
+    SquadMetric.FIRST_SERVE_IN: lambda week: _percent_value_or_none(
+        week.first_in, week.serve_points
+    ),
+}
+
+SquadMetricFilter = Annotated[
+    SquadMetric, Query(description="Which roster-wide figure the series carries.")
+]
+
+
+def _week_tallies(db: Session, roster: Sequence[uuid.UUID], first_monday: date) -> list[_WeekTally]:
+    """The window's weeks, oldest first, each holding its own matches' counts.
+
+    Always the full six, so an empty roster and a week nobody played in answer the
+    same way: a week with nothing counted in it.
+    """
+    weeks = [_WeekTally() for _ in range(SQUAD_TREND_WEEKS)]
+    if not roster:
+        return weeks
+    window = (first_monday, first_monday + timedelta(weeks=SQUAD_TREND_WEEKS, days=-1))
+    counts_by_match = _tracked_counts_by_match(db, roster, window)
+    for row in chain.from_iterable(_roster_matches(db, roster, window).values()):
+        week = weeks[(row.played_on - first_monday).days // 7]
+        if row.result is not None:
+            if row.result == MatchResult.WIN:
+                week.wins += 1
+            else:
+                week.losses += 1
+        counts = counts_by_match.get(row.id)
+        if counts is None:
+            continue
+        week.forced += counts.forced_won
+        week.unforced += counts.mistake_lost
+        week.first_in += counts.first_in
+        week.serve_points += counts.serve_points
+    return weeks
+
+
+@squad_router.get("/trend", response_model=list[SquadTrendPoint])
+def get_squad_trend(
+    metric: SquadMetricFilter, db: DbSession, coach: CurrentCoach
+) -> list[SquadTrendPoint]:
+    """One roster-wide figure a week, over the six weeks ending with this one.
+
+    Weeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather
+    than split across two, and the sixth is the current week however few of its days
+    have passed: a card about how the squad is trending now would be up to a week
+    stale if it stopped last Sunday. All six come back in order, so a quiet fortnight
+    draws a gap in the line rather than a shorter line.
+
+    A week's figure pools every match the roster played in it rather than averaging
+    the roster's players, for the reason the period's own rates are pooled: one match
+    is one match's worth of evidence whoever played it, where a per-player mean would
+    weigh a player's single match against another's four. A week whose matches cannot
+    answer the metric, one with no recorded result, no unforced error or no serve
+    among them, carries a null rather than a zero.
+    """
+    roster = list(db.scalars(select(Player.id).where(Player.coach_id == coach.id)))
+    today = date.today()
+    first_monday = today - timedelta(days=today.weekday(), weeks=SQUAD_TREND_WEEKS - 1)
+    value = _SQUAD_METRIC_VALUE[metric]
+    return [
+        SquadTrendPoint(week=f"Wk {position}", value=value(week))
+        for position, week in enumerate(_week_tallies(db, roster, first_monday), start=1)
+    ]

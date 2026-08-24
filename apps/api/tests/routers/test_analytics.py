@@ -2147,8 +2147,12 @@ def test_squad_members_covers_a_player_with_no_matches(
         {
             "player_id": str(player.id),
             "matches_logged_this_period": 0,
+            # A record counts matches, so nothing played really is nil all, where
+            # the two rates beside it are absent rather than zero.
+            "period_record": {"wins": 0, "losses": 0},
             "last5": [],
             "forced_to_unforced_ratio": None,
+            "first_serve_in_percent": None,
             "current_streak": None,
             "days_since_last_match": None,
             "tracked_stats": [],
@@ -2514,3 +2518,231 @@ def test_squad_members_omit_a_stat_left_with_one_countable_match(
     # The period ratio sums the counts, so the small match is still counted there,
     # weighed at the two points it is worth.
     assert row["forced_to_unforced_ratio"] == 1.83
+
+
+# --- squad leaderboard figures on the same rows (#237) ---
+
+
+def test_squad_members_period_record_and_serve_stop_at_the_year(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Both leaderboard figures are the period's, as the match count already is.
+
+    Two results this year and one last, so the record is one all and last year's win
+    is out of it. First serves in are 6 of 10 this year against 1 of 10 last, so the
+    figure is 60% rather than the 35% both years together would give.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session, player.id, date(THIS_YEAR, 7, 1), first_in=6, faults=4, result=MatchResult.WIN
+    )
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), result=MatchResult.LOSS)
+    _captured_match(
+        db_session, player.id, date(LAST_YEAR, 5, 1), first_in=1, faults=9, result=MatchResult.WIN
+    )
+
+    row = _squad(client)[0]
+
+    assert row["period_record"] == {"wins": 1, "losses": 1}
+    assert row["first_serve_in_percent"] == 60
+
+
+def test_squad_members_period_record_ignores_a_match_without_a_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match logged but never resulted counts toward the period, not the record."""
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), result=MatchResult.WIN)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2))
+
+    row = _squad(client)[0]
+
+    assert row["matches_logged_this_period"] == 2
+    assert row["period_record"] == {"wins": 1, "losses": 0}
+
+
+def test_squad_members_serve_percentage_is_absent_without_a_serve(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Rallies on the opponent's serve only, so the rate has no denominator."""
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=2, mistake=1)
+
+    row = _squad(client)[0]
+
+    assert row["forced_to_unforced_ratio"] == 2.0
+    assert row["first_serve_in_percent"] is None
+
+
+# --- squad trend (#237) ---
+
+TREND_PATH = "/squad/analytics/trend"
+
+# The window is the six Monday-to-Sunday weeks ending with the one today falls in, so
+# every arranged date is derived from today rather than pinned to a calendar. One
+# reading of the clock, so the two halves cannot land either side of a midnight.
+_TODAY = date.today()
+THIS_MONDAY = _TODAY - timedelta(days=_TODAY.weekday())
+
+
+def _in_week(index: int, weekday: int = 0) -> date:
+    """A date inside the window's week `index`, 0 being the oldest of the six."""
+    return THIS_MONDAY - timedelta(weeks=5 - index) + timedelta(days=weekday)
+
+
+def _values(client: TestClient, metric: str) -> Any:
+    """The series' six values, having checked its labels run oldest to newest."""
+    response = client.get(TREND_PATH, params={"metric": metric})
+    assert response.status_code == 200
+    body = response.json()
+    assert [point["week"] for point in body] == [f"Wk {n}" for n in range(1, 7)]
+    return [point["value"] for point in body]
+
+
+def test_squad_trend_requires_a_session(client: TestClient) -> None:
+    response = client.get(TREND_PATH, params={"metric": "record"})
+
+    assert response.status_code == 401
+
+
+def test_squad_trend_rejects_an_unknown_metric(client: TestClient, coach: Coach) -> None:
+    response = client.get(TREND_PATH, params={"metric": "unforced_to_forced"})
+
+    assert response.status_code == 422
+
+
+def test_squad_trend_answers_the_weeks_without_a_roster(client: TestClient, coach: Coach) -> None:
+    """The series is a list of weeks, and those exist whether or not anyone played."""
+    assert _values(client, "record") == [None] * 6
+
+
+def test_squad_trend_buckets_the_six_weeks_monday_to_sunday(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One point a week in order, a weekend in one bucket, quiet weeks left null.
+
+    A win in the oldest week, a Sunday loss in the third, a Saturday win beside a
+    Sunday loss in the fifth, and a win on the current week's Monday.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    for played_on, result in [
+        (_in_week(0), MatchResult.WIN),
+        (_in_week(2, 6), MatchResult.LOSS),
+        (_in_week(4, 5), MatchResult.WIN),
+        (_in_week(4, 6), MatchResult.LOSS),
+        (_in_week(5), MatchResult.WIN),
+    ]:
+        make_match(db_session, player_id=player.id, played_on=played_on, result=result)
+
+    assert _values(client, "record") == [100, None, 0, None, 50, 100]
+
+
+def test_squad_trend_stops_at_the_windows_first_monday(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The Sunday before the window is outside it, so its win moves nothing."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=_in_week(0) - timedelta(days=1),
+        result=MatchResult.WIN,
+    )
+
+    assert _values(client, "record") == [None] * 6
+
+
+def test_squad_trend_stops_at_the_current_weeks_sunday(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The window is closed at its far end too, so a later date falls outside it.
+
+    Nothing the API accepts writes a match ahead of today, but the sample-data
+    importer builds rows straight from a CSV, and a bucket past the sixth would be
+    an IndexError rather than a point off the chart.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=_in_week(5) + timedelta(weeks=1),
+        result=MatchResult.WIN,
+    )
+
+    assert _values(client, "record") == [None] * 6
+
+
+def test_squad_trend_leaves_an_unresulted_week_null(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Matches logged without a result decided nothing, so the win rate is absent."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(db_session, player_id=player.id, played_on=_in_week(5))
+
+    assert _values(client, "record") == [None] * 6
+
+
+def test_squad_trend_pools_the_roster_and_nobody_elses(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One win and one loss in the same week puts the squad at 50% for it.
+
+    Another coach's player wins that week too, which would read 67% if counted.
+    """
+    for result in [MatchResult.WIN, MatchResult.LOSS]:
+        make_match(
+            db_session,
+            player_id=make_player(db_session, coach_id=coach.id).id,
+            played_on=_in_week(5),
+            result=result,
+        )
+    make_match(
+        db_session,
+        player_id=make_player(db_session).id,
+        played_on=_in_week(5),
+        result=MatchResult.WIN,
+    )
+
+    assert _values(client, "record") == [None, None, None, None, None, 50]
+
+
+def test_squad_trend_pools_a_weeks_points_rather_than_its_players(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Four forced to one beside two to two is 6:3, so 2.0 where the mean is 2.5."""
+    for forced, mistake in [(4, 1), (2, 2)]:
+        _captured_match(
+            db_session,
+            make_player(db_session, coach_id=coach.id).id,
+            _in_week(3),
+            forced=forced,
+            mistake=mistake,
+        )
+
+    assert _values(client, "forced_to_unforced") == [None, None, None, 2.0, None, None]
+
+
+def test_squad_trend_has_no_stand_in_for_a_missing_denominator(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A week of clean tennis has no ratio to draw, where a member row shows the count."""
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, _in_week(2), forced=3)
+
+    assert _values(client, "forced_to_unforced") == [None] * 6
+
+
+def test_squad_trend_first_serve_pools_the_weeks_serves(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Six of ten beside one of four is 7 of 14, so 50% and not the 42.5% mean."""
+    for first_in, faults in [(6, 4), (1, 3)]:
+        _captured_match(
+            db_session,
+            make_player(db_session, coach_id=coach.id).id,
+            _in_week(1),
+            first_in=first_in,
+            faults=faults,
+        )
+
+    assert _values(client, "first_serve_in") == [None, 50, None, None, None, None]

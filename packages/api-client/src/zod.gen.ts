@@ -654,6 +654,27 @@ export const zSlopeLine = z.object({
 });
 
 /**
+ * SquadMetric
+ *
+ * Which roster-wide figure a squad trend series carries.
+ */
+export const zSquadMetric = z.enum([
+    'record',
+    'forced_to_unforced',
+    'first_serve_in'
+]);
+
+/**
+ * SquadTrendPoint
+ *
+ * One week of the roster-wide trend line.
+ */
+export const zSquadTrendPoint = z.object({
+    value: z.number().nullable(),
+    week: z.string()
+});
+
+/**
  * Surface
  */
 export const zSurface = z.enum([
@@ -751,24 +772,6 @@ export const zTrackedStat = z.object({
     rolling_mean: z.number(),
     rolling_std_dev: z.number(),
     unit: zMetricUnit
-});
-
-/**
- * SquadMemberStats
- *
- * One roster player's inputs to the home screen's squad snapshot (#204).
- *
- * Inputs and never a verdict: which of these amounts to needing attention is the
- * client's rule, so the thresholds live there and the windows live here.
- */
-export const zSquadMemberStats = z.object({
-    current_streak: zCurrentStreak.nullable(),
-    days_since_last_match: z.int().nullable(),
-    forced_to_unforced_ratio: z.number().nullable(),
-    last5: z.array(zMatchResult),
-    matches_logged_this_period: z.int(),
-    player_id: z.uuid(),
-    tracked_stats: z.array(zTrackedStat)
 });
 
 /**
@@ -898,6 +901,27 @@ export const zPlayerOverview = z.object({
     recent_results: z.array(zMatchResult),
     return_games_won: zMetric.nullable(),
     season_record: zWinLossRecord
+});
+
+/**
+ * SquadMemberStats
+ *
+ * One roster player's raw figures, for both screens that rank a whole squad.
+ *
+ * Inputs and never a verdict: which of these amounts to needing attention (#204),
+ * or to first place on the Squad stats leaderboard (#237), is the client's rule, so
+ * the thresholds live there and the windows live here.
+ */
+export const zSquadMemberStats = z.object({
+    current_streak: zCurrentStreak.nullable(),
+    days_since_last_match: z.int().nullable(),
+    first_serve_in_percent: z.number().nullable(),
+    forced_to_unforced_ratio: z.number().nullable(),
+    last5: z.array(zMatchResult),
+    matches_logged_this_period: z.int(),
+    period_record: zWinLossRecord,
+    player_id: z.uuid(),
+    tracked_stats: z.array(zTrackedStat)
 });
 
 /**
@@ -1554,3 +1578,14 @@ export const zCreatePlayerTransferCodeResponse = zPlayerTransferCodeRead;
  * Successful Response
  */
 export const zListSquadMemberStatsResponse = z.array(zSquadMemberStats);
+
+export const zGetSquadTrendQuery = z.object({
+    metric: zSquadMetric
+});
+
+/**
+ * Response Get Squad Trend
+ *
+ * Successful Response
+ */
+export const zGetSquadTrendResponse = z.array(zSquadTrendPoint);

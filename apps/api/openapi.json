@@ -2870,7 +2870,7 @@
         "type": "object"
       },
       "SquadMemberStats": {
-        "description": "One roster player's inputs to the home screen's squad snapshot (#204).\n\nInputs and never a verdict: which of these amounts to needing attention is the\nclient's rule, so the thresholds live there and the windows live here.",
+        "description": "One roster player's raw figures, for both screens that rank a whole squad.\n\nInputs and never a verdict: which of these amounts to needing attention (#204),\nor to first place on the Squad stats leaderboard (#237), is the client's rule, so\nthe thresholds live there and the windows live here.",
         "properties": {
           "current_streak": {
             "anyOf": [
@@ -2892,6 +2892,17 @@
               }
             ],
             "title": "Days Since Last Match"
+          },
+          "first_serve_in_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Serve In Percent"
           },
           "forced_to_unforced_ratio": {
             "anyOf": [
@@ -2915,6 +2926,9 @@
             "title": "Matches Logged This Period",
             "type": "integer"
           },
+          "period_record": {
+            "$ref": "#/components/schemas/WinLossRecord"
+          },
           "player_id": {
             "format": "uuid",
             "title": "Player Id",
@@ -2931,13 +2945,51 @@
         "required": [
           "player_id",
           "matches_logged_this_period",
+          "period_record",
           "last5",
           "forced_to_unforced_ratio",
+          "first_serve_in_percent",
           "current_streak",
           "days_since_last_match",
           "tracked_stats"
         ],
         "title": "SquadMemberStats",
+        "type": "object"
+      },
+      "SquadMetric": {
+        "description": "Which roster-wide figure a squad trend series carries.",
+        "enum": [
+          "record",
+          "forced_to_unforced",
+          "first_serve_in"
+        ],
+        "title": "SquadMetric",
+        "type": "string"
+      },
+      "SquadTrendPoint": {
+        "description": "One week of the roster-wide trend line.",
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          },
+          "week": {
+            "title": "Week",
+            "type": "string"
+          }
+        },
+        "required": [
+          "week",
+          "value"
+        ],
+        "title": "SquadTrendPoint",
         "type": "object"
       },
       "Surface": {
@@ -6391,7 +6443,7 @@
     },
     "/squad/analytics/members": {
       "get": {
-        "description": "Per-player inputs to the home screen's squad snapshot, one row per roster player.\n\nThe thresholds that turn these numbers into a flag are the web app's\n(`lib/analytics/attention.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period` and the forced : unforced\nratio; the streak, the last five results and the days since the last match are\ncounted over every match, so a run that started in December is still a run in\nJanuary. A tracked stat's `current` is its value over the latest match that\nrecorded enough of its own points to answer it, against a baseline of the ten\nsuch matches before that one.",
+        "description": "Per-player squad figures, one row per roster player.\n\nServes both screens that rank a squad: the home screen's snapshot (#204) and the\nSquad stats leaderboard and headline (#237). The thresholds that turn these\nnumbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,\n`lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period`, `period_record`, the\nforced : unforced ratio and the first-serve percentage; the streak, the last five\nresults and the days since the last match are counted over every match, so a run\nthat started in December is still a run in January. A tracked stat's `current` is\nits value over the latest match that can answer it, against a baseline of the ten\nmatches before that one.\n\nBoth period rates pool the period's points rather than averaging its matches, so\na four-point match weighs what four points are worth.",
         "operationId": "list_squad_member_stats",
         "responses": {
           "200": {
@@ -6430,6 +6482,74 @@
           }
         },
         "summary": "List Squad Member Stats",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
+    "/squad/analytics/trend": {
+      "get": {
+        "description": "One roster-wide figure a week, over the six weeks ending with this one.\n\nWeeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather\nthan split across two, and the sixth is the current week however few of its days\nhave passed: a card about how the squad is trending now would be up to a week\nstale if it stopped last Sunday. All six come back in order, so a quiet fortnight\ndraws a gap in the line rather than a shorter line.\n\nA week's figure pools every match the roster played in it rather than averaging\nthe roster's players, for the reason the period's own rates are pooled: one match\nis one match's worth of evidence whoever played it, where a per-player mean would\nweigh a player's single match against another's four. A week whose matches cannot\nanswer the metric, one with no recorded result, no unforced error or no serve\namong them, carries a null rather than a zero.",
+        "operationId": "get_squad_trend",
+        "parameters": [
+          {
+            "description": "Which roster-wide figure the series carries.",
+            "in": "query",
+            "name": "metric",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SquadMetric",
+              "description": "Which roster-wide figure the series carries."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SquadTrendPoint"
+                  },
+                  "title": "Response Get Squad Trend",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Get Squad Trend",
         "tags": [
           "analytics"
         ]

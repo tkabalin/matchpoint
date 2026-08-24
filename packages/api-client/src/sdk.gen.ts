@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetHeadToHeadData, GetHeadToHeadErrors, GetHeadToHeadResponses, GetMatchData, GetMatchErrors, GetMatchRallyStatsData, GetMatchRallyStatsErrors, GetMatchRallyStatsResponses, GetMatchResponses, GetMatchServeStatsData, GetMatchServeStatsErrors, GetMatchServeStatsResponses, GetPlayerData, GetPlayerErrors, GetPlayerOverviewData, GetPlayerOverviewErrors, GetPlayerOverviewResponses, GetPlayerResponses, GetRallyStatsData, GetRallyStatsErrors, GetRallyStatsResponses, GetServeStatsData, GetServeStatsErrors, GetServeStatsResponses, GetTrendStatsData, GetTrendStatsErrors, GetTrendStatsResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListHeadToHeadData, ListHeadToHeadErrors, ListHeadToHeadResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, ListSquadMemberStatsData, ListSquadMemberStatsErrors, ListSquadMemberStatsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetHeadToHeadData, GetHeadToHeadErrors, GetHeadToHeadResponses, GetMatchData, GetMatchErrors, GetMatchRallyStatsData, GetMatchRallyStatsErrors, GetMatchRallyStatsResponses, GetMatchResponses, GetMatchServeStatsData, GetMatchServeStatsErrors, GetMatchServeStatsResponses, GetPlayerData, GetPlayerErrors, GetPlayerOverviewData, GetPlayerOverviewErrors, GetPlayerOverviewResponses, GetPlayerResponses, GetRallyStatsData, GetRallyStatsErrors, GetRallyStatsResponses, GetServeStatsData, GetServeStatsErrors, GetServeStatsResponses, GetSquadTrendData, GetSquadTrendErrors, GetSquadTrendResponses, GetTrendStatsData, GetTrendStatsErrors, GetTrendStatsResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListHeadToHeadData, ListHeadToHeadErrors, ListHeadToHeadResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, ListSquadMemberStatsData, ListSquadMemberStatsErrors, ListSquadMemberStatsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -549,16 +549,41 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
 /**
  * List Squad Member Stats
  *
- * Per-player inputs to the home screen's squad snapshot, one row per roster player.
+ * Per-player squad figures, one row per roster player.
  *
- * The thresholds that turn these numbers into a flag are the web app's
- * (`lib/analytics/attention.ts`); what this endpoint owns is the windows they are
+ * Serves both screens that rank a squad: the home screen's snapshot (#204) and the
+ * Squad stats leaderboard and headline (#237). The thresholds that turn these
+ * numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
+ * `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
  * measured over. The period is the calendar year, as the overview tab's season
- * record is, and scopes `matches_logged_this_period` and the forced : unforced
- * ratio; the streak, the last five results and the days since the last match are
- * counted over every match, so a run that started in December is still a run in
- * January. A tracked stat's `current` is its value over the latest match that
- * recorded enough of its own points to answer it, against a baseline of the ten
- * such matches before that one.
+ * record is, and scopes `matches_logged_this_period`, `period_record`, the
+ * forced : unforced ratio and the first-serve percentage; the streak, the last five
+ * results and the days since the last match are counted over every match, so a run
+ * that started in December is still a run in January. A tracked stat's `current` is
+ * its value over the latest match that can answer it, against a baseline of the ten
+ * matches before that one.
+ *
+ * Both period rates pool the period's points rather than averaging its matches, so
+ * a four-point match weighs what four points are worth.
  */
 export const listSquadMemberStats = <ThrowOnError extends boolean = false>(options?: Options<ListSquadMemberStatsData, ThrowOnError>): RequestResult<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError> => (options?.client ?? client).get<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError>({ url: '/squad/analytics/members', ...options });
+
+/**
+ * Get Squad Trend
+ *
+ * One roster-wide figure a week, over the six weeks ending with this one.
+ *
+ * Weeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather
+ * than split across two, and the sixth is the current week however few of its days
+ * have passed: a card about how the squad is trending now would be up to a week
+ * stale if it stopped last Sunday. All six come back in order, so a quiet fortnight
+ * draws a gap in the line rather than a shorter line.
+ *
+ * A week's figure pools every match the roster played in it rather than averaging
+ * the roster's players, for the reason the period's own rates are pooled: one match
+ * is one match's worth of evidence whoever played it, where a per-player mean would
+ * weigh a player's single match against another's four. A week whose matches cannot
+ * answer the metric, one with no recorded result, no unforced error or no serve
+ * among them, carries a null rather than a zero.
+ */
+export const getSquadTrend = <ThrowOnError extends boolean = false>(options: Options<GetSquadTrendData, ThrowOnError>): RequestResult<GetSquadTrendResponses, GetSquadTrendErrors, ThrowOnError> => (options.client ?? client).get<GetSquadTrendResponses, GetSquadTrendErrors, ThrowOnError>({ url: '/squad/analytics/trend', ...options });

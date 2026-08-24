@@ -1473,10 +1473,11 @@ export type SlopeLine = {
 /**
  * SquadMemberStats
  *
- * One roster player's inputs to the home screen's squad snapshot (#204).
+ * One roster player's raw figures, for both screens that rank a whole squad.
  *
- * Inputs and never a verdict: which of these amounts to needing attention is the
- * client's rule, so the thresholds live there and the windows live here.
+ * Inputs and never a verdict: which of these amounts to needing attention (#204),
+ * or to first place on the Squad stats leaderboard (#237), is the client's rule, so
+ * the thresholds live there and the windows live here.
  */
 export type SquadMemberStats = {
     current_streak: CurrentStreak | null;
@@ -1484,6 +1485,10 @@ export type SquadMemberStats = {
      * Days Since Last Match
      */
     days_since_last_match: number | null;
+    /**
+     * First Serve In Percent
+     */
+    first_serve_in_percent: number | null;
     /**
      * Forced To Unforced Ratio
      */
@@ -1496,6 +1501,7 @@ export type SquadMemberStats = {
      * Matches Logged This Period
      */
     matches_logged_this_period: number;
+    period_record: WinLossRecord;
     /**
      * Player Id
      */
@@ -1504,6 +1510,29 @@ export type SquadMemberStats = {
      * Tracked Stats
      */
     tracked_stats: Array<TrackedStat>;
+};
+
+/**
+ * SquadMetric
+ *
+ * Which roster-wide figure a squad trend series carries.
+ */
+export type SquadMetric = 'record' | 'forced_to_unforced' | 'first_serve_in';
+
+/**
+ * SquadTrendPoint
+ *
+ * One week of the roster-wide trend line.
+ */
+export type SquadTrendPoint = {
+    /**
+     * Value
+     */
+    value: number | null;
+    /**
+     * Week
+     */
+    week: string;
 };
 
 /**
@@ -3619,3 +3648,43 @@ export type ListSquadMemberStatsResponses = {
 };
 
 export type ListSquadMemberStatsResponse = ListSquadMemberStatsResponses[keyof ListSquadMemberStatsResponses];
+
+export type GetSquadTrendData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Which roster-wide figure the series carries.
+         */
+        metric: SquadMetric;
+    };
+    url: '/squad/analytics/trend';
+};
+
+export type GetSquadTrendErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type GetSquadTrendError = GetSquadTrendErrors[keyof GetSquadTrendErrors];
+
+export type GetSquadTrendResponses = {
+    /**
+     * Response Get Squad Trend
+     *
+     * Successful Response
+     */
+    200: Array<SquadTrendPoint>;
+};
+
+export type GetSquadTrendResponse = GetSquadTrendResponses[keyof GetSquadTrendResponses];

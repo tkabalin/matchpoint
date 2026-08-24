@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getHeadToHead, getMatch, getMatchRallyStats, getMatchServeStats, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getTrendStats, health, ingestPoints, listHeadToHead, listMatches, listPlayers, listPoints, listSquadMemberStats, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetHeadToHeadData, GetHeadToHeadError, GetHeadToHeadResponse, GetMatchData, GetMatchError, GetMatchRallyStatsData, GetMatchRallyStatsError, GetMatchRallyStatsResponse, GetMatchResponse, GetMatchServeStatsData, GetMatchServeStatsError, GetMatchServeStatsResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetTrendStatsData, GetTrendStatsError, GetTrendStatsResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListHeadToHeadData, ListHeadToHeadError, ListHeadToHeadResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, ListSquadMemberStatsData, ListSquadMemberStatsError, ListSquadMemberStatsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getHeadToHead, getMatch, getMatchRallyStats, getMatchServeStats, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getSquadTrend, getTrendStats, health, ingestPoints, listHeadToHead, listMatches, listPlayers, listPoints, listSquadMemberStats, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetHeadToHeadData, GetHeadToHeadError, GetHeadToHeadResponse, GetMatchData, GetMatchError, GetMatchRallyStatsData, GetMatchRallyStatsError, GetMatchRallyStatsResponse, GetMatchResponse, GetMatchServeStatsData, GetMatchServeStatsError, GetMatchServeStatsResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetSquadTrendData, GetSquadTrendError, GetSquadTrendResponse, GetTrendStatsData, GetTrendStatsError, GetTrendStatsResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, ListHeadToHeadData, ListHeadToHeadError, ListHeadToHeadResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, ListSquadMemberStatsData, ListSquadMemberStatsError, ListSquadMemberStatsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -1020,17 +1020,22 @@ export const listSquadMemberStatsQueryKey = (options?: Options<ListSquadMemberSt
 /**
  * List Squad Member Stats
  *
- * Per-player inputs to the home screen's squad snapshot, one row per roster player.
+ * Per-player squad figures, one row per roster player.
  *
- * The thresholds that turn these numbers into a flag are the web app's
- * (`lib/analytics/attention.ts`); what this endpoint owns is the windows they are
+ * Serves both screens that rank a squad: the home screen's snapshot (#204) and the
+ * Squad stats leaderboard and headline (#237). The thresholds that turn these
+ * numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
+ * `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
  * measured over. The period is the calendar year, as the overview tab's season
- * record is, and scopes `matches_logged_this_period` and the forced : unforced
- * ratio; the streak, the last five results and the days since the last match are
- * counted over every match, so a run that started in December is still a run in
- * January. A tracked stat's `current` is its value over the latest match that
- * recorded enough of its own points to answer it, against a baseline of the ten
- * such matches before that one.
+ * record is, and scopes `matches_logged_this_period`, `period_record`, the
+ * forced : unforced ratio and the first-serve percentage; the streak, the last five
+ * results and the days since the last match are counted over every match, so a run
+ * that started in December is still a run in January. A tracked stat's `current` is
+ * its value over the latest match that can answer it, against a baseline of the ten
+ * matches before that one.
+ *
+ * Both period rates pool the period's points rather than averaging its matches, so
+ * a four-point match weighs what four points are worth.
  */
 export const listSquadMemberStatsOptions = (options?: Options<ListSquadMemberStatsData>) => queryOptions<ListSquadMemberStatsResponse, ListSquadMemberStatsError, ListSquadMemberStatsResponse, ReturnType<typeof listSquadMemberStatsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
@@ -1043,4 +1048,37 @@ export const listSquadMemberStatsOptions = (options?: Options<ListSquadMemberSta
         return data;
     },
     queryKey: listSquadMemberStatsQueryKey(options)
+});
+
+export const getSquadTrendQueryKey = (options: Options<GetSquadTrendData>) => createQueryKey('getSquadTrend', options);
+
+/**
+ * Get Squad Trend
+ *
+ * One roster-wide figure a week, over the six weeks ending with this one.
+ *
+ * Weeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather
+ * than split across two, and the sixth is the current week however few of its days
+ * have passed: a card about how the squad is trending now would be up to a week
+ * stale if it stopped last Sunday. All six come back in order, so a quiet fortnight
+ * draws a gap in the line rather than a shorter line.
+ *
+ * A week's figure pools every match the roster played in it rather than averaging
+ * the roster's players, for the reason the period's own rates are pooled: one match
+ * is one match's worth of evidence whoever played it, where a per-player mean would
+ * weigh a player's single match against another's four. A week whose matches cannot
+ * answer the metric, one with no recorded result, no unforced error or no serve
+ * among them, carries a null rather than a zero.
+ */
+export const getSquadTrendOptions = (options: Options<GetSquadTrendData>) => queryOptions<GetSquadTrendResponse, GetSquadTrendError, GetSquadTrendResponse, ReturnType<typeof getSquadTrendQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await getSquadTrend({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: getSquadTrendQueryKey(options)
 });

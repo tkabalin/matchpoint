@@ -427,22 +427,46 @@ class CurrentStreak(BaseModel):
 
 
 class SquadMemberStats(BaseModel):
-    """One roster player's inputs to the home screen's squad snapshot (#204).
+    """One roster player's raw figures, for both screens that rank a whole squad.
 
-    Inputs and never a verdict: which of these amounts to needing attention is the
-    client's rule, so the thresholds live there and the windows live here.
+    Inputs and never a verdict: which of these amounts to needing attention (#204),
+    or to first place on the Squad stats leaderboard (#237), is the client's rule, so
+    the thresholds live there and the windows live here.
     """
 
     player_id: uuid.UUID
     # Matches played this calendar year, whether or not a result was recorded.
     matches_logged_this_period: int
+    # This period's matches that carry a result. A count, so zero is the truth
+    # rather than a stand-in, unlike the two rates below.
+    period_record: WinLossRecord
     # The most recent results, oldest first, at most five, as PlayerOverview's are.
     last5: list[MatchResult]
     # Over this period's matches; null until a rally has ended either way.
     forced_to_unforced_ratio: float | None
+    # Over this period's points; null until the player has served a first serve.
+    first_serve_in_percent: float | None
     # Null until one match carries a result, there being no run to measure.
     current_streak: CurrentStreak | None
     # Counted over every match, resulted or not: staleness is about data entry.
     days_since_last_match: int | None
     # Only the stats this player has the matches to have a baseline for.
     tracked_stats: list[TrackedStat]
+
+
+class SquadMetric(enum.StrEnum):
+    """Which roster-wide figure a squad trend series carries."""
+
+    RECORD = "record"
+    FORCED_TO_UNFORCED = "forced_to_unforced"
+    FIRST_SERVE_IN = "first_serve_in"
+
+
+class SquadTrendPoint(BaseModel):
+    """One week of the roster-wide trend line."""
+
+    # A short axis label: "Wk 1" is the oldest week in the series.
+    week: str
+    # Null in a week the roster's matches cannot answer the metric over, an empty
+    # week among them, so the line breaks there instead of dropping to the floor.
+    value: float | None
