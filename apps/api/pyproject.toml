@@ -54,8 +54,17 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-# pycodestyle, pyflakes, isort, pyupgrade, flake8-bugbear, flake8-simplify
-select = ["E", "F", "I", "UP", "B", "SIM"]
+# pycodestyle, pyflakes, isort, pyupgrade, flake8-bugbear, flake8-simplify, flake8-tidy-imports,
+# flake8-bandit (S608: possible SQL injection via string-built query)
+select = ["E", "F", "I", "UP", "B", "SIM", "TID251", "S608"]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"sqlalchemy.text".msg = "Raw SQL bypasses the ORM's parameterisation. Use the ORM's expression language (select/filter/etc) instead."
+
+[tool.ruff.lint.per-file-ignores]
+# Alembic migrations use sa.text() for DDL column/server defaults, not query building.
+"tests/**" = ["TID251", "S608"]
+"migrations/**" = ["TID251"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
