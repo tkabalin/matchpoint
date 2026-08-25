@@ -74,7 +74,9 @@ export function MatchHeader({
   server: Server;
   trackedPlayerName: string;
   opponentName: string;
-  onBack: () => void;
+  // Null where there is nothing behind the coach — the button greys out rather than
+  // disappearing, so the header keeps its shape.
+  onBack: (() => void) | null;
   onSkipPoint: (won: boolean) => void;
   onSkipAhead: () => void;
 }) {
@@ -143,7 +145,19 @@ export function MatchHeader({
 
   return (
     <div className="flex h-10 items-center justify-between gap-3">
-      <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
+      {/* Greyed rather than gone, so the header keeps its shape and the coach can see
+          the control is there and unavailable. aria-disabled rather than disabled: a
+          disabled button leaves the tab order, so the one person who most needs to be
+          told why nothing happens is the one who can never reach it. With no handler
+          attached, the tap does nothing on its own. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label={onBack === null ? "Back, nothing to go back to" : "Back"}
+        aria-disabled={onBack === null}
+        onClick={onBack ?? undefined}
+        className={cn(onBack === null && "opacity-50")}
+      >
         <ArrowLeft className="size-5" />
       </Button>
 

@@ -102,6 +102,29 @@ test("keeps that width once sets have been played", () => {
   expect(within(score).getAllByRole("cell")).toHaveLength(8);
 });
 
+test("back greys out where there is nothing behind, rather than vanishing", async () => {
+  const user = userEvent.setup();
+  render(
+    <MatchHeader
+      match={match}
+      points={[]}
+      server="TRACKED"
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onBack={null}
+      onSkipPoint={vi.fn()}
+      onSkipAhead={vi.fn()}
+    />,
+  );
+
+  const back = screen.getByRole("button", { name: "Back, nothing to go back to" });
+  expect(back).toBeVisible();
+  expect(back).toHaveAttribute("aria-disabled", "true");
+
+  // Nothing to assert on the other side of the tap: it is that nothing happens.
+  await user.click(back);
+});
+
 test("back steps the capture flow back", async () => {
   const { onBack, user } = renderHeader();
 

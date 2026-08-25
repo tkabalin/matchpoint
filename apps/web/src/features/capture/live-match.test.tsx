@@ -124,6 +124,60 @@ test("an unforced error skips the shot screen", async () => {
   expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
 });
 
+test("back on the match's first screen returns to setup, still holding what was typed", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+  expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(screen.getByRole("heading", { name: "Match" })).toBeVisible();
+  expect(screen.getByLabelText("Opponent")).toHaveValue("Okoye");
+});
+
+test("nothing is queued while setup is still reachable", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  expect(vi.mocked(append)).not.toHaveBeenCalled();
+
+  // Leaving the serve screen is the moment the match stops being editable.
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(1);
+  });
+  expect(vi.mocked(append).mock.calls[0]?.[0]).toMatchObject({ kind: "match" });
+});
+
+test("back walks the point's screens, and stops at the serve", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+});
+
+test("once a point is recorded there is no way back into it", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+
+  // Still on screen, so the header keeps its shape, but no longer an offer.
+  expect(screen.getByRole("button", { name: "Back, nothing to go back to" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+});
+
 test("the committed point is queued behind its match, and never awaited", async () => {
   const { user } = renderMatch();
   await startMatch(user);

@@ -41,19 +41,27 @@ export interface MatchSetupConfig {
 
 export function MatchSetupScreen({
   playerName,
+  initial,
   defaultScoringSystem = "traditional",
   defaultSurfaceType = "unspecified",
   onStart,
 }: {
   playerName: string;
+  // What this screen was last left holding, when a coach steps back into it from the
+  // match's first screen. Coming back to a blank form would punish the trip.
+  initial?: MatchSetupConfig | null;
   defaultScoringSystem?: ScoringSystem;
   defaultSurfaceType?: SurfaceType;
   onStart: (config: MatchSetupConfig) => void;
 }) {
-  const [opponentName, setOpponentName] = useState("");
-  const [scoringSystem, setScoringSystem] = useState<ScoringSystem>(defaultScoringSystem);
-  const [surfaceType, setSurfaceType] = useState<SurfaceType>(defaultSurfaceType);
-  const [playerServesFirst, setPlayerServesFirst] = useState(true);
+  const [opponentName, setOpponentName] = useState(initial?.opponentName ?? "");
+  const [scoringSystem, setScoringSystem] = useState<ScoringSystem>(
+    initial?.scoringSystem ?? defaultScoringSystem,
+  );
+  const [surfaceType, setSurfaceType] = useState<SurfaceType>(
+    initial?.surfaceType ?? defaultSurfaceType,
+  );
+  const [playerServesFirst, setPlayerServesFirst] = useState(initial?.playerServesFirst ?? true);
   // Frozen at mount: this is when the coach sat down, not when React last rendered.
   const [startedAt] = useState(() =>
     new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),

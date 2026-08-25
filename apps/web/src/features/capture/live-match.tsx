@@ -77,22 +77,33 @@ export function LiveMatch({
   // thing alive across both (see rally-screen.tsx).
   const [rallyBucket, setRallyBucket] = useState<RallyBucket | null>(null);
   const [skipAheadOpen, setSkipAheadOpen] = useState(false);
+  // Kept so Back into setup returns the coach to what they typed, not a blank form.
+  const [setupConfig, setSetupConfig] = useState<MatchSetupConfig | null>(null);
   // The match row goes out just before the first point that needs it, so a skip-ahead
   // that reseeds the serve rotation is queued in its final shape — the outbox is
   // first-write-wins and never rewrites a payload.
   const matchQueued = useRef(false);
 
+  /**
+   * The match row, sent once the coach has left the first serve or return screen.
+   * Until then Back returns to setup, so the match is still being written: queueing it
+   * earlier would send one the coach then edited, and the outbox never rewrites a
+   * payload it already holds.
+   */
+  function queueMatch(current: Match) {
+    if (matchQueued.current) return;
+    matchQueued.current = true;
+    void outbox.append({
+      id: current.matchId,
+      coachId,
+      matchId: current.matchId,
+      kind: "match",
+      payload: current.toJSON(),
+    });
+  }
+
   function queue(current: Match, newPoints: readonly Point[]) {
-    if (!matchQueued.current) {
-      matchQueued.current = true;
-      void outbox.append({
-        id: current.matchId,
-        coachId,
-        matchId: current.matchId,
-        kind: "match",
-        payload: current.toJSON(),
-      });
-    }
+    queueMatch(current);
     for (const point of newPoints) {
       void outbox.append({
         id: point.id,
@@ -115,10 +126,15 @@ export function LiveMatch({
     }
 
     if (next.step.name === "ABORTED") {
-      // Undone past the first tap: the draft is gone, so the point starts over.
+      // Only reachable now if something dispatches UNDO with nothing behind it: Back
+      // stops offering it (see backAction). The draft is gone, so the point starts over.
       setCapture(startNextPoint(match, points));
       return;
     }
+
+    // Off the serve screen is the moment setup stops being reachable, so it is the
+    // moment the match becomes real.
+    if (next.step.name !== "SERVE") queueMatch(match);
 
     if (next.step.name !== "READY") {
       setCapture(next);
@@ -138,6 +154,7 @@ export function LiveMatch({
   }
 
   function startMatch(config: MatchSetupConfig) {
+    setSetupConfig(config);
     const opponentId = crypto.randomUUID();
     const created = Match.create({
       matchId: crypto.randomUUID(),
@@ -203,7 +220,7 @@ export function LiveMatch({
   }
 
   if (match === null) {
-    return <MatchSetupScreen playerName={playerName} onStart={startMatch} />;
+    return <MatchSetupScreen playerName={playerName} initial={setupConfig} onStart={startMatch} />;
   }
 
   const opponentName = match.opponentName ?? "Opponent";
@@ -225,6 +242,24 @@ export function LiveMatch({
 
   const { step, draft } = capture;
 
+  /**
+   * Back goes one screen at a time within the point, and stops at the serve or return
+   * screen: a point already committed is not unwound. On the match's very first screen
+   * there is nothing captured yet, so it steps out to setup instead. Null on a later
+   * point's first screen, where there is nowhere to go and no button to offer.
+   */
+  const backAction =
+    capture.history.length > 0
+      ? () => {
+          dispatch({ type: "UNDO" });
+        }
+      : points.length === 0
+        ? () => {
+            setMatch(null);
+            setCapture(null);
+          }
+        : null;
+
   return (
     // `display: contents` because custom properties inherit down the DOM tree rather
     // than the box tree: the surface reaches every court below without this wrapper
@@ -239,9 +274,7 @@ export function LiveMatch({
         server={draft.server}
         trackedPlayerName={playerName}
         opponentName={opponentName}
-        onBack={() => {
-          dispatch({ type: "UNDO" });
-        }}
+        onBack={backAction}
         onSkipPoint={skipPoint}
         onSkipAhead={() => {
           setSkipAheadOpen(true);
