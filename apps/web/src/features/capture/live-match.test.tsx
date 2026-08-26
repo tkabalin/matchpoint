@@ -252,3 +252,71 @@ test("ending the match shows the result, with the reason it ended", async () => 
   expect(screen.getByRole("heading", { name: "Win" })).toBeVisible();
   expect(screen.getByText(/retirement/)).toBeVisible();
 });
+
+// A walkover/retirement declared before any point is captured used to write nothing
+// to the outbox at all — matchQueued only ever fired off a point transition, and
+// endMatch never touched the outbox itself.
+test("declaring a walkover before the first point still queues the match and its outcome", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.pointer({
+    keys: "[MouseLeft>]",
+    target: screen.getByRole("button", { name: "Skip point" }),
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
+  });
+  await user.pointer({ keys: "[/MouseLeft]" });
+
+  await user.click(screen.getByRole("button", { name: "End match" }));
+  await user.click(screen.getByRole("radio", { name: /Walkover/ }));
+  const awardedTo = screen.getByRole("group", { name: "Match awarded to" });
+  await user.click(within(awardedTo).getByRole("button", { name: "Rivera" }));
+  await user.click(screen.getByRole("button", { name: "Confirm end of match" }));
+
+  expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(append).mock.calls[0]?.[0]).toMatchObject({ kind: "match" });
+  expect(vi.mocked(append).mock.calls[1]?.[0]).toMatchObject({
+    kind: "matchOutcome",
+    matchId: vi.mocked(append).mock.calls[0]?.[0]?.matchId,
+    payload: { reason: "walkover", trackedPlayerWon: true },
+  });
+});
+
+// Once a point has queued the match row, that row is frozen (first-write-wins by
+// id) — the outcome has to reach the outbox some other way, which is what the
+// separate matchOutcome row is for.
+test("retiring after points were played still queues the outcome, as its own row", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+  vi.mocked(append).mockClear();
+
+  await user.pointer({
+    keys: "[MouseLeft>]",
+    target: screen.getByRole("button", { name: "Skip point" }),
+  });
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
+  });
+  await user.pointer({ keys: "[/MouseLeft]" });
+
+  await user.click(screen.getByRole("button", { name: "End match" }));
+  await user.click(screen.getByRole("radio", { name: /Retirement/ }));
+  const awardedTo = screen.getByRole("group", { name: "Match awarded to" });
+  await user.click(within(awardedTo).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Confirm end of match" }));
+
+  // The match row itself is not re-sent — it's already queued and the outbox
+  // never rewrites it — only the new matchOutcome row goes out.
+  expect(vi.mocked(append)).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(append).mock.calls[0]?.[0]).toMatchObject({
+    kind: "matchOutcome",
+    payload: { reason: "retirement", trackedPlayerWon: false },
+  });
+});

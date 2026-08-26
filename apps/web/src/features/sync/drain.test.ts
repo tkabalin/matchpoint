@@ -1,5 +1,5 @@
 import type { PointCreate } from "@matchpoint/api-client";
-import { zMatchCreate, zMatchRead, zPointBatch } from "@matchpoint/api-client/zod";
+import { zMatchCreate, zMatchRead, zMatchUpdate, zPointBatch } from "@matchpoint/api-client/zod";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createMatch } from "@/features/capture/match";
@@ -110,6 +110,17 @@ function pointEntry(
   };
 }
 
+/** The outcome row `endMatch` queues — see live-match.tsx and match-outcome-payload.ts. */
+function outcomeEntry(matchId: string, trackedPlayerWon = true): OutboxEntry {
+  return {
+    id: `${matchId}:outcome`,
+    coachId: COACH_ID,
+    matchId,
+    kind: "matchOutcome",
+    payload: { reason: "retirement", trackedPlayerWon },
+  };
+}
+
 /** A point carrying the longest note the API takes, for the byte-bound test. */
 function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
   return pointEntry(tag, matchId, sequence, {
@@ -170,7 +181,9 @@ function stubTransport(respond: Responder): RecordedRequest[] {
           ? zMatchCreate
           : /^\/matches\/[^/]+\/points$/.test(recorded.pathname)
             ? zPointBatch
-            : null;
+            : recorded.method === "PATCH" && /^\/matches\/[^/]+$/.test(recorded.pathname)
+              ? zMatchUpdate
+              : null;
       const parsed = schema?.safeParse(recorded.body);
       if (parsed?.success === false) {
         contractViolations.push(`${recorded.pathname}: ${parsed.error.message}`);
@@ -416,6 +429,131 @@ describe("flushing", () => {
     expect(result).toEqual({
       acknowledged: 1,
       discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
+  });
+});
+
+describe("match outcome", () => {
+  test("sends the outcome as its own request, right after the match create", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A));
+
+    const result = await drain();
+
+    expect(
+      requests.map((request) => ({ method: request.method, pathname: request.pathname })),
+    ).toEqual([
+      { method: "POST", pathname: "/matches" },
+      { method: "PATCH", pathname: `/matches/${MATCH_A}` },
+    ]);
+    expect(zMatchUpdate.parse(requests[1]!.body)).toEqual({ result: "win" });
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    expect(result).toEqual({
+      acknowledged: 2,
+      discarded: 0,
+      parked: 0,
+      unauthorized: false,
+      skipped: false,
+    });
+  });
+
+  test("sends the outcome for a match whose create already landed on an earlier run", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(outcomeEntry(MATCH_A, false));
+
+    await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([`/matches/${MATCH_A}`]);
+    expect(zMatchUpdate.parse(requests[0]!.body)).toEqual({ result: "loss" });
+  });
+
+  // The outcome and the points are independent requests either way: a batch this
+  // app version cannot map yet (#210) must not hold the outcome back, and — the
+  // opposite direction, below — a refused outcome must not hold the points back.
+  test("sends the outcome even though the match's points are refused", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points`
+        ? jsonResponse(422, {
+            detail: [{ loc: ["body", "points", 0], msg: "bad point", type: "value_error" }],
+          })
+        : respondOk(request),
+    );
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}`,
+      `/matches/${MATCH_A}/points`,
+    ]);
+    expect(result).toMatchObject({ acknowledged: 2, parked: 1 });
+    const rows = await readByMatch(MATCH_A);
+    expect(rows).toEqual([expect.objectContaining({ kind: "point", status: "failed" })]);
+  });
+
+  test("parks a refused outcome without touching the match's points", async () => {
+    const requests = stubTransport((request) =>
+      request.method === "PATCH"
+        ? jsonResponse(409, {
+            detail: "A completed match's result or scoring system cannot be changed",
+          })
+        : respondOk(request),
+    );
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}`,
+      `/matches/${MATCH_A}/points`,
+    ]);
+    const outcomeRow = (await readByMatch(MATCH_A)).find((row) => row.kind === "matchOutcome");
+    expect(outcomeRow?.status).toBe("failed");
+    expect(outcomeRow?.failure).toEqual({
+      status: 409,
+      message: "A completed match's result or scoring system cannot be changed",
+    });
+    expect(result).toMatchObject({ acknowledged: 2, parked: 1 });
+  });
+
+  test("parks an outcome payload this app version cannot map", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(matchEntry(MATCH_A), {
+      id: `${MATCH_A}:outcome`,
+      coachId: COACH_ID,
+      matchId: MATCH_A,
+      kind: "matchOutcome",
+      payload: { schema: "from-a-future-app-version" },
+    });
+
+    await drain();
+
+    const outcomeRow = (await readByMatch(MATCH_A)).find((row) => row.kind === "matchOutcome");
+    expect(outcomeRow?.status).toBe("failed");
+    expect(outcomeRow?.failure).toEqual({ status: null, message: expect.any(String) });
+    expect(requests.map((request) => request.pathname)).toEqual(["/matches"]);
+  });
+
+  test("discards an outcome for a match the server says was deleted", async () => {
+    stubTransport((request) =>
+      request.method === "PATCH"
+        ? jsonResponse(410, { detail: "This match was deleted." })
+        : respondOk(request),
+    );
+    // The create already landed on an earlier run — only the outcome is queued.
+    await queue(outcomeEntry(MATCH_A));
+
+    const result = await drain();
+
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    expect(result).toEqual({
+      acknowledged: 0,
+      discarded: 1,
       parked: 0,
       unauthorized: false,
       skipped: false,
@@ -689,6 +827,32 @@ describe("halting and retrying", () => {
     expect(await pendingIds()).toEqual([uid("a1"), uid("a2")]);
     expect(result).toEqual({
       acknowledged: 0,
+      discarded: 0,
+      parked: 0,
+      unauthorized: true,
+      skipped: false,
+    });
+  });
+
+  // Same shape again: the create already lands, and the outcome PATCH is what
+  // returns 401 this time, halting before the point behind it is ever attempted.
+  test("halts on a 401 from the outcome PATCH too", async () => {
+    const requests = stubTransport((request) =>
+      request.method === "PATCH"
+        ? jsonResponse(401, { detail: "Not signed in" })
+        : respondOk(request),
+    );
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}`,
+    ]);
+    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`, uid("a1")]);
+    expect(result).toEqual({
+      acknowledged: 1,
       discarded: 0,
       parked: 0,
       unauthorized: true,

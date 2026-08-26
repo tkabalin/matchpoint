@@ -19,9 +19,11 @@
 import {
   createMatch,
   ingestPoints,
+  updateMatch,
   type ErrorDetail,
   type HttpValidationError,
   type MatchCreate,
+  type MatchUpdate,
   type PointCreate,
 } from "@matchpoint/api-client";
 
@@ -31,6 +33,7 @@ import { type OutboxFailure, type OutboxRow } from "@/features/outbox/db";
 import { markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 
+import { toMatchOutcomeUpdate } from "./match-outcome-payload";
 import { toMatchCreate } from "./match-payload";
 import { toPointCreate } from "./point-payload";
 
@@ -168,6 +171,7 @@ async function flushMatch(
   if (first === undefined) return false;
   const matchRow = rows.find((row) => row.kind === "match");
   const pointRows = rows.filter((row) => row.kind === "point");
+  const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
 
   if (matchRow) {
     let payload: MatchCreate;
@@ -197,6 +201,14 @@ async function flushMatch(
       case "ok":
         await acknowledge([matchRow], sweep);
     }
+  }
+
+  // Independent of the points below it: a PATCH to record who won and how does not
+  // need points to have landed, and points should not wait on it either — only an
+  // unauthorized run halts the match entirely, same as everywhere else in here.
+  if (outcomeRow) {
+    const halt = await flushOutcome(outcomeRow, first.matchId, sweep);
+    if (halt) return true;
   }
 
   let start = 0;
@@ -236,6 +248,40 @@ async function flushMatch(
     start = batch.end;
   }
   return false;
+}
+
+/**
+ * Sends the match's outcome row, a PATCH independent of both the match create above
+ * it and the points below it — nothing else in this match waits on it, and it waits
+ * on nothing but the match existing. Answers true only for a 401.
+ */
+async function flushOutcome(row: OutboxRow, matchId: string, sweep: Sweep): Promise<boolean> {
+  let payload: MatchUpdate;
+  try {
+    payload = toMatchOutcomeUpdate(row.payload);
+  } catch (cause) {
+    await park([row], unmappable(cause), sweep);
+    return false;
+  }
+  const { error, response } = await updateMatch({ path: { match_id: matchId }, body: payload });
+  const verdict = classify(response);
+  switch (verdict.kind) {
+    case "transient":
+      noteTransient(sweep, response);
+      return false;
+    case "unauthorized":
+      sweep.unauthorized = true;
+      return true;
+    case "gone":
+      await discard([row], sweep);
+      return false;
+    case "refused":
+      await park([row], refusal(verdict.response, error), sweep);
+      return false;
+    case "ok":
+      await acknowledge([row], sweep);
+      return false;
+  }
 }
 
 interface Batch {

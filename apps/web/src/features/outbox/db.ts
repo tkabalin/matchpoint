@@ -13,8 +13,14 @@ import Dexie, { type EntityTable } from "dexie";
  * Which entity a row's payload holds. A string union rather than a stored enum
  * so a new kind (#174 may add sets) widens it with no version bump —
  * nothing is indexed on the member list.
+ *
+ * `matchOutcome` is its own kind, not a rewrite of `match`'s row: the outbox is
+ * first-write-wins by id, so a match already queued (points played first) can
+ * never have its `outcomeOverride` folded into that row after the fact. A
+ * retirement/walkover/default queues this instead, under a derived id, and the
+ * drain sends it as its own request. See live-match.tsx's `endMatch`.
  */
-export type OutboxEntityKind = "match" | "point";
+export type OutboxEntityKind = "match" | "point" | "matchOutcome";
 
 /**
  * `failed` is where the drain engine parks a row the server rejected, so it

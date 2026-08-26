@@ -214,6 +214,18 @@ export function LiveMatch({
       reason === "retirement"
         ? retireMatch(match, trackedPlayerWon ? match.opponentId : match.trackedPlayerId)
         : Match.create({ ...match.toJSON(), outcomeOverride: { reason, winner } });
+    // Ending is final — there's no setup to back into from here — so the match must
+    // reach the outbox now if a point never did (a walkover/retirement declared off
+    // the serve screen). queueMatch is a no-op if points already queued it, which is
+    // why the outcome goes as its own row below rather than folded into this one.
+    queueMatch(ended);
+    void outbox.append({
+      id: `${ended.matchId}:outcome`,
+      coachId,
+      matchId: ended.matchId,
+      kind: "matchOutcome",
+      payload: { reason, trackedPlayerWon },
+    });
     setMatch(ended);
     setSkipAheadOpen(false);
     setCapture(null);
