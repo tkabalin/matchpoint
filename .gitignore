@@ -76,6 +76,12 @@ junit-e2e.xml
 docs/scratch/
 
 # -----------------------------------------------------------------------------
+# Design-tool handoff bundles, exported per wireframe and re-exported wholesale
+# on every change. Read locally when building a screen, never a repo artefact.
+# -----------------------------------------------------------------------------
+design/
+
+# -----------------------------------------------------------------------------
 # Editors / OS
 # -----------------------------------------------------------------------------
 .vscode/*
