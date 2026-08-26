@@ -2,14 +2,23 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
+import { createMatch } from "./match";
 import { SkipAheadSheet } from "./skip-ahead-sheet";
 
+const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
+const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
+
+// No real points recorded yet — every score entered in these tests is reachable from
+// scratch, same as skip-ahead.ts's own "starting from nothing real" test group.
 function renderSheet() {
+  const match = createMatch("2026-08-24", TRACKED_ID, { opponentId: OPPONENT_ID }, TRACKED_ID);
   const onSkipToScore = vi.fn();
   const onEndMatch = vi.fn();
   const onDismiss = vi.fn();
   render(
     <SkipAheadSheet
+      match={match}
+      points={[]}
       trackedPlayerName="Rivera"
       opponentName="Okoye"
       onSkipToScore={onSkipToScore}

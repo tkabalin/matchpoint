@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 
 import { createMatch } from "./match";
+import type { Match } from "./match";
 import { skipAhead, validateTarget } from "./skip-ahead";
 import type { SkipAheadTarget } from "./skip-ahead";
 import { nextServerFor, matchSetsFor, scoreboardFor } from "./state";
+import type { Point } from "./point";
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
@@ -32,13 +34,13 @@ function target(overrides: Partial<SkipAheadTarget> = {}): SkipAheadTarget {
 let counter = 0;
 const makeId = () => `synthetic-${String((counter += 1))}`;
 
-function scoreOf(result: { match: ReturnType<typeof matchFor>; points: unknown[] }) {
+function scoreOf(points: readonly Point[], match: Match) {
   return scoreboardFor(
-    result.points as never,
-    result.match.matchId,
-    result.match.trackedPlayerId,
-    result.match.opponentId,
-    result.match.scoringSystem,
+    points,
+    match.matchId,
+    match.trackedPlayerId,
+    match.opponentId,
+    match.scoringSystem,
   );
 }
 
@@ -62,17 +64,18 @@ describe("validateTarget", () => {
   });
 });
 
-describe("skipAhead", () => {
+describe("skipAhead — starting from nothing real", () => {
   test("the points it produces derive back to the score that was asked for", () => {
     const match = matchFor();
     const result = skipAhead(
       match,
+      [],
       target({ trackedGames: 3, opponentGames: 2, trackedPoints: "30", opponentPoints: "15" }),
       makeId,
       1_700_000_000_000,
     );
 
-    expect(scoreOf(result)).toEqual({
+    expect(scoreOf(result.points, result.match)).toEqual({
       trackedPlayer: ["3", "30"],
       opponent: ["2", "15"],
     });
@@ -91,12 +94,13 @@ describe("skipAhead", () => {
       const match = matchFor();
       const result = skipAhead(
         match,
+        [],
         target({ trackedGames: tracked, opponentGames: opponent }),
         makeId,
         1_700_000_000_000,
       );
 
-      const score = scoreOf(result);
+      const score = scoreOf(result.points, result.match);
       expect(score.trackedPlayer[0]).toBe(String(tracked));
       expect(score.opponent[0]).toBe(String(opponent));
     },
@@ -106,6 +110,7 @@ describe("skipAhead", () => {
     const match = matchFor();
     const result = skipAhead(
       match,
+      [],
       target({ trackedGames: 6, opponentGames: 4 }),
       makeId,
       1_700_000_000_000,
@@ -127,12 +132,13 @@ describe("skipAhead", () => {
     const match = matchFor();
     const result = skipAhead(
       match,
+      [],
       target({ trackedGames: 4, opponentGames: 4, trackedPoints: "AD", opponentPoints: "40" }),
       makeId,
       1_700_000_000_000,
     );
 
-    expect(scoreOf(result)).toEqual({
+    expect(scoreOf(result.points, result.match)).toEqual({
       trackedPlayer: ["4", "AD"],
       opponent: ["4", "40"],
     });
@@ -140,7 +146,7 @@ describe("skipAhead", () => {
 
   test("every synthesised point is marked as one nobody watched", () => {
     const match = matchFor();
-    const { points } = skipAhead(match, target({ trackedGames: 2 }), makeId, 1_700_000_000_000);
+    const { points } = skipAhead(match, [], target({ trackedGames: 2 }), makeId, 1_700_000_000_000);
 
     expect(points).toHaveLength(8);
     for (const point of points) {
@@ -155,6 +161,7 @@ describe("skipAhead", () => {
     const match = matchFor();
     const result = skipAhead(
       match,
+      [],
       target({ trackedGames: 3, opponentGames: 2, trackedServesNext }),
       makeId,
       1_700_000_000_000,
@@ -180,10 +187,12 @@ describe("skipAhead", () => {
 
   test("reseeding the rotation leaves the rest of the match alone", () => {
     // One game played puts the serve with the opponent already, so asking for the
-    // tracked player to serve next is what forces the seed to move.
+    // tracked player to serve next is what forces the seed to move. Only possible
+    // with no real points recorded yet — see the conflict test below.
     const match = matchFor();
     const result = skipAhead(
       match,
+      [],
       target({ trackedGames: 1, trackedServesNext: true }),
       makeId,
       1_700_000_000_000,
@@ -198,7 +207,7 @@ describe("skipAhead", () => {
 
   test("a score that completes a set is recorded as a completed set", () => {
     const match = matchFor();
-    const result = skipAhead(match, target({ trackedGames: 6 }), makeId, 1_700_000_000_000);
+    const result = skipAhead(match, [], target({ trackedGames: 6 }), makeId, 1_700_000_000_000);
 
     const { completedSets } = matchSetsFor(
       result.points,
@@ -213,7 +222,128 @@ describe("skipAhead", () => {
 
   test("refuses a target it cannot produce rather than producing a different score", () => {
     expect(() =>
-      skipAhead(matchFor(), target({ trackedGames: -1 }), makeId, 1_700_000_000_000),
+      skipAhead(matchFor(), [], target({ trackedGames: -1 }), makeId, 1_700_000_000_000),
     ).toThrow(/whole number/);
+  });
+});
+
+describe("skipAhead — bridging from points already real", () => {
+  test("keeps the real points exactly as recorded, only appending the gap", () => {
+    const match = matchFor();
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedGames: 1 }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+
+    const result = skipAhead(match, real, target({ trackedGames: 2 }), makeId, 1_700_000_100_000);
+
+    // One more game's worth of points, not the whole match rebuilt from scratch.
+    expect(result.points).toHaveLength(4);
+    const combined = [...real, ...result.points];
+    expect(combined.slice(0, real.length)).toEqual(real);
+    expect(scoreOf(combined, match).trackedPlayer[0]).toBe("2");
+  });
+
+  test("bridges a partial, still-open game forward from the real points already in it", () => {
+    const match = matchFor();
+    // Real capture so far: tracked leads 15-0 in the game still in progress.
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedPoints: "15" }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+    expect(real).toHaveLength(1);
+
+    const result = skipAhead(
+      match,
+      real,
+      target({ trackedPoints: "40", opponentPoints: "15" }),
+      makeId,
+      1_700_000_100_000,
+    );
+
+    const combined = [...real, ...result.points];
+    expect(combined.slice(0, real.length)).toEqual(real);
+    expect(scoreOf(combined, match)).toEqual({ trackedPlayer: ["0", "40"], opponent: ["0", "15"] });
+  });
+
+  test("bridges advantage swapping sides through deuce, not by rewinding the real lead", () => {
+    const match = matchFor();
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedPoints: "AD", opponentPoints: "40" }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+
+    const result = skipAhead(
+      match,
+      real,
+      target({ trackedPoints: "40", opponentPoints: "AD" }),
+      makeId,
+      1_700_000_100_000,
+    );
+
+    const combined = [...real, ...result.points];
+    expect(scoreOf(combined, match)).toEqual({ trackedPlayer: ["0", "40"], opponent: ["0", "AD"] });
+  });
+
+  test("refuses games behind what the real points already show", () => {
+    const match = matchFor();
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedGames: 3 }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+
+    expect(() =>
+      skipAhead(match, real, target({ trackedGames: 2 }), makeId, 1_700_000_100_000),
+    ).toThrow(/behind what's already been recorded/);
+  });
+
+  test("refuses a point call the real points have already passed", () => {
+    const match = matchFor();
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedPoints: "40" }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+
+    expect(() =>
+      skipAhead(match, real, target({ trackedPoints: "15" }), makeId, 1_700_000_100_000),
+    ).toThrow(/behind what's already been recorded/);
+  });
+
+  test("refuses a serving-next answer the real rotation disagrees with", () => {
+    const match = matchFor();
+    // Natural next server after one completed game is the opponent — asking for
+    // false here keeps this real prefix built without needing a reseed itself.
+    const real = skipAhead(
+      match,
+      [],
+      target({ trackedGames: 1, trackedServesNext: false }),
+      makeId,
+      1_700_000_000_000,
+    ).points;
+
+    expect(() =>
+      skipAhead(
+        match,
+        real,
+        target({ trackedGames: 1, trackedPoints: "15", trackedServesNext: true }),
+        makeId,
+        1_700_000_100_000,
+      ),
+    ).toThrow(/[Ss]erving next/);
   });
 });

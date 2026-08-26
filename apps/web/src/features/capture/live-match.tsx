@@ -191,13 +191,14 @@ export function LiveMatch({
 
   function skipToScore(target: SkipAheadTarget) {
     if (match === null) return;
-    const result = skipAhead(match, target, () => crypto.randomUUID(), Date.now());
+    const result = skipAhead(match, points, target, () => crypto.randomUUID(), Date.now());
+    const allPoints = [...points, ...result.points];
     queue(result.match, result.points);
     setMatch(result.match);
-    setPoints(result.points);
+    setPoints(allPoints);
     setSkipAheadOpen(false);
     setCapture(
-      isMatchOver(result.match, result.points) ? null : startNextPoint(result.match, result.points),
+      isMatchOver(result.match, allPoints) ? null : startNextPoint(result.match, allPoints),
     );
   }
 
@@ -328,6 +329,8 @@ export function LiveMatch({
 
       {skipAheadOpen && (
         <SkipAheadSheet
+          match={match}
+          points={points}
           trackedPlayerName={playerName}
           opponentName={opponentName}
           onSkipToScore={skipToScore}

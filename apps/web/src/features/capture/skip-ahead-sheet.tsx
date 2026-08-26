@@ -4,8 +4,9 @@
  *
  * Court side isn't asked for, unlike the handoff: deuce or ad follows from how many
  * points the current game has had (see nextCourtSideFor), so a chip here would be
- * overruled by the score entered two fields above it. Serving next is asked, because
- * that one can be honoured — see skipAhead's reseeding.
+ * overruled by the score entered two fields above it. Serving next is still asked
+ * even though it can only be honoured before any real point exists — see
+ * skipAhead's own comment on reseeding.
  *
  * Ending the match asks who won as well as why. A retirement's winner is the player who
  * didn't retire, and a walkover or default has no score to read one off at all, so
@@ -33,9 +34,16 @@ import {
 import { cn } from "@/lib/utils";
 
 import { MATCH_END_REASONS } from "./match";
-import type { MatchEndReason } from "./match";
-import { POINT_CALLS, validateTarget } from "./skip-ahead";
+import type { Match, MatchEndReason } from "./match";
+import type { Point } from "./point";
+import { POINT_CALLS, skipAhead, validateTarget } from "./skip-ahead";
 import type { PointCall, SkipAheadTarget } from "./skip-ahead";
+
+// Only used to probe whether skipAhead would throw for the score currently typed in
+// — never committed, so the exact id doesn't matter, just that repeats within one
+// probe stay distinct.
+let previewIdCounter = 0;
+const previewId = () => `skip-ahead-preview-${String((previewIdCounter += 1))}`;
 
 const END_REASON_COPY: Record<MatchEndReason, { label: string; description: string }> = {
   retirement: {
@@ -89,12 +97,16 @@ function Chips({
 }
 
 export function SkipAheadSheet({
+  match,
+  points,
   trackedPlayerName,
   opponentName,
   onSkipToScore,
   onEndMatch,
   onDismiss,
 }: {
+  match: Match;
+  points: readonly Point[];
   trackedPlayerName: string;
   opponentName: string;
   onSkipToScore: (target: SkipAheadTarget) => void;
@@ -118,7 +130,20 @@ export function SkipAheadSheet({
     opponentPoints,
     trackedServesNext,
   };
-  const problem = validateTarget(target);
+  // validateTarget only checks the target's own shape; skipAhead can still refuse it
+  // once it's weighed against the real points already recorded (behind the real
+  // score, or a "serving next" answer the real rotation disagrees with) — probing it
+  // here surfaces that inline, the same way, rather than as an error on tap.
+  const problem =
+    validateTarget(target) ??
+    (() => {
+      try {
+        skipAhead(match, points, target, previewId, 0);
+        return null;
+      } catch (error) {
+        return error instanceof Error ? error.message : "That score can't be reached";
+      }
+    })();
 
   const rows = [
     {

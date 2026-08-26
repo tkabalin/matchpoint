@@ -103,9 +103,11 @@ export interface GameState {
 /**
  * The win-condition math a game's score resolves to — shared by gameStateFor's own
  * batch tally and setStateFor's incremental one, so the ad/no-ad margin logic lives in
- * exactly one place regardless of how the two points are counted up to it.
+ * exactly one place regardless of how the two points are counted up to it. Exported
+ * for skip-ahead.ts's own use: deciding a game outright in a chosen winner's favor,
+ * from whatever raw counts it's already sitting at.
  */
-function resolveGameWinner(
+export function resolveGameWinner(
   trackedPlayerPoints: number,
   opponentPoints: number,
   trackedPlayerId: string,
@@ -789,8 +791,9 @@ function currentGameStateFor(
 // isAdScoring is false (no-ad sudden death never distinguishes a deuce point from any
 // other 40-40 tie, the game ends the instant either side leads by 1). pointCallFor's
 // own intermediate step — not a value stored anywhere, just how it decides between
-// "40"/"40" and "AD"/"40".
-function deuceOrAdFromCounts(
+// "40"/"40" and "AD"/"40". Exported for skip-ahead.ts, which needs the same
+// distinction to decide which side must win the next synthetic point.
+export function deuceOrAdFromCounts(
   trackedPlayerPoints: number,
   opponentPoints: number,
   isAdScoring: boolean,
@@ -809,8 +812,10 @@ function deuceOrAdFromCounts(
  *
  * Assumes the game is genuinely undecided (resolveGameWinner would return null) —
  * scoreboardFor only ever calls this on the match's current, unfinished game.
+ * skip-ahead.ts is the other caller, comparing a real in-progress game's call
+ * against a skip-ahead target one call at a time.
  */
-function pointCallFor(
+export function pointCallFor(
   trackedPlayerPoints: number,
   opponentPoints: number,
   isAdScoring: boolean,
