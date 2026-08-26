@@ -239,6 +239,20 @@ describe("rally screen", () => {
     expect(point.shotType).toBeNull();
     expect(point.ballLocation).toBe("NET");
   });
+
+  test("picking a length is sticky — it writes into the draft without leaving RALLY or touching history", () => {
+    const onRally = start();
+    const state = transition(onRally, { type: "TAP_RALLY_LENGTH", bucket: "B3" });
+    expect(state.step).toEqual({ name: "RALLY" });
+    expect(state.draft.rallyLengthBucket).toBe("B3");
+    expect(state.history).toEqual(onRally.history);
+  });
+
+  test("a rally let clears the picked length along with the rest of the draft", () => {
+    const withBucket = transition(start(), { type: "TAP_RALLY_LENGTH", bucket: "B4" });
+    const replayed = transition(withBucket, { type: "TAP_LET" });
+    expect(replayed.draft.rallyLengthBucket).toBeNull();
+  });
 });
 
 describe("full happy path — serve through commit", () => {

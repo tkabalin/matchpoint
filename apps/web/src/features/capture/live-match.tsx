@@ -5,9 +5,9 @@
  * the points already committed. The score, who serves, deuce or ad, whether the match
  * is over — all of it is re-derived from that `Point[]` by state.ts, never stored.
  *
- * Three of the flow's steps have no screen. RALLY_LENGTH is answered from the bucket
- * the rally screen parked, READY commits, and ABORTED restarts the point. The rest is a
- * switch over the step.
+ * Three of the flow's steps have no screen. RALLY_LENGTH re-affirms the bucket the
+ * rally screen already wrote onto the draft, READY commits, and ABORTED restarts the
+ * point. The rest is a switch over the step.
  *
  * Nothing here awaits: `outbox.append` is fired and left, per web-capture.md, and the
  * player and coach are handed in as props because the API client may not be imported
@@ -29,7 +29,6 @@ import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
 import { isMatchOver, retireMatch, startNextPoint } from "./match-flow";
 import { Point } from "./point";
-import type { RallyBucket } from "./point";
 import { RallyScreen } from "./rally-screen";
 import { ResultScreen } from "./result-screen";
 import { ReturnScreen } from "./return-screen";
@@ -73,9 +72,6 @@ export function LiveMatch({
   const [match, setMatch] = useState<Match | null>(null);
   const [points, setPoints] = useState<Point[]>([]);
   const [capture, setCapture] = useState<CaptureState | null>(null);
-  // Asked at the start of the rally, wanted at the end of the point: this is the only
-  // thing alive across both (see rally-screen.tsx).
-  const [rallyBucket, setRallyBucket] = useState<RallyBucket | null>(null);
   const [skipAheadOpen, setSkipAheadOpen] = useState(false);
   // Kept so Back into setup returns the coach to what they typed, not a blank form.
   const [setupConfig, setSetupConfig] = useState<MatchSetupConfig | null>(null);
@@ -122,7 +118,7 @@ export function LiveMatch({
     for (const action of actions) next = transition(next, action);
 
     if (next.step.name === "RALLY_LENGTH") {
-      next = transition(next, { type: "TAP_RALLY_LENGTH", bucket: rallyBucket });
+      next = transition(next, { type: "TAP_RALLY_LENGTH", bucket: next.draft.rallyLengthBucket });
     }
 
     if (next.step.name === "ABORTED") {
@@ -145,7 +141,6 @@ export function LiveMatch({
     const nextPoints = [...points, point];
     queue(match, [point]);
     setPoints(nextPoints);
-    setRallyBucket(null);
     setCapture(isMatchOver(match, nextPoints) ? null : startNextPoint(match, nextPoints));
   }
 
@@ -303,8 +298,10 @@ export function LiveMatch({
 
       {step.name === "RALLY" && (
         <RallyScreen
-          rallyBucket={rallyBucket}
-          onRallyBucketChange={setRallyBucket}
+          rallyBucket={draft.rallyLengthBucket}
+          onRallyBucketChange={(bucket) => {
+            dispatch({ type: "TAP_RALLY_LENGTH", bucket });
+          }}
           onAction={dispatch}
         />
       )}

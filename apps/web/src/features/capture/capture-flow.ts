@@ -335,6 +335,14 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     }
 
     case "RALLY": {
+      if (action.type === "TAP_RALLY_LENGTH") {
+        // Sticky, not a step change: picking a bucket doesn't leave this screen, so
+        // the draft updates in place with nothing pushed onto history. Written here
+        // rather than held by the caller, so a let or an undo-to-ABORTED wipes it
+        // along with the rest of the draft instead of it outliving the point it was
+        // picked for.
+        return { ...state, draft: { ...draft, rallyLengthBucket: action.bucket } };
+      }
       if (action.type === "TAP_RALLY_OUTCOME") {
         const nextDraft: PointDraft = { ...draft, won: action.won, endReason: action.endReason };
         // An unforced error skips the shot: which stroke produced a miss tells a coach

@@ -124,6 +124,34 @@ test("an unforced error skips the shot screen", async () => {
   expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
 });
 
+// The rally length used to live in its own piece of state, parked until commit — a let
+// discarded the draft but not that state, so the abandoned rally's length silently
+// carried into the replayed point (#5).
+test("a let after picking a rally length doesn't carry it into the replayed point", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "3-5" }));
+
+  await user.click(screen.getByRole("button", { name: "Let" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+  });
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+
+  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length, then how it ended");
+  expect(screen.getByRole("button", { name: "3-5" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.getByRole("button", { name: "Win, forced error" })).toBeDisabled();
+});
+
 test("back on the match's first screen returns to setup, still holding what was typed", async () => {
   const { user } = renderMatch();
   await startMatch(user);
