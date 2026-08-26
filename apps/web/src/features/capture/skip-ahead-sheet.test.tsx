@@ -32,14 +32,16 @@ function renderSheet() {
 test("hands back the score the coach entered", async () => {
   const { onSkipToScore, user } = renderSheet();
 
+  // 6 games total keeps "tracked serves next" (the sheet's default) consistent with
+  // firstServer, so this only exercises entering a score, not the serving-next check.
   await user.clear(screen.getByLabelText("Rivera games"));
-  await user.type(screen.getByLabelText("Rivera games"), "3");
+  await user.type(screen.getByLabelText("Rivera games"), "4");
   await user.clear(screen.getByLabelText("Okoye games"));
   await user.type(screen.getByLabelText("Okoye games"), "2");
   await user.click(screen.getByRole("button", { name: "Skip to score" }));
 
   expect(onSkipToScore).toHaveBeenCalledWith({
-    trackedGames: 3,
+    trackedGames: 4,
     opponentGames: 2,
     trackedPoints: "0",
     opponentPoints: "0",
@@ -50,11 +52,29 @@ test("hands back the score the coach entered", async () => {
 test("the opponent can be the one serving next", async () => {
   const { onSkipToScore, user } = renderSheet();
 
+  // One game played puts serve with the opponent, so this is where "Okoye" agrees
+  // with firstServer rather than contradicting it.
+  await user.clear(screen.getByLabelText("Rivera games"));
+  await user.type(screen.getByLabelText("Rivera games"), "1");
   const serving = screen.getByRole("group", { name: "Serving next" });
   await user.click(within(serving).getByRole("button", { name: "Okoye" }));
   await user.click(screen.getByRole("button", { name: "Skip to score" }));
 
   expect(onSkipToScore).toHaveBeenCalledWith(expect.objectContaining({ trackedServesNext: false }));
+});
+
+test("a serving-next answer that disagrees with firstServer is rejected, not silently applied", async () => {
+  const { onSkipToScore, user } = renderSheet();
+
+  // 0 games played, so serve is still firstServer's (Rivera) — picking Okoye
+  // contradicts that. firstServer is fixed at match creation and never rewritten
+  // here (see skip-ahead.ts), so this must be refused, not used to move it.
+  const serving = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(serving).getByRole("button", { name: "Okoye" }));
+
+  expect(screen.getByText(/doesn't match the score entered/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Skip to score" })).toBeDisabled();
+  expect(onSkipToScore).not.toHaveBeenCalled();
 });
 
 test("a score that cannot exist says why, and cannot be applied", async () => {

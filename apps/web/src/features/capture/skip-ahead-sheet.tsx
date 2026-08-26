@@ -5,8 +5,9 @@
  * Court side isn't asked for, unlike the handoff: deuce or ad follows from how many
  * points the current game has had (see nextCourtSideFor), so a chip here would be
  * overruled by the score entered two fields above it. Serving next is still asked
- * even though it can only be honoured before any real point exists — see
- * skipAhead's own comment on reseeding.
+ * even though it never changes firstServer — it's a cross-check on the score above,
+ * catching a mistyped game count the same way an inconsistent one would (see
+ * skipAhead).
  *
  * Ending the match asks who won as well as why. A retirement's winner is the player who
  * didn't retire, and a walkover or default has no score to read one off at all, so

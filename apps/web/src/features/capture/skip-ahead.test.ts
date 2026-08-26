@@ -70,7 +70,14 @@ describe("skipAhead — starting from nothing real", () => {
     const result = skipAhead(
       match,
       [],
-      target({ trackedGames: 3, opponentGames: 2, trackedPoints: "30", opponentPoints: "15" }),
+      target({
+        trackedGames: 3,
+        opponentGames: 2,
+        trackedPoints: "30",
+        opponentPoints: "15",
+        // 5 games played, alternating from firstServer, puts serve with the opponent.
+        trackedServesNext: false,
+      }),
       makeId,
       1_700_000_000_000,
     );
@@ -84,18 +91,21 @@ describe("skipAhead — starting from nothing real", () => {
   // Six straight games win a set. Emitting every tracked game before every opponent one
   // turned 6-5 into a finished 6-0 plus a second set at 0-5, and nothing rejected it.
   test.each([
-    [6, 5],
-    [5, 6],
-    [7, 5],
-    [5, 7],
+    [6, 5, false],
+    [5, 6, false],
+    [7, 5, true],
+    [5, 7, true],
   ])(
     "a set that runs long derives back to %i-%i, not a set that ended early",
-    (tracked, opponent) => {
+    (tracked, opponent, trackedServesNext) => {
       const match = matchFor();
       const result = skipAhead(
         match,
         [],
-        target({ trackedGames: tracked, opponentGames: opponent }),
+        // trackedServesNext must agree with firstServer once total games played is
+        // known (serve alternates each game) — an odd total puts serve with the
+        // opponent.
+        target({ trackedGames: tracked, opponentGames: opponent, trackedServesNext }),
         makeId,
         1_700_000_000_000,
       );
@@ -157,52 +167,56 @@ describe("skipAhead — starting from nothing real", () => {
     }
   });
 
-  test.each([true, false])("whoever the coach says serves next, does (%s)", (trackedServesNext) => {
-    const match = matchFor();
-    const result = skipAhead(
-      match,
-      [],
-      target({ trackedGames: 3, opponentGames: 2, trackedServesNext }),
-      makeId,
-      1_700_000_000_000,
-    );
+  // firstServer is fixed, so only the "serving next" answer the game count already
+  // implies (serve alternates each game) is accepted — see the refusal test below for
+  // the other case.
+  test.each([
+    { games: 0, trackedServesNext: true },
+    { games: 1, trackedServesNext: false },
+  ])(
+    "accepts serving next when it agrees with firstServer ($games games played)",
+    ({ games, trackedServesNext }) => {
+      const match = matchFor();
+      const result = skipAhead(
+        match,
+        [],
+        target({ trackedGames: games, trackedServesNext }),
+        makeId,
+        1_700_000_000_000,
+      );
 
-    const liveSets = matchSetsFor(
-      result.points,
-      result.match.matchId,
-      result.match.trackedPlayerId,
-      result.match.opponentId,
-      result.match.scoringSystem,
-    );
-    const servesNext = nextServerFor(
-      liveSets,
-      result.match.scoringSystem,
-      result.match.firstServer,
-      result.match.trackedPlayerId,
-      result.match.opponentId,
-    );
+      const liveSets = matchSetsFor(
+        result.points,
+        result.match.matchId,
+        result.match.trackedPlayerId,
+        result.match.opponentId,
+        result.match.scoringSystem,
+      );
+      const servesNext = nextServerFor(
+        liveSets,
+        result.match.scoringSystem,
+        result.match.firstServer,
+        result.match.trackedPlayerId,
+        result.match.opponentId,
+      );
 
-    expect(servesNext).toBe(trackedServesNext ? TRACKED_ID : OPPONENT_ID);
-  });
+      expect(servesNext).toBe(trackedServesNext ? TRACKED_ID : OPPONENT_ID);
+    },
+  );
 
-  test("reseeding the rotation leaves the rest of the match alone", () => {
-    // One game played puts the serve with the opponent already, so asking for the
-    // tracked player to serve next is what forces the seed to move. Only possible
-    // with no real points recorded yet — see the conflict test below.
-    const match = matchFor();
-    const result = skipAhead(
-      match,
-      [],
-      target({ trackedGames: 1, trackedServesNext: true }),
-      makeId,
-      1_700_000_000_000,
-    );
-
-    expect(match.firstServer).toBe(TRACKED_ID);
-    expect(result.match.firstServer).toBe(OPPONENT_ID);
-    expect(result.match.matchId).toBe(match.matchId);
-    expect(result.match.scoringSystem).toBe(match.scoringSystem);
-    expect(result.match.trackedPlayerId).toBe(match.trackedPlayerId);
+  test("refuses a serving-next answer firstServer disagrees with, even with no real points yet", () => {
+    // One game played puts the serve with the opponent already — asking for the
+    // tracked player to serve next contradicts firstServer. firstServer is fixed at
+    // match creation (see live-match.tsx) and never rewritten by skipAhead.
+    expect(() =>
+      skipAhead(
+        matchFor(),
+        [],
+        target({ trackedGames: 1, trackedServesNext: true }),
+        makeId,
+        1_700_000_000_000,
+      ),
+    ).toThrow(/[Ss]erving next/);
   });
 
   test("a score that completes a set is recorded as a completed set", () => {
@@ -233,7 +247,8 @@ describe("skipAhead — bridging from points already real", () => {
     const real = skipAhead(
       match,
       [],
-      target({ trackedGames: 1 }),
+      // One game played puts serve with the opponent.
+      target({ trackedGames: 1, trackedServesNext: false }),
       makeId,
       1_700_000_000_000,
     ).points;
@@ -299,7 +314,8 @@ describe("skipAhead — bridging from points already real", () => {
     const real = skipAhead(
       match,
       [],
-      target({ trackedGames: 3 }),
+      // Three games played puts serve with the opponent.
+      target({ trackedGames: 3, trackedServesNext: false }),
       makeId,
       1_700_000_000_000,
     ).points;

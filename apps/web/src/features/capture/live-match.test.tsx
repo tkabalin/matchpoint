@@ -219,15 +219,16 @@ test("skipping ahead resumes from the score the coach entered", async () => {
   });
   await user.pointer({ keys: "[/MouseLeft]" });
 
+  // 6 games total keeps the default "Rivera serves next" consistent with firstServer.
   await user.clear(screen.getByLabelText("Rivera games"));
   await user.type(screen.getByLabelText("Rivera games"), "4");
   await user.clear(screen.getByLabelText("Okoye games"));
-  await user.type(screen.getByLabelText("Okoye games"), "3");
+  await user.type(screen.getByLabelText("Okoye games"), "2");
   await user.click(screen.getByRole("button", { name: "Skip to score" }));
 
   const score = await screen.findByRole("table", { name: "Score" });
   expect(within(score).getByText("4")).toBeVisible();
-  expect(within(score).getByText("3")).toBeVisible();
+  expect(within(score).getByText("2")).toBeVisible();
 });
 
 test("ending the match shows the result, with the reason it ended", async () => {

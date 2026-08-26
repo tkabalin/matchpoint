@@ -21,7 +21,6 @@ import {
   isAdScoringFor,
   matchSetsFor,
   nextServerFor,
-  otherIdOf,
   pointCallFor,
   resolveGameWinner,
 } from "./state";
@@ -219,14 +218,16 @@ function deltaWinnersFor(
 }
 
 /**
- * The synthetic points to append so capture resumes from the target score, and the
- * match capture resumes on — unchanged unless the serve rotation has to be reseeded
- * (see below). `points` is the match's real log so far; every point in it is kept
- * exactly as recorded, never replaced.
+ * The synthetic points to append so capture resumes from the target score. `points`
+ * is the match's real log so far; every point in it is kept exactly as recorded,
+ * never replaced. `match.firstServer` is likewise never rewritten here — it's fixed
+ * the moment the match is created (see live-match.tsx's back-to-setup window), so a
+ * "serving next" answer that disagrees with it means the score entered above is
+ * wrong, not that firstServer is.
  *
  * Throws on a target `validateTarget` rejects, on games or a point call the real
  * score has already passed (see the two bridge helpers above), or on a "serving
- * next" answer that conflicts with the real rotation once real points exist.
+ * next" answer that conflicts with what firstServer and the score imply.
  */
 export function skipAhead(
   match: Match,
@@ -309,17 +310,8 @@ export function skipAhead(
     match.trackedPlayerId,
     match.opponentId,
   );
-  if (servesNext === desiredServer) return { match, points: firstPass };
-
-  // Reseeding rewrites who served every game from the first, which would contradict
-  // the server already stored on any real point (see point.ts) — only safe with
-  // none recorded yet, exactly the case skipAhead was originally built for.
-  if (points.length > 0) {
-    throw new Error("Serving next doesn't match the points already recorded");
+  if (servesNext !== desiredServer) {
+    throw new Error("Serving next doesn't match the score entered");
   }
-  const reseeded = Match.create({
-    ...match.toJSON(),
-    firstServer: otherIdOf(match.firstServer, match.trackedPlayerId, match.opponentId),
-  });
-  return { match: reseeded, points: buildFor(reseeded) };
+  return { match, points: firstPass };
 }

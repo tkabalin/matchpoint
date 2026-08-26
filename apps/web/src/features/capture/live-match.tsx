@@ -79,9 +79,9 @@ export function LiveMatch({
   const [skipAheadOpen, setSkipAheadOpen] = useState(false);
   // Kept so Back into setup returns the coach to what they typed, not a blank form.
   const [setupConfig, setSetupConfig] = useState<MatchSetupConfig | null>(null);
-  // The match row goes out just before the first point that needs it, so a skip-ahead
-  // that reseeds the serve rotation is queued in its final shape — the outbox is
-  // first-write-wins and never rewrites a payload.
+  // The match row goes out just before the first point that needs it. firstServer is
+  // fixed at that point onward — skipAhead never rewrites it (see skip-ahead.ts) — so
+  // the outbox being first-write-wins and never rewriting a payload is never an issue.
   const matchQueued = useRef(false);
 
   /**
