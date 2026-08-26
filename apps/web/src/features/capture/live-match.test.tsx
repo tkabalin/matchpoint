@@ -263,14 +263,17 @@ test("skipping ahead resumes from the score the coach entered", async () => {
   const { user } = renderMatch();
   await startMatch(user);
 
+  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
+  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
   await user.pointer({
     keys: "[MouseLeft>]",
     target: screen.getByRole("button", { name: "Skip point" }),
   });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]" });
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
   });
-  await user.pointer({ keys: "[/MouseLeft]" });
 
   // 6 games total keeps the default "Rivera serves next" consistent with firstServer.
   await user.clear(screen.getByLabelText("Rivera games"));
@@ -288,14 +291,17 @@ test("ending the match shows the result, with the reason it ended", async () => 
   const { user } = renderMatch();
   await startMatch(user);
 
+  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
+  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
   await user.pointer({
     keys: "[MouseLeft>]",
     target: screen.getByRole("button", { name: "Skip point" }),
   });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]" });
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
   });
-  await user.pointer({ keys: "[/MouseLeft]" });
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Retirement/ }));
@@ -314,14 +320,17 @@ test("declaring a walkover before the first point still queues the match and its
   const { user } = renderMatch();
   await startMatch(user);
 
+  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
+  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
   await user.pointer({
     keys: "[MouseLeft>]",
     target: screen.getByRole("button", { name: "Skip point" }),
   });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]" });
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
   });
-  await user.pointer({ keys: "[/MouseLeft]" });
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Walkover/ }));
@@ -351,14 +360,17 @@ test("retiring after points were played still queues the outcome, as its own row
   });
   vi.mocked(append).mockClear();
 
+  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
+  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
   await user.pointer({
     keys: "[MouseLeft>]",
     target: screen.getByRole("button", { name: "Skip point" }),
   });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]" });
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
   });
-  await user.pointer({ keys: "[/MouseLeft]" });
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Retirement/ }));

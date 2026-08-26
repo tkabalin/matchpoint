@@ -82,8 +82,8 @@ export function MatchHeader({
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set when the hold has already opened skip-ahead, so the click that follows the
-  // release doesn't also ask who won.
+  // Set once the hold has crossed HOLD_MS, so the click that follows the release
+  // opens skip-ahead instead of asking who won.
   const holdFired = useRef(false);
 
   useEffect(() => {
@@ -97,7 +97,6 @@ export function MatchHeader({
     holdTimer.current = setTimeout(() => {
       holdTimer.current = null;
       holdFired.current = true;
-      onSkipAhead();
     }, HOLD_MS);
   }
 
@@ -198,9 +197,14 @@ export function MatchHeader({
           onSkipAhead();
         }}
         onClick={() => {
-          // A keyboard activation never starts a hold, so it lands here as a plain tap.
+          // Opening skip-ahead waits for this click rather than firing straight out of
+          // the hold timer: a still-held mouse button has no element under it yet to
+          // dismiss, so the sheet's own outside-press handling can't catch its own
+          // trigger click and close what it just opened. A keyboard activation never
+          // starts a hold, so it always lands here as a plain tap.
           if (holdFired.current) {
             holdFired.current = false;
+            onSkipAhead();
             return;
           }
           setAskingWinner(true);

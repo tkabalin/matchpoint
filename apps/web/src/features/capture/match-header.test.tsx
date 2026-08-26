@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
@@ -160,11 +160,13 @@ test("holding skip opens skip ahead instead of skipping the point", async () => 
   const { onSkipPoint, onSkipAhead, user } = renderHeader();
   const skip = screen.getByRole("button", { name: "Skip point" });
 
+  // The button stays held past HOLD_MS before it's released: onSkipAhead only fires
+  // on the release, not mid-hold (see match-header.tsx's onClick comment for why).
   await user.pointer({ keys: "[MouseLeft>]", target: skip });
-  await waitFor(() => {
-    expect(onSkipAhead).toHaveBeenCalledTimes(1);
-  });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  expect(onSkipAhead).not.toHaveBeenCalled();
   await user.pointer({ keys: "[/MouseLeft]", target: skip });
 
+  expect(onSkipAhead).toHaveBeenCalledTimes(1);
   expect(onSkipPoint).not.toHaveBeenCalled();
 });
