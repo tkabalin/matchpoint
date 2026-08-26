@@ -178,6 +178,14 @@ function withServe(draft: PointDraft, attempt: ServeAttempt): PointDraft {
   return { ...draft, serves: [...draft.serves, attempt] };
 }
 
+// Where the RALLY step sends the draft once both taps are in — shared by the two
+// branches below since either one can be the tap that completes the pair. An unforced
+// error skips the shot: which stroke produced a miss tells a coach less than where it
+// missed, and asking costs a tap on the commonest ending.
+function rallyOutcomeNextStep(endReason: "FORCED" | "MISTAKE"): CaptureStep {
+  return endReason === "MISTAKE" ? { name: "BALL_LOCATION" } : { name: "SHOT_DETAIL" };
+}
+
 // The endings with no rally at all — the flow layer defaults rallyLengthBucket to the
 // shortest bucket here rather than asking, since there was nothing to ask about.
 // Point.create itself never does this (see point.ts) — it's this module's rule, not a
@@ -335,23 +343,26 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     }
 
     case "RALLY": {
+      // Two questions, answered in either order: each tap writes into the draft in
+      // place, and only the tap that completes the pair advances the screen — so
+      // "outcome then length" and "length then outcome" both land on the same next
+      // step. Sticky either way, same as before: writing without advancing means
+      // nothing is pushed onto history, so a let or an undo-to-ABORTED wipes whichever
+      // half was picked along with the rest of the draft instead of it outliving the
+      // point it was picked for.
       if (action.type === "TAP_RALLY_LENGTH") {
-        // Sticky, not a step change: picking a bucket doesn't leave this screen, so
-        // the draft updates in place with nothing pushed onto history. Written here
-        // rather than held by the caller, so a let or an undo-to-ABORTED wipes it
-        // along with the rest of the draft instead of it outliving the point it was
-        // picked for.
-        return { ...state, draft: { ...draft, rallyLengthBucket: action.bucket } };
+        const nextDraft: PointDraft = { ...draft, rallyLengthBucket: action.bucket };
+        if (draft.endReason === "FORCED" || draft.endReason === "MISTAKE") {
+          return advance(state, rallyOutcomeNextStep(draft.endReason), nextDraft);
+        }
+        return { ...state, draft: nextDraft };
       }
       if (action.type === "TAP_RALLY_OUTCOME") {
         const nextDraft: PointDraft = { ...draft, won: action.won, endReason: action.endReason };
-        // An unforced error skips the shot: which stroke produced a miss tells a coach
-        // less than where it missed, and asking costs a tap on the commonest ending.
-        // wing/shotType stay null, a shape Point.create already accepts on a MISTAKE.
-        if (action.endReason === "MISTAKE") {
-          return advance(state, { name: "BALL_LOCATION" }, nextDraft);
+        if (draft.rallyLengthBucket !== null) {
+          return advance(state, rallyOutcomeNextStep(action.endReason), nextDraft);
         }
-        return advance(state, { name: "SHOT_DETAIL" }, nextDraft);
+        return { ...state, draft: nextDraft };
       }
       throw invalidAction(action, step);
     }

@@ -3,16 +3,26 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
 import type { CaptureAction } from "./capture-flow";
-import type { RallyBucket } from "./point";
+import type { EndReason, RallyBucket } from "./point";
 import { RallyScreen } from "./rally-screen";
 
-function renderRally(rallyBucket: RallyBucket | null = null) {
+function renderRally({
+  rallyBucket = null,
+  won = null,
+  endReason = null,
+}: {
+  rallyBucket?: RallyBucket | null;
+  won?: boolean | null;
+  endReason?: EndReason | null;
+} = {}) {
   const onAction = vi.fn<(action: CaptureAction) => void>();
   const onRallyBucketChange = vi.fn<(bucket: RallyBucket | null) => void>();
   render(
     <RallyScreen
       rallyBucket={rallyBucket}
       onRallyBucketChange={onRallyBucketChange}
+      won={won}
+      endReason={endReason}
       onAction={onAction}
     />,
   );
@@ -24,28 +34,39 @@ test.each([
   ["Win, unforced error", true, "MISTAKE"],
   ["Loss, forced error", false, "FORCED"],
   ["Loss, unforced error", false, "MISTAKE"],
-])("%s ends the point", async (name, won, endReason) => {
-  const { onAction, user } = renderRally("B2");
+])("%s dispatches the outcome", async (name, won, endReason) => {
+  const { onAction, user } = renderRally();
 
   await user.click(screen.getByRole("button", { name }));
 
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_RALLY_OUTCOME", won, endReason });
 });
 
-test("the point cannot be ended before its length is answered", async () => {
+test("neither question is required first — the outcome cards are tappable before a length is picked", async () => {
   const { onAction, user } = renderRally();
 
-  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length, then how it ended");
+  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length and how it ended");
+  expect(screen.getByRole("button", { name: "Win, forced error" })).toBeEnabled();
+
   await user.click(screen.getByRole("button", { name: "Win, forced error" }));
 
-  expect(onAction).not.toHaveBeenCalled();
+  expect(onAction).toHaveBeenCalledWith({
+    type: "TAP_RALLY_OUTCOME",
+    won: true,
+    endReason: "FORCED",
+  });
 });
 
-test("once a length is chosen the endings become available", () => {
-  renderRally("B3");
+test("once an outcome is already picked, the prompt asks only for the length", () => {
+  renderRally({ won: true, endReason: "FORCED" });
+
+  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length");
+});
+
+test("once a length is already picked, the prompt asks only for the outcome", () => {
+  renderRally({ rallyBucket: "B3" });
 
   expect(screen.getByRole("status")).toHaveTextContent("Pick how it ended");
-  expect(screen.getByRole("button", { name: "Win, forced error" })).toBeEnabled();
 });
 
 test("picking a rally length reports it without ending the point", async () => {
@@ -58,7 +79,7 @@ test("picking a rally length reports it without ending the point", async () => {
 });
 
 test("the chosen rally length shows as chosen, and re-tapping keeps it", async () => {
-  const { onRallyBucketChange, user } = renderRally("B2");
+  const { onRallyBucketChange, user } = renderRally({ rallyBucket: "B2" });
 
   expect(screen.getByRole("button", { name: "3-5" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "1-2" })).toHaveAttribute("aria-pressed", "false");
@@ -66,6 +87,19 @@ test("the chosen rally length shows as chosen, and re-tapping keeps it", async (
   await user.click(screen.getByRole("button", { name: "3-5" }));
 
   expect(onRallyBucketChange).toHaveBeenCalledWith("B2");
+});
+
+test("the chosen outcome shows as chosen, the same way the chosen length does", () => {
+  renderRally({ won: false, endReason: "MISTAKE" });
+
+  expect(screen.getByRole("button", { name: "Loss, unforced error" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByRole("button", { name: "Win, forced error" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 });
 
 test("an unusual ending hands off to the flow's own unusual path", async () => {

@@ -302,6 +302,8 @@ export function LiveMatch({
           onRallyBucketChange={(bucket) => {
             dispatch({ type: "TAP_RALLY_LENGTH", bucket });
           }}
+          won={draft.won}
+          endReason={draft.endReason}
           onAction={dispatch}
         />
       )}

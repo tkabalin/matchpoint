@@ -110,6 +110,28 @@ test("a point threads serve to final ball and lands on the scoreboard", async ()
   expect(within(score).getByText("15")).toBeVisible();
 });
 
+test("the rally screen's two questions can be answered in either order", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+
+  // Outcome tapped first this time — the screen stays put until the length follows.
+  await user.click(screen.getByRole("button", { name: "Win, forced error" }));
+  expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  expect(screen.getByRole("button", { name: "Win, forced error" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await user.click(screen.getByRole("button", { name: "3-5" }));
+
+  expect(screen.getByRole("heading", { name: "Final shot" })).toBeVisible();
+});
+
 test("an unforced error skips the shot screen", async () => {
   const { user } = renderMatch();
   await startMatch(user);
@@ -147,9 +169,12 @@ test("a let after picking a rally length doesn't carry it into the replayed poin
     expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
   });
 
-  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length, then how it ended");
+  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length and how it ended");
   expect(screen.getByRole("button", { name: "3-5" })).toHaveAttribute("aria-pressed", "false");
-  expect(screen.getByRole("button", { name: "Win, forced error" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Win, forced error" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
 });
 
 test("back on the match's first screen returns to setup, still holding what was typed", async () => {

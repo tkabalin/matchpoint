@@ -200,8 +200,9 @@ describe("let", () => {
   });
 
   test("rejects a let from a step other than serve or rally", () => {
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
     const onShotDetail = transition(
-      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
+      transition(onRally, { type: "TAP_RALLY_LENGTH", bucket: "B2" }),
       { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" },
     );
     expect(() => transition(onShotDetail, { type: "TAP_LET" })).toThrow(/not valid on step/);
@@ -218,19 +219,34 @@ describe("rally screen", () => {
     [false, "FORCED", "SHOT_DETAIL"],
     [true, "MISTAKE", "BALL_LOCATION"],
     [false, "MISTAKE", "BALL_LOCATION"],
-  ] as const)("won=%s endReason=%s → %s with those fields set", (won, endReason, nextStep) => {
-    const state = transition(start(), { type: "TAP_RALLY_OUTCOME", won, endReason });
+  ] as const)("won=%s endReason=%s → %s, length first then outcome", (won, endReason, nextStep) => {
+    const withLength = transition(start(), { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+    const state = transition(withLength, { type: "TAP_RALLY_OUTCOME", won, endReason });
     expect(state.step).toEqual({ name: nextStep });
     expect(state.draft.won).toBe(won);
     expect(state.draft.endReason).toBe(endReason);
   });
 
+  test.each([
+    [true, "FORCED", "SHOT_DETAIL"],
+    [false, "FORCED", "SHOT_DETAIL"],
+    [true, "MISTAKE", "BALL_LOCATION"],
+    [false, "MISTAKE", "BALL_LOCATION"],
+  ] as const)(
+    "won=%s endReason=%s → %s, outcome first then length — order doesn't matter",
+    (won, endReason, nextStep) => {
+      const withOutcome = transition(start(), { type: "TAP_RALLY_OUTCOME", won, endReason });
+      expect(withOutcome.step).toEqual({ name: "RALLY" }); // one tap alone never advances
+      const state = transition(withOutcome, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+      expect(state.step).toEqual({ name: nextStep });
+      expect(state.draft.won).toBe(won);
+      expect(state.draft.endReason).toBe(endReason);
+    },
+  );
+
   test("an unforced error commits with no shot recorded, which Point.create allows", () => {
-    let state = transition(start(), {
-      type: "TAP_RALLY_OUTCOME",
-      won: false,
-      endReason: "MISTAKE",
-    });
+    let state = transition(start(), { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+    state = transition(state, { type: "TAP_RALLY_OUTCOME", won: false, endReason: "MISTAKE" });
     state = transition(state, { type: "TAP_BALL_LOCATION", ballIn: false, location: "NET" });
     state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
 
@@ -240,7 +256,7 @@ describe("rally screen", () => {
     expect(point.ballLocation).toBe("NET");
   });
 
-  test("picking a length is sticky — it writes into the draft without leaving RALLY or touching history", () => {
+  test("picking a length alone is sticky — it writes into the draft without leaving RALLY or touching history", () => {
     const onRally = start();
     const state = transition(onRally, { type: "TAP_RALLY_LENGTH", bucket: "B3" });
     expect(state.step).toEqual({ name: "RALLY" });
@@ -248,10 +264,34 @@ describe("rally screen", () => {
     expect(state.history).toEqual(onRally.history);
   });
 
-  test("a rally let clears the picked length along with the rest of the draft", () => {
+  test("picking an outcome alone is sticky too — same non-advancing update, symmetric with length", () => {
+    const onRally = start();
+    const state = transition(onRally, {
+      type: "TAP_RALLY_OUTCOME",
+      won: true,
+      endReason: "FORCED",
+    });
+    expect(state.step).toEqual({ name: "RALLY" });
+    expect(state.draft.won).toBe(true);
+    expect(state.draft.endReason).toBe("FORCED");
+    expect(state.history).toEqual(onRally.history);
+  });
+
+  test("a rally let clears a picked length along with the rest of the draft", () => {
     const withBucket = transition(start(), { type: "TAP_RALLY_LENGTH", bucket: "B4" });
     const replayed = transition(withBucket, { type: "TAP_LET" });
     expect(replayed.draft.rallyLengthBucket).toBeNull();
+  });
+
+  test("a rally let clears a picked outcome too, for the same reason", () => {
+    const withOutcome = transition(start(), {
+      type: "TAP_RALLY_OUTCOME",
+      won: true,
+      endReason: "FORCED",
+    });
+    const replayed = transition(withOutcome, { type: "TAP_LET" });
+    expect(replayed.draft.won).toBeNull();
+    expect(replayed.draft.endReason).toBeNull();
   });
 });
 
@@ -259,6 +299,7 @@ describe("full happy path — serve through commit", () => {
   test("a FORCED win threads through every screen and commits to a valid Point", () => {
     let state: CaptureState = startTracked();
     state = transition(state, { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
     state = transition(state, { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" });
     state = transition(state, { type: "TAP_SHOT_DETAIL", wing: "FOREHAND", shotType: "DRIVE" });
     state = transition(state, { type: "TAP_BALL_LOCATION", ballIn: true, location: COURT_ZONE });
@@ -346,7 +387,10 @@ describe("unusual point", () => {
 
 describe("undo", () => {
   test("undoes one step back to the exact prior draft", () => {
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(
+      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
+      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
+    );
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -361,7 +405,10 @@ describe("undo", () => {
     // RALLY_LENGTH is reachable via shot detail (wing/shotType/ballLocation set) and
     // via the unusual escape hatch (all three still null) — the step name alone
     // can't tell UNDO which draft to restore; only the history stack can.
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(
+      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
+      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
+    );
     let viaShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -390,7 +437,10 @@ describe("undo", () => {
   });
 
   test("undoing twice from a two-step-deep history exhausts the stack, lands on ABORTED", () => {
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(
+      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
+      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
+    );
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
