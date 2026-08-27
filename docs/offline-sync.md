@@ -9,12 +9,28 @@ those three describe the parts of.
 
 The device holds two IndexedDB databases, deliberately separate:
 
-- **The outbox** (`matchpoint-outbox`, Dexie) holds points and matches the server has never seen.
+- **The outbox** (`matchpoint-outbox`, Dexie) holds points and matches the server has never seen,
+  plus the match log described below.
 - **The read cache** (`matchpoint-query-cache`, idb-keyval) holds the last snapshot of the coach's
   roster and match lists, restored at startup so the app renders without a connection.
 
 The rule: clearing or evicting the read cache must never reach the outbox. The cache is disposable,
 refilled from the server on the next online visit. A queued point cannot be refilled from anywhere.
+
+### The match log, beside the queue
+
+The outbox database holds two more tables (`events`, `matches`), written by `match-log.ts`. They are
+in the same database so a sign-out's `deleteOutboxDatabase()` takes them with it, but they answer a
+different question and are deliberately not merged with the queue:
+
+- The **outbox** is a message queue. Rows are immutable, first-write-wins by id, and a row is
+  deleted once the server has it.
+- The **log** is state: every event of every match still on this device. Rewriting an event under
+  its own id overwrites, undo deletes one, and nothing is removed when a row syncs.
+
+Capture writes both on every commit. Without the log, a match whose points had already drained would
+lose its score on the next reload, since the queue rows it was folded from would be gone — so the
+log is what "reopen at the same score" is built on, and what `undo` pops from.
 
 ## Outbox
 

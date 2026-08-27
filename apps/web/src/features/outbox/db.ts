@@ -1,10 +1,17 @@
 /**
- * The outbox's IndexedDB schema.
+ * The outbox's IndexedDB schema, and the match log's.
  *
  * Its own database, never shared with query-cache persistence: clearing or
  * evicting the cache must not be able to reach a point that hasn't synced yet.
- * Operations live in `outbox.ts`; keeping the schema alone in here gives a
- * future version bump one place to happen.
+ * Operations live in `outbox.ts` and `match-log.ts`; keeping the schema alone in
+ * here gives a future version bump one place to happen.
+ *
+ * The two tables answer different questions and are deliberately not merged. The
+ * outbox is a message queue: rows are immutable, first-write-wins by id, and a
+ * drained row is deleted. The log is state — every event of every match still on
+ * this device, so a tab that dies mid-match reopens at the same score, and so undo
+ * has something durable to pop. `purgeLocalData` deletes the whole database, so the
+ * log inherits the sign-out rules with no extra code.
  */
 
 import Dexie, { type EntityTable } from "dexie";
@@ -82,14 +89,53 @@ export interface OutboxRow extends OutboxEntry {
   failure?: OutboxFailure;
 }
 
+/**
+ * One event of one match, as the log stores it: the domain object's own `toJSON()`
+ * under its own id, tagged so it can be read back as the right class.
+ */
+export interface LoggedEvent {
+  id: string;
+  matchId: string;
+  coachId: string;
+  sequence: number;
+  kind: "point" | "checkpoint";
+  payload: unknown;
+}
+
+/**
+ * The match itself, plus the two facts the log can't derive from its events:
+ * the next sequence to hand out (which never decreases, so an undone one is never
+ * reissued after a reload) and whether the coach has finished the match.
+ */
+export interface LoggedMatch {
+  matchId: string;
+  coachId: string;
+  trackedPlayerId: string;
+  nextSequence: number;
+  // Not indexed: IndexedDB has no boolean key type, so "unfinished" is filtered in
+  // memory off the coach's own matches rather than indexed as 0/1.
+  finished: boolean;
+  updatedAt: number;
+  payload: unknown;
+}
+
 const db = new Dexie("matchpoint-outbox") as Dexie & {
   entries: EntityTable<OutboxRow, "seq">;
+  events: EntityTable<LoggedEvent, "id">;
+  matches: EntityTable<LoggedMatch, "matchId">;
 };
 
 // `&id` is unique: an entity appended twice is the same queue row, not two.
 // `[coachId+status]` serves both the pending read and the two counts.
 db.version(1).stores({
   entries: "++seq, &id, matchId, [coachId+status]",
+});
+
+// `[matchId+sequence]` is how a match's own log is read back, in order.
+db.version(2).stores({
+  entries: "++seq, &id, matchId, [coachId+status]",
+  events: "id, matchId, [matchId+sequence]",
+  matches: "matchId, coachId, [coachId+trackedPlayerId]",
 });
 
 export const outboxDb = db;

@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { getDeviceId } from "@/lib/device-id";
 import { getErrorStatus } from "@/lib/error-status";
 import { parseErrorMessage } from "@/lib/parse-error";
+import { removeMatch } from "@/features/outbox/match-log";
 import { removeByMatch } from "@/features/outbox/outbox";
 
 type Step = "confirm-delete" | "capture-conflict";
@@ -55,7 +56,10 @@ export function DeleteMatchSheet({
       if (deleteError) throw deleteError;
       // This device's own queued rows for the match it just deleted have to
       // go too, or the next drain re-posts them and puts the match back (#214).
+      // The match log is the same story one step further on: left behind, capture
+      // would resume into a match that no longer exists.
       await removeByMatch(match.id);
+      await removeMatch(match.id);
     },
     onSuccess: finishDelete,
     onError: (mutationError) => {
@@ -78,6 +82,7 @@ export function DeleteMatchSheet({
       });
       if (deleteError) throw deleteError;
       await removeByMatch(match.id);
+      await removeMatch(match.id);
     },
     onSuccess: finishDelete,
     onError: (mutationError) => {

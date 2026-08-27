@@ -2,6 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
+import { Toaster } from "@/components/ui/sonner";
+import { outboxDb } from "@/features/outbox/db";
+
 import { LiveMatch } from "./live-match";
 
 // The outbox is IndexedDB; what matters here is that capture appends to it without
@@ -15,14 +18,23 @@ const { append } = await import("@/features/outbox/outbox");
 const COACH_ID = "3f1c2b4e-0000-4000-8000-0000000000c1";
 const PLAYER_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.mocked(append).mockClear();
+  // The log is real (fake-indexeddb), and it outlives a test unless it is cleared:
+  // otherwise the next render resumes the previous test's match.
+  await outboxDb.events.clear();
+  await outboxDb.matches.clear();
 });
 
-function renderMatch() {
+/**
+ * Renders and waits for the first paint. Capture asks the log whether this player has
+ * a match still running before it draws anything, so nothing is on screen until that
+ * answer lands — on either the setup screen or the match it resumed.
+ */
+async function renderMatch() {
   const onExit = vi.fn();
   const onViewResults = vi.fn();
-  render(
+  const view = render(
     <LiveMatch
       coachId={COACH_ID}
       trackedPlayerId={PLAYER_ID}
@@ -31,16 +43,19 @@ function renderMatch() {
       onViewResults={onViewResults}
     />,
   );
-  return { onExit, onViewResults, user: userEvent.setup() };
+  await waitFor(() => {
+    expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
+  });
+  return { ...view, onExit, onViewResults, user: userEvent.setup() };
 }
 
-async function startMatch(user: ReturnType<typeof renderMatch>["user"]) {
+async function startMatch(user: Awaited<ReturnType<typeof renderMatch>>["user"]) {
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("button", { name: "Start match" }));
 }
 
 test("setup comes first, and starting it opens the serve screen", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
 
   expect(screen.getByRole("heading", { name: "Match" })).toBeVisible();
 
@@ -51,7 +66,7 @@ test("setup comes first, and starting it opens the serve screen", async () => {
 });
 
 test("back on setup exits the match entirely", async () => {
-  const { onExit, user } = renderMatch();
+  const { onExit, user } = await renderMatch();
 
   await user.click(screen.getByRole("button", { name: "Back" }));
 
@@ -59,7 +74,7 @@ test("back on setup exits the match entirely", async () => {
 });
 
 test("the opponent serving first opens the return screen instead", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
 
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("button", { name: "Opponent" }));
@@ -73,7 +88,7 @@ test.each([
   ["Clay", "var(--color-court-clay)"],
   ["Carpet", "var(--color-court-carpet)"],
 ])("a %s match paints the court that surface", async (surface, expected) => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
 
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("combobox", { name: /Court type/ }));
@@ -87,14 +102,14 @@ test.each([
 });
 
 test("a hard court keeps the default green, with nothing to override it", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   expect(document.querySelector("[style*='--court-surface']")).toBeNull();
 });
 
 test("a point threads serve to final ball and lands on the scoreboard", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -120,7 +135,7 @@ test("a point threads serve to final ball and lands on the scoreboard", async ()
 });
 
 test("the rally screen's two questions can be answered in either order", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -142,7 +157,7 @@ test("the rally screen's two questions can be answered in either order", async (
 });
 
 test("an unforced error skips the shot screen", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -159,7 +174,7 @@ test("an unforced error skips the shot screen", async () => {
 // discarded the draft but not that state, so the abandoned rally's length silently
 // carried into the replayed point (#5).
 test("a let after picking a rally length doesn't carry it into the replayed point", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -187,7 +202,7 @@ test("a let after picking a rally length doesn't carry it into the replayed poin
 });
 
 test("a point the coach only half-saw is kept, not discarded", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   // Missed the serve, watched the rally, missed how it ended.
@@ -212,7 +227,7 @@ test("a point the coach only half-saw is kept, not discarded", async () => {
 });
 
 test("a missed stroke still records where the ball landed", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -240,7 +255,7 @@ test("a missed stroke still records where the ball landed", async () => {
 });
 
 test("the skip sheet points at the editor when the gap is bigger than one point", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Skip point" }));
@@ -252,7 +267,7 @@ test("the skip sheet points at the editor when the gap is bigger than one point"
 });
 
 test("back on the match's first screen returns to setup, still holding what was typed", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
   expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
 
@@ -263,7 +278,7 @@ test("back on the match's first screen returns to setup, still holding what was 
 });
 
 test("nothing is queued while setup is still reachable", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   expect(vi.mocked(append)).not.toHaveBeenCalled();
@@ -278,7 +293,7 @@ test("nothing is queued while setup is still reachable", async () => {
 });
 
 test("back walks the point's screens, and stops at the serve", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -295,7 +310,7 @@ test("back walks the point's screens, and stops at the serve", async () => {
 // used to satisfy the same points.length === 0 check that opens setup on a fresh
 // match — reopening a door that's supposed to have closed the moment the match queued.
 test("once the match is queued, undoing back to the serve screen still can't reach setup", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
@@ -311,7 +326,7 @@ test("once the match is queued, undoing back to the serve screen still can't rea
 });
 
 test("back past a recorded point offers to undo it, and asks first", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Ace" }));
@@ -325,7 +340,7 @@ test("back past a recorded point offers to undo it, and asks first", async () =>
 });
 
 test("undoing takes the point back off the score and queues its delete", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Ace" }));
@@ -352,7 +367,7 @@ test("undoing takes the point back off the score and queues its delete", async (
 });
 
 test("a mis-tapped match point can be undone from the result screen itself", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   // A pro set is one set to 8 games, so a single skipped point can finish the match.
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
@@ -379,8 +394,105 @@ test("a mis-tapped match point can be undone from the result screen itself", asy
   expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "matchOutcome")).toBe(false);
 });
 
+test("a tab that dies mid-match reopens at the same score", async () => {
+  const first = await renderMatch();
+  await startMatch(first.user);
+  await first.user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+  first.unmount();
+
+  await renderMatch();
+
+  // Folded again from the log, not from anything that was held in memory.
+  const score = await screen.findByRole("table", { name: "Score" });
+  expect(within(score).getByText("15")).toBeVisible();
+  expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+});
+
+test("a resumed match keeps counting from where its sequence left off", async () => {
+  const first = await renderMatch();
+  await startMatch(first.user);
+  await first.user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+  first.unmount();
+  vi.mocked(append).mockClear();
+
+  const second = await renderMatch();
+  await second.user.click(screen.getByRole("button", { name: "Ace" }));
+
+  await waitFor(() => {
+    expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "point")).toBe(true);
+  });
+  const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];
+  expect(point?.payload).toMatchObject({ sequence: 1 });
+});
+
+test("a logged event this build cannot read leaves the coach on setup, told why", async () => {
+  const first = await renderMatch();
+  await startMatch(first.user);
+  await first.user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+  first.unmount();
+
+  // What an app update can leave behind: a payload an earlier build wrote that this
+  // one's fromJSON refuses. Log rows carry no schemaVersion, so it is only found here.
+  const logged = await outboxDb.events.toArray();
+  expect(logged.length).toBeGreaterThan(0);
+  await outboxDb.events.bulkPut(logged.map((row) => ({ ...row, payload: { won: "maybe" } })));
+
+  render(
+    <>
+      <Toaster />
+      <LiveMatch
+        coachId={COACH_ID}
+        trackedPlayerId={PLAYER_ID}
+        playerName="Rivera"
+        onExit={vi.fn()}
+        onViewResults={vi.fn()}
+      />
+    </>,
+  );
+
+  expect(await screen.findByRole("heading", { name: "Match" })).toBeVisible();
+  expect(
+    await screen.findByText(
+      "That match could not be reopened on this device. You can start a new one.",
+    ),
+  ).toBeVisible();
+});
+
+test("a finished match is not resumed into", async () => {
+  const first = await renderMatch();
+  await first.user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await first.user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
+  await first.user.click(await screen.findByRole("option", { name: "Pro Set" }));
+  await first.user.click(screen.getByRole("button", { name: "Start match" }));
+
+  await openScoreSheet(first.user);
+  await first.user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await first.user.type(screen.getByLabelText("Rivera set 1 games"), "7");
+  await first.user.click(screen.getByRole("button", { name: "Rivera 40" }));
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await first.user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
+  await first.user.click(screen.getByRole("button", { name: "Set score" }));
+  await first.user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await first.user.click(screen.getByRole("button", { name: /Win/ }));
+  await first.user.click(await screen.findByRole("button", { name: "Finish match" }));
+  first.unmount();
+
+  await renderMatch();
+
+  expect(screen.getByRole("heading", { name: "Match" })).toBeVisible();
+});
+
 test("the score the coach enters is queued as its own event, not as invented points", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
   await openScoreSheet(user);
 
@@ -405,7 +517,7 @@ test("the score the coach enters is queued as its own event, not as invented poi
 });
 
 test("an out-of-turn game on court is recordable rather than a dead end", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
   await user.click(screen.getByRole("button", { name: "Ace" }));
   await openScoreSheet(user);
@@ -425,7 +537,7 @@ test("an out-of-turn game on court is recordable rather than a dead end", async 
 });
 
 test("finishing a match won on sets queues its completion, which nothing else does", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
   await user.click(await screen.findByRole("option", { name: "Pro Set" }));
@@ -455,7 +567,7 @@ test("finishing a match won on sets queues its completion, which nothing else do
 });
 
 test("the committed point is queued behind its match, and never awaited", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   // An ace is the shortest whole point: one tap, straight to READY.
@@ -472,7 +584,7 @@ test("the committed point is queued behind its match, and never awaited", async 
 });
 
 test("a skipped point is recorded winner-only and moves the score", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Skip point" }));
@@ -486,7 +598,7 @@ test.each([
   ["Win", "Point won"],
   ["Loss", "Point lost"],
 ])("recording a point as a %s flashes %s", async (outcome, flashed) => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Skip point" }));
@@ -496,7 +608,7 @@ test.each([
 });
 
 /** Tapping the score opens the editor; the hold gesture is match-header.test.tsx's. */
-async function openScoreSheet(user: ReturnType<typeof renderMatch>["user"]) {
+async function openScoreSheet(user: Awaited<ReturnType<typeof renderMatch>>["user"]) {
   await user.click(screen.getByRole("button", { name: "Edit score" }));
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "Score" })).toBeVisible();
@@ -504,7 +616,7 @@ async function openScoreSheet(user: ReturnType<typeof renderMatch>["user"]) {
 }
 
 test("a point that takes the game flashes the game, not the point", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
   await openScoreSheet(user);
 
@@ -520,7 +632,7 @@ test("a point that takes the game flashes the game, not the point", async () => 
 });
 
 test("a point that takes the set flashes the set", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
   await openScoreSheet(user);
 
@@ -540,7 +652,7 @@ test("a point that takes the set flashes the set", async () => {
 });
 
 test("the point that ends the match doesn't flash over the result screen", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   // A pro set is one set to 8 games, so a single skipped point can finish the match.
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
@@ -565,7 +677,7 @@ test("the point that ends the match doesn't flash over the result screen", async
 });
 
 test("skipping ahead resumes from the score the coach entered", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await openScoreSheet(user);
@@ -583,7 +695,7 @@ test("skipping ahead resumes from the score the coach entered", async () => {
 });
 
 test("ending the match shows the result, with the reason it ended", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await openScoreSheet(user);
@@ -602,7 +714,7 @@ test("ending the match shows the result, with the reason it ended", async () => 
 // to the outbox at all — matchQueued only ever fired off a point transition, and
 // endMatch never touched the outbox itself.
 test("declaring a walkover before the first point still queues the match and its outcome", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await openScoreSheet(user);
@@ -626,7 +738,7 @@ test("declaring a walkover before the first point still queues the match and its
 // id) — the outcome has to reach the outbox some other way, which is what the
 // separate matchOutcome row is for.
 test("retiring after points were played still queues the outcome, as its own row", async () => {
-  const { user } = renderMatch();
+  const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Ace" }));

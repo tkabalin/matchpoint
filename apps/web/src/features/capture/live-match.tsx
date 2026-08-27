@@ -20,10 +20,12 @@
  * from this slice at all.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import * as log from "@/features/outbox/match-log";
 import * as outbox from "@/features/outbox/outbox";
 
 import { commitDraft, transition } from "./capture-flow";
@@ -38,6 +40,7 @@ import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
 import { isMatchOver, retireMatch, startNextPoint, undoLast } from "./match-flow";
+import { Point } from "./point";
 import type { Server } from "./point";
 import { RallyScreen } from "./rally-screen";
 import { ResultScreen } from "./result-screen";
@@ -111,12 +114,67 @@ export function LiveMatch({
   // render has something reactive to read; render must never read a ref directly.
   const matchQueuedRef = useRef(false);
   const [matchQueued, setMatchQueued] = useState(false);
+  // Null until the log has been asked whether this player has a match still running.
+  const [restoring, setRestoring] = useState(true);
   // Same ref-plus-state pairing as matchQueued above, and for the same reason: finish()
   // can run twice in one pass, and render needs a reactive copy to read.
   const finishedRef = useRef(false);
   const [finished, setFinished] = useState(false);
 
   const board = useMemo(() => (match === null ? null : foldScore(match, events)), [match, events]);
+
+  /**
+   * Picks up a match this device already has events for — the phone died, the tab was
+   * closed, the app updated — and folds the score again from the log rather than from
+   * anything held in memory (#119). Nothing here is on the tap path, so it is the one
+   * place in capture that awaits.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const found = await log.findInProgressFor(coachId, trackedPlayerId);
+        if (cancelled || found === undefined) return;
+        const logged = await log.readLog(found.matchId);
+        if (cancelled) return;
+        const resumed = Match.fromJSON(found.payload);
+        const restoredEvents = logged.map((event) =>
+          event.kind === "checkpoint"
+            ? ScoreCheckpoint.fromJSON(event.payload)
+            : Point.fromJSON(event.payload),
+        );
+        const resumedBoard = foldScore(resumed, restoredEvents);
+        setMatch(resumed);
+        setEvents(restoredEvents);
+        setNextSequence(found.nextSequence);
+        // The match row went out with its first event, so Back must not offer setup.
+        matchQueuedRef.current = true;
+        setMatchQueued(true);
+        setCapture(
+          isMatchOver(resumed, resumedBoard)
+            ? null
+            : startNextPoint(resumed, resumedBoard, found.nextSequence),
+        );
+      } catch {
+        // A logged row that won't parse (an older build's payload, a half-written
+        // event) must not leave the coach on a blank form wondering: say so, and drop
+        // back to setup with nothing half-restored rather than by accident.
+        if (cancelled) return;
+        setMatch(null);
+        setEvents([]);
+        setCapture(null);
+        setNextSequence(0);
+        matchQueuedRef.current = false;
+        setMatchQueued(false);
+        toast.error("That match could not be reopened on this device. You can start a new one.");
+      } finally {
+        if (!cancelled) setRestoring(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [coachId, trackedPlayerId]);
 
   /**
    * The match row, sent once the coach has left the first serve or return screen.
@@ -137,14 +195,34 @@ export function LiveMatch({
     });
   }
 
-  function queueEvent(current: Match, event: MatchEvent) {
+  function queueEvent(current: Match, event: MatchEvent, sequenceAfter: number) {
     queueMatch(current);
+    const kind = isCheckpoint(event) ? "checkpoint" : "point";
     void outbox.append({
       id: event.id,
       coachId,
       matchId: current.matchId,
-      kind: isCheckpoint(event) ? "checkpoint" : "point",
+      kind,
       payload: event.toJSON(),
+    });
+    // Written beside the queue row, never instead of it: the queue is drained and
+    // deleted, the log is what the match is folded from next time it opens.
+    void log.appendEvent({
+      id: event.id,
+      matchId: current.matchId,
+      coachId,
+      sequence: event.sequence,
+      kind,
+      payload: event.toJSON(),
+    });
+    void log.saveMatch({
+      matchId: current.matchId,
+      coachId,
+      trackedPlayerId,
+      nextSequence: sequenceAfter,
+      finished: false,
+      updatedAt: Date.now(),
+      payload: current.toJSON(),
     });
   }
 
@@ -158,6 +236,17 @@ export function LiveMatch({
     finishedRef.current = true;
     setFinished(true);
     queueMatch(current);
+    // Finished is what keeps a completed match from being resumed into, and out of
+    // the in-progress list the home screen reads.
+    void log.saveMatch({
+      matchId: current.matchId,
+      coachId,
+      trackedPlayerId,
+      nextSequence,
+      finished: true,
+      updatedAt: Date.now(),
+      payload: current.toJSON(),
+    });
     void outbox.append({
       id: `${current.matchId}:outcome`,
       coachId,
@@ -197,7 +286,7 @@ export function LiveMatch({
     const context = contextFor(match, board, next.draft.server, won);
     const point = commitDraft(next.draft, crypto.randomUUID(), Date.now(), context);
     const nextEvents = [...events, point];
-    queueEvent(match, point);
+    queueEvent(match, point, nextSequence + 1);
     setEvents(nextEvents);
     setNextSequence(nextSequence + 1);
 
@@ -291,7 +380,7 @@ export function LiveMatch({
       orderChanged: entered.orderChanged,
     });
     const nextEvents = [...events, checkpoint];
-    queueEvent(current, checkpoint);
+    queueEvent(current, checkpoint, nextSequence + 1);
     setEvents(nextEvents);
     setNextSequence(nextSequence + 1);
     setScoreSheetOpen(false);
@@ -313,6 +402,7 @@ export function LiveMatch({
     if (removed === null) return;
 
     void outbox.remove([removed.id]);
+    void log.removeEvent(removed.id);
     void outbox.append({
       id: `${removed.id}:delete`,
       coachId,
@@ -349,6 +439,10 @@ export function LiveMatch({
     setScoreSheetOpen(false);
     setCapture(null);
   }
+
+  // Nothing is drawn until the log has answered: showing setup first would flash a
+  // blank form over a match that is about to be resumed.
+  if (restoring) return null;
 
   if (match === null || board === null) {
     return (
