@@ -96,9 +96,20 @@ function pointEntry(
       sequence,
       server: "TRACKED",
       courtSide: "DEUCE",
-      serves: [{ number: 1, outcome: "ACE", location: "T" }],
-      returnOutcome: null,
       won: true,
+      context: {
+        setNumber: 1,
+        gameNumber: 1,
+        inTiebreak: false,
+        isBreakPoint: false,
+        isGamePoint: false,
+        isGameEnd: false,
+        isSetPoint: false,
+        isSetEnd: false,
+        isMatchPoint: false,
+      },
+      serves: [{ number: 1, outcome: "ACE", location: null }],
+      returnOutcome: null,
       endReason: "ACE",
       unusualReason: null,
       unusualNote: null,
@@ -127,7 +138,7 @@ function outcomeEntry(matchId: string, trackedPlayerWon = true): OutboxEntry {
 /** A point carrying the longest note the API takes, for the byte-bound test. */
 function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
   return pointEntry(tag, matchId, sequence, {
-    serves: [{ number: 1, outcome: "IN", location: "T" }],
+    serves: [{ number: 1, outcome: "IN", location: null }],
     endReason: "UNUSUAL",
     unusualReason: "OTHER",
     unusualNote: "x".repeat(2_000),

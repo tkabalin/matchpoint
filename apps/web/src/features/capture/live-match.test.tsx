@@ -8,6 +8,7 @@ import { LiveMatch } from "./live-match";
 // waiting, which is asserted on the calls rather than on Dexie.
 vi.mock("@/features/outbox/outbox", () => ({
   append: vi.fn(() => new Promise(() => {})),
+  remove: vi.fn(() => new Promise(() => {})),
 }));
 const { append } = await import("@/features/outbox/outbox");
 
@@ -244,7 +245,7 @@ test("once the match is queued, undoing back to the serve screen still can't rea
   expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
 });
 
-test("once a point is recorded there is no way back into it", async () => {
+test("back past a recorded point offers to undo it, and asks first", async () => {
   const { user } = renderMatch();
   await startMatch(user);
 
@@ -253,9 +254,139 @@ test("once a point is recorded there is no way back into it", async () => {
     expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
   });
 
-  // Still on screen, so the header keeps its shape, but no longer an offer.
-  expect(screen.getByRole("button", { name: "Back, nothing to go back to" })).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(screen.getByRole("heading", { name: "Undo the last point?" })).toBeVisible();
+});
+
+test("undoing takes the point back off the score and queues its delete", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  const score = screen.getByRole("table", { name: "Score" });
+  await waitFor(() => {
+    expect(within(score).getByText("15")).toBeVisible();
+  });
+  const pointRow = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point");
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: "Undo" }));
+
+  await waitFor(() => {
+    expect(within(screen.getByRole("table", { name: "Score" })).queryByText("15")).toBeNull();
+  });
+  // "Not in the outbox" is not "not on the server", so the delete goes out either way.
+  expect(vi.mocked(append).mock.calls.map((call) => call[0])).toContainEqual(
+    expect.objectContaining({
+      id: `${String(pointRow?.[0].id)}:delete`,
+      kind: "eventDelete",
+      payload: { kind: "point" },
+    }),
+  );
+});
+
+test("a mis-tapped match point can be undone from the result screen itself", async () => {
+  const { user } = renderMatch();
+  // A pro set is one set to 8 games, so a single skipped point can finish the match.
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
+  await user.click(await screen.findByRole("option", { name: "Pro Set" }));
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  await openScoreSheet(user);
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "7");
+  await user.click(screen.getByRole("button", { name: "Rivera 40" }));
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Set score" }));
+
+  await user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+  expect(await screen.findByRole("heading", { name: "Win" })).toBeVisible();
+
+  await user.click(screen.getByRole("button", { name: "Undo last point" }));
+  await user.click(screen.getByRole("button", { name: "Undo" }));
+
+  // Back in the match, with the match-deciding point gone.
+  expect(await screen.findByRole("button", { name: "Skip point" })).toBeVisible();
+  expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "matchOutcome")).toBe(false);
+});
+
+test("the score the coach enters is queued as its own event, not as invented points", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+  await openScoreSheet(user);
+
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "4");
+  await user.clear(screen.getByLabelText("Okoye set 1 games"));
+  await user.type(screen.getByLabelText("Okoye set 1 games"), "2");
+  await user.click(screen.getByRole("button", { name: "Set score" }));
+
+  await waitFor(() => {
+    expect(vi.mocked(append).mock.calls.map((call) => call[0].kind)).toEqual([
+      "match",
+      "checkpoint",
+    ]);
+  });
+  const checkpoint = vi.mocked(append).mock.calls[1]?.[0];
+  expect(checkpoint?.payload).toMatchObject({
+    after: { sets: [{ tracked: 4, opponent: 2 }] },
+    servesNext: "TRACKED",
+    orderChanged: false,
+  });
+});
+
+test("an out-of-turn game on court is recordable rather than a dead end", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  await openScoreSheet(user);
+
+  // One game played means game 2 is Okoye's, so "Rivera serves next" disagrees.
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "1");
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(servingNext).getByRole("button", { name: "Rivera" }));
+
+  expect(screen.getByText(/serving order changed on court/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Set score" })).toBeDisabled();
+
+  await user.click(screen.getByRole("button", { name: "The order changed on court" }));
+
+  expect(screen.getByRole("button", { name: "Set score" })).toBeEnabled();
+});
+
+test("finishing a match won on sets queues its completion, which nothing else does", async () => {
+  const { user } = renderMatch();
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
+  await user.click(await screen.findByRole("option", { name: "Pro Set" }));
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  await openScoreSheet(user);
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "7");
+  await user.click(screen.getByRole("button", { name: "Rivera 40" }));
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Set score" }));
+
+  await user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+  expect(await screen.findByRole("heading", { name: "Win" })).toBeVisible();
+  expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "matchOutcome")).toBe(false);
+
+  await user.click(screen.getByRole("button", { name: "Finish match" }));
+
+  expect(vi.mocked(append).mock.calls.map((call) => call[0])).toContainEqual(
+    expect.objectContaining({
+      kind: "matchOutcome",
+      payload: { reason: "completed", trackedPlayerWon: true },
+    }),
+  );
 });
 
 test("the committed point is queued behind its match, and never awaited", async () => {
@@ -299,29 +430,22 @@ test.each([
   expect(screen.getByText(flashed)).toBeVisible();
 });
 
-// Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick comment
-// for why), so the press has to actually outlast HOLD_MS before it lifts.
-async function openSkipAhead(user: ReturnType<typeof renderMatch>["user"]) {
-  await user.pointer({
-    keys: "[MouseLeft>]",
-    target: screen.getByRole("button", { name: "Skip point" }),
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  await user.pointer({ keys: "[/MouseLeft]" });
+/** Tapping the score opens the editor; the hold gesture is match-header.test.tsx's. */
+async function openScoreSheet(user: ReturnType<typeof renderMatch>["user"]) {
+  await user.click(screen.getByRole("button", { name: "Edit score" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Score" })).toBeVisible();
   });
 }
 
 test("a point that takes the game flashes the game, not the point", async () => {
   const { user } = renderMatch();
   await startMatch(user);
-  await openSkipAhead(user);
+  await openScoreSheet(user);
 
   // 40-0 in the opening game: the next point takes it.
-  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
-  await user.click(await screen.findByRole("option", { name: "40" }));
-  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+  await user.click(screen.getByRole("button", { name: "Rivera 40" }));
+  await user.click(screen.getByRole("button", { name: "Set score" }));
 
   await user.click(await screen.findByRole("button", { name: "Skip point" }));
   await user.click(screen.getByRole("button", { name: /Win/ }));
@@ -333,17 +457,16 @@ test("a point that takes the game flashes the game, not the point", async () => 
 test("a point that takes the set flashes the set", async () => {
   const { user } = renderMatch();
   await startMatch(user);
-  await openSkipAhead(user);
+  await openScoreSheet(user);
 
   // 5-0, 40-0: the next point takes the sixth game and the set. Rivera served the odd
   // games, so the sixth is Okoye's.
-  await user.clear(screen.getByLabelText("Rivera games"));
-  await user.type(screen.getByLabelText("Rivera games"), "5");
-  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
-  await user.click(await screen.findByRole("option", { name: "40" }));
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "5");
+  await user.click(screen.getByRole("button", { name: "Rivera 40" }));
   const servingNext = screen.getByRole("group", { name: "Serving next" });
   await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
-  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+  await user.click(screen.getByRole("button", { name: "Set score" }));
 
   await user.click(await screen.findByRole("button", { name: "Skip point" }));
   await user.click(screen.getByRole("button", { name: /Win/ }));
@@ -358,17 +481,16 @@ test("the point that ends the match doesn't flash over the result screen", async
   await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
   await user.click(await screen.findByRole("option", { name: "Pro Set" }));
   await user.click(screen.getByRole("button", { name: "Start match" }));
-  await openSkipAhead(user);
+  await openScoreSheet(user);
 
   // 7-0, 40-0: one more point takes the eighth game and the match with it. Rivera
   // served the odd games, so the eighth is Okoye's.
-  await user.clear(screen.getByLabelText("Rivera games"));
-  await user.type(screen.getByLabelText("Rivera games"), "7");
-  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
-  await user.click(await screen.findByRole("option", { name: "40" }));
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "7");
+  await user.click(screen.getByRole("button", { name: "Rivera 40" }));
   const servingNext = screen.getByRole("group", { name: "Serving next" });
   await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
-  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+  await user.click(screen.getByRole("button", { name: "Set score" }));
 
   await user.click(await screen.findByRole("button", { name: "Skip point" }));
   await user.click(screen.getByRole("button", { name: /Win/ }));
@@ -381,24 +503,14 @@ test("skipping ahead resumes from the score the coach entered", async () => {
   const { user } = renderMatch();
   await startMatch(user);
 
-  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
-  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
-  await user.pointer({
-    keys: "[MouseLeft>]",
-    target: screen.getByRole("button", { name: "Skip point" }),
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  await user.pointer({ keys: "[/MouseLeft]" });
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
-  });
+  await openScoreSheet(user);
 
   // 6 games total keeps the default "Rivera serves next" consistent with firstServer.
-  await user.clear(screen.getByLabelText("Rivera games"));
-  await user.type(screen.getByLabelText("Rivera games"), "4");
-  await user.clear(screen.getByLabelText("Okoye games"));
-  await user.type(screen.getByLabelText("Okoye games"), "2");
-  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+  await user.clear(screen.getByLabelText("Rivera set 1 games"));
+  await user.type(screen.getByLabelText("Rivera set 1 games"), "4");
+  await user.clear(screen.getByLabelText("Okoye set 1 games"));
+  await user.type(screen.getByLabelText("Okoye set 1 games"), "2");
+  await user.click(screen.getByRole("button", { name: "Set score" }));
 
   const score = await screen.findByRole("table", { name: "Score" });
   expect(within(score).getByText("4")).toBeVisible();
@@ -409,17 +521,7 @@ test("ending the match shows the result, with the reason it ended", async () => 
   const { user } = renderMatch();
   await startMatch(user);
 
-  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
-  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
-  await user.pointer({
-    keys: "[MouseLeft>]",
-    target: screen.getByRole("button", { name: "Skip point" }),
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  await user.pointer({ keys: "[/MouseLeft]" });
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
-  });
+  await openScoreSheet(user);
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Retirement/ }));
@@ -438,17 +540,7 @@ test("declaring a walkover before the first point still queues the match and its
   const { user } = renderMatch();
   await startMatch(user);
 
-  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
-  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
-  await user.pointer({
-    keys: "[MouseLeft>]",
-    target: screen.getByRole("button", { name: "Skip point" }),
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  await user.pointer({ keys: "[/MouseLeft]" });
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
-  });
+  await openScoreSheet(user);
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Walkover/ }));
@@ -478,17 +570,7 @@ test("retiring after points were played still queues the outcome, as its own row
   });
   vi.mocked(append).mockClear();
 
-  // Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick
-  // comment for why), so the press has to actually outlast HOLD_MS before it lifts.
-  await user.pointer({
-    keys: "[MouseLeft>]",
-    target: screen.getByRole("button", { name: "Skip point" }),
-  });
-  await new Promise((resolve) => setTimeout(resolve, 500));
-  await user.pointer({ keys: "[/MouseLeft]" });
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
-  });
+  await openScoreSheet(user);
 
   await user.click(screen.getByRole("button", { name: "End match" }));
   await user.click(screen.getByRole("radio", { name: /Retirement/ }));

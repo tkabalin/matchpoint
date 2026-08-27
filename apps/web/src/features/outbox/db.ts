@@ -19,8 +19,12 @@ import Dexie, { type EntityTable } from "dexie";
  * never have its `outcomeOverride` folded into that row after the fact. A
  * retirement/walkover/default queues this instead, under a derived id, and the
  * drain sends it as its own request. See live-match.tsx's `endMatch`.
+ *
+ * `checkpoint` and `eventDelete` are queued by capture but not yet drained: the API has
+ * no score-checkpoint or delete endpoint yet (see database-changes-needed.md), and the
+ * drain selects rows by kind, so they sit pending rather than failing.
  */
-export type OutboxEntityKind = "match" | "point" | "matchOutcome";
+export type OutboxEntityKind = "match" | "point" | "matchOutcome" | "checkpoint" | "eventDelete";
 
 /**
  * `failed` is where the drain engine parks a row the server rejected, so it

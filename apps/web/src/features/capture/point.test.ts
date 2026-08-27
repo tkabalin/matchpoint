@@ -6,16 +6,31 @@ import { NOTE_MAX_LENGTH, Point } from "./point";
 // on return-error points — spread this into pointData()'s overrides for any test building one.
 const NO_CONTACT = { wing: null, shotType: null, ballIn: null, ballLocation: null };
 
+/** Where a point sat in the match. Its own validation is tested below; what the nine
+ * stamps mean is score.test.ts's subject. */
+const CONTEXT = {
+  setNumber: 1,
+  gameNumber: 1,
+  inTiebreak: false,
+  isBreakPoint: false,
+  isGamePoint: false,
+  isGameEnd: false,
+  isSetPoint: false,
+  isSetEnd: false,
+  isMatchPoint: false,
+};
+
 /** A minimal, valid raw Point payload — override just the fields a test cares about. */
 function pointData(overrides: Record<string, unknown> = {}) {
   return {
+    context: { ...CONTEXT },
     id: "point-1",
     matchId: "match-1",
     timestamp: 1_700_000_000_000,
     sequence: 0,
     server: "TRACKED",
     courtSide: "DEUCE",
-    serves: [{ number: 1, outcome: "IN", location: "T" }],
+    serves: [{ number: 1, outcome: "IN", location: null }],
     returnOutcome: null,
     won: true,
     endReason: "FORCED",
@@ -29,6 +44,28 @@ function pointData(overrides: Record<string, unknown> = {}) {
     rallyLengthBucket: null,
     ...overrides,
   };
+}
+
+/** The serves each no-contact ending needs to be coherent at all. */
+function servesFor(endReason: "ACE" | "DOUBLE_FAULT" | "UNUSUAL") {
+  if (endReason === "DOUBLE_FAULT") {
+    return [
+      { number: 1, outcome: "FAULT", location: "NET" },
+      { number: 2, outcome: "FAULT", location: "LONG" },
+    ];
+  }
+  if (endReason === "ACE") return [{ number: 1, outcome: "ACE", location: null }];
+  return [{ number: 1, outcome: "IN", location: null }];
+}
+
+/** A minimal, valid ace payload — the serve itself is what makes it one. */
+function aceData(overrides: Record<string, unknown> = {}) {
+  return pointData({
+    serves: [{ number: 1, outcome: "ACE", location: null }],
+    endReason: "ACE",
+    ...NO_CONTACT,
+    ...overrides,
+  });
 }
 
 /** A minimal, valid double-fault point payload — both serves faulted, no contact fields. */
@@ -102,24 +139,24 @@ describe("Point.create structural validation", () => {
   });
 
   describe("serves", () => {
-    test.each([0, 3])("rejects a serves array of length %i", (length) => {
+    test.each([3, 4])("rejects a serves array of length %i", (length) => {
       const serves = Array.from({ length }, (_, index) => ({
         number: index + 1,
         outcome: "IN",
-        location: "T",
+        location: null,
       }));
       expect(() => Point.create(pointData({ serves }))).toThrow(/serves/);
     });
 
     test("rejects a serve with the wrong number for its position", () => {
       expect(() =>
-        Point.create(pointData({ serves: [{ number: 2, outcome: "IN", location: "T" }] })),
+        Point.create(pointData({ serves: [{ number: 2, outcome: "IN", location: null }] })),
       ).toThrow(/number/);
     });
 
     test("rejects an unknown serve outcome", () => {
       expect(() =>
-        Point.create(pointData({ serves: [{ number: 1, outcome: "LET", location: "T" }] })),
+        Point.create(pointData({ serves: [{ number: 1, outcome: "LET", location: null }] })),
       ).toThrow();
     });
 
@@ -128,7 +165,7 @@ describe("Point.create structural validation", () => {
         Point.create(
           pointData({
             server: "OPPONENT",
-            serves: [{ number: 1, outcome: "IN", location: "T" }],
+            serves: [{ number: 1, outcome: "FAULT", location: "NET" }],
           }),
         ),
       ).toThrow(/OPPONENT/);
@@ -146,58 +183,41 @@ describe("Point.create structural validation", () => {
       expect(point.serves[0]?.location).toBeNull();
     });
 
-    test("rejects a FailureMode location on a TRACKED serve that went in", () => {
+    test("rejects a location on a TRACKED serve that went in — a landed serve has none", () => {
       expect(() =>
         Point.create(pointData({ serves: [{ number: 1, outcome: "IN", location: "NET" }] })),
-      ).toThrow(/ServeTarget/);
+      ).toThrow(/must be null when outcome is IN/);
     });
 
-    test("accepts a null location on a TRACKED serve that went in — placement is optional", () => {
+    test("accepts a null location on a TRACKED serve that went in", () => {
       const point = Point.create(
         pointData({ serves: [{ number: 1, outcome: "IN", location: null }] }),
       );
       expect(point.serves[0]?.location).toBeNull();
     });
 
-    test("accepts an unrecorded serve on an unusual point", () => {
+    test("accepts a point with no serve at all — the coach missed it", () => {
+      const point = Point.create(pointData({ serves: [] }));
+      expect(point.serves).toEqual([]);
+      expect(point.firstServeIn).toBeNull();
+    });
+
+    test("accepts a lone faulted serve — the second one went unwatched", () => {
       const point = Point.create(
-        pointData({
-          serves: [{ number: 1, outcome: "UNKNOWN", location: null }],
-          endReason: "UNUSUAL",
-          ...NO_CONTACT,
-        }),
+        pointData({ serves: [{ number: 1, outcome: "FAULT", location: "NET" }] }),
       );
-      expect(point.serves[0]?.outcome).toBe("UNKNOWN");
+      expect(point.serves).toHaveLength(1);
+      expect(point.firstServeIn).toBe(false);
     });
 
-    test("rejects a location on an unrecorded serve — there is nothing to place", () => {
-      expect(() =>
-        Point.create(
-          pointData({
-            serves: [{ number: 1, outcome: "UNKNOWN", location: "T" }],
-            endReason: "UNUSUAL",
-            ...NO_CONTACT,
-          }),
-        ),
-      ).toThrow(/must be null when outcome is UNKNOWN/);
-    });
-
-    test("rejects an unrecorded serve on a point whose ending was recorded", () => {
-      expect(() =>
-        Point.create(pointData({ serves: [{ number: 1, outcome: "UNKNOWN", location: null }] })),
-      ).toThrow(/must have endReason UNUSUAL/);
-    });
-
-    test("rejects an attempt following an unrecorded serve", () => {
+    test("rejects a second attempt that doesn't follow a fault", () => {
       expect(() =>
         Point.create(
           pointData({
             serves: [
-              { number: 1, outcome: "UNKNOWN", location: null },
-              { number: 2, outcome: "IN", location: "T" },
+              { number: 1, outcome: "IN", location: null },
+              { number: 2, outcome: "IN", location: null },
             ],
-            endReason: "UNUSUAL",
-            ...NO_CONTACT,
           }),
         ),
       ).toThrow(/requires the first serve to have faulted/);
@@ -205,25 +225,34 @@ describe("Point.create structural validation", () => {
 
     test("rejects a non-FailureMode location on a TRACKED serve that faulted", () => {
       expect(() =>
-        Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: "T" }] })),
+        Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: null }] })),
       ).toThrow(/FailureMode/);
     });
 
-    test("accepts a ServeTarget location on an ace", () => {
-      const point = Point.create(
-        pointData({
-          serves: [{ number: 1, outcome: "ACE", location: "WIDE" }],
-          endReason: "ACE",
-          ...NO_CONTACT,
-        }),
-      );
-      expect(point.serves[0]?.location).toBe("WIDE");
+    test("rejects a location on an ace — a landed serve carries none", () => {
+      expect(() =>
+        Point.create(
+          pointData({
+            serves: [{ number: 1, outcome: "ACE", location: "WIDE" }],
+            endReason: "ACE",
+            ...NO_CONTACT,
+          }),
+        ),
+      ).toThrow(/must be null when outcome is ACE/);
     });
 
-    test("rejects a lone faulted first serve with no second attempt", () => {
+    test("an ace and its endReason require each other", () => {
       expect(() =>
-        Point.create(pointData({ serves: [{ number: 1, outcome: "FAULT", location: "NET" }] })),
-      ).toThrow(/second serve/);
+        Point.create(
+          pointData({
+            serves: [{ number: 1, outcome: "ACE", location: null }],
+            ...NO_CONTACT,
+          }),
+        ),
+      ).toThrow(/must have endReason ACE/);
+      expect(() => Point.create(pointData({ endReason: "ACE", ...NO_CONTACT }))).toThrow(
+        /requires a serve recorded as an ace/,
+      );
     });
 
     test("rejects a double fault whose endReason isn't DOUBLE_FAULT", () => {
@@ -251,8 +280,8 @@ describe("Point.create structural validation", () => {
         Point.create(
           pointData({
             serves: [
-              { number: 1, outcome: "IN", location: "T" },
-              { number: 2, outcome: "IN", location: "T" },
+              { number: 1, outcome: "IN", location: null },
+              { number: 2, outcome: "IN", location: null },
             ],
           }),
         ),
@@ -404,13 +433,7 @@ describe("Point.create structural validation", () => {
               endReason,
               wing: "FOREHAND",
               shotType: "DRIVE",
-              serves:
-                endReason === "DOUBLE_FAULT"
-                  ? [
-                      { number: 1, outcome: "FAULT", location: "NET" },
-                      { number: 2, outcome: "FAULT", location: "LONG" },
-                    ]
-                  : pointData().serves,
+              serves: servesFor(endReason),
             }),
           ),
         ).toThrow(/wing and shotType must be null/);
@@ -458,8 +481,16 @@ describe("Point.create structural validation", () => {
       ).toThrow(/FailureMode/);
     });
 
-    test("rejects a null ballIn on a FORCED/MISTAKE point", () => {
-      expect(() => Point.create(pointData({ ballIn: null, ballLocation: null }))).toThrow(/ballIn/);
+    test("accepts a null ballIn on a FORCED/MISTAKE point — the coach missed where it landed", () => {
+      const point = Point.create(pointData({ ballIn: null, ballLocation: null }));
+      expect(point.ballIn).toBeNull();
+      expect(point.ballLocation).toBeNull();
+    });
+
+    test("rejects a ballLocation with no ballIn beside it", () => {
+      expect(() =>
+        Point.create(pointData({ ballIn: null, ballLocation: { half: "AD", depth: "SHORT" } })),
+      ).toThrow(/ballLocation must be null/);
     });
 
     test.each(["ACE", "DOUBLE_FAULT", "UNUSUAL"] as const)(
@@ -471,13 +502,7 @@ describe("Point.create structural validation", () => {
               endReason,
               wing: null,
               shotType: null,
-              serves:
-                endReason === "DOUBLE_FAULT"
-                  ? [
-                      { number: 1, outcome: "FAULT", location: "NET" },
-                      { number: 2, outcome: "FAULT", location: "LONG" },
-                    ]
-                  : pointData().serves,
+              serves: servesFor(endReason),
             }),
           ),
         ).toThrow(/ballIn and ballLocation must be null/);
@@ -504,12 +529,7 @@ describe("Point.create structural validation", () => {
 
     test("does not override a provided bucket even for an ACE", () => {
       const point = Point.create(
-        pointData({
-          endReason: "ACE",
-          wing: null,
-          shotType: null,
-          ballIn: null,
-          ballLocation: null,
+        aceData({
           rallyLengthBucket: "B1",
         }),
       );
@@ -536,10 +556,12 @@ describe("Point.fromJSON / toJSON", () => {
 
 describe("immutability", () => {
   test("mutating the input serves array after create() does not affect the Point", () => {
-    const serves = [{ number: 1, outcome: "IN", location: "T" }];
+    const serves: { number: number; outcome: string; location: string | null }[] = [
+      { number: 1, outcome: "FAULT", location: "NET" },
+    ];
     const point = Point.create(pointData({ serves }));
 
-    serves.push({ number: 2, outcome: "IN", location: "T" });
+    serves.push({ number: 2, outcome: "IN", location: null });
 
     expect(point.serves).toHaveLength(1);
   });
@@ -548,7 +570,7 @@ describe("immutability", () => {
     const point = Point.create(pointData());
 
     const snapshot = point.toJSON();
-    snapshot.serves.push({ number: 2, outcome: "IN", location: "T" });
+    snapshot.serves.push({ number: 2, outcome: "IN", location: null });
 
     expect(point.serves).toHaveLength(1);
   });
@@ -567,7 +589,7 @@ describe("immutability", () => {
 
 describe("isAce", () => {
   test("true when endReason is ACE", () => {
-    const point = Point.create(pointData({ endReason: "ACE", ...NO_CONTACT }));
+    const point = Point.create(aceData());
     expect(point.isAce).toBe(true);
   });
 
@@ -589,11 +611,46 @@ describe("isDoubleFault", () => {
   });
 
   test("isAce and isDoubleFault are mutually exclusive", () => {
-    const ace = Point.create(pointData({ endReason: "ACE", ...NO_CONTACT }));
+    const ace = Point.create(aceData());
     expect(ace.isAce && ace.isDoubleFault).toBe(false);
 
     const doubleFault = Point.create(doubleFaultData());
     expect(doubleFault.isAce && doubleFault.isDoubleFault).toBe(false);
+  });
+});
+
+describe("context", () => {
+  test("is required — a point always knows where in the match it sat", () => {
+    const { context, ...withoutContext } = pointData();
+    void context;
+    expect(() => Point.create(withoutContext)).toThrow(/context must be an object/);
+  });
+
+  test.each(["setNumber", "gameNumber"])("rejects a non-positive %s", (field) => {
+    expect(() => Point.create(pointData({ context: { ...CONTEXT, [field]: 0 } }))).toThrow(
+      new RegExp(field),
+    );
+  });
+
+  test.each([
+    "inTiebreak",
+    "isBreakPoint",
+    "isGamePoint",
+    "isGameEnd",
+    "isSetPoint",
+    "isSetEnd",
+    "isMatchPoint",
+  ])("rejects a non-boolean %s", (flag) => {
+    expect(() => Point.create(pointData({ context: { ...CONTEXT, [flag]: "yes" } }))).toThrow(
+      new RegExp(flag),
+    );
+  });
+
+  test("is copied out by toJSON rather than shared", () => {
+    const point = Point.create(pointData());
+    const json = point.toJSON();
+    json.context.setNumber = 9;
+    expect(point.context.setNumber).toBe(1);
   });
 });
 
@@ -608,7 +665,7 @@ describe("firstServeIn", () => {
       pointData({
         serves: [
           { number: 1, outcome: "FAULT", location: "NET" },
-          { number: 2, outcome: "IN", location: "T" },
+          { number: 2, outcome: "IN", location: null },
         ],
       }),
     );
@@ -616,26 +673,13 @@ describe("firstServeIn", () => {
   });
 
   test("null when the serve was never recorded — not the same as it having missed", () => {
-    const point = Point.create(
-      pointData({
-        serves: [{ number: 1, outcome: "UNKNOWN", location: null }],
-        endReason: "UNUSUAL",
-        ...NO_CONTACT,
-      }),
-    );
+    const point = Point.create(pointData({ serves: [] }));
     expect(point.firstServeIn).toBeNull();
   });
 
-  test("false when the first serve faulted and the second went unrecorded", () => {
+  test("false when the first serve faulted and the second went unwatched", () => {
     const point = Point.create(
-      pointData({
-        serves: [
-          { number: 1, outcome: "FAULT", location: "NET" },
-          { number: 2, outcome: "UNKNOWN", location: null },
-        ],
-        endReason: "UNUSUAL",
-        ...NO_CONTACT,
-      }),
+      pointData({ serves: [{ number: 1, outcome: "FAULT", location: "NET" }] }),
     );
     expect(point.firstServeIn).toBe(false);
   });

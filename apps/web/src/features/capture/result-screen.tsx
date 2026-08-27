@@ -1,10 +1,16 @@
 /**
  * The result screen — how the match finished, once it has.
  *
- * Everything shown is derived from the points and the match: the winner through
+ * Everything shown is derived from the folded board and the match: the winner through
  * `finalWinnerFor`, which is the one place an outcome override (a retirement, walkover
- * or default) beats the set count, and the sets through `matchSetsFor`. Expects a
- * decided match; the caller only reaches here when `isMatchOver` says so.
+ * or default) beats the set count. Expects a decided match; the caller only reaches
+ * here when `isMatchOver` says so.
+ *
+ * The match is not finished server-side until the coach leaves this screen, which is
+ * what leaves room for "Undo last point": completion is one-way on the server, so a
+ * mis-tapped match point has to be recoverable before it is sent, not after. Coverage
+ * is shown in games rather than as a percentage — an exact count of what was watched
+ * beats a point estimate of it.
  */
 
 import { Button } from "@/components/ui/button";
@@ -12,8 +18,9 @@ import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
 import type { MatchSet } from "./match-set";
-import type { Point } from "./point";
-import { finalWinnerFor, matchSetsFor, maxSetsFor, setRulesFor } from "./state";
+import { coverageOf, matchSetsOf, observedOf } from "./score";
+import type { Scoreboard } from "./score";
+import { finalWinnerFor, maxSetsFor, setRulesFor } from "./state";
 
 // A set with no games phase records its breaker instead, so it shows in brackets —
 // the same convention scoreboardFor uses for the live header.
@@ -33,33 +40,36 @@ function setScores(matchSet: MatchSet, match: Match, maxSets: number) {
 
 export function ResultScreen({
   match,
-  points,
+  board,
   trackedPlayerName,
   opponentName,
+  onUndo,
+  onFinish,
   onHome,
   onViewResults,
 }: {
   match: Match;
-  points: readonly Point[];
+  board: Scoreboard;
   trackedPlayerName: string;
   opponentName: string;
+  // Null once there is nothing left to unwind, or when the match ended by retirement,
+  // walkover or default — none of those are a score to take a point back off.
+  onUndo: (() => void) | null;
+  onFinish: () => void;
   onHome: () => void;
   onViewResults: () => void;
 }) {
-  const { completedSets } = matchSetsFor(
-    points,
-    match.matchId,
-    match.trackedPlayerId,
-    match.opponentId,
-    match.scoringSystem,
-  );
+  const completedSets = matchSetsOf(board);
+  const coverage = coverageOf(board);
   const winner = finalWinnerFor(match, completedSets);
   const won = winner === match.trackedPlayerId;
   const maxSets = maxSetsFor(match.scoringSystem);
 
-  const scores = completedSets.map((matchSet) => ({
+  const scores = completedSets.map((matchSet, index) => ({
     setNumber: matchSet.setNumber,
     wonBySet: matchSet.winner === match.trackedPlayerId,
+    declared:
+      observedOf(board.completedSets[index] ?? { slotsPlayed: 0, slotsObserved: 0 }) !== "full",
     ...setScores(matchSet, match, maxSets),
   }));
 
@@ -109,6 +119,7 @@ export function ResultScreen({
                 {scores.map((score) => (
                   <th key={score.setNumber} scope="col" className="py-2 font-normal">
                     S{score.setNumber}
+                    {score.declared && <span className="sr-only"> (not fully recorded)</span>}
                   </th>
                 ))}
               </tr>
@@ -129,7 +140,14 @@ export function ResultScreen({
                           : "text-muted-foreground",
                       )}
                     >
-                      {cell}
+                      <span
+                        className={cn(
+                          scores[index]?.declared === true &&
+                            "border-b border-dotted border-muted-foreground",
+                        )}
+                      >
+                        {cell}
+                      </span>
                     </td>
                   ))}
                 </tr>
@@ -137,9 +155,20 @@ export function ResultScreen({
             </tbody>
           </table>
         </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {coverage.slotsObserved === coverage.slotsPlayed
+            ? `All ${String(coverage.slotsPlayed)} games recorded.`
+            : `${String(coverage.slotsObserved)} of ${String(coverage.slotsPlayed)} games fully recorded.`}
+        </p>
       </div>
 
       <div className="flex-1" />
+
+      {onUndo !== null && (
+        <Button variant="outline" onClick={onUndo} className="mb-2 h-12 w-full text-base">
+          Undo last point
+        </Button>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Button variant="secondary" onClick={onHome} className="h-14 text-base">
@@ -149,6 +178,9 @@ export function ResultScreen({
           Match results
         </Button>
       </div>
+      <Button variant="ghost" onClick={onFinish} className="mt-2 h-11 w-full text-sm">
+        Finish match
+      </Button>
     </div>
   );
 }

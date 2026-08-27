@@ -9,6 +9,11 @@
  * Skipping asks who won before it hands the point back: `Point` has no way to record
  * one without a winner, and the score has to stay right (see the `UNUSUAL_OUTCOME`
  * step in capture-flow.ts).
+ *
+ * Tapping the score opens the score editor — the most discoverable place to put it,
+ * and it leaves the press-and-hold on skip free to do the same thing for a thumb
+ * already resting there. A set the coach declared rather than watched is marked with a
+ * dotted rule and says so to a screen reader: a filled-in 6-0 must never read as fact.
  */
 
 import { ArrowLeft, SkipForward } from "lucide-react";
@@ -20,8 +25,10 @@ import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
 import { NoteButton } from "./note-button";
-import type { Point, Server } from "./point";
-import { matchSetsFor, maxSetsFor, scoreboardFor } from "./state";
+import type { Server } from "./point";
+import { scoreboardFor } from "./score";
+import type { Scoreboard } from "./score";
+import { maxSetsFor } from "./state";
 
 // Long enough that a deliberate press is unmistakable, short enough to feel like a
 // hold rather than a hang. From the design handoff.
@@ -60,17 +67,17 @@ function PlayerCell({ name, serving }: { name: string; serving: boolean }) {
 
 export function MatchHeader({
   match,
-  points,
+  board,
   server,
   trackedPlayerName,
   opponentName,
   onBack,
   onSkipPoint,
-  onSkipAhead,
+  onEditScore,
   onAddNote,
 }: {
   match: Match;
-  points: readonly Point[];
+  board: Scoreboard;
   // Who is serving the point being captured — the draft's own server, not a
   // derivation: the point is already under way by the time this renders.
   server: Server;
@@ -80,7 +87,7 @@ export function MatchHeader({
   // disappearing, so the header keeps its shape.
   onBack: (() => void) | null;
   onSkipPoint: (won: boolean) => void;
-  onSkipAhead: () => void;
+  onEditScore: () => void;
   onAddNote: (text: string) => void;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
@@ -115,20 +122,8 @@ export function MatchHeader({
     onSkipPoint(won);
   }
 
-  const { completedSets } = matchSetsFor(
-    points,
-    match.matchId,
-    match.trackedPlayerId,
-    match.opponentId,
-    match.scoringSystem,
-  );
-  const scoreboard = scoreboardFor(
-    points,
-    match.matchId,
-    match.trackedPlayerId,
-    match.opponentId,
-    match.scoringSystem,
-  );
+  const scoreboard = scoreboardFor(match, board);
+  const completedSets = board.completedSets;
 
   // The widest the score can get: every set but the last already completed, plus the
   // live games and the current call.
@@ -163,23 +158,37 @@ export function MatchHeader({
         <ArrowLeft className="size-5" />
       </Button>
 
-      <div className="rounded-lg border border-border bg-card px-2 py-[5px]">
+      {/* The button sits over the table rather than around it: a table is not phrasing
+          content, so it cannot legally live inside a button. */}
+      <div className="relative rounded-lg border border-border bg-card px-2 py-[5px]">
+        <button
+          type="button"
+          aria-label="Edit score"
+          onClick={onEditScore}
+          className="absolute inset-0 z-10 rounded-lg"
+        />
         <table className="border-separate border-spacing-[3px]" aria-label="Score">
           <tbody>
             {rows.map((row) => (
               <tr key={row.name}>
                 <PlayerCell name={row.name} serving={row.serving} />
-                {Array.from({ length: columnCount }, (_, index) => (
-                  <td
-                    key={index}
-                    className={cn(
-                      "w-5 text-center text-[11px] leading-[14px] tabular-nums",
-                      toneFor(index),
-                    )}
-                  >
-                    {row.cells[index] ?? ""}
-                  </td>
-                ))}
+                {Array.from({ length: columnCount }, (_, index) => {
+                  const observed = scoreboard.observed[index] ?? null;
+                  const declared = observed === "partial" || observed === "none";
+                  return (
+                    <td
+                      key={index}
+                      className={cn(
+                        "w-5 text-center text-[11px] leading-[14px] tabular-nums",
+                        toneFor(index),
+                        declared && "border-b border-dotted border-muted-foreground",
+                      )}
+                    >
+                      {row.cells[index] ?? ""}
+                      {declared && <span className="sr-only"> (not fully recorded)</span>}
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -202,17 +211,17 @@ export function MatchHeader({
             // clears it on its own pointerdown; a keyboard activation was left stuck.
             event.preventDefault();
             cancelHold();
-            onSkipAhead();
+            onEditScore();
           }}
           onClick={() => {
-            // Opening skip-ahead waits for this click rather than firing straight out
+            // Opening the editor waits for this click rather than firing straight out
             // of the hold timer: a still-held mouse button has no element under it yet
             // to dismiss, so the sheet's own outside-press handling can't catch its own
             // trigger click and close what it just opened. A keyboard activation never
             // starts a hold, so it always lands here as a plain tap.
             if (holdFired.current) {
               holdFired.current = false;
-              onSkipAhead();
+              onEditScore();
               return;
             }
             setAskingWinner(true);

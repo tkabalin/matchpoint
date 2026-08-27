@@ -50,7 +50,7 @@ export class MatchSet {
   readonly opponentId: string;
   // For a match_tiebreak_10_points-decided set these stay 0/0 — the
   // "set" is the breaker outright, no games phase to credit from (see
-  // setStateFor in state.ts). Correct storage, but a display layer must
+  // score.ts's fold). Correct storage, but a display layer must
   // never render that literally as "0-0" — the convention is the breaker
   // score in brackets, e.g. "[10-7]". Not built here; noted so whoever
   // builds the scoreboard doesn't render these two fields blindly.

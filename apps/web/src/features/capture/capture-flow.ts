@@ -23,9 +23,9 @@ import type {
   FailureMode,
   ReturnOutcome,
   RallyBucket,
+  PointContext,
   Server,
   ServeAttempt,
-  ServeTarget,
   ShotType,
   UnusualReason,
   Wing,
@@ -46,7 +46,7 @@ export interface PointDraft {
   server: Server;
   // Which physical side of the court this point is played from — fixed for the
   // point's whole life, regardless of who serves (see point.ts's own comment on
-  // Point.courtSide). The caller's job to derive (via `state.ts`'s
+  // Point.courtSide). The caller's job to derive (via `score.ts`'s
   // `nextCourtSideFor`) and hand in at `startPoint`, not something this module
   // computes.
   courtSide: CourtSide;
@@ -122,7 +122,7 @@ export interface CaptureState {
 
 /**
  * Starts a new point's capture at the first serve. `courtSide` is the caller's
- * responsibility to derive (via `state.ts`'s `nextCourtSideFor`) and hand in — this
+ * responsibility to derive (via `score.ts`'s `nextCourtSideFor`) and hand in — this
  * module never computes it. Not checked against `server`: it applies the same way
  * regardless of who serves (see point.ts's own comment on Point.courtSide).
  */
@@ -143,17 +143,14 @@ export function startPoint(
 
 export type CaptureAction =
   // Tracked player serving only (never valid for OPPONENT — see TAP_RETURN below).
-  // `target` is where within the box the serve landed, and optional: the capture
-  // screen taps the box `draft.courtSide` already fixes, so one tap says the serve
-  // landed without saying where inside it (see point.ts's own comment on the split).
-  | { type: "TAP_SERVE_IN"; target?: ServeTarget }
+  // Carries no placement: the capture screen taps the box `draft.courtSide` already
+  // fixes, so one tap says the serve landed, never where inside it.
+  | { type: "TAP_SERVE_IN" }
   // location required for TRACKED (why it missed), omitted for OPPONENT (out of
   // scope — opponent serve placement, fault or otherwise, is never captured).
   | { type: "TAP_SERVE_FAULT"; location?: FailureMode }
-  // target optional for TRACKED (see TAP_SERVE_IN — the Ace button carries no
-  // placement), and never valid for OPPONENT (an ace against the tracked player has
-  // no location at all).
-  | { type: "TAP_SERVE_ACE"; target?: ServeTarget }
+  // Carries no placement either way — see TAP_SERVE_IN.
+  | { type: "TAP_SERVE_ACE" }
   // Opponent serving only: there's no separate "serve in" tap the way tracked-serving
   // has one — reaching for "where did the return go" already implies the serve was in.
   // endReason is required exactly when outcome is an error (the coach's forced/mistake
@@ -163,8 +160,7 @@ export type CaptureAction =
   // origin resets.
   | { type: "TAP_LET" }
   | { type: "TAP_RALLY_OUTCOME"; won: boolean; endReason: "FORCED" | "MISTAKE" }
-  // Valid from a SERVE or RALLY step — from a serve it records the attempt as
-  // UNKNOWN, see transition()'s own comment.
+  // Valid from a SERVE or RALLY step — from a serve, no serve is recorded at all.
   | { type: "TAP_UNUSUAL" }
   | { type: "TAP_UNUSUAL_OUTCOME"; won: boolean }
   | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null; note: string | null }
@@ -277,18 +273,10 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
   }
 
   if (action.type === "TAP_UNUSUAL") {
-    if (step.name === "SERVE") {
-      // A SERVE step has nothing committable yet (no attempt, or a lone fault still
-      // awaiting its second), so the attempt in hand is recorded as UNKNOWN rather
-      // than assumed — the one shape that says the serve went unwatched.
-      const nextDraft = withServe(draft, {
-        number: step.number,
-        outcome: "UNKNOWN",
-        location: null,
-      });
-      return advance(state, { name: "UNUSUAL_OUTCOME" }, nextDraft);
-    }
-    if (step.name !== "RALLY") {
+    // From a SERVE step nothing is committable yet (no attempt, or a lone fault still
+    // awaiting its second), so the attempt in hand is simply not recorded: an unwatched
+    // serve is one absent from `serves`, not a fourth thing a serve can do.
+    if (step.name !== "SERVE" && step.name !== "RALLY") {
       throw invalidAction(action, step);
     }
     return advance(state, { name: "UNUSUAL_OUTCOME" }, draft);
@@ -299,29 +287,15 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       const { number } = step;
       if (action.type === "TAP_SERVE_IN") {
         if (draft.server !== "TRACKED") throw invalidAction(action, step);
-        const nextDraft = withServe(draft, {
-          number,
-          outcome: "IN",
-          location: action.target ?? null,
-        });
+        const nextDraft = withServe(draft, { number, outcome: "IN", location: null });
         return advance(state, { name: "RALLY" }, nextDraft);
       }
       if (action.type === "TAP_SERVE_ACE") {
-        if (draft.server === "TRACKED") {
-          const nextDraft = withServe(draft, {
-            number,
-            outcome: "ACE",
-            location: action.target ?? null,
-          });
-          // Aced by the tracked player: they served it, so they won.
-          return advance(state, { name: "READY" }, readyDraft(nextDraft, true, "ACE"));
-        }
-        if (action.target !== undefined) {
-          throw new Error("TAP_SERVE_ACE must omit target when server is OPPONENT");
-        }
         const nextDraft = withServe(draft, { number, outcome: "ACE", location: null });
-        // Aced by the opponent: our player never touched it, so the opponent won.
-        return advance(state, { name: "READY" }, readyDraft(nextDraft, false, "ACE"));
+        // Whoever served it won it: an ace by the tracked player is a point won, an
+        // ace against them is a point lost.
+        const won = draft.server === "TRACKED";
+        return advance(state, { name: "READY" }, readyDraft(nextDraft, won, "ACE"));
       }
       if (action.type === "TAP_SERVE_FAULT") {
         const location = draft.server === "TRACKED" ? (action.location ?? null) : null;
@@ -460,6 +434,11 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
  * re-checking the draft here — a bug in `transition` that reaches READY with an
  * incomplete draft surfaces as `Point.create` throwing, not a silent bad commit.
  */
-export function commitDraft(draft: PointDraft, id: string, timestamp: number): Point {
-  return Point.create({ id, timestamp, ...draft });
+export function commitDraft(
+  draft: PointDraft,
+  id: string,
+  timestamp: number,
+  context: PointContext,
+): Point {
+  return Point.create({ id, timestamp, context, ...draft });
 }

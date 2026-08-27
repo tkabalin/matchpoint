@@ -2,8 +2,14 @@
  * The live match — the one stateful piece of capture, and the only one that runs.
  *
  * It owns two things and derives the rest: the point being built (`CaptureState`) and
- * the points already committed. The score, who serves, deuce or ad, whether the match
- * is over — all of it is re-derived from that `Point[]` by state.ts, never stored.
+ * the match's event log. The score, who serves, deuce or ad, whether the match is over
+ * — all of it is folded from that log by score.ts, never stored.
+ *
+ * The log holds two kinds of event. A `Point` is one point the coach vouches for, at
+ * minimum its winner. A `ScoreCheckpoint` is a scoreboard the coach vouches for, which
+ * is how a missed game, a missed set or a wrong scoreboard is recorded — nothing is
+ * ever invented to bridge the two. Editing is tail-only: append, or undo the newest
+ * event, as often as needed.
  *
  * Three of the flow's steps have no screen. RALLY_LENGTH re-affirms the bucket the
  * rally screen already wrote onto the draft, READY commits, and ABORTED restarts the
@@ -14,12 +20,16 @@
  * from this slice at all.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import * as outbox from "@/features/outbox/outbox";
 
 import { commitDraft, transition } from "./capture-flow";
 import type { CaptureAction, CaptureState } from "./capture-flow";
+import { ScoreCheckpoint } from "./checkpoint";
+import type { ScoreSnapshot } from "./checkpoint";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
 import { Match } from "./match";
@@ -27,18 +37,25 @@ import type { MatchEndReason, SurfaceType } from "./match";
 import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
-import { completedLevelFor, isMatchOver, retireMatch, startNextPoint } from "./match-flow";
-import type { CompletedLevel } from "./match-flow";
-import { Point } from "./point";
+import { isMatchOver, retireMatch, startNextPoint, undoLast } from "./match-flow";
+import type { Server } from "./point";
 import { RallyScreen } from "./rally-screen";
 import { ResultScreen } from "./result-screen";
 import { ReturnScreen } from "./return-screen";
+import {
+  contextFor,
+  firstServerImpliedBy,
+  foldScore,
+  interpretSnapshot,
+  isCheckpoint,
+  matchSetsOf,
+} from "./score";
+import type { MatchEvent } from "./score";
 import { ScoreFlash } from "./score-flash";
+import { ScoreSheet } from "./score-sheet";
 import { ServeScreen } from "./serve-screen";
-import { SkipAheadSheet } from "./skip-ahead-sheet";
-import { skipAhead } from "./skip-ahead";
-import type { SkipAheadTarget } from "./skip-ahead";
 import { UnusualPointSheet } from "./unusual-point-sheet";
+import { finalWinnerFor } from "./state";
 
 // The court is painted the surface it is played on. Hard and unspecified are absent
 // rather than mapped: court-diagram.tsx already falls back to --color-court, so leaving
@@ -72,29 +89,34 @@ export function LiveMatch({
   onViewResults: (matchId: string) => void;
 }) {
   const [match, setMatch] = useState<Match | null>(null);
-  const [points, setPoints] = useState<Point[]>([]);
+  const [events, setEvents] = useState<MatchEvent[]>([]);
   const [capture, setCapture] = useState<CaptureState | null>(null);
-  const [skipAheadOpen, setSkipAheadOpen] = useState(false);
-  // The point just committed, held only long enough to flash who won it and how far
-  // that win reached. Keyed by the point's own id so two wins in a row replay the
-  // animation instead of leaving the first one's node in place.
+  const [scoreSheetOpen, setScoreSheetOpen] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  // Never decreases, so an undone sequence is never handed out twice — deriving it
+  // from the surviving log would reissue one after an undo.
+  const [nextSequence, setNextSequence] = useState(0);
+  // The event just committed, held only long enough to flash what it won.
   const [flash, setFlash] = useState<{
     pointId: string;
     won: boolean;
-    level: CompletedLevel;
+    level: "point" | "game" | "set";
   } | null>(null);
   // Kept so Back into setup returns the coach to what they typed, not a blank form.
   const [setupConfig, setSetupConfig] = useState<MatchSetupConfig | null>(null);
-  // The match row goes out just before the first point that needs it. firstServer is
-  // fixed at that point onward — skipAhead never rewrites it (see skip-ahead.ts) — so
-  // the outbox being first-write-wins and never rewriting a payload is never an issue.
-  // A ref, not state, because advance() can call queueMatch twice in the same
-  // synchronous pass (once directly, again via queue() once READY commits the point) —
-  // a state setter wouldn't be visible to the second call until the next render. Mirrored
-  // into matchQueued (state) below purely so render has something reactive to read;
-  // render must never read a ref directly (react-hooks/refs).
+  // The match row goes out just before the first event that needs it. A ref, not
+  // state, because a single synchronous pass can queue twice (once directly, again via
+  // queue() once READY commits) — a state setter wouldn't be visible to the second
+  // call until the next render. Mirrored into matchQueued (state) below purely so
+  // render has something reactive to read; render must never read a ref directly.
   const matchQueuedRef = useRef(false);
   const [matchQueued, setMatchQueued] = useState(false);
+  // Same ref-plus-state pairing as matchQueued above, and for the same reason: finish()
+  // can run twice in one pass, and render needs a reactive copy to read.
+  const finishedRef = useRef(false);
+  const [finished, setFinished] = useState(false);
+
+  const board = useMemo(() => (match === null ? null : foldScore(match, events)), [match, events]);
 
   /**
    * The match row, sent once the coach has left the first serve or return screen.
@@ -115,22 +137,39 @@ export function LiveMatch({
     });
   }
 
-  function queue(current: Match, newPoints: readonly Point[]) {
+  function queueEvent(current: Match, event: MatchEvent) {
     queueMatch(current);
-    for (const point of newPoints) {
-      void outbox.append({
-        id: point.id,
-        coachId,
-        matchId: current.matchId,
-        kind: "point",
-        payload: point.toJSON(),
-      });
-    }
+    void outbox.append({
+      id: event.id,
+      coachId,
+      matchId: current.matchId,
+      kind: isCheckpoint(event) ? "checkpoint" : "point",
+      payload: event.toJSON(),
+    });
+  }
+
+  /**
+   * Finishes the match server-side. Completion is one-way there, so it waits for the
+   * coach rather than firing the moment the fold decides the match: until this row is
+   * queued the result screen can still undo its way back into the match.
+   */
+  function finish(current: Match, trackedPlayerWon: boolean, reason: "completed" | MatchEndReason) {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    setFinished(true);
+    queueMatch(current);
+    void outbox.append({
+      id: `${current.matchId}:outcome`,
+      coachId,
+      matchId: current.matchId,
+      kind: "matchOutcome",
+      payload: { reason, trackedPlayerWon },
+    });
   }
 
   /** Runs actions through the flow, then answers the steps that have no screen. */
   function advance(from: CaptureState, actions: readonly CaptureAction[]) {
-    if (match === null) return;
+    if (match === null || board === null) return;
     let next = from;
     for (const action of actions) next = transition(next, action);
 
@@ -141,7 +180,7 @@ export function LiveMatch({
     if (next.step.name === "ABORTED") {
       // Only reachable now if something dispatches UNDO with nothing behind it: Back
       // stops offering it (see backAction). The draft is gone, so the point starts over.
-      setCapture(startNextPoint(match, points));
+      setCapture(startNextPoint(match, board, nextSequence));
       return;
     }
 
@@ -154,21 +193,26 @@ export function LiveMatch({
       return;
     }
 
-    const point = commitDraft(next.draft, crypto.randomUUID(), Date.now());
-    const nextPoints = [...points, point];
-    queue(match, [point]);
-    setPoints(nextPoints);
-    const over = isMatchOver(match, nextPoints);
+    const won = next.draft.won ?? false;
+    const context = contextFor(match, board, next.draft.server, won);
+    const point = commitDraft(next.draft, crypto.randomUUID(), Date.now(), context);
+    const nextEvents = [...events, point];
+    queueEvent(match, point);
+    setEvents(nextEvents);
+    setNextSequence(nextSequence + 1);
+
+    const after = foldScore(match, nextEvents);
+    const over = isMatchOver(match, after);
     // The point that ends the match hands straight over to the result screen, which
     // says who won at greater length — a flash over it is the same news twice.
     if (!over) {
       setFlash({
         pointId: point.id,
         won: point.won,
-        level: completedLevelFor(match, nextPoints),
+        level: context.isSetEnd ? "set" : context.isGameEnd ? "game" : "point",
       });
     }
-    setCapture(over ? null : startNextPoint(match, nextPoints));
+    setCapture(over ? null : startNextPoint(match, after, nextSequence + 1));
   }
 
   // Stable, so a tap on the screen underneath doesn't restart the flash's own timer.
@@ -195,7 +239,7 @@ export function LiveMatch({
       outcomeOverride: null,
     });
     setMatch(created);
-    setCapture(startNextPoint(created, []));
+    setCapture(startNextPoint(created, foldScore(created, []), 0));
   }
 
   /**
@@ -216,17 +260,71 @@ export function LiveMatch({
     ]);
   }
 
-  function skipToScore(target: SkipAheadTarget) {
-    if (match === null) return;
-    const result = skipAhead(match, points, target, () => crypto.randomUUID(), Date.now());
-    const allPoints = [...points, ...result.points];
-    queue(result.match, result.points);
-    setMatch(result.match);
-    setPoints(allPoints);
-    setSkipAheadOpen(false);
+  /**
+   * Appends the scoreboard the coach just declared. On an empty log their "serving
+   * next" answer also pins who served first — the one moment that is still open, since
+   * every point already recorded was captured under the rotation it implies.
+   */
+  function setScore(entered: { after: ScoreSnapshot; servesNext: Server; orderChanged: boolean }) {
+    if (match === null || board === null) return;
+    let current = match;
+
+    if (events.length === 0) {
+      const read = interpretSnapshot(current, entered.after);
+      if (!("problems" in read)) {
+        const implied = firstServerImpliedBy(read.board, entered.servesNext);
+        const impliedId = implied === "TRACKED" ? current.trackedPlayerId : current.opponentId;
+        if (impliedId !== current.firstServer) {
+          current = Match.create({ ...current.toJSON(), firstServer: impliedId });
+          setMatch(current);
+        }
+      }
+    }
+
+    const checkpoint = ScoreCheckpoint.create({
+      id: crypto.randomUUID(),
+      matchId: current.matchId,
+      timestamp: Date.now(),
+      sequence: nextSequence,
+      after: entered.after,
+      servesNext: entered.servesNext,
+      orderChanged: entered.orderChanged,
+    });
+    const nextEvents = [...events, checkpoint];
+    queueEvent(current, checkpoint);
+    setEvents(nextEvents);
+    setNextSequence(nextSequence + 1);
+    setScoreSheetOpen(false);
+
+    const after = foldScore(current, nextEvents);
     setCapture(
-      isMatchOver(result.match, allPoints) ? null : startNextPoint(result.match, allPoints),
+      isMatchOver(current, after) ? null : startNextPoint(current, after, nextSequence + 1),
     );
+  }
+
+  /**
+   * Drops the newest event. Always queues a delete row as well as removing the event's
+   * own: a row stays queued from send until the 2xx lands, so "not in the outbox" is
+   * not "not on the server", and the delete is idempotent either way.
+   */
+  function undo() {
+    if (match === null) return;
+    const { events: remaining, removed } = undoLast(events);
+    if (removed === null) return;
+
+    void outbox.remove([removed.id]);
+    void outbox.append({
+      id: `${removed.id}:delete`,
+      coachId,
+      matchId: match.matchId,
+      kind: "eventDelete",
+      payload: { kind: isCheckpoint(removed) ? "checkpoint" : "point" },
+    });
+
+    setEvents(remaining);
+    setUndoing(false);
+    const after = foldScore(match, remaining);
+    setCapture(startNextPoint(match, after, nextSequence));
   }
 
   function endMatch({
@@ -243,23 +341,16 @@ export function LiveMatch({
         ? retireMatch(match, trackedPlayerWon ? match.opponentId : match.trackedPlayerId)
         : Match.create({ ...match.toJSON(), outcomeOverride: { reason, winner } });
     // Ending is final — there's no setup to back into from here — so the match must
-    // reach the outbox now if a point never did (a walkover/retirement declared off
-    // the serve screen). queueMatch is a no-op if points already queued it, which is
-    // why the outcome goes as its own row below rather than folded into this one.
-    queueMatch(ended);
-    void outbox.append({
-      id: `${ended.matchId}:outcome`,
-      coachId,
-      matchId: ended.matchId,
-      kind: "matchOutcome",
-      payload: { reason, trackedPlayerWon },
-    });
+    // reach the outbox now if an event never did (a walkover/retirement declared off
+    // the serve screen). The outcome goes as its own row rather than folded into the
+    // match row, which the outbox would never rewrite.
+    finish(ended, trackedPlayerWon, reason);
     setMatch(ended);
-    setSkipAheadOpen(false);
+    setScoreSheetOpen(false);
     setCapture(null);
   }
 
-  if (match === null) {
+  if (match === null || board === null) {
     return (
       <MatchSetupScreen
         playerName={playerName}
@@ -272,18 +363,80 @@ export function LiveMatch({
 
   const opponentName = match.opponentName ?? "Opponent";
 
+  const newest = events[events.length - 1];
+  const undoLabel = newest !== undefined && isCheckpoint(newest) ? "score change" : "last point";
+  // Rendered from both the capture screens and the result screen: a mis-tapped match
+  // point is undone from exactly the screen it lands on.
+  const undoSheet = undoing ? (
+    <Sheet open onOpenChange={setUndoing}>
+      <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
+        <SheetHeader className="p-0">
+          <SheetTitle>Undo the {undoLabel}?</SheetTitle>
+        </SheetHeader>
+        <p className="text-sm text-muted-foreground">
+          It comes off the record and the score goes back with it.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setUndoing(false);
+            }}
+            className="h-13 text-base"
+          >
+            Keep it
+          </Button>
+          <Button variant="destructive" onClick={undo} className="h-13 text-base">
+            Undo
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+  ) : null;
+
   if (capture === null) {
+    // Aliased so the narrowing above survives into the closure below.
+    const decided = match;
+    const winner = finalWinnerFor(decided, matchSetsOf(board));
+    // Leaving the result screen finishes the match too, so a coach who never taps
+    // Finish still completes it.
+    function finishAndLeave(go: () => void) {
+      finish(
+        decided,
+        winner === decided.trackedPlayerId,
+        decided.outcomeOverride?.reason ?? "completed",
+      );
+      go();
+    }
     return (
-      <ResultScreen
-        match={match}
-        points={points}
-        trackedPlayerName={playerName}
-        opponentName={opponentName}
-        onHome={onExit}
-        onViewResults={() => {
-          onViewResults(match.matchId);
-        }}
-      />
+      <>
+        {undoSheet}
+        <ResultScreen
+          match={match}
+          board={board}
+          trackedPlayerName={playerName}
+          opponentName={opponentName}
+          // A match ended by retirement, walkover or default is not a score to unwind.
+          onUndo={
+            match.outcomeOverride === null && events.length > 0 && !finished
+              ? () => {
+                  setUndoing(true);
+                }
+              : null
+          }
+          onFinish={() => {
+            finishAndLeave(onExit);
+          }}
+          onHome={() => {
+            finishAndLeave(onExit);
+          }}
+          onViewResults={() => {
+            finishAndLeave(() => {
+              onViewResults(match.matchId);
+            });
+          }}
+        />
+      </>
     );
   }
 
@@ -291,12 +444,10 @@ export function LiveMatch({
 
   /**
    * Back goes one screen at a time within the point, and stops at the serve or return
-   * screen: a point already committed is not unwound. Before the match has been queued
-   * (see queueMatch), its very first screen has nothing captured yet, so it steps out
-   * to setup instead. Gated on matchQueued rather than points.length === 0: an UNDO can
-   * return history to empty on the first point too, and once the match is real, setup
-   * must stay unreachable even then. Null everywhere else, where there is nowhere to go
-   * and no button to offer.
+   * screen. Before the match has been queued (see queueMatch), its very first screen
+   * has nothing captured yet, so it steps out to setup instead. Past that, with a
+   * fresh draft, it offers to undo the newest committed event — which is what makes a
+   * mis-tap recoverable rather than permanent.
    */
   const backAction =
     capture.history.length > 0
@@ -308,7 +459,11 @@ export function LiveMatch({
             setMatch(null);
             setCapture(null);
           }
-        : null;
+        : events.length > 0
+          ? () => {
+              setUndoing(true);
+            }
+          : null;
 
   return (
     // `display: contents` because custom properties inherit down the DOM tree rather
@@ -320,15 +475,15 @@ export function LiveMatch({
     >
       <MatchHeader
         match={match}
-        points={points}
+        board={board}
         server={draft.server}
         trackedPlayerName={playerName}
         opponentName={opponentName}
         onBack={backAction}
-        onSkipPoint={skipPoint}
-        onSkipAhead={() => {
-          setSkipAheadOpen(true);
+        onEditScore={() => {
+          setScoreSheetOpen(true);
         }}
+        onSkipPoint={skipPoint}
         onAddNote={(text) => {
           dispatch({ type: "ADD_NOTE", text });
         }}
@@ -371,19 +526,22 @@ export function LiveMatch({
         />
       )}
 
-      {skipAheadOpen && (
-        <SkipAheadSheet
+      {scoreSheetOpen && (
+        <ScoreSheet
           match={match}
-          points={points}
+          board={board}
+          hasEvents={events.length > 0}
           trackedPlayerName={playerName}
           opponentName={opponentName}
-          onSkipToScore={skipToScore}
+          onSetScore={setScore}
           onEndMatch={endMatch}
           onDismiss={() => {
-            setSkipAheadOpen(false);
+            setScoreSheetOpen(false);
           }}
         />
       )}
+
+      {undoSheet}
 
       {flash !== null && (
         <ScoreFlash key={flash.pointId} level={flash.level} won={flash.won} onDone={clearFlash} />

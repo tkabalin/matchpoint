@@ -12,9 +12,20 @@ function point() {
     sequence: 0,
     server: "TRACKED",
     courtSide: "DEUCE",
-    serves: [{ number: 1, outcome: "IN", location: "T" }],
-    returnOutcome: null,
     won: true,
+    context: {
+      setNumber: 1,
+      gameNumber: 1,
+      inTiebreak: false,
+      isBreakPoint: false,
+      isGamePoint: false,
+      isGameEnd: false,
+      isSetPoint: false,
+      isSetEnd: false,
+      isMatchPoint: false,
+    },
+    serves: [{ number: 1, outcome: "IN", location: null }],
+    returnOutcome: null,
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
@@ -28,9 +39,10 @@ function point() {
 }
 
 describe("toPointCreate", () => {
-  // #210 hasn't landed, so this is the one place the throw is exercised: drain.test.ts
-  // mocks the whole module to test the engine, not this function's own body.
-  test("throws until the capture model carries the score-context stamps", () => {
+  // The API can't store an unwatched serve or ending yet, so this is the one place the
+  // throw is exercised: drain.test.ts mocks the whole module to test the engine, not
+  // this function's own body.
+  test("throws until the API can store a point with an observation hole", () => {
     expect(() => toPointCreate(point())).toThrow(/cannot be mapped/);
   });
 });

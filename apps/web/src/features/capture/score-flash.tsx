@@ -17,14 +17,15 @@ import { useEffect } from "react";
 
 import { cn } from "@/lib/utils";
 
-import type { CompletedLevel } from "./match-flow";
+/** The biggest thing a point finished, off its own stamps (see point.ts's context). */
+export type FlashLevel = "point" | "game" | "set";
 
 // Matches the animation durations in app.css: the node leaves as its animation ends.
-const FLASH_MS: Record<CompletedLevel, number> = { point: 900, game: 1400, set: 1400 };
+const FLASH_MS: Record<FlashLevel, number> = { point: 900, game: 1400, set: 1400 };
 
-const LABEL: Record<CompletedLevel, string> = { point: "Point", game: "Game", set: "Set" };
+const LABEL: Record<FlashLevel, string> = { point: "Point", game: "Game", set: "Set" };
 
-const SIZE: Record<CompletedLevel, string> = {
+const SIZE: Record<FlashLevel, string> = {
   point: "animate-score-flash gap-2 px-5 py-3 text-lg [&_svg]:size-6",
   game: "animate-score-flash-long gap-3 px-7 py-5 text-2xl [&_svg]:size-8",
   set: "animate-score-flash-long gap-3 px-7 py-5 text-2xl [&_svg]:size-8",
@@ -35,7 +36,7 @@ export function ScoreFlash({
   won,
   onDone,
 }: {
-  level: CompletedLevel;
+  level: FlashLevel;
   won: boolean;
   onDone: () => void;
 }) {

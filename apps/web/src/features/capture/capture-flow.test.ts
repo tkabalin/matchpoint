@@ -6,9 +6,21 @@ import type { CourtSide } from "./point";
 import { Point } from "./point";
 
 const MATCH_ID = "match-1";
-const SERVE_TARGET = "T";
-const AD_TARGET = "WIDE";
 const COURT_ZONE = { half: "DEUCE", depth: "DEEP" } as const;
+
+// Where the point sat in the match. commitDraft only carries it onto the Point; what
+// the nine stamps mean, and how they are computed, is score.test.ts's subject.
+const CONTEXT = {
+  setNumber: 1,
+  gameNumber: 1,
+  inTiebreak: false,
+  isBreakPoint: false,
+  isGamePoint: false,
+  isGameEnd: false,
+  isSetPoint: false,
+  isSetEnd: false,
+  isMatchPoint: false,
+} as const;
 
 /** Starts a tracked-serving point — courtSide defaults to DEUCE. */
 function startTracked(courtSide: CourtSide = "DEUCE") {
@@ -65,13 +77,7 @@ describe("startPoint", () => {
 });
 
 describe("serve — tracked player", () => {
-  test("in → RALLY, target alone is the location — courtSide lives on the draft, not the serve", () => {
-    const state = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
-    expect(state.step).toEqual({ name: "RALLY" });
-    expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: SERVE_TARGET }]);
-  });
-
-  test("in with no target → RALLY — one tap says it landed, not where inside the box", () => {
+  test("in → RALLY — one tap says it landed, not where inside the box", () => {
     const state = transition(startTracked(), { type: "TAP_SERVE_IN" });
     expect(state.step).toEqual({ name: "RALLY" });
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: null }]);
@@ -96,19 +102,12 @@ describe("serve — tracked player", () => {
     expect(state.draft.rallyLengthBucket).toBe("B1");
   });
 
-  test("ace → READY, won by the server, target alone is the location", () => {
-    const state = transition(startTracked(), { type: "TAP_SERVE_ACE", target: AD_TARGET });
+  test("ace → READY, won by the server, and carrying no placement", () => {
+    const state = transition(startTracked(), { type: "TAP_SERVE_ACE" });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.won).toBe(true);
     expect(state.draft.endReason).toBe("ACE");
     expect(state.draft.rallyLengthBucket).toBe("B1");
-    expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: AD_TARGET }]);
-  });
-
-  test("ace with no target → READY — the Ace button carries no placement", () => {
-    const state = transition(startTracked(), { type: "TAP_SERVE_ACE" });
-    expect(state.step).toEqual({ name: "READY" });
-    expect(state.draft.won).toBe(true);
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: null }]);
   });
 });
@@ -120,12 +119,6 @@ describe("serve — opponent", () => {
     expect(state.draft.won).toBe(false);
     expect(state.draft.endReason).toBe("ACE");
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "ACE", location: null }]);
-  });
-
-  test("rejects an ace with a target — opponent serve placement is out of scope", () => {
-    expect(() =>
-      transition(startOpponent(), { type: "TAP_SERVE_ACE", target: SERVE_TARGET }),
-    ).toThrow(/must omit target/);
   });
 
   test("fault on the second serve → READY, DOUBLE_FAULT, won by the tracked player", () => {
@@ -185,7 +178,6 @@ describe("let", () => {
   test("rally let resets the whole point to first serve, clearing serves and history", () => {
     const afterServe = transition(startTracked(), {
       type: "TAP_SERVE_IN",
-      target: SERVE_TARGET,
     });
     const state = transition(afterServe, { type: "TAP_LET" });
     expect(state).toEqual(startTracked());
@@ -194,14 +186,13 @@ describe("let", () => {
   test("rally let preserves courtSide unchanged — the same point, replayed", () => {
     const afterServe = transition(startTracked("AD"), {
       type: "TAP_SERVE_IN",
-      target: AD_TARGET,
     });
     const state = transition(afterServe, { type: "TAP_LET" });
     expect(state.draft.courtSide).toBe("AD");
   });
 
   test("rejects a let from a step other than serve or rally", () => {
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
     const onShotDetail = transition(
       transition(onRally, { type: "TAP_RALLY_LENGTH", bucket: "B2" }),
       { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" },
@@ -242,14 +233,13 @@ describe("note", () => {
 
   test("survives an ordinary step transition", () => {
     const noted = transition(startTracked(), { type: "ADD_NOTE", text: "watch the toss" });
-    const state = transition(noted, { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const state = transition(noted, { type: "TAP_SERVE_IN" });
     expect(state.draft.note).toBe("watch the toss");
   });
 
   test("a rally let discards the note along with the rest of the draft", () => {
     const afterServe = transition(startTracked(), {
       type: "TAP_SERVE_IN",
-      target: SERVE_TARGET,
     });
     const noted = transition(afterServe, { type: "ADD_NOTE", text: "mid-rally note" });
     const state = transition(noted, { type: "TAP_LET" });
@@ -258,7 +248,7 @@ describe("note", () => {
 });
 
 describe("rally screen", () => {
-  const start = () => transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+  const start = () => transition(startTracked(), { type: "TAP_SERVE_IN" });
 
   // A copy-paste bug wiring the same (won, endReason) to more than one button would
   // pass a single-case test — this guards that all four combinations stay distinct.
@@ -298,7 +288,7 @@ describe("rally screen", () => {
     state = transition(state, { type: "TAP_BALL_LOCATION", ballIn: false, location: "NET" });
     state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
 
-    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
     expect(point.wing).toBeNull();
     expect(point.shotType).toBeNull();
     expect(point.ballLocation).toBe("NET");
@@ -346,7 +336,7 @@ describe("rally screen", () => {
 describe("full happy path — serve through commit", () => {
   test("a FORCED win threads through every screen and commits to a valid Point", () => {
     let state: CaptureState = startTracked();
-    state = transition(state, { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    state = transition(state, { type: "TAP_SERVE_IN" });
     state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
     state = transition(state, { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" });
     state = transition(state, { type: "TAP_SHOT_DETAIL", wing: "FOREHAND", shotType: "DRIVE" });
@@ -355,7 +345,7 @@ describe("full happy path — serve through commit", () => {
 
     expect(state.step).toEqual({ name: "READY" });
 
-    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
     expect(point).toBeInstanceOf(Point);
     expect(point.won).toBe(true);
     expect(point.endReason).toBe("FORCED");
@@ -365,19 +355,16 @@ describe("full happy path — serve through commit", () => {
 });
 
 describe("unusual point", () => {
-  test("from the first serve, the serve is recorded as unwatched rather than assumed", () => {
+  test("from the first serve, no serve is recorded rather than one assumed", () => {
     const state = transition(startTracked(), { type: "TAP_UNUSUAL" });
     expect(state.step).toEqual({ name: "UNUSUAL_OUTCOME" });
-    expect(state.draft.serves).toEqual([{ number: 1, outcome: "UNKNOWN", location: null }]);
+    expect(state.draft.serves).toEqual([]);
   });
 
   test("from the second serve, the fault already recorded survives", () => {
     const afterFault = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
     const state = transition(afterFault, { type: "TAP_UNUSUAL" });
-    expect(state.draft.serves).toEqual([
-      { number: 1, outcome: "FAULT", location: "NET" },
-      { number: 2, outcome: "UNKNOWN", location: null },
-    ]);
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "FAULT", location: "NET" }]);
   });
 
   test("a point skipped from the serve commits with its winner and nothing else", () => {
@@ -387,14 +374,14 @@ describe("unusual point", () => {
     state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: null });
     expect(state.step).toEqual({ name: "READY" });
 
-    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
     expect(point.won).toBe(false);
     expect(point.firstServeIn).toBeNull();
     expect(point.rallyLengthBucket).toBeNull();
   });
 
   test("reachable from the rally screen, win/loss is mandatory, reason is optional", () => {
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
     let state = transition(onRally, { type: "TAP_UNUSUAL" });
     expect(state.step).toEqual({ name: "UNUSUAL_OUTCOME" });
 
@@ -411,7 +398,7 @@ describe("unusual point", () => {
   });
 
   test("an unusual point's rally length is never auto-filled, unlike ACE/DOUBLE_FAULT", () => {
-    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
     let state = transition(onRally, { type: "TAP_UNUSUAL" });
     state = transition(state, { type: "TAP_UNUSUAL_OUTCOME", won: true });
     state = transition(state, {
@@ -427,7 +414,7 @@ describe("unusual point", () => {
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.rallyLengthBucket).toBeNull();
 
-    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
     expect(point.rallyLengthBucket).toBeNull();
     expect(point.unusualReason).toBe("POINT_PENALTY");
   });
@@ -435,10 +422,10 @@ describe("unusual point", () => {
 
 describe("undo", () => {
   test("undoes one step back to the exact prior draft", () => {
-    const onRally = transition(
-      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
-      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
-    );
+    const onRally = transition(transition(startTracked(), { type: "TAP_SERVE_IN" }), {
+      type: "TAP_RALLY_LENGTH",
+      bucket: "B2",
+    });
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -453,10 +440,10 @@ describe("undo", () => {
     // RALLY_LENGTH is reachable via shot detail (wing/shotType/ballLocation set) and
     // via the unusual escape hatch (all three still null) — the step name alone
     // can't tell UNDO which draft to restore; only the history stack can.
-    const onRally = transition(
-      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
-      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
-    );
+    const onRally = transition(transition(startTracked(), { type: "TAP_SERVE_IN" }), {
+      type: "TAP_RALLY_LENGTH",
+      bucket: "B2",
+    });
     let viaShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -485,10 +472,10 @@ describe("undo", () => {
   });
 
   test("undoing twice from a two-step-deep history exhausts the stack, lands on ABORTED", () => {
-    const onRally = transition(
-      transition(startTracked(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
-      { type: "TAP_RALLY_LENGTH", bucket: "B2" },
-    );
+    const onRally = transition(transition(startTracked(), { type: "TAP_SERVE_IN" }), {
+      type: "TAP_RALLY_LENGTH",
+      bucket: "B2",
+    });
     const onShotDetail = transition(onRally, {
       type: "TAP_RALLY_OUTCOME",
       won: true,
@@ -506,7 +493,7 @@ describe("commitDraft", () => {
   test("a valid READY draft for each endReason produces a Point that passes Point.create", () => {
     const cases: PointDraft[] = [
       freshDraft("TRACKED", {
-        serves: [{ number: 1, outcome: "IN", location: SERVE_TARGET }],
+        serves: [{ number: 1, outcome: "IN", location: null }],
         won: true,
         endReason: "FORCED",
         wing: "FOREHAND",
@@ -516,7 +503,7 @@ describe("commitDraft", () => {
         rallyLengthBucket: "B2",
       }),
       freshDraft("TRACKED", {
-        serves: [{ number: 1, outcome: "IN", location: SERVE_TARGET }],
+        serves: [{ number: 1, outcome: "IN", location: null }],
         won: false,
         endReason: "MISTAKE",
         wing: "BACKHAND",
@@ -526,7 +513,7 @@ describe("commitDraft", () => {
         rallyLengthBucket: "B1",
       }),
       freshDraft("TRACKED", {
-        serves: [{ number: 1, outcome: "ACE", location: AD_TARGET }],
+        serves: [{ number: 1, outcome: "ACE", location: null }],
         won: true,
         endReason: "ACE",
         rallyLengthBucket: "B1",
@@ -541,7 +528,7 @@ describe("commitDraft", () => {
         rallyLengthBucket: "B1",
       }),
       freshDraft("TRACKED", {
-        serves: [{ number: 1, outcome: "IN", location: SERVE_TARGET }],
+        serves: [{ number: 1, outcome: "IN", location: null }],
         won: false,
         endReason: "UNUSUAL",
         unusualReason: "HINDRANCE",
@@ -551,7 +538,7 @@ describe("commitDraft", () => {
     ];
 
     for (const draft of cases) {
-      expect(() => commitDraft(draft, "point-1", 1_700_000_000_000)).not.toThrow();
+      expect(() => commitDraft(draft, "point-1", 1_700_000_000_000, CONTEXT)).not.toThrow();
     }
   });
 
@@ -562,7 +549,7 @@ describe("commitDraft", () => {
       endReason: "FORCED",
     });
     expect(state.step).toEqual({ name: "READY" });
-    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000);
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
     expect(point.returnOutcome).toBe("WIDE");
     expect(point.won).toBe(false);
     expect(point.endReason).toBe("FORCED");
@@ -571,14 +558,23 @@ describe("commitDraft", () => {
     expect(point.ballLocation).toBeNull();
   });
 
-  test("a broken draft (READY reached with no endReason) throws via Point.create, not silently", () => {
-    const broken = freshDraft("TRACKED", {
-      serves: [{ number: 1, outcome: "IN", location: SERVE_TARGET }],
+  test("an ending nobody saw commits — endReason null is an observation hole, not a break", () => {
+    const unseen = freshDraft("TRACKED", {
+      serves: [{ number: 1, outcome: "IN", location: null }],
       won: true,
-      // endReason left null — transition() should never actually produce this, but
-      // commitDraft must not paper over it if some future bug does.
     });
-    expect(() => commitDraft(broken, "point-1", 1_700_000_000_000)).toThrow();
+    const point = commitDraft(unseen, "point-1", 1_700_000_000_000, CONTEXT);
+    expect(point.endReason).toBeNull();
+    expect(point.won).toBe(true);
+  });
+
+  test("a broken draft (READY reached with no winner) throws via Point.create, not silently", () => {
+    const broken = freshDraft("TRACKED", {
+      serves: [{ number: 1, outcome: "IN", location: null }],
+      // won left null — transition() should never actually produce this, but commitDraft
+      // must not paper over it if some future bug does: a Point is its winner.
+    });
+    expect(() => commitDraft(broken, "point-1", 1_700_000_000_000, CONTEXT)).toThrow();
   });
 });
 
@@ -594,9 +590,9 @@ describe("action validity guards", () => {
   });
 
   test("rejects TAP_SERVE_IN when the opponent is serving — no such tap on that screen", () => {
-    expect(() =>
-      transition(startOpponent(), { type: "TAP_SERVE_IN", target: SERVE_TARGET }),
-    ).toThrow(/not valid on step/);
+    expect(() => transition(startOpponent(), { type: "TAP_SERVE_IN" })).toThrow(
+      /not valid on step/,
+    );
   });
 
   test("rejects TAP_RETURN when the tracked player is serving — no return tap on that screen", () => {

@@ -4,10 +4,21 @@
  * Every point is recorded from the tracked player's point of view: `won` is the tracked
  * player's win/loss and `server` is a role ("TRACKED" | "OPPONENT"), not an id — so unlike
  * the model this replaces, a Point stores no `gameId` or `trackedPlayerId`/`opponentId`;
- * game membership is derived from `sequence` (see `state.ts`), and `server`/`won` alone
- * make a Point self-describing. Construct via `Point.create()`/`Point.fromJSON()`, never
- * `new Point(...)` — `create()` validates shape only (enum membership, nullness pairing by
- * `endReason`), not tennis-logic coherence, which is the capture UI's job once it exists.
+ * game membership is `context`, and `server`/`won` alone make a Point self-describing.
+ * Construct via `Point.create()`/`Point.fromJSON()`, never `new Point(...)`.
+ *
+ * A Point's fields fall in two groups, and the split is the whole point of this model:
+ *
+ * - **Score facts, never null.** `won`, `server`, `courtSide`, `sequence` and `context`.
+ *   A Point is one point the coach vouches for, at minimum its winner, so the score can
+ *   always be folded from it.
+ * - **Observation fields, each nullable.** Null means "not seen" (or not applicable,
+ *   which analytics treat identically). A coach who watched the rally but not the serve
+ *   records `serves: []`; one who saw only who won records every one of them null.
+ *
+ * `create()` validates shape and "if present, must cohere" — a second serve still needs
+ * a faulted first, ACE and DOUBLE_FAULT still need the serves that prove them — never
+ * whether the coach *should* have seen more.
  */
 
 // --- Supporting enums -------------------------------------------------------
@@ -58,18 +69,15 @@ export const WINGS: readonly Wing[] = ["FOREHAND", "BACKHAND"];
 export type ShotType = "DRIVE" | "VOLLEY" | "DROPSHOT" | "LOB";
 export const SHOT_TYPES: readonly ShotType[] = ["DRIVE", "VOLLEY", "DROPSHOT", "LOB"];
 
-// UNKNOWN is a serve nobody recorded, not a fourth thing a serve can do: the coach
-// skipped the point rather than captured it. It exists so serve percentages can
-// exclude those points instead of counting a guess as a real first serve in.
-export type ServeOutcome = "IN" | "FAULT" | "ACE" | "UNKNOWN";
-export const SERVE_OUTCOMES: readonly ServeOutcome[] = ["IN", "FAULT", "ACE", "UNKNOWN"];
+// Three outcomes, not four: a serve nobody watched is absent from `serves` entirely
+// rather than present as an UNKNOWN one. An enum member for "not seen" needed every
+// serve aggregate to remember a filter, and had no backend member to sync to.
+export type ServeOutcome = "IN" | "FAULT" | "ACE";
+export const SERVE_OUTCOMES: readonly ServeOutcome[] = ["IN", "FAULT", "ACE"];
 
 // Shared by Point.courtSide and CourtZone.half — the same two physical sides of the court.
 export type CourtSide = "DEUCE" | "AD";
 export const COURT_SIDES: readonly CourtSide[] = ["DEUCE", "AD"];
-
-export type ServeTarget = "WIDE" | "BODY" | "T";
-export const SERVE_TARGETS: readonly ServeTarget[] = ["WIDE", "BODY", "T"];
 
 export type FailureMode = "NET" | "LONG" | "WIDE";
 export const FAILURE_MODES: readonly FailureMode[] = ["NET", "LONG", "WIDE"];
@@ -104,25 +112,50 @@ export interface CourtZone {
 export interface ServeAttempt {
   number: 1 | 2;
   outcome: ServeOutcome;
-  // Three zones, not raw coordinates — a coach watching live cannot place a
-  // coordinate reliably, and wide/body/T is how coaches already think about serve
-  // targets. Non-null only for the tracked player's own serve: a FailureMode when it
-  // faulted (why it missed), and optionally a ServeTarget when it went in or aced —
-  // null there means placement wasn't captured, which is what the one-tap capture
-  // screen records: that the ball landed in the box, not where inside it.
-  // Always null for an UNKNOWN serve, which by definition has nothing to place, and
-  // for an OPPONENT serve — placement there is out of scope. Which
-  // physical side (deuce/ad) the serve came from is Point.courtSide, not part of
-  // this — that fact belongs to the whole point, not just the tracked player's serve.
-  location: ServeTarget | FailureMode | null;
+  // Why a faulted serve missed, and null for anything that landed. The serve screen
+  // taps the box `Point.courtSide` already fixes, so a serve that went in records that
+  // it landed, never where inside the box (wide/body/T is out of scope on both sides
+  // of the wire). Always null for an OPPONENT serve — placement there isn't captured.
+  location: FailureMode | null;
 }
+
+/**
+ * Where a point sat in the match when it was played — the nine facts analytics group
+ * by, computed once at commit by probing the score fold (see `score.ts`'s `contextFor`)
+ * and then frozen. Stored rather than re-derived because the fold's own history can
+ * move under a point: a later score checkpoint corrects the scoreboard without
+ * rewriting what the board said when this point was actually played.
+ */
+export interface PointContext {
+  setNumber: number;
+  // 1-indexed within its set. A breaker is a game number of its own, the same way
+  // service rotation treats it as one game slot.
+  gameNumber: number;
+  inTiebreak: boolean;
+  // True when the *receiver* winning this point would end the game, and its mirror for
+  // the server. Both are true at no-ad deuce, where either side ends it.
+  isBreakPoint: boolean;
+  isGamePoint: boolean;
+  isGameEnd: boolean;
+  // True when either side winning would end the set (or the match) — a set point is a
+  // set point for whoever it belongs to.
+  isSetPoint: boolean;
+  isSetEnd: boolean;
+  isMatchPoint: boolean;
+}
+
+const CONTEXT_FLAGS = [
+  "inTiebreak",
+  "isBreakPoint",
+  "isGamePoint",
+  "isGameEnd",
+  "isSetPoint",
+  "isSetEnd",
+  "isMatchPoint",
+] as const;
 
 function isCourtSide(value: unknown): value is CourtSide {
   return COURT_SIDES.includes(value as CourtSide);
-}
-
-function isServeTarget(value: unknown): value is ServeTarget {
-  return SERVE_TARGETS.includes(value as ServeTarget);
 }
 
 function isFailureMode(value: unknown): value is FailureMode {
@@ -142,7 +175,40 @@ function isServeAttempt(value: unknown): value is ServeAttempt {
   const data = value as Record<string, unknown>;
   if (data.number !== 1 && data.number !== 2) return false;
   if (!SERVE_OUTCOMES.includes(data.outcome as ServeOutcome)) return false;
-  return data.location === null || isServeTarget(data.location) || isFailureMode(data.location);
+  return data.location === null || isFailureMode(data.location);
+}
+
+function positiveInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value > 0;
+}
+
+function parseContext(value: unknown): PointContext {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("point context must be an object");
+  }
+  const data = value as Record<string, unknown>;
+  if (!positiveInteger(data.setNumber)) {
+    throw new Error("context.setNumber must be a positive integer");
+  }
+  if (!positiveInteger(data.gameNumber)) {
+    throw new Error("context.gameNumber must be a positive integer");
+  }
+  for (const flag of CONTEXT_FLAGS) {
+    if (typeof data[flag] !== "boolean") {
+      throw new Error(`context.${flag} must be a boolean`);
+    }
+  }
+  return {
+    setNumber: data.setNumber as number,
+    gameNumber: data.gameNumber as number,
+    inTiebreak: data.inTiebreak as boolean,
+    isBreakPoint: data.isBreakPoint as boolean,
+    isGamePoint: data.isGamePoint as boolean,
+    isGameEnd: data.isGameEnd as boolean,
+    isSetPoint: data.isSetPoint as boolean,
+    isSetEnd: data.isSetEnd as boolean,
+    isMatchPoint: data.isMatchPoint as boolean,
+  };
 }
 
 // Plain objects with only primitive fields, so a shallow spread is a full deep copy.
@@ -153,8 +219,8 @@ function copyLocation<T extends CourtZone | FailureMode | null>(location: T): T 
 }
 
 // No copyLocation call needed here, unlike ballLocation below — a ServeAttempt's
-// location is always a primitive (ServeTarget/FailureMode string, or null), never an
-// object, so there's nothing for a caller to mutate through a shared reference.
+// location is always a primitive (FailureMode string, or null), never an object, so
+// there's nothing for a caller to mutate through a shared reference.
 function copyServeAttempt(attempt: ServeAttempt): ServeAttempt {
   return {
     number: attempt.number,
@@ -169,20 +235,23 @@ export class Point {
   readonly id: string;
   readonly matchId: string;
   readonly timestamp: number;
-  // Ordering within the match; scoring (state.ts) replays points in this order.
+  // Ordering within the match; the score fold (score.ts) replays events in this order.
   readonly sequence: number;
   readonly server: Server;
   // Which physical side of the court this point was played from — shared by both
-  // players regardless of who serves, unlike ServeAttempt.location's target (see its
-  // own comment). See CourtSide's own comment.
+  // players regardless of who serves. See CourtSide's own comment.
   readonly courtSide: CourtSide;
-  // Length 1 or 2 — length 2 implies a first-serve fault. Both faulted implies
-  // endReason DOUBLE_FAULT.
-  readonly serves: readonly ServeAttempt[];
-  // Only set when server is OPPONENT.
-  readonly returnOutcome: ReturnOutcome | null;
   readonly won: boolean;
-  readonly endReason: EndReason;
+  readonly context: PointContext;
+  // Length 0, 1 or 2. Empty is a serve nobody watched, a lone fault is a second serve
+  // nobody watched, and both faulted implies endReason DOUBLE_FAULT.
+  readonly serves: readonly ServeAttempt[];
+  // Only set when server is OPPONENT, and only when a serve was observed — reaching
+  // for "where did the return go" already implies the serve was in.
+  readonly returnOutcome: ReturnOutcome | null;
+  // Null when the coach didn't see how the point ended. Every field below that
+  // describes the ending is then null too.
+  readonly endReason: EndReason | null;
   // Unusual points only — null otherwise, and optional even on one.
   readonly unusualReason: UnusualReason | null;
   readonly unusualNote: string | null;
@@ -213,10 +282,11 @@ export class Point {
     sequence: number;
     server: Server;
     courtSide: CourtSide;
+    won: boolean;
+    context: PointContext;
     serves: readonly ServeAttempt[];
     returnOutcome: ReturnOutcome | null;
-    won: boolean;
-    endReason: EndReason;
+    endReason: EndReason | null;
     unusualReason: UnusualReason | null;
     unusualNote: string | null;
     note: string | null;
@@ -232,9 +302,10 @@ export class Point {
     this.sequence = fields.sequence;
     this.server = fields.server;
     this.courtSide = fields.courtSide;
+    this.won = fields.won;
+    this.context = fields.context;
     this.serves = fields.serves;
     this.returnOutcome = fields.returnOutcome;
-    this.won = fields.won;
     this.endReason = fields.endReason;
     this.unusualReason = fields.unusualReason;
     this.unusualNote = fields.unusualNote;
@@ -278,8 +349,16 @@ export class Point {
     }
     const courtSide = data.courtSide as CourtSide;
 
-    if (!Array.isArray(data.serves) || (data.serves.length !== 1 && data.serves.length !== 2)) {
-      throw new Error("serves must be an array of length 1 or 2");
+    if (typeof data.won !== "boolean") {
+      throw new Error("won must be a boolean");
+    }
+    const context = parseContext(data.context);
+
+    // Length 0 is a serve nobody watched — the one observation hole that isn't a
+    // truncation of the flow's own order (a coach can miss the serve and still see
+    // the rally it started).
+    if (!Array.isArray(data.serves) || data.serves.length > 2) {
+      throw new Error("serves must be an array of length 0, 1 or 2");
     }
     const serves: ServeAttempt[] = (data.serves as unknown[]).map((raw, index) => {
       if (!isServeAttempt(raw)) {
@@ -292,52 +371,46 @@ export class Point {
         if (raw.location !== null) {
           throw new Error(`serves[${index}].location must be null when server is OPPONENT`);
         }
-      } else if (raw.outcome === "UNKNOWN") {
-        if (raw.location !== null) {
-          throw new Error(`serves[${index}].location must be null when outcome is UNKNOWN`);
-        }
       } else if (raw.outcome === "FAULT") {
         if (!isFailureMode(raw.location)) {
           throw new Error(`serves[${index}].location must be a FailureMode when outcome is FAULT`);
         }
-      } else if (raw.location !== null && !isServeTarget(raw.location)) {
-        throw new Error(
-          `serves[${index}].location must be a ServeTarget or null when outcome is ${raw.outcome}`,
-        );
+      } else if (raw.location !== null) {
+        throw new Error(`serves[${index}].location must be null when outcome is ${raw.outcome}`);
       }
       return copyServeAttempt(raw);
     });
 
-    // A faulted first serve always demands a second attempt, and a second attempt only
-    // ever follows one — the two conditions are enforced in both directions.
-    if (serves[0]?.outcome === "FAULT" && serves.length !== 2) {
-      throw new Error("a faulted first serve must be followed by a second serve attempt");
-    }
+    // A second attempt only ever follows a faulted first. The reverse no longer holds:
+    // a lone faulted serve is a coach who watched the fault and then missed what the
+    // second serve did, which is an observation hole like any other.
     if (serves.length === 2 && serves[0]?.outcome !== "FAULT") {
       throw new Error("a second serve attempt requires the first serve to have faulted");
     }
     const bothFaulted =
       serves.length === 2 && serves[0]?.outcome === "FAULT" && serves[1]?.outcome === "FAULT";
+    const acedServe = serves[serves.length - 1]?.outcome === "ACE";
 
     let returnOutcome: ReturnOutcome | null = null;
-    if (server === "TRACKED") {
-      if (data.returnOutcome !== null && data.returnOutcome !== undefined) {
+    if (data.returnOutcome !== null && data.returnOutcome !== undefined) {
+      if (server === "TRACKED") {
         throw new Error("returnOutcome must be null when server is TRACKED");
       }
-    } else if (data.returnOutcome !== null && data.returnOutcome !== undefined) {
       if (!RETURN_OUTCOMES.includes(data.returnOutcome as ReturnOutcome)) {
         throw new Error(`invalid returnOutcome: ${String(data.returnOutcome)}`);
+      }
+      // The return is a fact about a serve that landed, so it can't outlive one that
+      // was never watched.
+      if (serves.length === 0) {
+        throw new Error("returnOutcome requires an observed serve");
       }
       returnOutcome = data.returnOutcome as ReturnOutcome;
     }
 
-    if (typeof data.won !== "boolean") {
-      throw new Error("won must be a boolean");
-    }
-    if (!END_REASONS.includes(data.endReason as EndReason)) {
+    if (data.endReason !== null && !END_REASONS.includes(data.endReason as EndReason)) {
       throw new Error(`invalid endReason: ${String(data.endReason)}`);
     }
-    const endReason = data.endReason as EndReason;
+    const endReason = data.endReason as EndReason | null;
 
     if (bothFaulted && endReason !== "DOUBLE_FAULT") {
       throw new Error("a point with both serves faulted must have endReason DOUBLE_FAULT");
@@ -345,12 +418,11 @@ export class Point {
     if (endReason === "DOUBLE_FAULT" && !bothFaulted) {
       throw new Error("endReason DOUBLE_FAULT requires both serves to have faulted");
     }
-
-    // A serve nobody saw can only belong to a point nobody saw the end of either.
-    // Nothing structural is needed to keep UNKNOWN last: the second-attempt rule above
-    // already rejects anything following it.
-    if (serves.some((serve) => serve.outcome === "UNKNOWN") && endReason !== "UNUSUAL") {
-      throw new Error("a point with an unrecorded serve must have endReason UNUSUAL");
+    if (acedServe && endReason !== "ACE") {
+      throw new Error("a point whose serve was an ace must have endReason ACE");
+    }
+    if (endReason === "ACE" && !acedServe) {
+      throw new Error("endReason ACE requires a serve recorded as an ace");
     }
 
     if (
@@ -387,9 +459,11 @@ export class Point {
 
     // ACE/DOUBLE_FAULT/UNUSUAL never had a shot to describe. A missed return did have
     // contact, but returnOutcome already says where it went — asking wing/shotType/
-    // ballLocation again would just recapture the same fact under a second name.
+    // ballLocation again would just recapture the same fact under a second name. An
+    // unseen ending (endReason null) has nothing to describe either.
     const isReturnError = returnOutcome !== null && returnOutcome !== "IN";
     const noContact =
+      endReason === null ||
       endReason === "ACE" ||
       endReason === "DOUBLE_FAULT" ||
       endReason === "UNUSUAL" ||
@@ -398,7 +472,7 @@ export class Point {
     if (noContact) {
       if (data.wing !== null || data.shotType !== null) {
         throw new Error(
-          "wing and shotType must be null for ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
+          "wing and shotType must be null for unseen, ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
         );
       }
     } else {
@@ -420,11 +494,17 @@ export class Point {
     if (noContact) {
       if (data.ballIn !== null || data.ballLocation !== null) {
         throw new Error(
-          "ballIn and ballLocation must be null for ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
+          "ballIn and ballLocation must be null for unseen, ACE, DOUBLE_FAULT, UNUSUAL, and return-error points",
         );
       }
+    } else if (data.ballIn === null) {
+      // The coach saw the point end but not where the ball finished — the two travel
+      // together, so neither is recorded.
+      if (data.ballLocation !== null) {
+        throw new Error("ballLocation must be null when ballIn is null");
+      }
     } else if (typeof data.ballIn !== "boolean") {
-      throw new Error("ballIn must be a boolean for FORCED and MISTAKE points");
+      throw new Error("ballIn must be a boolean or null for FORCED and MISTAKE points");
     } else if (data.ballIn) {
       if (!isCourtZone(data.ballLocation)) {
         throw new Error("ballLocation must be a CourtZone when ballIn is true");
@@ -450,9 +530,10 @@ export class Point {
       sequence: data.sequence,
       server,
       courtSide,
+      won: data.won,
+      context,
       serves,
       returnOutcome,
-      won: data.won,
       endReason,
       unusualReason,
       unusualNote,
@@ -477,12 +558,13 @@ export class Point {
       sequence: this.sequence,
       server: this.server,
       courtSide: this.courtSide,
+      won: this.won,
+      context: { ...this.context },
       // Deep-copied, not the live array: each ServeAttempt is its own object, so a
       // shallow spread of the array alone would let a caller mutate this Point
       // through the objects it still shares.
       serves: this.serves.map(copyServeAttempt),
       returnOutcome: this.returnOutcome,
-      won: this.won,
       endReason: this.endReason,
       unusualReason: this.unusualReason,
       unusualNote: this.unusualNote,
@@ -500,11 +582,14 @@ export class Point {
     return this.won ? "TRACKED" : "OPPONENT";
   }
 
-  /** Derived, not stored — null when the first serve was never recorded, which is not
-   * the same as it having missed. Serve percentages must drop those, not count them. */
+  /** Derived, not stored — null when no serve was recorded, which is not the same as
+   * one having missed. Serve percentages must drop those, not count them. Read off the
+   * first attempt's own outcome, since a lone attempt may itself be a fault whose
+   * second serve went unwatched. */
   get firstServeIn(): boolean | null {
-    if (this.serves[0]?.outcome === "UNKNOWN") return null;
-    return this.serves.length === 1;
+    const first = this.serves[0];
+    if (first === undefined) return null;
+    return first.outcome !== "FAULT";
   }
 
   get isAce(): boolean {

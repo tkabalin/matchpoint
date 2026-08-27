@@ -4,8 +4,9 @@ import { expect, test, vi } from "vitest";
 
 import { Match } from "./match";
 import { MatchHeader } from "./match-header";
-import { Point } from "./point";
 import type { Server } from "./point";
+import { applyPoint, initialBoard } from "./score";
+import type { Scoreboard } from "./score";
 
 const TRACKED_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
@@ -23,44 +24,22 @@ const match = Match.create({
   outcomeOverride: null,
 });
 
-let nextSequence = 0;
-
-function pointWonBy(winner: string) {
-  const sequence = nextSequence;
-  nextSequence += 1;
-  return Point.create({
-    id: `point-${String(sequence)}`,
-    matchId: MATCH_ID,
-    timestamp: 1_700_000_000_000 + sequence,
-    sequence,
-    server: "TRACKED",
-    courtSide: "DEUCE",
-    serves: [{ number: 1, outcome: "IN", location: null }],
-    returnOutcome: null,
-    won: winner === TRACKED_ID,
-    endReason: "FORCED",
-    unusualReason: null,
-    unusualNote: null,
-    note: null,
-    wing: "FOREHAND",
-    shotType: "DRIVE",
-    ballIn: true,
-    ballLocation: { half: "DEUCE", depth: "DEEP" },
-    rallyLengthBucket: null,
-  });
+/** A board with the given run of points already folded into it. */
+function boardWith(wins: boolean[]): Scoreboard {
+  return wins.reduce((board, won) => applyPoint(match, board, won), initialBoard(match));
 }
 
-function renderHeader(options: { points?: Point[]; server?: Server } = {}) {
+function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
   const handlers = {
     onBack: vi.fn(),
     onSkipPoint: vi.fn(),
-    onSkipAhead: vi.fn(),
+    onEditScore: vi.fn(),
     onAddNote: vi.fn(),
   };
   render(
     <MatchHeader
       match={match}
-      points={options.points ?? []}
+      board={options.board ?? initialBoard(match)}
       server={options.server ?? "TRACKED"}
       trackedPlayerName="Rivera"
       opponentName="Okoye"
@@ -78,10 +57,9 @@ test("marks the server of the point being captured", () => {
   expect(within(score).getByRole("rowheader", { name: "Okoye, serving" })).toBeVisible();
 });
 
-test("shows the live game score from the recorded points", () => {
+test("shows the live game score from the folded board", () => {
   // Two points to the tracked player, one to the opponent: 0-0 games, 30-15.
-  const points = [pointWonBy(TRACKED_ID), pointWonBy(TRACKED_ID), pointWonBy(OPPONENT_ID)];
-  renderHeader({ points });
+  renderHeader({ board: boardWith([true, true, false]) });
 
   const score = screen.getByRole("table", { name: "Score" });
   expect(within(score).getByText("30")).toBeVisible();
@@ -97,8 +75,7 @@ test("sizes the score for the whole match before a point is played", () => {
 });
 
 test("keeps that width once sets have been played", () => {
-  const points = [pointWonBy(TRACKED_ID), pointWonBy(OPPONENT_ID)];
-  renderHeader({ points });
+  renderHeader({ board: boardWith([true, false]) });
 
   const score = screen.getByRole("table", { name: "Score" });
   expect(within(score).getAllByRole("cell")).toHaveLength(8);
@@ -109,13 +86,13 @@ test("back greys out where there is nothing behind, rather than vanishing", asyn
   render(
     <MatchHeader
       match={match}
-      points={[]}
+      board={initialBoard(match)}
       server="TRACKED"
       trackedPlayerName="Rivera"
       opponentName="Okoye"
       onBack={null}
       onSkipPoint={vi.fn()}
-      onSkipAhead={vi.fn()}
+      onEditScore={vi.fn()}
       onAddNote={vi.fn()}
     />,
   );
@@ -137,7 +114,7 @@ test("back steps the capture flow back", async () => {
 });
 
 test("tapping skip asks who won before recording the point", async () => {
-  const { onSkipPoint, onSkipAhead, user } = renderHeader();
+  const { onSkipPoint, onEditScore, user } = renderHeader();
 
   await user.click(screen.getByRole("button", { name: "Skip point" }));
 
@@ -147,7 +124,7 @@ test("tapping skip asks who won before recording the point", async () => {
   await user.click(screen.getByRole("button", { name: /Win/ }));
 
   expect(onSkipPoint).toHaveBeenCalledWith(true);
-  expect(onSkipAhead).not.toHaveBeenCalled();
+  expect(onEditScore).not.toHaveBeenCalled();
 });
 
 test("the skipped point can go to the opponent", async () => {
@@ -159,37 +136,58 @@ test("the skipped point can go to the opponent", async () => {
   expect(onSkipPoint).toHaveBeenCalledWith(false);
 });
 
-test("holding skip opens skip ahead instead of skipping the point", async () => {
-  const { onSkipPoint, onSkipAhead, user } = renderHeader();
+test("holding skip opens the score editor instead of skipping the point", async () => {
+  const { onSkipPoint, onEditScore, user } = renderHeader();
   const skip = screen.getByRole("button", { name: "Skip point" });
 
-  // The button stays held past HOLD_MS before it's released: onSkipAhead only fires
+  // The button stays held past HOLD_MS before it's released: onEditScore only fires
   // on the release, not mid-hold (see match-header.tsx's onClick comment for why).
   await user.pointer({ keys: "[MouseLeft>]", target: skip });
   await new Promise((resolve) => setTimeout(resolve, 500));
-  expect(onSkipAhead).not.toHaveBeenCalled();
+  expect(onEditScore).not.toHaveBeenCalled();
   await user.pointer({ keys: "[/MouseLeft]", target: skip });
 
-  expect(onSkipAhead).toHaveBeenCalledTimes(1);
+  expect(onEditScore).toHaveBeenCalledTimes(1);
   expect(onSkipPoint).not.toHaveBeenCalled();
 });
 
 test("a long-press's swallowed click doesn't leave a keyboard activation stuck", async () => {
-  const { onSkipPoint, onSkipAhead, user } = renderHeader();
+  const { onSkipPoint, onEditScore, user } = renderHeader();
   const skip = screen.getByRole("button", { name: "Skip point" });
 
   // The sheet a long-press opens swallows the click the release would have produced,
   // so nothing consumes the hold flag. A later tap resets it on its own pointerdown;
   // a keyboard activation has no pointerdown, so it was the one left stuck.
   await user.pointer({ keys: "[MouseRight]", target: skip });
-  expect(onSkipAhead).toHaveBeenCalledTimes(1);
+  expect(onEditScore).toHaveBeenCalledTimes(1);
 
   skip.focus();
   await user.keyboard("{Enter}");
 
   expect(screen.getByRole("heading", { name: "Who won the point?" })).toBeVisible();
   expect(onSkipPoint).not.toHaveBeenCalled();
-  expect(onSkipAhead).toHaveBeenCalledTimes(1);
+  expect(onEditScore).toHaveBeenCalledTimes(1);
+});
+
+test("tapping the score opens the editor — the most discoverable way in", async () => {
+  const { onEditScore, user } = renderHeader();
+
+  await user.click(screen.getByRole("button", { name: "Edit score" }));
+
+  expect(onEditScore).toHaveBeenCalledTimes(1);
+});
+
+test("a set the coach declared rather than watched says so", () => {
+  const fresh = boardWith([]);
+  const declared =
+    fresh.currentSet === null
+      ? fresh
+      : { ...fresh, currentSet: { ...fresh.currentSet, slotsPlayed: 4, slotsObserved: 0 } };
+  renderHeader({ board: declared });
+
+  // One per player row: the column belongs to both of them.
+  const score = screen.getByRole("table", { name: "Score" });
+  expect(within(score).getAllByText("(not fully recorded)")).toHaveLength(2);
 });
 
 test("tapping the note button opens the text sheet where the browser can't transcribe, and adds the note", async () => {

@@ -38,7 +38,7 @@ function otherSide(side: CourtSide): CourtSide {
 }
 
 // How the status line names the fault the coach just tapped. Only meaningful on a
-// faulted attempt: "WIDE" is a ServeTarget as well as a FailureMode.
+// faulted attempt: "WIDE" is where the serve missed, not where it was aimed.
 function faultReason(location: ServeAttempt["location"]): string {
   if (location === "LONG") return "long";
   if (location === "NET") return "into net";

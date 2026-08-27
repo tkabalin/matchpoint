@@ -9,18 +9,25 @@
  * win/loss from the tracked player's side, with no reason. `reason` is carried and
  * checked anyway, so a future field to hold it costs no re-plumbing here — see
  * docs/database-changes-needed.md.
+ *
+ * "completed" is a reason alongside the three that end a match early: a match won on
+ * set count is finished explicitly by the coach (see live-match.tsx), and until that
+ * row is sent the match stays in progress server-side.
  */
 
 import type { MatchUpdate } from "@matchpoint/api-client";
 
 import { MATCH_END_REASONS, type MatchEndReason } from "@/features/capture/match";
 
+export type MatchOutcomeReason = MatchEndReason | "completed";
+const OUTCOME_REASONS: readonly MatchOutcomeReason[] = [...MATCH_END_REASONS, "completed"];
+
 export function toMatchOutcomeUpdate(payload: unknown): MatchUpdate {
   if (typeof payload !== "object" || payload === null) {
     throw new Error("match outcome payload must be an object");
   }
   const { reason, trackedPlayerWon } = payload as Record<string, unknown>;
-  if (!MATCH_END_REASONS.includes(reason as MatchEndReason)) {
+  if (!OUTCOME_REASONS.includes(reason as MatchOutcomeReason)) {
     throw new Error(`invalid match outcome reason: ${String(reason)}`);
   }
   if (typeof trackedPlayerWon !== "boolean") {
