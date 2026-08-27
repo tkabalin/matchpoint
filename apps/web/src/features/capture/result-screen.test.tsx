@@ -43,6 +43,7 @@ function pointWonBy(winner: string) {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: "FOREHAND",
     shotType: "DRIVE",
     ballIn: true,

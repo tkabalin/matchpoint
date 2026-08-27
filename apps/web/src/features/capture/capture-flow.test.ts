@@ -36,6 +36,7 @@ function freshDraft(
     endReason: null,
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: null,
@@ -206,6 +207,53 @@ describe("let", () => {
       { type: "TAP_RALLY_OUTCOME", won: true, endReason: "FORCED" },
     );
     expect(() => transition(onShotDetail, { type: "TAP_LET" })).toThrow(/not valid on step/);
+  });
+});
+
+describe("note", () => {
+  test("adds a note to the draft without advancing the step", () => {
+    const start = startTracked();
+    const state = transition(start, { type: "ADD_NOTE", text: "double bounce, let it go" });
+    expect(state.step).toEqual(start.step);
+    expect(state.draft.note).toBe("double bounce, let it go");
+  });
+
+  test("doesn't push onto history — an undo skips straight past it", () => {
+    const start = startTracked();
+    const noted = transition(start, { type: "ADD_NOTE", text: "first note" });
+    expect(noted.history).toEqual(start.history);
+  });
+
+  test("a second note appends onto a new line rather than overwriting the first", () => {
+    const once = transition(startTracked(), { type: "ADD_NOTE", text: "first note" });
+    const twice = transition(once, { type: "ADD_NOTE", text: "second note" });
+    expect(twice.draft.note).toBe("first note\nsecond note");
+  });
+
+  test("blank or whitespace-only text is a no-op — no empty note recorded", () => {
+    const state = transition(startTracked(), { type: "ADD_NOTE", text: "   " });
+    expect(state.draft.note).toBeNull();
+  });
+
+  test("trims surrounding whitespace off a real note", () => {
+    const state = transition(startTracked(), { type: "ADD_NOTE", text: "  spacing  " });
+    expect(state.draft.note).toBe("spacing");
+  });
+
+  test("survives an ordinary step transition", () => {
+    const noted = transition(startTracked(), { type: "ADD_NOTE", text: "watch the toss" });
+    const state = transition(noted, { type: "TAP_SERVE_IN", target: SERVE_TARGET });
+    expect(state.draft.note).toBe("watch the toss");
+  });
+
+  test("a rally let discards the note along with the rest of the draft", () => {
+    const afterServe = transition(startTracked(), {
+      type: "TAP_SERVE_IN",
+      target: SERVE_TARGET,
+    });
+    const noted = transition(afterServe, { type: "ADD_NOTE", text: "mid-rally note" });
+    const state = transition(noted, { type: "TAP_LET" });
+    expect(state.draft.note).toBeNull();
   });
 });
 

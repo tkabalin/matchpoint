@@ -56,6 +56,9 @@ export interface PointDraft {
   endReason: EndReason | null;
   unusualReason: UnusualReason | null;
   unusualNote: string | null;
+  // A coach note, added any time during the point via ADD_NOTE — see its own comment
+  // in transition() for why it isn't gated to a particular step.
+  note: string | null;
   wing: Wing | null;
   shotType: ShotType | null;
   ballIn: boolean | null;
@@ -80,6 +83,7 @@ function freshDraft(
     endReason: null,
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: null,
@@ -167,6 +171,9 @@ export type CaptureAction =
   | { type: "TAP_SHOT_DETAIL"; wing: Wing; shotType: ShotType }
   | { type: "TAP_BALL_LOCATION"; ballIn: boolean; location: CourtZone | FailureMode }
   | { type: "TAP_RALLY_LENGTH"; bucket: RallyBucket | null }
+  // The header's note button — valid on every step, since a note is a supplementary
+  // annotation, not part of the tennis flow it's layered over.
+  | { type: "ADD_NOTE"; text: string }
   | { type: "UNDO" };
 
 function invalidAction(action: CaptureAction, step: CaptureStep): Error {
@@ -176,6 +183,14 @@ function invalidAction(action: CaptureAction, step: CaptureStep): Error {
 /** Appends a ServeAttempt for the given serve number, growing draft.serves by one. */
 function withServe(draft: PointDraft, attempt: ServeAttempt): PointDraft {
   return { ...draft, serves: [...draft.serves, attempt] };
+}
+
+// A second note on the same point lands on a new line rather than overwriting the
+// first — see ADD_NOTE's own comment on why this stays a plain string, not a list.
+function appendNote(existing: string | null, text: string): string | null {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return existing;
+  return existing === null ? trimmed : `${existing}\n${trimmed}`;
 }
 
 // Where the RALLY step sends the draft once both taps are in — shared by the two
@@ -227,6 +242,16 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       return { step: { name: "ABORTED" }, draft, history: [] };
     }
     return { ...previous, history: history.slice(0, -1) };
+  }
+
+  // Valid on every step, unlike TAP_LET/TAP_UNUSUAL below: a note isn't a scoring
+  // action, so there's no "wrong step" to reject it from. Doesn't advance the step
+  // or push onto history — an undo shouldn't have to walk back through note-taking
+  // to reach real capture progress, and a note about a discarded rally is rightly
+  // discarded with the rest of the draft on TAP_LET/UNDO-to-ABORTED, same as every
+  // other field here.
+  if (action.type === "ADD_NOTE") {
+    return { ...state, draft: { ...draft, note: appendNote(draft.note, action.text) } };
   }
 
   // TAP_LET is context-sensitive by origin step, not by a field on the action itself.

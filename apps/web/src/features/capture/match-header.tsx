@@ -19,6 +19,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
+import { NoteButton } from "./note-button";
 import type { Point, Server } from "./point";
 import { matchSetsFor, maxSetsFor, scoreboardFor } from "./state";
 
@@ -66,6 +67,7 @@ export function MatchHeader({
   onBack,
   onSkipPoint,
   onSkipAhead,
+  onAddNote,
 }: {
   match: Match;
   points: readonly Point[];
@@ -79,6 +81,7 @@ export function MatchHeader({
   onBack: (() => void) | null;
   onSkipPoint: (won: boolean) => void;
   onSkipAhead: () => void;
+  onAddNote: (text: string) => void;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -183,35 +186,39 @@ export function MatchHeader({
         </table>
       </div>
 
-      <Button
-        variant="ghost"
-        size="icon"
-        aria-label="Skip point"
-        onPointerDown={startHold}
-        onPointerUp={cancelHold}
-        onPointerLeave={cancelHold}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          cancelHold();
-          holdFired.current = true;
-          onSkipAhead();
-        }}
-        onClick={() => {
-          // Opening skip-ahead waits for this click rather than firing straight out of
-          // the hold timer: a still-held mouse button has no element under it yet to
-          // dismiss, so the sheet's own outside-press handling can't catch its own
-          // trigger click and close what it just opened. A keyboard activation never
-          // starts a hold, so it always lands here as a plain tap.
-          if (holdFired.current) {
-            holdFired.current = false;
+      <div className="flex items-center gap-1">
+        <NoteButton onAddNote={onAddNote} />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Skip point"
+          onPointerDown={startHold}
+          onPointerUp={cancelHold}
+          onPointerLeave={cancelHold}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            cancelHold();
+            holdFired.current = true;
             onSkipAhead();
-            return;
-          }
-          setAskingWinner(true);
-        }}
-      >
-        <SkipForward className="size-5" />
-      </Button>
+          }}
+          onClick={() => {
+            // Opening skip-ahead waits for this click rather than firing straight out
+            // of the hold timer: a still-held mouse button has no element under it yet
+            // to dismiss, so the sheet's own outside-press handling can't catch its own
+            // trigger click and close what it just opened. A keyboard activation never
+            // starts a hold, so it always lands here as a plain tap.
+            if (holdFired.current) {
+              holdFired.current = false;
+              onSkipAhead();
+              return;
+            }
+            setAskingWinner(true);
+          }}
+        >
+          <SkipForward className="size-5" />
+        </Button>
+      </div>
 
       <Sheet open={askingWinner} onOpenChange={setAskingWinner}>
         <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">

@@ -37,8 +37,10 @@ vi.mock("./point-payload", () => ({
     won: point.won,
     end_reason: "ace",
     serve1_outcome: "ace",
-    // #175's note is a general coach note the capture model does not carry yet;
-    // unusualNote is the prose it does have, and prose is what sizes a batch.
+    // The capture model now carries point.note (#175's general coach note, see
+    // note-button.tsx) alongside unusualNote, but which one the real toPointCreate
+    // sends is still blocked on #210 — this stand-in keeps using unusualNote, since
+    // that's the field the byte-bound test below actually sizes its batch against.
     note: point.unusualNote,
   }),
 }));
@@ -100,6 +102,7 @@ function pointEntry(
       endReason: "ACE",
       unusualReason: null,
       unusualNote: null,
+      note: null,
       wing: null,
       shotType: null,
       ballIn: null,

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { Point } from "./point";
+import { NOTE_MAX_LENGTH, Point } from "./point";
 
 // wing/shotType/ballIn/ballLocation must all be null on ACE/DOUBLE_FAULT/UNUSUAL points and
 // on return-error points — spread this into pointData()'s overrides for any test building one.
@@ -21,6 +21,7 @@ function pointData(overrides: Record<string, unknown> = {}) {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: true,
@@ -359,6 +360,26 @@ describe("Point.create structural validation", () => {
           }),
         ),
       ).toThrow(/unusualReason/);
+    });
+  });
+
+  describe("note", () => {
+    test("defaults to null", () => {
+      expect(Point.create(pointData()).note).toBeNull();
+    });
+
+    test("accepts a coach note on an ordinary (non-UNUSUAL) point", () => {
+      const point = Point.create(pointData({ note: "favoring the backhand today" }));
+      expect(point.note).toBe("favoring the backhand today");
+    });
+
+    test("rejects an empty string — null is how 'no note' is spelled", () => {
+      expect(() => Point.create(pointData({ note: "" }))).toThrow(/note/);
+    });
+
+    test("truncates a note past what the API accepts rather than losing the point", () => {
+      const point = Point.create(pointData({ note: "a".repeat(NOTE_MAX_LENGTH + 500) }));
+      expect(point.note).toBe("a".repeat(NOTE_MAX_LENGTH));
     });
   });
 

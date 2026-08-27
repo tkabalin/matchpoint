@@ -37,6 +37,7 @@ function pointWonBy(matchId: string, winner: string, sequence?: number) {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: true,

@@ -88,6 +88,11 @@ export const COURT_DEPTHS: readonly CourtDepth[] = ["SHORT", "DEEP"];
 export type RallyBucket = "B1" | "B2" | "B3" | "B4";
 export const RALLY_BUCKETS: readonly RallyBucket[] = ["B1", "B2", "B3", "B4"];
 
+// Mirrors PointCreate.note in the API, which is LongText (max_length 2000). The bound
+// lives here so the note sheet and the model agree on it, since a longer note would
+// 422 the batch it syncs in and park every other point in that batch with it.
+export const NOTE_MAX_LENGTH = 2000;
+
 // --- Compound types ----------------------------------------------------------------
 
 // Where the last ball to land, landed — six zones (side x depth).
@@ -181,6 +186,9 @@ export class Point {
   // Unusual points only — null otherwise, and optional even on one.
   readonly unusualReason: UnusualReason | null;
   readonly unusualNote: string | null;
+  // A coach's free-text annotation on any point, not only an unusual one — distinct
+  // from unusualNote above, which only ever accompanies an UNUSUAL end reason.
+  readonly note: string | null;
   // Null on ACE / DOUBLE_FAULT / UNUSUAL (no contact) and on a return error (returnOutcome
   // already describes it). Otherwise describes whichever player hit last — see lastShotPlayer.
   // Also null on an unforced error, whose stroke capture doesn't ask for.
@@ -211,6 +219,7 @@ export class Point {
     endReason: EndReason;
     unusualReason: UnusualReason | null;
     unusualNote: string | null;
+    note: string | null;
     wing: Wing | null;
     shotType: ShotType | null;
     ballIn: boolean | null;
@@ -229,6 +238,7 @@ export class Point {
     this.endReason = fields.endReason;
     this.unusualReason = fields.unusualReason;
     this.unusualNote = fields.unusualNote;
+    this.note = fields.note;
     this.wing = fields.wing;
     this.shotType = fields.shotType;
     this.ballIn = fields.ballIn;
@@ -365,6 +375,16 @@ export class Point {
     }
     const unusualNote = data.unusualNote as string | null;
 
+    // No endReason coupling, unlike unusualNote above — a coach can annotate any
+    // point, so this is just a plain nullable string.
+    if (data.note !== null && (typeof data.note !== "string" || data.note.length === 0)) {
+      throw new Error("note must be a non-empty string, or null");
+    }
+    // Truncated rather than rejected: notes append, so even bounded ones can add up
+    // past NOTE_MAX_LENGTH, and losing a note's tail costs the coach far less than
+    // losing the point.
+    const note = data.note === null ? null : (data.note as string).slice(0, NOTE_MAX_LENGTH);
+
     // ACE/DOUBLE_FAULT/UNUSUAL never had a shot to describe. A missed return did have
     // contact, but returnOutcome already says where it went — asking wing/shotType/
     // ballLocation again would just recapture the same fact under a second name.
@@ -436,6 +456,7 @@ export class Point {
       endReason,
       unusualReason,
       unusualNote,
+      note,
       wing,
       shotType,
       ballIn,
@@ -465,6 +486,7 @@ export class Point {
       endReason: this.endReason,
       unusualReason: this.unusualReason,
       unusualNote: this.unusualNote,
+      note: this.note,
       wing: this.wing,
       shotType: this.shotType,
       ballIn: this.ballIn,

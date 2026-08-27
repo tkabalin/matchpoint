@@ -36,6 +36,8 @@
 @theme inline {
   --color-cat-indigo: var(--cat-indigo);
   --color-cat-violet: var(--cat-violet);
+  --color-recording: var(--recording);
+  --color-recording-foreground: var(--recording-foreground);
   --font-heading: var(--font-sans);
   --font-sans: "Inter Variable", sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
@@ -93,6 +95,14 @@
      mode's own value is unchanged. See the .dark block for the dark-mode pair. */
   --cat-indigo: #2e1a47;
   --cat-violet: #d9569e;
+  /* Not one of .claude/rules/web-color.md's seven categorical colors — this is a
+     dedicated UI-state token (same idea as --color-court above), for the note
+     button's recording state, so it never collides with a category or outcome
+     meaning. #6C4FD1 measures 5.71:1 against both this mode's white background and
+     white icon glyph — clear of the 3:1 (graphical object) and comfortably past
+     4.5:1 (icon-as-text) minimums either way. */
+  --recording: #6c4fd1;
+  --recording-foreground: #ffffff;
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.963 0.002 197.1);
@@ -141,6 +151,12 @@
      by the halo technique on the Line/dot marks themselves, not a wrong hex. */
   --cat-indigo: #9b7fc4;
   --cat-violet: #d9569e;
+  /* #6C4FD1 measures only 2.97:1 against this mode's ~#090b0c background, under the
+     3:1 floor — lightened the same way --cat-indigo was for the same reason.
+     #A78BFA measures 7.25:1 against the background and 6.63:1 against its own
+     foreground below. */
+  --recording: #a78bfa;
+  --recording-foreground: #1b1030;
   --secondary: oklch(0.274 0.006 286.033);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.275 0.011 216.9);

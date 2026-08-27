@@ -18,6 +18,7 @@ function point() {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: true,

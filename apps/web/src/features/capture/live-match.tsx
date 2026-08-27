@@ -290,6 +290,9 @@ export function LiveMatch({
         onSkipAhead={() => {
           setSkipAheadOpen(true);
         }}
+        onAddNote={(text) => {
+          dispatch({ type: "ADD_NOTE", text });
+        }}
       />
 
       {step.name === "SERVE" &&

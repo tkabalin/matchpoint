@@ -41,6 +41,7 @@ function pointWonBy(winner: string) {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: "FOREHAND",
     shotType: "DRIVE",
     ballIn: true,
@@ -54,6 +55,7 @@ function renderHeader(options: { points?: Point[]; server?: Server } = {}) {
     onBack: vi.fn(),
     onSkipPoint: vi.fn(),
     onSkipAhead: vi.fn(),
+    onAddNote: vi.fn(),
   };
   render(
     <MatchHeader
@@ -114,6 +116,7 @@ test("back greys out where there is nothing behind, rather than vanishing", asyn
       onBack={null}
       onSkipPoint={vi.fn()}
       onSkipAhead={vi.fn()}
+      onAddNote={vi.fn()}
     />,
   );
 
@@ -169,4 +172,16 @@ test("holding skip opens skip ahead instead of skipping the point", async () => 
 
   expect(onSkipAhead).toHaveBeenCalledTimes(1);
   expect(onSkipPoint).not.toHaveBeenCalled();
+});
+
+test("tapping the note button opens the text sheet where the browser can't transcribe, and adds the note", async () => {
+  // jsdom implements no SpeechRecognition, same fallback path a real browser without
+  // it takes — see note-button.tsx.
+  const { onAddNote, user } = renderHeader();
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  await user.type(screen.getByPlaceholderText("What happened?"), "favoring the backhand today");
+  await user.click(screen.getByRole("button", { name: "Add note" }));
+
+  expect(onAddNote).toHaveBeenCalledWith("favoring the backhand today");
 });
