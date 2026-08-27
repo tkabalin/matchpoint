@@ -10,7 +10,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { buttonVariants } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { ItemGroup } from "@/components/ui/item";
 import {
   Select,
@@ -19,7 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SCORING_SYSTEM_LABEL, SURFACE_LABEL } from "@/lib/tennis-labels";
+import {
+  SCORING_SYSTEM_DESCRIPTION,
+  SCORING_SYSTEM_LABEL,
+  SURFACE_LABEL,
+} from "@/lib/tennis-labels";
 
 const NONE = "none";
 
@@ -97,30 +101,37 @@ export function SettingsMatchDefaults() {
 
         <Field orientation="horizontal">
           <FieldLabel htmlFor="default-scoring-system">Default scoring system</FieldLabel>
-          <Select
-            value={coach?.default_scoring_system ?? NONE}
-            onValueChange={(value) =>
-              mutate({
-                default_scoring_system: value === NONE ? null : (value as ScoringSystem),
-              })
-            }
-          >
-            <SelectTrigger id="default-scoring-system">
-              <SelectValue>
-                {(value: string) =>
-                  value === NONE ? "No preference" : SCORING_SYSTEM_LABEL[value as ScoringSystem]
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>No preference</SelectItem>
-              {SCORING_SYSTEM_OPTIONS.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FieldContent>
+            <Select
+              value={coach?.default_scoring_system ?? NONE}
+              onValueChange={(value) =>
+                mutate({
+                  default_scoring_system: value === NONE ? null : (value as ScoringSystem),
+                })
+              }
+            >
+              <SelectTrigger id="default-scoring-system">
+                <SelectValue>
+                  {(value: string) =>
+                    value === NONE ? "No preference" : SCORING_SYSTEM_LABEL[value as ScoringSystem]
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE}>No preference</SelectItem>
+                {SCORING_SYSTEM_OPTIONS.map(([value, label]) => (
+                  <SelectItem key={value} value={value}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {coach?.default_scoring_system && (
+              <FieldDescription>
+                {SCORING_SYSTEM_DESCRIPTION[coach.default_scoring_system]}
+              </FieldDescription>
+            )}
+          </FieldContent>
         </Field>
       </ItemGroup>
     </AppPage>

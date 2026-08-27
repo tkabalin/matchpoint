@@ -118,6 +118,14 @@ test("choosing a surface PATCHes it straight away", async () => {
   expect(zUpdateCurrentCoachBody.safeParse(body).success).toBe(true);
 });
 
+test("shows a short rule explanation for the selected scoring system", async () => {
+  await renderPage({ ...coach, default_scoring_system: "no_ad_scoring" });
+
+  expect(
+    await screen.findByText("Sudden death at 40-40 — next point wins the game outright."),
+  ).toBeInTheDocument();
+});
+
 test("choosing a scoring system PATCHes it straight away", async () => {
   const patches: string[] = [];
   stubFetch({
