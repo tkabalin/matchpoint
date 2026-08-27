@@ -31,6 +31,32 @@
   --color-outcome-forced: #e69f00;
   --color-outcome-unforced: #9c3d0a;
   --color-cat-yellow: #eddd6e;
+
+  /* The flash that confirms a captured point. One keyframe covering in, hold and out
+     rather than an enter/exit pair: score-flash.tsx unmounts on its own timer, so
+     there is no second render to hang an exit animation off. The long variant is the
+     same shape held longer, for a game or a set. */
+  --animate-score-flash: score-flash 900ms ease-out both;
+  --animate-score-flash-long: score-flash 1400ms ease-out both;
+
+  @keyframes score-flash {
+    0% {
+      opacity: 0;
+      transform: scale(0.92);
+    }
+    12% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    65% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: scale(1);
+    }
+  }
 }
 
 @theme inline {

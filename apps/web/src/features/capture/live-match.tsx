@@ -14,7 +14,7 @@
  * from this slice at all.
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import * as outbox from "@/features/outbox/outbox";
 
@@ -27,11 +27,13 @@ import type { MatchEndReason, SurfaceType } from "./match";
 import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
-import { isMatchOver, retireMatch, startNextPoint } from "./match-flow";
+import { completedLevelFor, isMatchOver, retireMatch, startNextPoint } from "./match-flow";
+import type { CompletedLevel } from "./match-flow";
 import { Point } from "./point";
 import { RallyScreen } from "./rally-screen";
 import { ResultScreen } from "./result-screen";
 import { ReturnScreen } from "./return-screen";
+import { ScoreFlash } from "./score-flash";
 import { ServeScreen } from "./serve-screen";
 import { SkipAheadSheet } from "./skip-ahead-sheet";
 import { skipAhead } from "./skip-ahead";
@@ -73,6 +75,14 @@ export function LiveMatch({
   const [points, setPoints] = useState<Point[]>([]);
   const [capture, setCapture] = useState<CaptureState | null>(null);
   const [skipAheadOpen, setSkipAheadOpen] = useState(false);
+  // The point just committed, held only long enough to flash who won it and how far
+  // that win reached. Keyed by the point's own id so two wins in a row replay the
+  // animation instead of leaving the first one's node in place.
+  const [flash, setFlash] = useState<{
+    pointId: string;
+    won: boolean;
+    level: CompletedLevel;
+  } | null>(null);
   // Kept so Back into setup returns the coach to what they typed, not a blank form.
   const [setupConfig, setSetupConfig] = useState<MatchSetupConfig | null>(null);
   // The match row goes out just before the first point that needs it. firstServer is
@@ -148,8 +158,23 @@ export function LiveMatch({
     const nextPoints = [...points, point];
     queue(match, [point]);
     setPoints(nextPoints);
-    setCapture(isMatchOver(match, nextPoints) ? null : startNextPoint(match, nextPoints));
+    const over = isMatchOver(match, nextPoints);
+    // The point that ends the match hands straight over to the result screen, which
+    // says who won at greater length — a flash over it is the same news twice.
+    if (!over) {
+      setFlash({
+        pointId: point.id,
+        won: point.won,
+        level: completedLevelFor(match, nextPoints),
+      });
+    }
+    setCapture(over ? null : startNextPoint(match, nextPoints));
   }
+
+  // Stable, so a tap on the screen underneath doesn't restart the flash's own timer.
+  const clearFlash = useCallback(() => {
+    setFlash(null);
+  }, []);
 
   function dispatch(action: CaptureAction) {
     if (capture !== null) advance(capture, [action]);
@@ -358,6 +383,10 @@ export function LiveMatch({
             setSkipAheadOpen(false);
           }}
         />
+      )}
+
+      {flash !== null && (
+        <ScoreFlash key={flash.pointId} level={flash.level} won={flash.won} onDone={clearFlash} />
       )}
     </div>
   );

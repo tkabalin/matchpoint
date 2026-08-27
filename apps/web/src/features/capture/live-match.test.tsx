@@ -286,6 +286,97 @@ test("a skipped point is recorded winner-only and moves the score", async () => 
   expect(within(score).getByText("15")).toBeVisible();
 });
 
+test.each([
+  ["Win", "Point won"],
+  ["Loss", "Point lost"],
+])("recording a point as a %s flashes %s", async (outcome, flashed) => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: new RegExp(outcome) }));
+
+  expect(screen.getByText(flashed)).toBeVisible();
+});
+
+// Skip ahead opens on release, not mid-hold (see match-header.tsx's onClick comment
+// for why), so the press has to actually outlast HOLD_MS before it lifts.
+async function openSkipAhead(user: ReturnType<typeof renderMatch>["user"]) {
+  await user.pointer({
+    keys: "[MouseLeft>]",
+    target: screen.getByRole("button", { name: "Skip point" }),
+  });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]" });
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Skip ahead" })).toBeVisible();
+  });
+}
+
+test("a point that takes the game flashes the game, not the point", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+  await openSkipAhead(user);
+
+  // 40-0 in the opening game: the next point takes it.
+  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
+  await user.click(await screen.findByRole("option", { name: "40" }));
+  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+
+  await user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+
+  expect(screen.getByText("Game won")).toBeVisible();
+  expect(screen.queryByText("Point won")).not.toBeInTheDocument();
+});
+
+test("a point that takes the set flashes the set", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+  await openSkipAhead(user);
+
+  // 5-0, 40-0: the next point takes the sixth game and the set. Rivera served the odd
+  // games, so the sixth is Okoye's.
+  await user.clear(screen.getByLabelText("Rivera games"));
+  await user.type(screen.getByLabelText("Rivera games"), "5");
+  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
+  await user.click(await screen.findByRole("option", { name: "40" }));
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+
+  await user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+
+  expect(screen.getByText("Set won")).toBeVisible();
+});
+
+test("the point that ends the match doesn't flash over the result screen", async () => {
+  const { user } = renderMatch();
+  // A pro set is one set to 8 games, so a single skipped point can finish the match.
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("combobox", { name: /Scoring system/ }));
+  await user.click(await screen.findByRole("option", { name: "Pro Set" }));
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+  await openSkipAhead(user);
+
+  // 7-0, 40-0: one more point takes the eighth game and the match with it. Rivera
+  // served the odd games, so the eighth is Okoye's.
+  await user.clear(screen.getByLabelText("Rivera games"));
+  await user.type(screen.getByLabelText("Rivera games"), "7");
+  await user.click(screen.getByRole("combobox", { name: "Rivera points" }));
+  await user.click(await screen.findByRole("option", { name: "40" }));
+  const servingNext = screen.getByRole("group", { name: "Serving next" });
+  await user.click(within(servingNext).getByRole("button", { name: "Okoye" }));
+  await user.click(screen.getByRole("button", { name: "Skip to score" }));
+
+  await user.click(await screen.findByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+
+  expect(await screen.findByRole("heading", { name: "Win" })).toBeVisible();
+  expect(screen.queryByText(/^Point (won|lost)$/)).not.toBeInTheDocument();
+});
+
 test("skipping ahead resumes from the score the coach entered", async () => {
   const { user } = renderMatch();
   await startMatch(user);

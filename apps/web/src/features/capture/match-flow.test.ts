@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  completedLevelFor,
   isMatchOver,
   nextSequenceFor,
   nextServerRoleFor,
@@ -254,5 +255,54 @@ describe("isMatchOver", () => {
     const match = matchOf();
     const points = completedGames(match.matchId, TRACKED_ID, 1);
     expect(isMatchOver(match, points)).toBe(false);
+  });
+});
+
+describe("completedLevelFor", () => {
+  /** Alternating single games, so neither side ever runs away with the set. */
+  function alternatingGames(matchId: string, count: number) {
+    return Array.from({ length: count }, (_, index) =>
+      completedGames(matchId, index % 2 === 0 ? TRACKED_ID : OPPONENT_ID, 1),
+    ).flat();
+  }
+
+  test("a point mid-game completes only itself", () => {
+    const match = matchOf();
+    const points = [pointWonBy(match.matchId, TRACKED_ID)];
+    expect(completedLevelFor(match, points)).toBe("point");
+  });
+
+  test("the point that takes a game completes the game", () => {
+    const match = matchOf();
+    const points = completedGames(match.matchId, TRACKED_ID, 1);
+    expect(completedLevelFor(match, points)).toBe("game");
+  });
+
+  test("the point that takes a set completes the set", () => {
+    const match = matchOf();
+    const points = completedGames(match.matchId, TRACKED_ID, 6);
+    expect(completedLevelFor(match, points)).toBe("set");
+  });
+
+  test("the game that reaches 6-6 is still a game, breaker not yet started", () => {
+    const match = matchOf();
+    expect(completedLevelFor(match, alternatingGames(match.matchId, 12))).toBe("game");
+  });
+
+  // The breaker credits no games as it goes, so currentGamePoints sits at 0 for every
+  // point of it — the reading that says "game" everywhere else.
+  test("a point inside the breaker completes only itself", () => {
+    const match = matchOf();
+    const points = [...alternatingGames(match.matchId, 12), pointWonBy(match.matchId, TRACKED_ID)];
+    expect(completedLevelFor(match, points)).toBe("point");
+  });
+
+  test("the point that takes the breaker completes the set", () => {
+    const match = matchOf();
+    const points = [
+      ...alternatingGames(match.matchId, 12),
+      ...Array.from({ length: 7 }, () => pointWonBy(match.matchId, TRACKED_ID)),
+    ];
+    expect(completedLevelFor(match, points)).toBe("set");
   });
 });

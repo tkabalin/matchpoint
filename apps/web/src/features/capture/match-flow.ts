@@ -140,3 +140,33 @@ export function isMatchOver(match: Match, points: readonly Point[]): boolean {
   );
   return finalWinnerFor(match, completedSets) !== null;
 }
+
+/** The biggest thing a point finished — always at least the point itself. */
+export type CompletedLevel = "point" | "game" | "set";
+
+/**
+ * What the match's last point completed, read off the score it produced rather than by
+ * diffing against the score before it: a set had just ended exactly when `matchSetsFor`
+ * has no current set left, and a game had exactly when the live set is between games
+ * (`currentGamePoints === 0`).
+ *
+ * The breaker is the exception to that second reading — it credits no games as it goes,
+ * so `currentGamePoints` sits at 0 for every point of it. A tiebreak underway therefore
+ * completes nothing until it completes the set. At 6-6 with the breaker not yet started
+ * `tiebreak` is still null, which is what the game just finished to get there.
+ *
+ * Whoever won the last point won whatever it completed, so the caller reads the winner
+ * off the point and this answers only how far the win reached.
+ */
+export function completedLevelFor(match: Match, points: readonly Point[]): CompletedLevel {
+  const { currentSet } = matchSetsFor(
+    points,
+    match.matchId,
+    match.trackedPlayerId,
+    match.opponentId,
+    match.scoringSystem,
+  );
+  if (currentSet === null) return "set";
+  if (currentSet.state.tiebreak !== null) return "point";
+  return currentSet.state.currentGamePoints === 0 ? "game" : "point";
+}
