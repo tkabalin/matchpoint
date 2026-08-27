@@ -37,7 +37,6 @@ export const SURFACE_TYPES: readonly SurfaceType[] = [
 export type ScoringSystem =
   | "traditional"
   | "mens_grand_slam"
-  | "womens_grand_slam"
   | "no_ad_scoring"
   | "match_tiebreak_10_points"
   | "short_sets"
@@ -46,7 +45,6 @@ export type ScoringSystem =
 export const SCORING_SYSTEMS: readonly ScoringSystem[] = [
   "traditional",
   "mens_grand_slam",
-  "womens_grand_slam",
   "no_ad_scoring",
   "match_tiebreak_10_points",
   "short_sets",
@@ -170,7 +168,12 @@ export class Match {
     ) {
       throw new Error("opponentName must be a non-empty string, or null");
     }
-    if (!SCORING_SYSTEMS.includes(data.scoringSystem as ScoringSystem)) {
+    // Mirrors the Alembic migration that backfills the retired womens_grand_slam to
+    // traditional, so a match an earlier build queued or logged still reads back
+    // instead of parking. Removable once no such payload can still be on a device.
+    const scoringSystem =
+      data.scoringSystem === "womens_grand_slam" ? "traditional" : data.scoringSystem;
+    if (!SCORING_SYSTEMS.includes(scoringSystem as ScoringSystem)) {
       throw new Error(`invalid scoringSystem: ${String(data.scoringSystem)}`);
     }
     // Same check as Point.create runs on server: must be trackedPlayerId or
@@ -211,7 +214,7 @@ export class Match {
       trackedPlayerId: data.trackedPlayerId,
       opponentId: data.opponentId,
       opponentName: data.opponentName as string | null,
-      scoringSystem: data.scoringSystem as ScoringSystem,
+      scoringSystem: scoringSystem as ScoringSystem,
       firstServer: data.firstServer as string,
       surfaceType: data.surfaceType as SurfaceType,
       outcomeOverride,

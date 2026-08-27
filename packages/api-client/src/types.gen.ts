@@ -1307,7 +1307,7 @@ export type ReturnOutcomeSplit = {
  *
  * The scoring system the match is played under.
  */
-export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'womens_grand_slam' | 'no_ad_scoring' | 'match_tiebreak_10_points' | 'short_sets' | 'pro_set' | 'legacy';
+export type ScoringSystem = 'traditional' | 'mens_grand_slam' | 'no_ad_scoring' | 'match_tiebreak_10_points' | 'short_sets' | 'pro_set' | 'legacy';
 
 /**
  * ServeOutcome

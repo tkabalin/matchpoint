@@ -104,7 +104,7 @@ erDiagram
         date played_on
         varchar(6) surface "nullable: hard, clay, grass, carpet"
         varchar(100) event "nullable: tournament or fixture"
-        varchar(24) scoring_system "nullable: traditional, mens_grand_slam, womens_grand_slam, no_ad_scoring, match_tiebreak_10_points, short_sets, pro_set, legacy"
+        varchar(24) scoring_system "nullable: traditional, mens_grand_slam, no_ad_scoring, match_tiebreak_10_points, short_sets, pro_set, legacy"
         varchar(4) result "nullable: win, loss"
         uuid capture_claim_device_id "nullable: the device capturing this match"
         timestamptz capture_claim_expires_at "nullable: when that claim lapses"

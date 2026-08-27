@@ -29,7 +29,6 @@ class ScoringSystem(enum.StrEnum):
 
     TRADITIONAL = "traditional"
     MENS_GRAND_SLAM = "mens_grand_slam"
-    WOMENS_GRAND_SLAM = "womens_grand_slam"
     NO_AD_SCORING = "no_ad_scoring"
     MATCH_TIEBREAK_10_POINTS = "match_tiebreak_10_points"
     SHORT_SETS = "short_sets"

@@ -40,7 +40,6 @@ export function isAdScoringFor(scoringSystem: ScoringSystem): boolean {
       return false;
     case "traditional":
     case "mens_grand_slam":
-    case "womens_grand_slam":
     case "match_tiebreak_10_points":
     case "pro_set":
     case "legacy":
@@ -71,7 +70,6 @@ export function maxSetsFor(scoringSystem: ScoringSystem): number {
     case "pro_set":
       return 1;
     case "traditional":
-    case "womens_grand_slam":
     case "no_ad_scoring":
     case "match_tiebreak_10_points":
     case "short_sets":
@@ -198,7 +196,7 @@ export interface SetRules {
  * since the two definitions coincide there.
  *
  * Several systems are position-dependent, not just legacy:
- * mens_grand_slam/womens_grand_slam use a 7-point breaker in regular sets
+ * mens_grand_slam uses a 7-point breaker in regular sets
  * but a 10-point breaker in the decider, and match_tiebreak_10_points
  * replaces the decider with a single breaker outright — gamesToWin: 0,
  * no games phase to play at all.
@@ -231,7 +229,6 @@ export function setRulesFor(
         ? { gamesToWin: 0, tiebreakAt: 0, tiebreakTarget: 10 }
         : { gamesToWin: 6, tiebreakAt: 6, tiebreakTarget: 7 };
     case "mens_grand_slam":
-    case "womens_grand_slam":
       return { gamesToWin: 6, tiebreakAt: 6, tiebreakTarget: isDecidingSet ? 10 : 7 };
     case "legacy":
       return { gamesToWin: 6, tiebreakAt: isDecidingSet ? null : 6, tiebreakTarget: 7 };

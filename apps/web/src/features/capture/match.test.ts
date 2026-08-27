@@ -218,4 +218,13 @@ describe("Match.fromJSON / toJSON", () => {
 
     expect(rehydrated.toJSON()).toEqual(original.toJSON());
   });
+
+  test("reads a womens_grand_slam payload back as traditional, the way the API's migration did", () => {
+    const queued = {
+      ...createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID).toJSON(),
+      scoringSystem: "womens_grand_slam",
+    };
+
+    expect(Match.fromJSON(queued).scoringSystem).toBe("traditional");
+  });
 });

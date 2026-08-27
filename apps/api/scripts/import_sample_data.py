@@ -43,7 +43,7 @@ Expected CSV files, read from /tmp inside the container:
 - dominant_hand: right | left (blank = unset)
 - gender: male | female | other (blank = unset)
 - surface: hard | clay | grass | carpet (blank = unset)
-- scoring_system: traditional | mens_grand_slam | womens_grand_slam | no_ad_scoring |
+- scoring_system: traditional | mens_grand_slam | no_ad_scoring |
   match_tiebreak_10_points | short_sets | pro_set | legacy (blank = unset)
 - result: win | loss (blank = unset)
 - match_key: an arbitrary label, unique per coach (blank = this match has no points).

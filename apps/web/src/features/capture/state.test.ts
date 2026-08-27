@@ -28,7 +28,6 @@ describe("maxSetsFor", () => {
   test.each([
     ["traditional", 3],
     ["mens_grand_slam", 5],
-    ["womens_grand_slam", 3],
     ["no_ad_scoring", 3],
     ["match_tiebreak_10_points", 3],
     ["short_sets", 3],
@@ -43,7 +42,6 @@ describe("matchRulesFor", () => {
   test.each([
     ["traditional", 2, 3],
     ["mens_grand_slam", 3, 5],
-    ["womens_grand_slam", 2, 3],
     ["no_ad_scoring", 2, 3],
     ["match_tiebreak_10_points", 2, 3],
     ["short_sets", 2, 3],
@@ -55,23 +53,12 @@ describe("matchRulesFor", () => {
       expect(matchRulesFor(scoringSystem)).toEqual({ setsToWin, maxSets });
     },
   );
-
-  test("mens_grand_slam and womens_grand_slam diverge on setsToWin — the entire reason they're separate systems", () => {
-    // A copy-paste bug giving both 2 would pass every other test in this
-    // suite, since nothing else distinguishes the two.
-    expect(matchRulesFor("mens_grand_slam").setsToWin).toBe(3);
-    expect(matchRulesFor("womens_grand_slam").setsToWin).toBe(2);
-    expect(matchRulesFor("mens_grand_slam").setsToWin).not.toBe(
-      matchRulesFor("womens_grand_slam").setsToWin,
-    );
-  });
 });
 
 describe("isAdScoringFor", () => {
   test.each([
     ["traditional", true],
     ["mens_grand_slam", true],
-    ["womens_grand_slam", true],
     ["no_ad_scoring", false],
     ["match_tiebreak_10_points", true],
     ["short_sets", false],
@@ -113,11 +100,6 @@ describe("setRulesFor", () => {
     // silently resolve the wrong (10-point) target here.
     const rules = setRulesFor("mens_grand_slam", 3, 5);
     expect(rules.tiebreakTarget).toBe(7);
-  });
-
-  test("womens_grand_slam's decider (best-of-3) uses a 10-point breaker", () => {
-    const rules = setRulesFor("womens_grand_slam", 3, 3);
-    expect(rules).toEqual({ gamesToWin: 6, tiebreakAt: 6, tiebreakTarget: 10 });
   });
 
   test("legacy's regular set tiebreaks normally at 6-6", () => {
@@ -177,6 +159,7 @@ function pointWonBy(winner: string, overrides: Record<string, unknown> = {}) {
     endReason: "FORCED",
     unusualReason: null,
     unusualNote: null,
+    note: null,
     wing: null,
     shotType: null,
     ballIn: true,

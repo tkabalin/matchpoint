@@ -523,7 +523,6 @@ export const zReturnOutcomeSplit = z.object({
 export const zScoringSystem = z.enum([
     'traditional',
     'mens_grand_slam',
-    'womens_grand_slam',
     'no_ad_scoring',
     'match_tiebreak_10_points',
     'short_sets',
