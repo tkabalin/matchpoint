@@ -11,6 +11,8 @@
  * it just has to match where the coach watched the ball bounce.
  */
 
+import { Button } from "@/components/ui/button";
+
 import type { CaptureAction } from "./capture-flow";
 import { CourtDiagram } from "./court-diagram";
 import type { CourtDepth, CourtSide } from "./point";
@@ -76,6 +78,16 @@ export function FinalBallScreen({
       </div>
 
       <CourtDiagram zones={zones} className="min-h-0 flex-1" />
+
+      <Button
+        variant="ghost"
+        onClick={() => {
+          onAction({ type: "TAP_DIDNT_SEE" });
+        }}
+        className="mt-2 h-11 w-full flex-none text-base font-semibold text-muted-foreground"
+      >
+        Didn&apos;t see where it landed
+      </Button>
     </div>
   );
 }

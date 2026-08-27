@@ -164,6 +164,17 @@ export function ReturnScreen({
           <RotateCcw className="size-5" />
           Let
         </Button>
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
+            setLetNotice(null);
+            onAction({ type: "TAP_DIDNT_SEE" });
+          }}
+          className="col-span-full h-11 text-base font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see the serve
+        </Button>
       </div>
 
       <Sheet

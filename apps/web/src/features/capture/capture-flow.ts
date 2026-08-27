@@ -162,6 +162,11 @@ export type CaptureAction =
   | { type: "TAP_RALLY_OUTCOME"; won: boolean; endReason: "FORCED" | "MISTAKE" }
   // Valid from a SERVE or RALLY step — from a serve, no serve is recorded at all.
   | { type: "TAP_UNUSUAL" }
+  // "I didn't see that." Valid on every step that asks for an observation, and the
+  // one place the flow stops short without discarding the point: whatever the coach
+  // did see is kept, and everything past it stays null. `won` is required exactly on
+  // RALLY, where the ending is what went unseen and the winner still has to be told.
+  | { type: "TAP_DIDNT_SEE"; won?: boolean }
   | { type: "TAP_UNUSUAL_OUTCOME"; won: boolean }
   | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null; note: string | null }
   | { type: "TAP_SHOT_DETAIL"; wing: Wing; shotType: ShotType }
@@ -268,6 +273,29 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       // not something to step back into. courtSide carries over unchanged — it's the
       // same point being replayed, so the court side it's played from doesn't change.
       return startPoint(draft.matchId, draft.sequence, draft.server, draft.courtSide);
+    }
+    throw invalidAction(action, step);
+  }
+
+  if (action.type === "TAP_DIDNT_SEE") {
+    if (step.name === "SERVE") {
+      // Nothing is recorded for the serve — an unwatched one is absent from `serves`,
+      // not a fourth thing a serve can do — and the rally is still ahead.
+      return advance(state, { name: "RALLY" }, draft);
+    }
+    if (step.name === "RALLY") {
+      if (action.won === undefined) {
+        throw new Error("TAP_DIDNT_SEE requires won on the rally step");
+      }
+      // The ending is what went unseen, so endReason and everything below it stay
+      // null. The rally length keeps whatever was picked, including nothing.
+      return advance(state, { name: "READY" }, { ...draft, won: action.won, endReason: null });
+    }
+    if (step.name === "SHOT_DETAIL") {
+      return advance(state, { name: "BALL_LOCATION" }, draft);
+    }
+    if (step.name === "BALL_LOCATION") {
+      return advance(state, { name: "RALLY_LENGTH" }, draft);
     }
     throw invalidAction(action, step);
   }

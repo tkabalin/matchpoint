@@ -185,6 +185,17 @@ export function ServeScreen({
           variant="ghost"
           disabled={pending}
           onClick={() => {
+            setLetNotice(null);
+            onAction({ type: "TAP_DIDNT_SEE" });
+          }}
+          className="h-11 px-[18px] text-base font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
             setLetNotice("Let — replay the point.");
             onAction({ type: "TAP_LET" });
           }}

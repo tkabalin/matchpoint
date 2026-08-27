@@ -14,7 +14,8 @@ function renderFinalShot() {
 test("offers every stored shot on both wings, and labels the columns", () => {
   renderFinalShot();
 
-  expect(screen.getAllByRole("button")).toHaveLength(8);
+  // Eight shots, plus the one escape for a shot the coach didn't see.
+  expect(screen.getAllByRole("button")).toHaveLength(9);
   expect(screen.getByText("Backhand")).toBeVisible();
   expect(screen.getByText("Forehand")).toBeVisible();
 });

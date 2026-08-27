@@ -71,6 +71,16 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
           ))}
         </div>
       </CourtDiagram>
+
+      <Button
+        variant="ghost"
+        onClick={() => {
+          onAction({ type: "TAP_DIDNT_SEE" });
+        }}
+        className="mt-2 h-11 w-full flex-none text-base font-semibold text-muted-foreground"
+      >
+        Didn&apos;t see the shot
+      </Button>
     </div>
   );
 }

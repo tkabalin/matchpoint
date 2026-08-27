@@ -186,6 +186,71 @@ test("a let after picking a rally length doesn't carry it into the replayed poin
   );
 });
 
+test("a point the coach only half-saw is kept, not discarded", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  // Missed the serve, watched the rally, missed how it ended.
+  await user.click(screen.getByRole("button", { name: "Didn't see" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "3-5" }));
+  await user.click(screen.getByRole("button", { name: "Didn't see the end" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+
+  const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];
+  expect(point?.payload).toMatchObject({
+    won: true,
+    serves: [],
+    endReason: null,
+    rallyLengthBucket: "B2",
+  });
+  // And the score moved, which is the whole point of keeping it.
+  const score = screen.getByRole("table", { name: "Score" });
+  expect(within(score).getByText("15")).toBeVisible();
+});
+
+test("a missed stroke still records where the ball landed", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "3-5" }));
+  await user.click(screen.getByRole("button", { name: "Win, forced error" }));
+  await user.click(screen.getByRole("button", { name: "Didn't see the shot" }));
+
+  expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Deuce deep" }));
+
+  // The court's own tap flash runs before the action fires.
+  await waitFor(() => {
+    expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "point")).toBe(true);
+  });
+  const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];
+  expect(point?.payload).toMatchObject({
+    wing: null,
+    shotType: null,
+    ballIn: true,
+    endReason: "FORCED",
+  });
+});
+
+test("the skip sheet points at the editor when the gap is bigger than one point", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+  await user.click(
+    screen.getByRole("button", { name: "Missed more than one point? Set the score" }),
+  );
+
+  expect(await screen.findByRole("heading", { name: "Score" })).toBeVisible();
+});
+
 test("back on the match's first screen returns to setup, still holding what was typed", async () => {
   const { user } = renderMatch();
   await startMatch(user);

@@ -20,7 +20,6 @@ import { ArrowLeft, SkipForward } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
@@ -29,6 +28,7 @@ import type { Server } from "./point";
 import { scoreboardFor } from "./score";
 import type { Scoreboard } from "./score";
 import { maxSetsFor } from "./state";
+import { WinnerSheet } from "./winner-sheet";
 
 // Long enough that a deliberate press is unmistakable, short enough to feel like a
 // hold rather than a hang. From the design handoff.
@@ -231,38 +231,18 @@ export function MatchHeader({
         </Button>
       </div>
 
-      <Sheet open={askingWinner} onOpenChange={setAskingWinner}>
-        <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
-          <SheetHeader className="p-0">
-            <SheetTitle>Who won the point?</SheetTitle>
-          </SheetHeader>
-          <p className="text-sm text-muted-foreground">
-            The point is recorded with its winner and nothing else.
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => {
-                skipTo(true);
-              }}
-              className="h-[76px] flex-col gap-1 border-court/30 bg-court/10 hover:bg-court/20"
-            >
-              <span className="text-base font-semibold text-court">Win</span>
-              <span className="text-xs text-muted-foreground">Point to {trackedPlayerName}</span>
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                skipTo(false);
-              }}
-              className="h-[76px] flex-col gap-1 border-destructive/30 bg-destructive/10 hover:bg-destructive/20"
-            >
-              <span className="text-base font-semibold text-destructive">Loss</span>
-              <span className="text-xs text-muted-foreground">Point to {opponentName}</span>
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
+      <WinnerSheet
+        open={askingWinner}
+        description="The point is recorded with its winner and nothing else."
+        trackedPlayerName={trackedPlayerName}
+        opponentName={opponentName}
+        onPick={skipTo}
+        onEditScore={() => {
+          setAskingWinner(false);
+          onEditScore();
+        }}
+        onOpenChange={setAskingWinner}
+      />
     </div>
   );
 }

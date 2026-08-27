@@ -498,6 +498,8 @@ export function LiveMatch({
 
       {step.name === "RALLY" && (
         <RallyScreen
+          trackedPlayerName={playerName}
+          opponentName={opponentName}
           rallyBucket={draft.rallyLengthBucket}
           onRallyBucketChange={(bucket) => {
             dispatch({ type: "TAP_RALLY_LENGTH", bucket });

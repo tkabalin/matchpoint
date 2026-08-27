@@ -23,6 +23,8 @@ function renderRally({
       onRallyBucketChange={onRallyBucketChange}
       won={won}
       endReason={endReason}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
       onAction={onAction}
     />,
   );

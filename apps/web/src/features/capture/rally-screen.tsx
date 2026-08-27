@@ -7,6 +7,7 @@
  */
 
 import { RotateCcw } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 import type { CaptureAction } from "./capture-flow";
 import { CourtDiagram } from "./court-diagram";
 import type { EndReason, RallyBucket } from "./point";
+import { WinnerSheet } from "./winner-sheet";
 
 // The four stored buckets, in the coach's own vocabulary. B1 is also what the flow
 // fills in for an ace or a double fault, where there was no rally to ask about.
@@ -36,6 +38,8 @@ const OUTCOMES: { won: boolean; endReason: "FORCED" | "MISTAKE"; kicker: string 
 const CARD = "rounded-lg border border-white/70 shadow-[0_1px_6px_rgb(0_0_0/0.18)]";
 
 export function RallyScreen({
+  trackedPlayerName,
+  opponentName,
   rallyBucket,
   onRallyBucketChange,
   won,
@@ -47,7 +51,10 @@ export function RallyScreen({
   won: boolean | null;
   endReason: EndReason | null;
   onAction: (action: CaptureAction) => void;
+  trackedPlayerName: string;
+  opponentName: string;
 }) {
+  const [askingWinner, setAskingWinner] = useState(false);
   const outcomeChosen = won !== null && endReason !== null;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -164,7 +171,28 @@ export function RallyScreen({
           <RotateCcw className="size-5" />
           Let
         </Button>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            setAskingWinner(true);
+          }}
+          className="col-span-full h-11 text-base font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see the end
+        </Button>
       </div>
+
+      <WinnerSheet
+        open={askingWinner}
+        description="The rally length stays as recorded; how it ended is left unknown."
+        trackedPlayerName={trackedPlayerName}
+        opponentName={opponentName}
+        onPick={(won) => {
+          setAskingWinner(false);
+          onAction({ type: "TAP_DIDNT_SEE", won });
+        }}
+        onOpenChange={setAskingWinner}
+      />
     </div>
   );
 }

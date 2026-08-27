@@ -578,6 +578,90 @@ describe("commitDraft", () => {
   });
 });
 
+describe("didn't see", () => {
+  test("from the serve, no serve is recorded and the rally is still ahead", () => {
+    const state = transition(startTracked(), { type: "TAP_DIDNT_SEE" });
+    expect(state.step).toEqual({ name: "RALLY" });
+    expect(state.draft.serves).toEqual([]);
+  });
+
+  test("from the second serve, the fault already watched survives", () => {
+    const afterFault = transition(startTracked(), { type: "TAP_SERVE_FAULT", location: "NET" });
+    const state = transition(afterFault, { type: "TAP_DIDNT_SEE" });
+    expect(state.step).toEqual({ name: "RALLY" });
+    expect(state.draft.serves).toEqual([{ number: 1, outcome: "FAULT", location: "NET" }]);
+  });
+
+  test("from the rally it still needs the winner, and leaves the ending unknown", () => {
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    const state = transition(onRally, { type: "TAP_DIDNT_SEE", won: false });
+    expect(state.step).toEqual({ name: "READY" });
+    expect(state.draft.won).toBe(false);
+    expect(state.draft.endReason).toBeNull();
+    expect(state.draft.rallyLengthBucket).toBeNull();
+  });
+
+  test("from the rally, a length already picked is kept", () => {
+    let state = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B3" });
+    state = transition(state, { type: "TAP_DIDNT_SEE", won: true });
+    expect(state.draft.rallyLengthBucket).toBe("B3");
+  });
+
+  test("from the rally without a winner it throws rather than guessing", () => {
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    expect(() => transition(onRally, { type: "TAP_DIDNT_SEE" })).toThrow(/requires won/);
+  });
+
+  test("from the shot screen, the stroke is left null and the ball still asked for", () => {
+    let state = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+    state = transition(state, {
+      type: "TAP_RALLY_OUTCOME",
+      won: true,
+      endReason: "FORCED",
+    });
+    state = transition(state, { type: "TAP_DIDNT_SEE" });
+    expect(state.step).toEqual({ name: "BALL_LOCATION" });
+    expect(state.draft.wing).toBeNull();
+    expect(state.draft.shotType).toBeNull();
+  });
+
+  test("from the ball screen, where it landed is left null and the point commits", () => {
+    let state = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    state = transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+    state = transition(state, { type: "TAP_RALLY_OUTCOME", won: true, endReason: "MISTAKE" });
+    state = transition(state, { type: "TAP_DIDNT_SEE" });
+    expect(state.step).toEqual({ name: "RALLY_LENGTH" });
+
+    const point = commitDraft(
+      transition(state, { type: "TAP_RALLY_LENGTH", bucket: "B2" }).draft,
+      "point-1",
+      1_700_000_000_000,
+      CONTEXT,
+    );
+    expect(point.ballIn).toBeNull();
+    expect(point.ballLocation).toBeNull();
+    expect(point.won).toBe(true);
+  });
+
+  test("undo steps back into the screen that was skipped", () => {
+    const onRally = transition(startTracked(), { type: "TAP_SERVE_IN" });
+    const skipped = transition(onRally, { type: "TAP_DIDNT_SEE", won: true });
+    expect(transition(skipped, { type: "UNDO" }).step).toEqual({ name: "RALLY" });
+  });
+
+  test("a point with every observation missing still commits with its winner", () => {
+    let state = transition(startTracked(), { type: "TAP_DIDNT_SEE" });
+    state = transition(state, { type: "TAP_DIDNT_SEE", won: true });
+    const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
+    expect(point.won).toBe(true);
+    expect(point.serves).toEqual([]);
+    expect(point.endReason).toBeNull();
+    expect(point.firstServeIn).toBeNull();
+  });
+});
+
 describe("action validity guards", () => {
   test("rejects an action that doesn't belong on the current step", () => {
     expect(() =>
