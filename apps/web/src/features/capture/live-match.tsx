@@ -78,7 +78,13 @@ export function LiveMatch({
   // The match row goes out just before the first point that needs it. firstServer is
   // fixed at that point onward — skipAhead never rewrites it (see skip-ahead.ts) — so
   // the outbox being first-write-wins and never rewriting a payload is never an issue.
-  const matchQueued = useRef(false);
+  // A ref, not state, because advance() can call queueMatch twice in the same
+  // synchronous pass (once directly, again via queue() once READY commits the point) —
+  // a state setter wouldn't be visible to the second call until the next render. Mirrored
+  // into matchQueued (state) below purely so render has something reactive to read;
+  // render must never read a ref directly (react-hooks/refs).
+  const matchQueuedRef = useRef(false);
+  const [matchQueued, setMatchQueued] = useState(false);
 
   /**
    * The match row, sent once the coach has left the first serve or return screen.
@@ -87,8 +93,9 @@ export function LiveMatch({
    * payload it already holds.
    */
   function queueMatch(current: Match) {
-    if (matchQueued.current) return;
-    matchQueued.current = true;
+    if (matchQueuedRef.current) return;
+    matchQueuedRef.current = true;
+    setMatchQueued(true);
     void outbox.append({
       id: current.matchId,
       coachId,
@@ -271,7 +278,7 @@ export function LiveMatch({
       ? () => {
           dispatch({ type: "UNDO" });
         }
-      : !matchQueued.current
+      : !matchQueued
         ? () => {
             setMatch(null);
             setCapture(null);

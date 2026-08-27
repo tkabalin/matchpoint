@@ -76,7 +76,7 @@ test.each([
 
   await user.type(screen.getByLabelText("Opponent"), "Okoye");
   await user.click(screen.getByRole("combobox", { name: /Court type/ }));
-  await user.click(screen.getByRole("option", { name: surface }));
+  await user.click(await screen.findByRole("option", { name: surface }));
   await user.click(screen.getByRole("button", { name: "Start match" }));
 
   const court = screen.getByRole("button", { name: "Deuce service box" }).closest("div[style]");
