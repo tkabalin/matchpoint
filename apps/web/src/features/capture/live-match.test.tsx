@@ -217,6 +217,25 @@ test("back walks the point's screens, and stops at the serve", async () => {
   expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
 });
 
+// Regression: undoing the point's first screen once returns history to empty, which
+// used to satisfy the same points.length === 0 check that opens setup on a fresh
+// match — reopening a door that's supposed to have closed the moment the match queued.
+test("once the match is queued, undoing back to the serve screen still can't reach setup", async () => {
+  const { user } = renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+  });
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+
+  expect(screen.getByRole("button", { name: "Back, nothing to go back to" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+});
+
 test("once a point is recorded there is no way back into it", async () => {
   const { user } = renderMatch();
   await startMatch(user);

@@ -252,16 +252,19 @@ export function LiveMatch({
 
   /**
    * Back goes one screen at a time within the point, and stops at the serve or return
-   * screen: a point already committed is not unwound. On the match's very first screen
-   * there is nothing captured yet, so it steps out to setup instead. Null on a later
-   * point's first screen, where there is nowhere to go and no button to offer.
+   * screen: a point already committed is not unwound. Before the match has been queued
+   * (see queueMatch), its very first screen has nothing captured yet, so it steps out
+   * to setup instead. Gated on matchQueued rather than points.length === 0: an UNDO can
+   * return history to empty on the first point too, and once the match is real, setup
+   * must stay unreachable even then. Null everywhere else, where there is nowhere to go
+   * and no button to offer.
    */
   const backAction =
     capture.history.length > 0
       ? () => {
           dispatch({ type: "UNDO" });
         }
-      : points.length === 0
+      : !matchQueued.current
         ? () => {
             setMatch(null);
             setCapture(null);
