@@ -7,6 +7,7 @@
  * screen, so it names them rather than asking.
  */
 
+import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,7 @@ export function MatchSetupScreen({
   initial,
   defaultScoringSystem = "traditional",
   defaultSurfaceType = "unspecified",
+  onBack,
   onStart,
 }: {
   playerName: string;
@@ -52,6 +54,7 @@ export function MatchSetupScreen({
   initial?: MatchSetupConfig | null;
   defaultScoringSystem?: ScoringSystem;
   defaultSurfaceType?: SurfaceType;
+  onBack: () => void;
   onStart: (config: MatchSetupConfig) => void;
 }) {
   const [opponentName, setOpponentName] = useState(initial?.opponentName ?? "");
@@ -71,7 +74,10 @@ export function MatchSetupScreen({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-10 items-center">
+      <div className="flex h-10 items-center gap-3">
+        <Button variant="ghost" size="icon" aria-label="Back" onClick={onBack}>
+          <ArrowLeft className="size-5" />
+        </Button>
         <h1 className="text-3xl font-semibold tracking-[-0.02em]">Match</h1>
       </div>
 

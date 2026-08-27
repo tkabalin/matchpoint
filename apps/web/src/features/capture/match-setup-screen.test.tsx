@@ -6,9 +6,10 @@ import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
 
 function renderSetup() {
+  const onBack = vi.fn();
   const onStart = vi.fn<(config: MatchSetupConfig) => void>();
-  render(<MatchSetupScreen playerName="Rivera" onStart={onStart} />);
-  return { onStart, user: userEvent.setup() };
+  render(<MatchSetupScreen playerName="Rivera" onBack={onBack} onStart={onStart} />);
+  return { onBack, onStart, user: userEvent.setup() };
 }
 
 test("names the player the match is for", () => {
@@ -59,4 +60,12 @@ test("whitespace alone is not an opponent", async () => {
   await user.type(screen.getByLabelText("Opponent"), "   ");
 
   expect(screen.getByRole("button", { name: "Start match" })).toBeDisabled();
+});
+
+test("back steps out of setup", async () => {
+  const { onBack, user } = renderSetup();
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(onBack).toHaveBeenCalled();
 });

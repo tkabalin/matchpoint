@@ -228,7 +228,14 @@ export function LiveMatch({
   }
 
   if (match === null) {
-    return <MatchSetupScreen playerName={playerName} initial={setupConfig} onStart={startMatch} />;
+    return (
+      <MatchSetupScreen
+        playerName={playerName}
+        initial={setupConfig}
+        onBack={onExit}
+        onStart={startMatch}
+      />
+    );
   }
 
   const opponentName = match.opponentName ?? "Opponent";

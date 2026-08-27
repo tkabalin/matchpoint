@@ -49,6 +49,14 @@ test("setup comes first, and starting it opens the serve screen", async () => {
   expect(screen.getByRole("table", { name: "Score" })).toBeVisible();
 });
 
+test("back on setup exits the match entirely", async () => {
+  const { onExit, user } = renderMatch();
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(onExit).toHaveBeenCalled();
+});
+
 test("the opponent serving first opens the return screen instead", async () => {
   const { user } = renderMatch();
 
