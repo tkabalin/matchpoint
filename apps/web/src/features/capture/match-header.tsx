@@ -197,9 +197,11 @@ export function MatchHeader({
           onPointerUp={cancelHold}
           onPointerLeave={cancelHold}
           onContextMenu={(event) => {
+            // The sheet mounts under the still-down finger and swallows the click this
+            // gesture would have produced, so nothing consumes the flag. A later tap
+            // clears it on its own pointerdown; a keyboard activation was left stuck.
             event.preventDefault();
             cancelHold();
-            holdFired.current = true;
             onSkipAhead();
           }}
           onClick={() => {

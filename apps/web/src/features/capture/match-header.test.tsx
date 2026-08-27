@@ -174,6 +174,24 @@ test("holding skip opens skip ahead instead of skipping the point", async () => 
   expect(onSkipPoint).not.toHaveBeenCalled();
 });
 
+test("a long-press's swallowed click doesn't leave a keyboard activation stuck", async () => {
+  const { onSkipPoint, onSkipAhead, user } = renderHeader();
+  const skip = screen.getByRole("button", { name: "Skip point" });
+
+  // The sheet a long-press opens swallows the click the release would have produced,
+  // so nothing consumes the hold flag. A later tap resets it on its own pointerdown;
+  // a keyboard activation has no pointerdown, so it was the one left stuck.
+  await user.pointer({ keys: "[MouseRight]", target: skip });
+  expect(onSkipAhead).toHaveBeenCalledTimes(1);
+
+  skip.focus();
+  await user.keyboard("{Enter}");
+
+  expect(screen.getByRole("heading", { name: "Who won the point?" })).toBeVisible();
+  expect(onSkipPoint).not.toHaveBeenCalled();
+  expect(onSkipAhead).toHaveBeenCalledTimes(1);
+});
+
 test("tapping the note button opens the text sheet where the browser can't transcribe, and adds the note", async () => {
   // jsdom implements no SpeechRecognition, same fallback path a real browser without
   // it takes — see note-button.tsx.
