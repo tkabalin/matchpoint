@@ -57,6 +57,10 @@ export function ServeScreen({
   // A let leaves the flow exactly where it was, so the only thing to show for it is a
   // message this screen owns; every other tap moves the step and re-derives the line.
   const [letNotice, setLetNotice] = useState<string | null>(null);
+  // Ace/Let sit outside the court, so they're not covered by CourtDiagram's own
+  // zone-vs-zone tap guard — disable them while a zone tap's flash is pending, or one
+  // fires immediately and the queued zone tap lands later against stale state.
+  const [pending, setPending] = useState(false);
 
   function fault(location: FailureMode) {
     return () => {
@@ -153,7 +157,12 @@ export function ServeScreen({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <CourtDiagram zones={zones} netLabel="Net" className="min-h-0 flex-1" />
+        <CourtDiagram
+          zones={zones}
+          netLabel="Net"
+          className="min-h-0 flex-1"
+          onPendingChange={setPending}
+        />
         <p className="mt-2.5 px-0.5 text-center text-xs text-muted-foreground">
           Outer zones and the net are out
         </p>
@@ -162,6 +171,7 @@ export function ServeScreen({
       <div className="flex flex-none items-end justify-between pt-4">
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() => {
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_ACE" });
@@ -173,6 +183,7 @@ export function ServeScreen({
         </Button>
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() => {
             setLetNotice("Let — replay the point.");
             onAction({ type: "TAP_LET" });

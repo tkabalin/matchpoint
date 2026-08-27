@@ -54,6 +54,19 @@ test("a second tap during the flash does not advance twice", async () => {
   expect(second).not.toHaveBeenCalled();
 });
 
+test("reports pending while a tap's flash is in flight", async () => {
+  const onPendingChange = vi.fn();
+  const user = userEvent.setup();
+  render(<CourtDiagram zones={[zone("Net", vi.fn())]} onPendingChange={onPendingChange} />);
+
+  await user.click(screen.getByRole("button", { name: "Net" }));
+  expect(onPendingChange).toHaveBeenLastCalledWith(true);
+
+  await waitFor(() => {
+    expect(onPendingChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
 test("chips the net band only when labelled", () => {
   const { rerender } = render(<CourtDiagram />);
   expect(screen.queryByText("Rally length")).not.toBeInTheDocument();

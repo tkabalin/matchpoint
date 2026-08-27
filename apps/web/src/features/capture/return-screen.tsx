@@ -33,6 +33,10 @@ export function ReturnScreen({
   // whenever no follow-up is pending.
   const [missedTo, setMissedTo] = useState<FailureMode | null>(null);
   const [letNotice, setLetNotice] = useState<string | null>(null);
+  // Ace/Fault/Let sit outside the court, so they're not covered by CourtDiagram's own
+  // zone-vs-zone tap guard — disable them while a zone tap's flash is pending, or one
+  // fires immediately and the queued zone tap lands later against stale state.
+  const [pending, setPending] = useState(false);
 
   function miss(location: FailureMode) {
     return () => {
@@ -112,7 +116,12 @@ export function ReturnScreen({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <CourtDiagram zones={zones} netLabel="Net" className="min-h-0 flex-1" />
+        <CourtDiagram
+          zones={zones}
+          netLabel="Net"
+          className="min-h-0 flex-1"
+          onPendingChange={setPending}
+        />
         <p className="mt-2.5 px-0.5 text-center text-xs text-muted-foreground">
           Only the safe area counts as in
         </p>
@@ -121,6 +130,7 @@ export function ReturnScreen({
       <div className="grid flex-none grid-cols-3 gap-2 pt-4">
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() => {
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_ACE" });
@@ -132,6 +142,7 @@ export function ReturnScreen({
         </Button>
         <Button
           variant="outline"
+          disabled={pending}
           onClick={() => {
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_FAULT" });
@@ -143,6 +154,7 @@ export function ReturnScreen({
         </Button>
         <Button
           variant="ghost"
+          disabled={pending}
           onClick={() => {
             setLetNotice("Let — replay the point.");
             onAction({ type: "TAP_LET" });

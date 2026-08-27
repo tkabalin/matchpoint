@@ -82,6 +82,19 @@ test("the ace button records an ace with no placement", async () => {
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_SERVE_ACE" });
 });
 
+test("ace and let are disabled while a court tap's flash is pending", async () => {
+  const { user } = renderServe();
+
+  await user.click(screen.getByRole("button", { name: "Net" }));
+  expect(screen.getByRole("button", { name: "Ace" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Let" })).toBeDisabled();
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Ace" })).toBeEnabled();
+  });
+  expect(screen.getByRole("button", { name: "Let" })).toBeEnabled();
+});
+
 test("the second attempt says why the first one faulted", () => {
   const draft = draftFor();
   renderServe({

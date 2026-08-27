@@ -94,11 +94,17 @@ export function CourtDiagram({
   netLabel,
   className,
   children,
+  onPendingChange,
 }: {
   zones?: CourtTapZone[];
   netLabel?: string;
   className?: string;
   children?: React.ReactNode;
+  // Fires while a zone tap's flash is pending, so a screen with its own buttons
+  // alongside the court (Ace, Let, Fault) can disable them for the same window —
+  // otherwise one of those fires immediately and the queued zone tap lands later
+  // against whatever state has since moved on to.
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [flashing, setFlashing] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,9 +119,11 @@ export function CourtDiagram({
     // A second tap during the flash would advance twice off one ball.
     if (flashTimer.current !== null) return;
     setFlashing(zone.name);
+    onPendingChange?.(true);
     flashTimer.current = setTimeout(() => {
       flashTimer.current = null;
       setFlashing(null);
+      onPendingChange?.(false);
       zone.onTap();
     }, FLASH_MS);
   }

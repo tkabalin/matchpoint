@@ -90,6 +90,23 @@ test("the opponent's fault carries no placement either", async () => {
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_SERVE_FAULT" });
 });
 
+test("ace, fault and let are disabled while a court tap's flash is pending", async () => {
+  const { user } = renderReturn();
+
+  // "Safe area" dispatches straight through rather than opening the forced/mistake
+  // sheet, so it doesn't hide the rest of the screen from the accessibility tree.
+  await user.click(screen.getByRole("button", { name: "Safe area" }));
+  expect(screen.getByRole("button", { name: "Ace" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Fault" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Let" })).toBeDisabled();
+
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Ace" })).toBeEnabled();
+  });
+  expect(screen.getByRole("button", { name: "Fault" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Let" })).toBeEnabled();
+});
+
 test("the second attempt says a second serve is coming, without a reason", () => {
   renderReturn({ step: SERVE_2 });
 
