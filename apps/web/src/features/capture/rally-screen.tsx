@@ -13,7 +13,13 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import {
+  COURT_ACTIONS,
+  COURT_COLUMNS,
+  COURT_REGION_GRID,
+  COURT_ROWS,
+  CourtDiagram,
+} from "./court-diagram";
 import type { EndReason, RallyBucket } from "./point";
 import { WinnerSheet } from "./winner-sheet";
 
@@ -70,8 +76,10 @@ export function RallyScreen({
       </div>
 
       <CourtDiagram netLabel="Rally length" className="min-h-0 flex-1">
-        <div className="absolute inset-x-0 top-0 grid h-1/2 grid-cols-2 grid-rows-2 gap-2.5 px-4 pt-[26px] pb-[22px]">
-          {OUTCOMES.map((outcome) => {
+        {/* Both groups share one grid: two overlapping ones would each cover the other's
+            cards, and a card sits in a court region rather than an even fraction. */}
+        <div className="absolute inset-0 grid" style={COURT_REGION_GRID}>
+          {OUTCOMES.map((outcome, index) => {
             const selected = won === outcome.won && endReason === outcome.endReason;
             return (
               <Button
@@ -86,9 +94,13 @@ export function RallyScreen({
                     endReason: outcome.endReason,
                   });
                 }}
+                style={{
+                  gridColumn: COURT_COLUMNS[index % 2],
+                  gridRow: COURT_ROWS[Math.floor(index / 2)],
+                }}
                 className={cn(
                   CARD,
-                  "h-full flex-col gap-1",
+                  "m-[3px] h-auto flex-col gap-1 px-1",
                   selected
                     ? "bg-primary hover:bg-primary/90"
                     : outcome.won
@@ -121,10 +133,8 @@ export function RallyScreen({
               </Button>
             );
           })}
-        </div>
 
-        <div className="absolute inset-x-0 bottom-0 grid h-1/2 grid-cols-2 grid-rows-2 gap-2.5 px-4 pt-[22px] pb-[26px]">
-          {BUCKET_LABELS.map(({ bucket, label }) => {
+          {BUCKET_LABELS.map(({ bucket, label }, index) => {
             const selected = rallyBucket === bucket;
             return (
               <Button
@@ -136,9 +146,13 @@ export function RallyScreen({
                 onClick={() => {
                   onRallyBucketChange(bucket);
                 }}
+                style={{
+                  gridColumn: COURT_COLUMNS[index % 2],
+                  gridRow: COURT_ROWS[2 + Math.floor(index / 2)],
+                }}
                 className={cn(
                   CARD,
-                  "h-full text-base font-semibold tabular-nums",
+                  "m-[3px] h-auto px-1 text-base font-semibold tabular-nums",
                   selected
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-white/90 text-foreground hover:bg-white/99",

@@ -9,7 +9,14 @@
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import {
+  COURT_ACTIONS,
+  COURT_COLUMNS,
+  COURT_REGION_COLUMNS,
+  COURT_REGION_GRID,
+  COURT_ROWS,
+  CourtDiagram,
+} from "./court-diagram";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent
@@ -36,9 +43,10 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
       </div>
 
       <CourtDiagram className="min-h-0 flex-1">
-        <div className="absolute inset-0 grid grid-cols-2 grid-rows-4 gap-x-2.5 gap-y-[26px] px-4 py-[52px]">
-          {SHOTS.flatMap((shot) =>
-            WINGS.map((wing) => (
+        {/* One card per court region: a row per shot type, a column per wing. */}
+        <div className="absolute inset-0 grid" style={COURT_REGION_GRID}>
+          {SHOTS.flatMap((shot, shotIndex) =>
+            WINGS.map((wing, wingIndex) => (
               <Button
                 key={`${wing.wing}-${shot.shotType}`}
                 variant="ghost"
@@ -50,7 +58,10 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
                     shotType: shot.shotType,
                   });
                 }}
-                className="h-full rounded-lg border-white/70 bg-white/90 text-sm font-semibold text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+                style={{ gridColumn: COURT_COLUMNS[wingIndex], gridRow: COURT_ROWS[shotIndex] }}
+                // A region is narrow in landscape, where the court is height-bound, so
+                // the label wraps rather than running past the card it sits in.
+                className="m-[3px] h-auto rounded-lg border-white/70 bg-white/90 px-1 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
               >
                 {shot.label}
               </Button>
@@ -59,12 +70,17 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
         </div>
 
         {/* On the net line, as drawn — but above the mesh, which hides them in the
-            prototype's own screenshot. Without these the two columns are unlabelled. */}
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 items-center gap-2 px-[14px]">
-          {WINGS.map((wing) => (
+            prototype's own screenshot. Without these the two columns are unlabelled, and
+            each sits over the column it names so it lines up with those cards. */}
+        <div
+          className="pointer-events-none absolute inset-x-0 top-1/2 z-30 grid -translate-y-1/2 items-center"
+          style={{ gridTemplateColumns: COURT_REGION_COLUMNS }}
+        >
+          {WINGS.map((wing, wingIndex) => (
             <span
               key={wing.wing}
-              className="flex h-8 flex-1 items-center justify-center rounded-md bg-white/95 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]"
+              style={{ gridColumn: COURT_COLUMNS[wingIndex] }}
+              className="flex h-8 items-center justify-center rounded-md bg-white/95 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]"
             >
               {wing.label}
             </span>
