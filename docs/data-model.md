@@ -192,10 +192,10 @@ by the client's scoring engine and never recomputed server-side, since that logi
 the client for offline use.
 
 Deleting a match deletes its points too: the realistic delete is a coach backing out of a mis-set-up
-match. `deleted_matches` stops that delete being undone by a create still queued offline: a queued
-create or point-flush naming a deleted id gets `410 Gone` rather than a 404, so the client can
-discard rather than surface an error. The record is kept for thirty days and holds only the id and
-the deleting coach.
+match. `deleted_matches` stops a delete being undone by a create still queued offline, whether the
+match went on its own or with the player it was recorded against: a queued create or point-flush
+naming a deleted id gets `410 Gone` rather than a 404, so the client can discard rather than surface
+an error. The record is kept for thirty days and holds only the id and the deleting coach.
 
 `email_verifications` stands alone: it holds addresses proving themselves at sign-up, before any
 coach row exists. `otp_hash` and `token_hash` are exactly-one-of under a CHECK, one row per address.
