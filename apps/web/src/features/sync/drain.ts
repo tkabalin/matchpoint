@@ -31,7 +31,7 @@ import {
 
 import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
-import { type OutboxFailure, type OutboxRow } from "@/features/outbox/db";
+import { isDrainableKind, type OutboxFailure, type OutboxRow } from "@/features/outbox/db";
 import { markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 
@@ -190,7 +190,7 @@ async function flushMatch(
   // database-changes-needed.md). They sit pending rather than failing, and they hold
   // the outcome back: completing the match would fence out its own checkpoints the
   // moment those endpoints do land.
-  const undrainable = rows.filter((row) => row.kind === "checkpoint" || row.kind === "eventDelete");
+  const undrainable = rows.filter((row) => !isDrainableKind(row.kind));
 
   if (matchRow) {
     let payload: MatchCreate;

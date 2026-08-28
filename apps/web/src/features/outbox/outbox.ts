@@ -14,6 +14,7 @@
 import { liveQuery, type Observable } from "dexie";
 
 import {
+  isDrainableKind,
   outboxDb,
   OUTBOX_PAYLOAD_VERSION,
   type OutboxEntry,
@@ -192,8 +193,17 @@ export function watchCounts(coachId: string): Observable<OutboxCounts> {
   );
 }
 
+/**
+ * Counts only what a drain could actually send: a checkpoint has no endpoint yet,
+ * so counting it would show unsynced work no action of the coach's ever clears.
+ * Filtered in memory over one coach's rows, the kind union not being indexed.
+ */
 function countByStatus(coachId: string, status: OutboxRow["status"]): Promise<number> {
-  return outboxDb.entries.where("[coachId+status]").equals([coachId, status]).count();
+  return outboxDb.entries
+    .where("[coachId+status]")
+    .equals([coachId, status])
+    .filter((row) => isDrainableKind(row.kind))
+    .count();
 }
 
 let persistenceRequested = false;

@@ -34,6 +34,23 @@ import Dexie, { type EntityTable } from "dexie";
 export type OutboxEntityKind = "match" | "point" | "matchOutcome" | "checkpoint" | "eventDelete";
 
 /**
+ * Whether the drain has a request for a kind: one answer for both sides of it,
+ * since `drain.ts` sends only these and `watchCounts` counts only these. A
+ * record, so widening the union above is a compile error until it is classified.
+ */
+const DRAINABLE_KINDS: Record<OutboxEntityKind, boolean> = {
+  match: true,
+  point: true,
+  matchOutcome: true,
+  checkpoint: false,
+  eventDelete: false,
+};
+
+export function isDrainableKind(kind: OutboxEntityKind): boolean {
+  return DRAINABLE_KINDS[kind];
+}
+
+/**
  * `failed` is where the drain engine parks a row the server rejected, so it
  * stops being retried without being thrown away. `readPending` skips those,
  * which is what keeps one rejected row from blocking every row behind it.
