@@ -190,11 +190,13 @@ guard breaks it.
 
 ### Timing on a shared runner
 
-Several CI jobs run at once on one machine, and Vitest sizes its worker pool from the cores it can
-see rather than the share it gets, so concurrent jobs together ask for a multiple of the CPU that
-exists. Every test budget is wall-clock, so the same work takes more of each one under that load and
-the tightest expires first: a render that resolves in half a second on an idle machine can take ten
-times longer.
+Several CI jobs run at once on one machine, each in a container under a CPU quota set in the
+runner's configuration. Node reads that quota, so Vitest sizes its worker pool from the job's share
+rather than the host's cores: a quota of n CPUs runs n - 1 workers, and one worker below three. The
+quota keeps jobs from starving each other, but a saturated host still splits its cores across every
+running job, and every test budget is wall-clock, so the same work takes more of each budget under
+that load and the tightest expires first: a render that resolves in half a second on an idle machine
+can take ten times longer.
 
 Widening a budget only moves the next failure, so two things are done instead:
 
@@ -210,9 +212,16 @@ Widening a budget only moves the next failure, so two things are done instead:
 
 Neither reaches a budget that was never the suite's own: a library default sitting well below the
 configured figure is the one that expires first, so a poll with no promise to await states its
-budget at the call site. Capping a job's own worker count is not the lever it looks like either,
-since a pool with fewer runnable processes gets a smaller share of a contended machine: it lengthens
-the job without shortening any test.
+budget at the call site. The worker count is not a lever in the repo either: it follows the quota,
+so it is set where the quota is, in the runner's configuration.
+
+A small pool also changes what costs time. Wall time is close to the sum of every file's own, so a
+wait a test spends idle is paid in full rather than overlapped with another worker's work. The
+largest such wait is `user-event`'s own: by default it yields a macrotask between every keystroke
+and click, which nothing under test needs, so every `userEvent.setup()` passes `{ delay: null }` and
+the interaction-heavy suites run in about two thirds of the time. What remains is the cost of
+building a fresh jsdom for each file, which is the price of the isolation `src/test-setup.ts`'s
+globals rely on.
 
 ## Regression testing
 
