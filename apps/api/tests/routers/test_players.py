@@ -14,6 +14,7 @@ from matchpoint_api import photos
 from matchpoint_api.auth import new_session_token
 from matchpoint_api.models import (
     Coach,
+    DeletedMatch,
     DominantHand,
     Match,
     Player,
@@ -813,6 +814,39 @@ def test_delete_player_takes_a_match_being_captured_with_it(
 
     assert client.delete(f"/players/{player.id}").status_code == 204
     assert db_session.get(Match, match.id) is None
+
+
+def test_delete_player_records_the_ids_of_the_matches_it_freed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """What a match's own delete route writes, written here too and once per match (#243).
+    Without it a create or point flush queued offline for one of them answers 404, which
+    the sync layer parks as a failure the coach can never clear, for data they chose to
+    destroy."""
+    player = make_player(db_session, coach_id=coach.id)
+    match_ids = [make_match(db_session, player_id=player.id).id for _ in range(2)]
+    db_session.commit()
+
+    assert client.delete(f"/players/{player.id}").status_code == 204
+
+    for match_id in match_ids:
+        recorded = db_session.get(DeletedMatch, match_id)
+        assert recorded is not None
+        assert recorded.coach_id == coach.id
+        assert recorded.deleted_at > datetime.now(UTC) - timedelta(minutes=1)
+
+
+def test_delete_player_with_no_matches_records_nothing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The ids remembered are the ids erased, so a roster entry that never played leaves
+    nothing behind to sit out its window."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    assert client.delete(f"/players/{player.id}").status_code == 204
+
+    assert db_session.scalar(select(func.count()).select_from(DeletedMatch)) == 0
 
 
 def test_delete_player_leaves_the_rest_of_the_roster_alone(

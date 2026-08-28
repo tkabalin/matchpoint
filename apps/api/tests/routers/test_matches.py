@@ -461,6 +461,26 @@ def test_create_match_refuses_an_id_the_coach_deleted(
     assert db_session.scalar(select(func.count()).select_from(Match)) == 0
 
 
+def test_create_match_refuses_an_id_a_player_delete_freed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The commoner way a coach destroys a match: they delete the player, and the matches
+    go with them. There is no player left for the queued create to name, so the answer
+    came from the check above the tombstone and was the 404 the transferred-player case
+    needs the sync layer to park (#243)."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    body = {"id": str(match.id), "player_id": str(player.id), "played_on": "2026-08-01"}
+    assert client.delete(f"/players/{player.id}").status_code == 204
+
+    response = client.post("/matches", json=body)
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+    assert db_session.scalar(select(func.count()).select_from(Match)) == 0
+
+
 def test_create_match_allows_an_id_whose_delete_has_aged_out(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -1073,6 +1093,24 @@ def test_update_a_deleted_match_is_410(
     assert response.json()["detail"] == MATCH_WAS_DELETED
 
 
+def test_update_a_match_a_player_delete_took_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The same queued finish, where the coach deleted the player rather than the one
+    match. The match is as gone either way, so the status the sync layer discards on has
+    to be the same one (#243)."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/players/{player.id}").status_code == 204
+
+    response = client.patch(f"/matches/{match_id}", json={"result": MatchResult.WIN.value})
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+
+
 def test_delete_match_removes_it(client: TestClient, db_session: Session, coach: Coach) -> None:
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()
@@ -1137,8 +1175,7 @@ def test_delete_match_records_the_id_it_freed(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     """What stops a create still queued on another device from putting the match back.
-    Only the id is kept, and only the delete writes it, so nothing of the match itself
-    survives the request."""
+    Only the id is kept, so nothing of the match itself survives the request."""
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()
 
@@ -1906,6 +1943,28 @@ def test_ingest_into_a_deleted_match_is_410(
     db_session.commit()
     match_id = match.id
     assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.post(
+        f"/matches/{match_id}/points",
+        json={"device_id": str(uuid.uuid4()), "points": [point_payload()]},
+    )
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+    assert db_session.scalar(select(func.count()).select_from(Point)) == 0
+
+
+def test_ingest_into_a_match_a_player_delete_took_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The same backlog, where the coach deleted the player instead. Without a tombstone
+    per erased match these points would sit behind a failure count the coach cannot
+    clear, which is exactly what the 410 exists to prevent (#243)."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/players/{player.id}").status_code == 204
 
     response = client.post(
         f"/matches/{match_id}/points",

@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from psycopg.errors import UniqueViolation
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, literal, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -17,7 +17,14 @@ from matchpoint_api.auth import (
     revoke_player_sessions,
 )
 from matchpoint_api.db import get_db
-from matchpoint_api.models import Match, Player, PlayerSession, PlayerTransferCode, Point
+from matchpoint_api.models import (
+    DeletedMatch,
+    Match,
+    Player,
+    PlayerSession,
+    PlayerTransferCode,
+    Point,
+)
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.player import (
@@ -186,6 +193,27 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     photo_key = player.photo_key
     their_matches = select(Match.id).where(Match.player_id == player.id)
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
+    # Every match going with the player is remembered as its own delete would remember
+    # it, so a create or point flush queued offline is refused with the 410 the sync
+    # layer discards rather than the 404 it parks (#243). DO UPDATE for delete_match's
+    # reason: an id whose window has aged out can be created and deleted again.
+    #
+    # The matches are locked here rather than left to the delete below, so both routes
+    # take the match row before the tombstone row: taking them the other way round lets
+    # this delete and a concurrent one of the same match deadlock.
+    db.execute(
+        insert(DeletedMatch)
+        .from_select(
+            ["id", "coach_id"],
+            select(Match.id, literal(coach.id))
+            .where(Match.player_id == player.id)
+            .with_for_update(of=Match),
+        )
+        .on_conflict_do_update(
+            index_elements=[DeletedMatch.id],
+            set_={"deleted_at": func.clock_timestamp(), "coach_id": coach.id},
+        )
+    )
     db.execute(delete(Match).where(Match.player_id == player.id))
     # Their logins go with them: a session row authenticating a deleted player is a
     # foreign-key refusal waiting at the flush, and a credential nobody should hold.

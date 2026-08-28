@@ -154,6 +154,11 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
     # with a 500 rather than the 404 below.
     player = db.get(Player, data.player_id, with_for_update=True)
     if player is None or player.coach_id != coach.id:
+        # Deleting a player tombstones each of their matches (#243), and this 404 cannot
+        # tell one of those from a player who never existed. Read after the locked player
+        # read, as below: a delete committing during the wait is in no earlier snapshot.
+        if data.id is not None and deleted_within_window(db, data.id):
+            raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
         raise HTTPException(status_code=404, detail="Unknown player_id")
     values = data.model_dump()
     if values["id"] is None:
