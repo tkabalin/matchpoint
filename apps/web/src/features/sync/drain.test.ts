@@ -135,6 +135,12 @@ function outcomeEntry(matchId: string, trackedPlayerWon = true): OutboxEntry {
   };
 }
 
+/** A checkpoint row: no endpoint takes one yet, so the drain never maps the payload. */
+function checkpointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
+  const id = uid(tag);
+  return { id, coachId: COACH_ID, matchId, kind: "checkpoint", payload: { id, matchId, sequence } };
+}
+
 /** A point carrying the longest note the API takes, for the byte-bound test. */
 function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
   return pointEntry(tag, matchId, sequence, {
@@ -639,6 +645,29 @@ describe("refusals", () => {
       unauthorized: false,
       skipped: false,
     });
+  });
+
+  test("leaves a refused match's undrainable rows pending", async () => {
+    stubTransport((request) =>
+      request.pathname === "/matches"
+        ? jsonResponse(409, { detail: "That player has been archived." })
+        : respondOk(request),
+    );
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      checkpointEntry("a2", MATCH_A, 1),
+    );
+
+    const result = await drain();
+
+    // The checkpoint has no endpoint to have refused it, so it is not a failure.
+    expect((await readByMatch(MATCH_A)).map((row) => [row.kind, row.status])).toEqual([
+      ["match", "failed"],
+      ["point", "failed"],
+      ["checkpoint", "pending"],
+    ]);
+    expect(result).toMatchObject({ parked: 2 });
   });
 
   test("parks a refused point batch with the 422's own words, never retrying it", async () => {

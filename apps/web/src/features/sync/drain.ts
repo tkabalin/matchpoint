@@ -186,18 +186,18 @@ async function flushMatch(
   const matchRow = rows.find((row) => row.kind === "match");
   const pointRows = rows.filter((row) => row.kind === "point");
   const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
-  // Queued by capture, with no endpoint to send them to yet (see
-  // docs/scratch/database-changes-needed.md). They sit pending rather than failing, and they hold
-  // the outcome back: completing the match would fence out its own checkpoints the
-  // moment those endpoints do land.
-  const undrainable = rows.filter((row) => !isDrainableKind(row.kind));
+  // checkpoint and eventDelete rows are queued by capture with no endpoint to send them to
+  // yet (see outbox/db.ts). They sit pending rather than failing, and they hold the outcome
+  // back: completing the match would fence out its own checkpoints the moment those
+  // endpoints do land.
+  const sendable = rows.filter((row) => isDrainableKind(row.kind));
 
   if (matchRow) {
     let payload: MatchCreate;
     try {
       payload = toMatchCreate(Match.fromJSON(matchRow.payload));
     } catch (cause) {
-      await park(rows, unmappable(cause), sweep);
+      await park(sendable, unmappable(cause), sweep);
       return false;
     }
     const { error, response } = await createMatch({ body: payload });
@@ -215,7 +215,7 @@ async function flushMatch(
         await discard(rows, sweep);
         return false;
       case "refused":
-        await park(rows, refusal(verdict.response, error), sweep);
+        await park(sendable, refusal(verdict.response, error), sweep);
         return false;
       case "ok":
         await acknowledge([matchRow], sweep);
@@ -259,7 +259,7 @@ async function flushMatch(
     start = batch.end;
   }
 
-  if (outcomeRow && undrainable.length === 0) {
+  if (outcomeRow && sendable.length === rows.length) {
     const halt = await flushOutcome(outcomeRow, first.matchId, sweep);
     if (halt) return true;
   }
