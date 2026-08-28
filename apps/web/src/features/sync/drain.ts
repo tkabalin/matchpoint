@@ -11,7 +11,7 @@
  * in one of five buckets: success removes the rows; a 401 halts the whole run
  * with the queue intact, because a revoked session must never cost a match; a
  * 410 means the match those rows belong to was deliberately deleted, so they are
- * discarded rather than parked; any other 4xx, a 404 included, is a permanent
+ * discarded rather than parked, and this device's log of it goes with them; any other 4xx, a 404 included, is a permanent
  * refusal, so the match's rows park as failed with the reason recorded; network
  * errors, 5xx and 429 are transient, so the sweep runs again on a doubling
  * backoff until the schedule runs out. All three requests are idempotent
@@ -32,6 +32,7 @@ import {
 import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
 import { isDrainableKind, type OutboxFailure, type OutboxRow } from "@/features/outbox/db";
+import { removeMatch } from "@/features/outbox/match-log";
 import { markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 
@@ -212,7 +213,7 @@ async function flushMatch(
       case "gone":
         // A match that cannot be created has nothing for its points to attach
         // to, so the whole group goes, not just the create.
-        await discard(rows, sweep);
+        await discard(rows, first.matchId, sweep);
         return false;
       case "refused":
         await park(sendable, refusal(verdict.response, error), sweep);
@@ -246,7 +247,7 @@ async function flushMatch(
       case "gone":
         // The match was deleted, which every row behind this batch would hit
         // too, so they are discarded on the same grouping as a park.
-        await discard(pointRows.slice(start), sweep);
+        await discard(pointRows.slice(start), first.matchId, sweep);
         return false;
       case "refused":
         // The batch is refused whole, and the refusal is durable state the
@@ -289,7 +290,7 @@ async function flushOutcome(row: OutboxRow, matchId: string, sweep: Sweep): Prom
       sweep.unauthorized = true;
       return true;
     case "gone":
-      await discard([row], sweep);
+      await discard([row], matchId, sweep);
       return false;
     case "refused":
       await park([row], refusal(verdict.response, error), sweep);
@@ -354,13 +355,16 @@ async function acknowledge(rows: readonly OutboxRow[], sweep: Sweep): Promise<vo
 }
 
 /**
- * Removes rows unsent because the coach deleted the match they belong to, on
- * this device or another. Not parked, because a failed count would ask them to
- * act on their own decision. Every other row that can never land does park, so
- * one they did not choose to lose stays visible (#214).
+ * Removes rows unsent because the coach deleted the match they belong to, on this
+ * device or another, and this device's log of that match with them: left behind, the
+ * log would have capture resume into a match that no longer exists. Not parked,
+ * because a failed count would ask them to act on their own decision, while every
+ * other row that can never land does park, so one they did not choose to lose stays
+ * visible (#214).
  */
-async function discard(rows: readonly OutboxRow[], sweep: Sweep): Promise<void> {
+async function discard(rows: readonly OutboxRow[], matchId: string, sweep: Sweep): Promise<void> {
   await remove(rows.map((row) => row.id));
+  await removeMatch(matchId);
   sweep.discarded += rows.length;
 }
 

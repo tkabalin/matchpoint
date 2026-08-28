@@ -110,13 +110,13 @@ all its stored points, so a late, partial, or retried flush lands on the same an
 
 Every server response falls into one of five buckets:
 
-| Response                | Action                                | Rationale                                                 |
-| ----------------------- | ------------------------------------- | --------------------------------------------------------- |
-| 2xx                     | Remove rows from the queue            | Acknowledged                                              |
-| 401                     | Halt the run, keep the queue intact   | A revoked session must never cost a match                 |
-| 410                     | Discard the rows unsent               | The match was deliberately deleted; no failed count shown |
-| Other 4xx (incl. 404)   | Park rows as `failed` with the reason | A permanent refusal no retry will clear                   |
-| 5xx, 429, network error | Retry on a doubling backoff           | Transient; a 429's `Retry-After` overrides the schedule   |
+| Response                | Action                                                      | Rationale                                                                                      |
+| ----------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| 2xx                     | Remove rows from the queue                                  | Acknowledged                                                                                   |
+| 401                     | Halt the run, keep the queue intact                         | A revoked session must never cost a match                                                      |
+| 410                     | Discard the rows unsent, and this device's log of the match | The match was deliberately deleted; no failed count shown, and capture must not resume into it |
+| Other 4xx (incl. 404)   | Park rows as `failed` with the reason                       | A permanent refusal no retry will clear                                                        |
+| 5xx, 429, network error | Retry on a doubling backoff                                 | Transient; a 429's `Retry-After` overrides the schedule                                        |
 
 The backoff schedule is `[1s, 2s, 4s, 8s]`. When the schedule runs out, the sweep ends and the next
 flush trigger starts a fresh attempt.

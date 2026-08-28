@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createMatch } from "@/features/capture/match";
 import type { Point } from "@/features/capture/point";
 import { outboxDb, type OutboxEntry, type OutboxFailure } from "@/features/outbox/db";
+import { appendEvent, findInProgressFor, readLog, saveMatch } from "@/features/outbox/match-log";
 import {
   append,
   markFailed,
@@ -790,6 +791,39 @@ describe("rows that can never land", () => {
       unauthorized: false,
       skipped: false,
     });
+  });
+
+  test("forgets a deleted match's log, so capture cannot resume into it", async () => {
+    stubTransport((request) =>
+      request.pathname === "/matches"
+        ? jsonResponse(410, { detail: "This match was deleted." })
+        : respondOk(request),
+    );
+    await queue(matchEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+    await saveMatch({
+      matchId: MATCH_A,
+      coachId: COACH_ID,
+      trackedPlayerId: PLAYER_ID,
+      nextSequence: 1,
+      finished: false,
+      updatedAt: 1_755_600_000_000,
+      payload: matchEntry(MATCH_A).payload,
+    });
+    await appendEvent({
+      id: uid("a1"),
+      matchId: MATCH_A,
+      coachId: COACH_ID,
+      sequence: 0,
+      kind: "point",
+      payload: pointEntry("a1", MATCH_A, 0).payload,
+    });
+
+    await drain();
+
+    // The delete was the coach's, made on another device; a log left behind would
+    // offer the match back on this one as something still being captured.
+    expect(await findInProgressFor(COACH_ID, PLAYER_ID)).toBeUndefined();
+    expect(await readLog(MATCH_A)).toEqual([]);
   });
 
   test("discards the points of a deleted match and flushes the next one", async () => {
