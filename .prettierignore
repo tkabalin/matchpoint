@@ -14,6 +14,9 @@ dev-dist/
 
 # Generated
 routeTree.gen.ts
+# The fake dataset and its README, written by apps/web/scripts/generate-fake-data.ts.
+# Reformatting the README would make the next run's output fail this check.
+apps/web/scripts/fake-data/
 # Only the generated tree — the package's own config files are ours to format.
 packages/api-client/src/
 
