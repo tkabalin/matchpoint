@@ -1,15 +1,69 @@
 # MatchPoint
 
-MatchPoint is a tennis statistics tracking app that lets coaches capture live match data and turn it
-into player performance analytics.
+MatchPoint is a tennis statistics app for coaches. During a match, a coach records each point on
+their phone as it happens: serve, rally outcome, rally length. Capture works with no signal and
+syncs when a connection returns. Between matches, the same data becomes an analytics dashboard of
+serve percentages, rally-length win rates and trends across matches and opponents, so training
+decisions rest on evidence rather than recollection.
+
+## Try it
+
+The prototype runs at <https://matchpoint.thomaskabalin.com>. It is a progressive web app, so it
+installs from the browser rather than an app store:
+
+- iOS (Safari): Share → Add to Home Screen.
+- Android (Chrome): accept the install prompt, or menu → Install app.
+
+Installed, it opens full-screen and keeps working without a connection.
+
+## Team
+
+- **Thomas Kabalin**: API, data model, security, infrastructure and CI/CD.
+- **Danny Gebhard**: frontend, accounts, roster and analytics dashboard.
+- **Luke Bryant**: frontend, live capture screen and scoring engine.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph device["Coach's phone or browser"]
+        spa["React PWA<br/>app shell cached by a service worker"]
+        outbox[("IndexedDB: outbox<br/>matches, points and outcomes awaiting sync")]
+        cache[("IndexedDB: read cache<br/>last-seen roster and matches")]
+        spa <--> outbox
+        spa <--> cache
+    end
+    cf["Cloudflare<br/>DNS and proxy"]
+    subgraph vps["VPS, Docker Compose"]
+        caddy["Caddy<br/>static SPA, /api/* proxy"]
+        api["FastAPI"]
+        pg[("PostgreSQL")]
+        caddy --> api --> pg
+    end
+    spa -- HTTPS --> cf -- "HTTPS, origin certificate" --> caddy
+    api -.-> resend["Resend<br/>sign-up and reset codes by email"]
+    api -.-> hibp["Have I Been Pwned<br/>breached-password range check"]
+```
+
+Solid arrows are the request path, from the app through the proxy to the database; dotted arrows are
+the API's calls to third-party services; cylinders are data stores.
+
+Points captured during a match are appended to the outbox on the device, never sent directly. The
+sync layer drains the outbox to the API whenever a connection exists, so the capture screen behaves
+the same with or without signal. The outbox and the read cache are separate databases, so clearing
+cached reads can never touch a point that has not synced. Caddy serves the app and proxies `/api/*`
+from one hostname, so there is no cross-origin traffic to configure. The server stores what it
+receives and answers the analytics queries; the scoring itself runs on the device. See
+[docs/offline-sync.md](docs/offline-sync.md) for the sync protocol and
+[docs/security.md](docs/security.md) for the policy behind the two external calls.
 
 ## Stack
 
-| Layer    | Key technologies                                 |
-| -------- | ------------------------------------------------ |
-| Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui |
-| Backend  | FastAPI · SQLAlchemy · Alembic · Python          |
-| Infra    | PostgreSQL · Docker Compose · GitLab CI          |
+| Layer    | Key technologies                                                                            |
+| -------- | ------------------------------------------------------------------------------------------- |
+| Frontend | React · Vite · TypeScript · Tailwind · shadcn/ui · TanStack Router/Query · Dexie · Recharts |
+| Backend  | FastAPI · Pydantic · SQLAlchemy · Alembic · Python                                          |
+| Infra    | PostgreSQL · Caddy · Docker Compose · GitLab CI                                             |
 
 See [docs/tech-stack.md](docs/tech-stack.md) for the full breakdown with versions, tooling, and test
 frameworks.
@@ -114,7 +168,9 @@ anything a route exposes, regenerate them and commit the result alongside the ch
 scripts/gen-api-client.sh
 ```
 
-A stale spec fails `uv run pytest` in `apps/api`, so it cannot go unnoticed for long.
+A stale spec fails `uv run pytest` in `apps/api`, and a stale generated client fails CI's
+`web-api-client` job, which regenerates the client and diffs it against what was committed. Neither
+is covered by `scripts/check.sh`, so run the script whenever a route changes.
 
 ### Check your work
 
@@ -143,32 +199,56 @@ CI runs the same checks in verify mode rather than write mode — `pnpm run form
 `uv run ruff format --check .` — so it fails the pipeline instead of reformatting. Formatting
 locally first is what keeps it green.
 
-For a coverage report on the API, run `uv run pytest --cov` from `apps/api` — coverage is opt-in, so
-it's not part of `scripts/check.sh` or plain `uv run pytest` runs.
+Coverage is opt-in on both sides, so it is not part of `scripts/check.sh` or the plain test
+commands. For a report, run `uv run pytest --cov` from `apps/api`, or
+`pnpm --filter @matchpoint/web run test --coverage` from the repo root; CI collects both.
+
+#### End-to-end tests
+
+The Playwright suite in `apps/web/e2e/` drives the real app in a browser. `scripts/check.sh` leaves
+it out because it is the slow tier; CI runs it on every push.
+
+```sh
+pnpm --filter @matchpoint/web exec playwright install chromium webkit --with-deps   # first run only
+pnpm --filter @matchpoint/web run test:e2e
+```
+
+Playwright starts the Vite dev server and the API itself, the latter through `scripts/e2e-api.sh` on
+a database of its own, so the Compose Postgres must be up and a dev API from the Run step must be
+stopped first. What each tier covers, and why, is in [docs/testing.md](docs/testing.md).
 
 ## Repository structure
-
-This is the target layout — some of these directories are planned and do not exist yet; create them
-as the work that needs them lands.
 
 ```
 apps/
   web/                      # React Single Page Application (Vite)
     public/
-    e2e/                    # end-to-end testing
+    e2e/                    # Playwright end-to-end specs
     index.html              # Vite entry point
     components.json         # shadcn CLI config (style, aliases, base colour)
+    playwright.config.ts
+    scripts/                # gen-icons.mjs: PWA icons from icon.svg
     src/
       routes/
-      features/             # feature slices (e.g. matches, players)
+      features/             # feature slices, one directory each
+        auth/
         capture/            # network-free zone (enforced by ESLint)
+        home/
+        matches/
+        outbox/             # Dexie queue of captured points, one row per write
         players/
+        profile/
+        pwa/
+        settings/
+        stats/
+        sync/               # drains the outbox to the API
       components/
         ui/                 # shadcn components
-        layout/
       lib/                  # shared helpers
   api/                      # FastAPI service (uv project)
+    media/                  # uploaded photos on a dev box (gitignored)
     migrations/
+    scripts/                # one-off operator scripts, e.g. import_sample_data.py
     src/matchpoint_api/     # app factory, config
       models/
       schemas/
@@ -180,10 +260,12 @@ infra/                      # deployment config for matchpoint-prod
 scripts/                    # dev setup/check/format helpers
 .claude/
   rules/                    # path-scoped conventions for Claude Code
-  skills/                   # task procedures for Claude Code; skills-lock.json pins the vendored ones
+  skills/                   # task procedures for Claude Code
 docs/                       # finished, production-ready documentation only
   scratch/                  # gitignored — in-progress/planning notes, not tracked
 deliverables/               # graded course submissions (e.g. assignment write-ups), not docs/ or app code
+CODEOWNERS                  # who reviews what
+skills-lock.json            # pins the vendored skills under .claude/skills/
 ```
 
 The web app is sliced by **feature**, not by file type, so architectural rules can be scoped to a
@@ -195,4 +277,4 @@ new team member or an external reader. Drafts and in-progress notes belong in `d
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and workflow conventions.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commit and code-style conventions.

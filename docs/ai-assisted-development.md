@@ -162,8 +162,7 @@ The instruction files are only as useful as they are accurate, so they are maint
 - `CLAUDE.md` requires the stack table to be updated when the stack changes, and `.gitignore` to be
   updated in the same change as the tool that generates the artefacts. Drift is closed at commit
   time rather than during a later audit.
-- `README.md` is the single source for the repository layout and is explicit about which parts of it
-  are the target rather than the current state, so a new folder follows the intended structure
-  instead of one inferred from whatever happens to exist.
+- `README.md` is the single source for the repository layout, so a new folder follows the documented
+  structure instead of one inferred from whatever happens to exist.
 - `docs.md` holds `docs/` to a finished-quality bar and routes drafts to gitignored `docs/scratch/`,
   so what an assistant reads back as project documentation is never half-written notes.
