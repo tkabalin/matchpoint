@@ -8,7 +8,7 @@
  * `result` is the only field the API has for how a match ended: MatchResult is
  * win/loss from the tracked player's side, with no reason. `reason` is carried and
  * checked anyway, so a future field to hold it costs no re-plumbing here — see
- * docs/database-changes-needed.md.
+ * docs/scratch/database-changes-needed.md.
  *
  * "completed" is a reason alongside the three that end a match early: a match won on
  * set count is finished explicitly by the coach (see live-match.tsx), and until that

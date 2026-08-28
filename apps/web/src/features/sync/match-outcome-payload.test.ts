@@ -24,7 +24,7 @@ describe("toMatchOutcomeUpdate", () => {
     });
   });
 
-  // The reason is carried for a future field (docs/database-changes-needed.md) but
+  // The reason is carried for a future field (docs/scratch/database-changes-needed.md) but
   // MatchResult has no home for it yet, so today's mapping drops it.
   test("does not send the reason — the API has nowhere to put it yet", () => {
     const body = toMatchOutcomeUpdate({ reason: "retirement", trackedPlayerWon: true });

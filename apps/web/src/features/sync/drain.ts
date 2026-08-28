@@ -187,7 +187,7 @@ async function flushMatch(
   const pointRows = rows.filter((row) => row.kind === "point");
   const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
   // Queued by capture, with no endpoint to send them to yet (see
-  // database-changes-needed.md). They sit pending rather than failing, and they hold
+  // docs/scratch/database-changes-needed.md). They sit pending rather than failing, and they hold
   // the outcome back: completing the match would fence out its own checkpoints the
   // moment those endpoints do land.
   const undrainable = rows.filter((row) => !isDrainableKind(row.kind));
