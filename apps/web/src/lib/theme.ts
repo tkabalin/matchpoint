@@ -5,6 +5,13 @@ export type Theme = "light" | "dark";
 const THEME_STORAGE_KEY = "matchpoint:theme";
 const DEFAULT_THEME: Theme = "light";
 
+// What the browser paints outside the app's own CSS: the canvas, form controls and
+// scrollbars follow color-scheme, and an installed PWA's status bar follows theme-color.
+// These values are duplicated in index.html's bootstrap, which must set them before
+// first paint; keep the two in step by hand (see .claude/rules/web.md). Declared above
+// the boot-time applyTheme call below, which reads it.
+const THEME_COLORS: Record<Theme, string> = { light: "#ffffff", dark: "#090B0C" };
+
 const listeners = new Set<() => void>();
 let cachedTheme: Theme = readStoredTheme();
 // index.html's inline bootstrap script sets .dark on <html> before this module
@@ -19,12 +26,6 @@ function readStoredTheme(): Theme {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   return stored === "dark" ? "dark" : DEFAULT_THEME;
 }
-
-// What the browser paints outside the app's own CSS: the canvas, form controls and
-// scrollbars follow color-scheme, and an installed PWA's status bar follows theme-color.
-// These values are duplicated in index.html's bootstrap, which must set them before
-// first paint; keep the two in step by hand (see .claude/rules/web.md).
-const THEME_COLORS: Record<Theme, string> = { light: "#ffffff", dark: "#090B0C" };
 
 /** The only place `.dark` is ever toggled on `<html>` — index.html's inline
  * bootstrap script does the same thing before first paint, deliberately

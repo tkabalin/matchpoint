@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { applyTheme, setStoredTheme } from "./theme";
 
@@ -51,6 +51,23 @@ describe("applyTheme", () => {
       applyTheme("dark");
     }).not.toThrow();
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+});
+
+describe("module load", () => {
+  // The module applies the stored theme as it loads, so the class and the tags agree with
+  // useTheme() even when index.html's bootstrap did not run. The static import above
+  // evaluated before beforeEach put the tags there, so only a re-import exercises the tag
+  // half of that path.
+  test("applies the stored theme with the tags already in place", async () => {
+    localStorage.setItem("matchpoint:theme", "dark");
+    vi.resetModules();
+
+    await import("./theme");
+
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+    expect(contentOf("color-scheme-meta")).toBe("dark");
+    expect(contentOf("theme-color-meta")).toBe("#090B0C");
   });
 });
 
