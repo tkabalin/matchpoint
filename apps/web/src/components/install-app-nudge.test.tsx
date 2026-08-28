@@ -63,7 +63,7 @@ test("shows the nudge when not dismissed and not installed", async () => {
 
 test("hides itself once dismissed, and stays hidden across a remount", async () => {
   stubMatchMedia(false);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderNudge();
 
   await user.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -83,7 +83,7 @@ test("never shows once the app is already installed", async () => {
 
 test("'See how' links to the full install guide", async () => {
   stubMatchMedia(false);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderNudge();
 
   await user.click(screen.getByRole("link", { name: "See how" }));

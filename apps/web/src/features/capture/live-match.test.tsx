@@ -46,7 +46,7 @@ async function renderMatch() {
   await waitFor(() => {
     expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
   });
-  return { ...view, onExit, onViewResults, user: userEvent.setup() };
+  return { ...view, onExit, onViewResults, user: userEvent.setup({ delay: null }) };
 }
 
 async function startMatch(user: Awaited<ReturnType<typeof renderMatch>>["user"]) {
@@ -609,6 +609,21 @@ test.each([
   await user.click(screen.getByRole("button", { name: new RegExp(outcome) }));
 
   expect(screen.getByText(flashed)).toBeVisible();
+});
+
+test("the flash clears itself rather than sitting over the next point", async () => {
+  const { user } = await renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+  expect(screen.getByText("Point won")).toBeVisible();
+
+  // Real timers: the duration is ScoreFlash's own (score-flash.test.tsx); this is the
+  // screen's side of the hand-off, that its onDone takes the flash down.
+  await waitFor(() => {
+    expect(screen.queryByText("Point won")).not.toBeInTheDocument();
+  });
 });
 
 /** Tapping the score opens the editor; the hold gesture is match-header.test.tsx's. */

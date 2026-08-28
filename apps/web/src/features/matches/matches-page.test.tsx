@@ -101,7 +101,7 @@ test("offers starting a match when none is in progress", async () => {
 
 test("tapping a match row navigates to its stats page", async () => {
   stubFetch({ "/api/matches": () => Response.json([match]) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("link", { name: /vs T\. Naidoo/ }));
@@ -132,7 +132,7 @@ test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what chan
       return Response.json(match);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
@@ -162,7 +162,7 @@ test("a completed match edits its metadata, with the scoring system locked", asy
       return Response.json(completed);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
@@ -191,7 +191,7 @@ test("Cancel closes the delete sheet without deleting", async () => {
       return new Response(null, { status: 204 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -211,7 +211,7 @@ test("Delete match asks for confirmation before sending anything", async () => {
       return new Response(null, { status: 204 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -234,7 +234,7 @@ test("confirming deletes the match and it leaves the list", async () => {
       return Response.json(listed);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -253,7 +253,7 @@ test("a failed delete says so and keeps the match", async () => {
       return Response.json([match]);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -278,7 +278,7 @@ test("the delete names this device, so its own capture claim cannot block it", a
       return Response.json([match]);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -314,7 +314,7 @@ test("a match being captured on another device offers to release and delete anyw
       return new Response(null, { status: 404 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));

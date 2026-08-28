@@ -70,7 +70,7 @@ async function renderSettings() {
 }
 
 test("links back to home", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettings();
 
   await user.click(screen.getByRole("link", { name: "Back to home" }));
@@ -84,7 +84,7 @@ test.each([
   ["App", "App"],
   ["Support", "Support"],
 ])("the %s row links to its category page", async (rowName, headingName) => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettings();
 
   await user.click(screen.getByRole("link", { name: rowName }));
@@ -93,7 +93,7 @@ test.each([
 });
 
 test("offers Sign Out at the root, for fast single-tap access", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettings();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));

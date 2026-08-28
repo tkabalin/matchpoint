@@ -46,7 +46,7 @@ function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
       {...handlers}
     />,
   );
-  return { ...handlers, user: userEvent.setup() };
+  return { ...handlers, user: userEvent.setup({ delay: null }) };
 }
 
 test("marks the server of the point being captured", () => {
@@ -82,7 +82,7 @@ test("keeps that width once sets have been played", () => {
 });
 
 test("back greys out where there is nothing behind, rather than vanishing", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     <MatchHeader
       match={match}

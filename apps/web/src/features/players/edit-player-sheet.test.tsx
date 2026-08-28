@@ -124,7 +124,7 @@ test("choosing a photo uploads it and shows it in place of initials", async () =
       return Response.json(current);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderWithOwnedQuery();
 
   await user.click(await screen.findByRole("button", { name: "Change Amahle's photo" }));
@@ -148,7 +148,7 @@ test("removing a photo restores initials", async () => {
       return Response.json(current);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderWithOwnedQuery(withPhoto);
 
   await user.click(await screen.findByRole("button", { name: "Change Amahle's photo" }));
@@ -158,7 +158,7 @@ test("removing a photo restores initials", async () => {
 });
 
 test("no Remove photo option when there is no photo to remove", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));
@@ -175,7 +175,7 @@ test("generating a transfer code shows it once, with a copy button", async () =>
   stubFetch({
     [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "ABCD1234" }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
@@ -198,7 +198,7 @@ test("shows 'Manage transfer code' and lets the coach cancel a pending one", asy
       return new Response(null, { status: 204 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderWithOwnedQuery(pending);
 
   await user.click(await screen.findByRole("button", { name: "Manage transfer code" }));
@@ -210,7 +210,7 @@ test("shows 'Manage transfer code' and lets the coach cancel a pending one", asy
 });
 
 test("generating a new code while one is pending", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   stubFetch({
     [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "FRESH9999" }),
   });
@@ -227,7 +227,7 @@ test("generating a new code while one is pending", async () => {
 // that kept a minted code on screen after Done — would not have failed anything.
 
 test("OK returns to the form from the can't-delete-yet step", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet({ ...player, has_transfer_code: true });
 
   await user.click(screen.getByRole("button", { name: "Delete player" }));
@@ -245,7 +245,7 @@ test("Cancel backs out of the transfer explanation without minting a code", asyn
       return Response.json({ code: "ABCD1234" });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
@@ -261,7 +261,7 @@ test("Done clears the minted code rather than leaving it on screen", async () =>
   stubFetch({
     [`POST /api/players/${player.id}/transfer-code`]: () => Response.json({ code: "ABCD1234" }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Transfer to another coach" }));
@@ -278,7 +278,7 @@ test("a refused save keeps the sheet open and shows the server's reason", async 
     [`PATCH /api/players/${player.id}`]: () =>
       Response.json({ detail: "That username is taken" }, { status: 409 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.clear(screen.getByLabelText("First name"));
@@ -297,7 +297,7 @@ test("a failed photo upload says so and leaves the initials showing", async () =
     [`POST /api/players/${player.id}/photo`]: () =>
       Response.json({ detail: "That image is too large" }, { status: 413 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));
@@ -314,7 +314,7 @@ test("a failed photo removal explains itself rather than appearing to succeed", 
   stubFetch({
     [`DELETE /api/players/${player.id}/photo`]: () => new Response(null, { status: 500 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet(withPhoto);
 
   await user.click(screen.getByRole("button", { name: "Change Amahle's photo" }));

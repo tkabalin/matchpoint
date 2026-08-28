@@ -142,7 +142,7 @@ test("reports a failed load instead of rendering an empty list", async () => {
 
 test("tapping a match row navigates to its stats page", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchList();
 
   await user.click(await screen.findByRole("link", { name: /vs T\. Naidoo/ }));
@@ -152,7 +152,7 @@ test("tapping a match row navigates to its stats page", async () => {
 
 test("the edit icon hands the match to the caller instead of navigating", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onEdit } = renderMatchList();
 
   await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
@@ -163,7 +163,7 @@ test("the edit icon hands the match to the caller instead of navigating", async 
 
 test("the delete icon hands the match to the caller instead of navigating", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onDelete } = renderMatchList();
 
   await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
@@ -205,7 +205,7 @@ test("filters by opponent name", async () => {
     matches: () => Response.json([match, clay, grass]),
     players: () => Response.json([player]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchList();
   await screen.findByText("vs T. Naidoo");
 
@@ -251,7 +251,7 @@ async function openFilters(user: ReturnType<typeof userEvent.setup>) {
 }
 
 test("filters by surface", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await openFilters(user);
 
   await user.click(screen.getByRole("combobox", { name: "Surface" }));
@@ -263,7 +263,7 @@ test("filters by surface", async () => {
 });
 
 test("filters by result", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await openFilters(user);
 
   await user.click(screen.getByRole("combobox", { name: "Result" }));
@@ -276,7 +276,7 @@ test("filters by result", async () => {
 // "Unfinished" is not the absence of a result filter — it selects matches whose result
 // is still null, which is a different set from "any result".
 test("filters to matches that were never finished", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await openFilters(user);
 
   await user.click(screen.getByRole("combobox", { name: "Result" }));
@@ -288,7 +288,7 @@ test("filters to matches that were never finished", async () => {
 });
 
 test("filters by a date range, inclusive at both ends", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await openFilters(user);
 
   await user.type(screen.getByLabelText("From"), "2026-08-10");
@@ -317,7 +317,7 @@ test("filters by which of the coach's players played the match", async () => {
     matches: () => Response.json([match, other]),
     players: () => Response.json([player, otherPlayer]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchList();
   await screen.findByText("vs T. Naidoo");
 
@@ -335,7 +335,7 @@ test("clearing filters restores the full list", async () => {
     matches: () => Response.json([match, clay]),
     players: () => Response.json([player]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderMatchList();
   await screen.findByText("vs T. Naidoo");
 

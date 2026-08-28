@@ -84,7 +84,7 @@ afterEach(() => {
 });
 
 test("opens a confirmation dialog when clicked", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignOutAction();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
@@ -94,7 +94,7 @@ test("opens a confirmation dialog when clicked", async () => {
 
 test("Cancel closes the dialog without signing out", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignOutAction();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
@@ -114,7 +114,7 @@ test("confirming signs out, clears the query cache, and navigates to sign-in dir
     timestamp: Date.now(),
     clientState: { mutations: [], queries: [] },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const queryClient = await renderSignOutAction();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
@@ -139,7 +139,7 @@ test("confirming also deletes the points that never synced", async () => {
     kind: "point",
     payload: { rallyLength: 4 },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignOutAction();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
@@ -160,7 +160,7 @@ test("says so with a toast when the device could not be cleared, but still signs
   vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
     throw new Error("storage blocked");
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignOutAction();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));

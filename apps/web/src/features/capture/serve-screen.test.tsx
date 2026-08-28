@@ -25,7 +25,7 @@ function renderServe(options: { step?: typeof SERVE_1; draft?: PointDraft } = {}
       onAction={onAction}
     />,
   );
-  return { onAction, user: userEvent.setup() };
+  return { onAction, user: userEvent.setup({ delay: null }) };
 }
 
 test("titles the attempt and names the court the point is played from", () => {

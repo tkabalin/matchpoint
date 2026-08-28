@@ -76,7 +76,7 @@ afterEach(() => {
 });
 
 test("links back to settings", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("link", { name: "Back to settings" }));
@@ -105,7 +105,7 @@ test("choosing a surface PATCHes it straight away", async () => {
       return Response.json({ ...coach, default_surface: "grass" });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("combobox", { name: "Default surface" }));
@@ -134,7 +134,7 @@ test("choosing a scoring system PATCHes it straight away", async () => {
       return Response.json({ ...coach, default_scoring_system: "pro_set" });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("combobox", { name: "Default scoring system" }));
@@ -155,7 +155,7 @@ test("choosing 'No preference' PATCHes null", async () => {
       return Response.json({ ...coach, default_surface: null });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage({ ...coach, default_surface: "hard" });
 
   await user.click(screen.getByRole("combobox", { name: "Default surface" }));

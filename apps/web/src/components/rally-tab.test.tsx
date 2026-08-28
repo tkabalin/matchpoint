@@ -26,7 +26,7 @@ test("shows the point-ender style cards, none open by default", async () => {
 });
 
 test("tapping a style card opens its drill", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 
@@ -37,7 +37,7 @@ test("tapping a style card opens its drill", async () => {
 });
 
 test("tapping the open card again collapses it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 
@@ -50,7 +50,7 @@ test("tapping the open card again collapses it", async () => {
 });
 
 test("tapping a different style card swaps the drill", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
@@ -63,7 +63,7 @@ test("tapping a different style card swaps the drill", async () => {
 });
 
 test("switching You won / They won leaves the drill closed", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 
@@ -79,7 +79,7 @@ test("switching You won / They won leaves the drill closed", async () => {
 // switching to "They won" silently re-resolved the same open card against
 // the opponent's data, with no change to the heading that told a coach so.
 test("switching sides while a drill is open closes it, rather than silently swapping its data", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
@@ -92,7 +92,7 @@ test("switching sides while a drill is open closes it, rather than silently swap
 });
 
 test("switching sides changes the radar's title between Your and Their", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 

@@ -179,7 +179,7 @@ test("links back to home", async () => {
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -193,7 +193,7 @@ test("links to the match setup screen", async () => {
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -222,7 +222,7 @@ test("the Notes button opens the notes sheet", async () => {
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -252,7 +252,7 @@ test("switches to Rally when its toggle is clicked, scope panel and recent form 
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
   await screen.findByText("Your serve");
@@ -270,7 +270,7 @@ test("Edit opens the sheet pre-filled with the player's current values", async (
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -294,7 +294,7 @@ test("saving Edit PATCHes only the field that changed", async () => {
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -317,7 +317,7 @@ test("saving Edit with nothing changed just closes, no request sent", async () =
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -340,7 +340,7 @@ test("Delete player asks for confirmation before sending anything", async () => 
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -361,7 +361,7 @@ test("Cancel on the delete step returns to the form without deleting", async () 
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -386,7 +386,7 @@ test("confirming Delete removes the player and returns to the roster", async () 
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -410,7 +410,7 @@ test("a player already flagged as pending transfer skips straight to the explana
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -437,7 +437,7 @@ test("a code created since the page loaded is caught by the request's own 409, s
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
@@ -465,7 +465,7 @@ test("an unexpected delete failure shows the server's own message", async () => 
     },
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 

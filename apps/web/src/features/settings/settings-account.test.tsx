@@ -66,7 +66,7 @@ afterEach(() => {
 });
 
 test("links back to settings", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("link", { name: "Back to settings" }));
@@ -75,7 +75,7 @@ test("links back to settings", async () => {
 });
 
 test("change password asks for confirmation before leaving Settings", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
@@ -86,7 +86,7 @@ test("change password asks for confirmation before leaving Settings", async () =
 });
 
 test("confirming the change-password dialog navigates to the forgot-password flow", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Change password" }));
@@ -97,7 +97,7 @@ test("confirming the change-password dialog navigates to the forgot-password flo
 });
 
 test("cancelling the change-password dialog makes no navigation happen", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Change password" }));
@@ -109,7 +109,7 @@ test("cancelling the change-password dialog makes no navigation happen", async (
 });
 
 test("offers Sign Out, grouped with the other session actions", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign Out" }));
@@ -119,7 +119,7 @@ test("offers Sign Out, grouped with the other session actions", async () => {
 
 test("signing out of all other sessions shows a confirm then a success dialog", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
@@ -131,7 +131,7 @@ test("signing out of all other sessions shows a confirm then a success dialog", 
 
 test("dismissing the success dialog leaves the settings page as it was", async () => {
   stubFetch(() => new Response(null, { status: 204 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
@@ -149,7 +149,7 @@ test("dismissing the success dialog leaves the settings page as it was", async (
 // like it worked.
 test("a failed revoke closes the dialog and says why, in the server's own words", async () => {
   stubFetch(() => Response.json({ detail: "Session store unavailable" }, { status: 503 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
@@ -161,7 +161,7 @@ test("a failed revoke closes the dialog and says why, in the server's own words"
 
 test("a failure with nothing to quote still explains itself", async () => {
   stubFetch(() => new Response(null, { status: 500 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
@@ -171,7 +171,7 @@ test("a failure with nothing to quote still explains itself", async () => {
 });
 
 test("cancelling the sign-out-all-sessions confirm makes no request", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Sign out of all other sessions" }));
@@ -182,7 +182,7 @@ test("cancelling the sign-out-all-sessions confirm makes no request", async () =
 });
 
 test("opens the delete-account flow", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSettingsAccount();
 
   await user.click(screen.getByRole("button", { name: "Delete account" }));

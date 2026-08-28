@@ -26,7 +26,7 @@ test("offers Remove photo only when one is set", () => {
 
 test("Choose photo opens the file picker, and a picked file reaches onChoose", async () => {
   const onChoose = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     <PhotoPickerSheet
       open
@@ -46,7 +46,7 @@ test("Choose photo opens the file picker, and a picked file reaches onChoose", a
 
 test("Remove photo calls onRemove", async () => {
   const onRemove = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     <PhotoPickerSheet
       open
@@ -64,7 +64,7 @@ test("Remove photo calls onRemove", async () => {
 
 test("Cancel closes the sheet without choosing or removing anything", async () => {
   const onOpenChange = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     <PhotoPickerSheet
       open

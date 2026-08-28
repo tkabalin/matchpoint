@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 test("no SpeechRecognition on the window: tapping opens the text sheet directly", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -79,7 +79,7 @@ test("no SpeechRecognition on the window: tapping opens the text sheet directly"
 
 test("SpeechRecognition present: tapping starts recording instead of opening the sheet", async () => {
   installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   const button = screen.getByRole("button", { name: "Add a note" });
@@ -94,7 +94,7 @@ test("SpeechRecognition present: tapping starts recording instead of opening the
 
 test("holding opens the text sheet without ever reaching for the mic", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await holdAndRelease(user, screen.getByRole("button", { name: "Add a note" }));
@@ -107,7 +107,7 @@ test("holding opens the text sheet without ever reaching for the mic", async () 
 
 test("a hold on a touch screen opens the sheet, though its release fires pointerleave first", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   const button = screen.getByRole("button", { name: "Add a note" });
@@ -121,7 +121,7 @@ test("a hold on a touch screen opens the sheet, though its release fires pointer
 
 test("a hold is spent by its own click, so the next activation dictates again", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await holdAndRelease(user, screen.getByRole("button", { name: "Add a note" }));
@@ -142,7 +142,7 @@ test("a hold is spent by its own click, so the next activation dictates again", 
 
 test("holding while recording stops and adds the note, rather than opening the sheet", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -167,7 +167,7 @@ test("holding while recording stops and adds the note, rather than opening the s
 
 test("holding while a session the service ended is pending adds the note once, not the sheet", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -197,7 +197,7 @@ test("a touch long-press's contextmenu is prevented, so the click it precedes su
 
 test("the typed sheet is reachable by keyboard, which can't perform the hold", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.tab();
@@ -212,7 +212,7 @@ test("the typed sheet is reachable by keyboard, which can't perform the hold", a
 
 test("stopping a recording adds the transcript as a note", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -229,7 +229,7 @@ test("stopping a recording adds the transcript as a note", async () => {
 
 test("a note goes to the caller's latest handler, not the one recording started with", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const atRecordStart = vi.fn();
   const afterMorePoints = vi.fn();
   const { rerender } = render(<NoteButton onAddNote={atRecordStart} />);
@@ -250,7 +250,7 @@ test("the last words before Stop are part of the note, not cut off", async () =>
   const instances = installFakeSpeechRecognition({
     finalResult: "second serve sitting up, punish the forehand",
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -274,7 +274,7 @@ test("the last words before Stop are part of the note, not cut off", async () =>
 
 test("a dictated note longer than the API accepts is capped, not sent whole", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -288,7 +288,7 @@ test("a dictated note longer than the API accepts is capped, not sent whole", as
 });
 
 test("the typed note field stops at the same length the API accepts", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
@@ -301,7 +301,7 @@ test("the typed note field stops at the same length the API accepts", async () =
 
 test("stopping with no speech heard adds nothing", async () => {
   installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -313,7 +313,7 @@ test("stopping with no speech heard adds nothing", async () => {
 
 test("a session the service ends by itself keeps recording, and the next tap adds the note once", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -340,7 +340,7 @@ test("a session the service ends by itself keeps recording, and the next tap add
 
 test("a session that ends by itself with nothing heard adds nothing", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -355,7 +355,7 @@ test("a session that ends by itself with nothing heard adds nothing", async () =
 
 test("a recognition that refuses to start falls back to the text sheet, not a stuck button", async () => {
   installFakeSpeechRecognition({ startThrows: true });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
@@ -370,7 +370,7 @@ test("a recognition that refuses to start falls back to the text sheet, not a st
 
 test("a recognition that can't be constructed at all falls back to the text sheet", async () => {
   installFakeSpeechRecognition({ constructionThrows: true });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
@@ -380,7 +380,7 @@ test("a recognition that can't be constructed at all falls back to the text shee
 
 test("a recognition error falls back to the text sheet, pre-filled with what was heard so far", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
@@ -395,7 +395,7 @@ test("a recognition error falls back to the text sheet, pre-filled with what was
 
 test("an errored session never auto-adds what it heard, since the sheet already holds it", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -413,7 +413,7 @@ test("an errored session never auto-adds what it heard, since the sheet already 
 
 test("a superseded session's late error doesn't open the sheet over a live recording", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -439,7 +439,7 @@ test("a superseded session's late error doesn't open the sheet over a live recor
 
 test("a superseded session's late end doesn't stand down a live recording", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -463,7 +463,7 @@ test("a superseded session's late end doesn't stand down a live recording", asyn
 
 test("after a recognition error the next tap records afresh, adding only the new note", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -486,7 +486,7 @@ test("after a recognition error the next tap records afresh, adding only the new
 
 test("navigating away mid-dictation still adds what was heard", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   const { unmount } = render(<NoteButton onAddNote={onAddNote} />);
 
@@ -501,7 +501,7 @@ test("navigating away mid-dictation still adds what was heard", async () => {
 
 test("navigating away after a recognition error adds nothing, since the sheet held it", async () => {
   const instances = installFakeSpeechRecognition();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   const { unmount } = render(<NoteButton onAddNote={onAddNote} />);
 
@@ -516,7 +516,7 @@ test("navigating away after a recognition error adds nothing, since the sheet he
 });
 
 test("cancel closes the sheet without adding a note", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onAddNote = vi.fn();
   render(<NoteButton onAddNote={onAddNote} />);
 
@@ -529,7 +529,7 @@ test("cancel closes the sheet without adding a note", async () => {
 });
 
 test("the sheet's Add note button is disabled until there's text to add", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));

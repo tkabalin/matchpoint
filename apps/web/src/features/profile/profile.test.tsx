@@ -97,7 +97,7 @@ test("shows initials when no photo is set", async () => {
 });
 
 test("links back to home", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("link", { name: "Back to home" }));
@@ -113,7 +113,7 @@ test("editing the name PATCHes only display_name and updates live", async () => 
       return Response.json({ ...coach, display_name: "Jamie C." });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Edit display name" }));
@@ -137,7 +137,7 @@ test("saving with nothing changed closes without a request", async () => {
       return Response.json(coach);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Edit display name" }));
@@ -153,7 +153,7 @@ test("choosing a photo uploads it and shows it in place of initials", async () =
   stubFetch({
     "POST /api/coaches/me/photo": () => Response.json(photoCoach),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Change profile photo" }));
@@ -174,7 +174,7 @@ test("Remove photo is offered only once one is set, and clears it", async () => 
   stubFetch({
     "DELETE /api/coaches/me/photo": () => Response.json(coach),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile({ ...coach, photo_url: "/api/media/abc.webp" });
 
   await user.click(screen.getByRole("button", { name: "Change profile photo" }));
@@ -184,7 +184,7 @@ test("Remove photo is offered only once one is set, and clears it", async () => 
 });
 
 test("no Remove photo option when there is no photo to remove", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Change profile photo" }));
@@ -202,7 +202,7 @@ test("a failed photo upload says so, in the server's own words", async () => {
     "POST /api/coaches/me/photo": () =>
       Response.json({ detail: "That image is too large" }, { status: 413 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Change profile photo" }));
@@ -218,7 +218,7 @@ test("a failed photo removal leaves the photo and explains itself", async () => 
   stubFetch({
     "DELETE /api/coaches/me/photo": () => new Response(null, { status: 500 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile({ ...coach, photo_url: "/api/media/abc.webp" });
 
   await user.click(screen.getByRole("button", { name: "Change profile photo" }));
@@ -233,7 +233,7 @@ test("a refused name change keeps the sheet open with the typed name", async () 
     "PATCH /api/coaches/me": () =>
       Response.json({ detail: "That name is not allowed" }, { status: 422 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Edit display name" }));
@@ -249,7 +249,7 @@ test("a refused name change keeps the sheet open with the typed name", async () 
 // Dismissing has to drop the draft: the name is re-seeded from the coach record each
 // time the sheet opens, so an abandoned edit reappearing would look saved.
 test("dismissing the edit sheet discards the typed name", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderProfile();
 
   await user.click(screen.getByRole("button", { name: "Edit display name" }));

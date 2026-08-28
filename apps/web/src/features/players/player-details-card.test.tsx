@@ -43,7 +43,7 @@ test("shows a dash for every field the player hasn't filled in", () => {
 
 test("Edit lives in this card and fires the handler", async () => {
   const onEdit = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<PlayerDetailsCard player={BASE_PLAYER} onEdit={onEdit} />);
 
   await user.click(screen.getByRole("button", { name: "Edit" }));

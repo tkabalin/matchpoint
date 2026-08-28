@@ -72,7 +72,7 @@ test("renders the email field", async () => {
 });
 
 test("updates the field as the user types", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
@@ -81,7 +81,7 @@ test("updates the field as the user types", async () => {
 });
 
 test("blocks submit until the email is filled", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   const submit = screen.getByRole("button", { name: "Continue" });
@@ -92,7 +92,7 @@ test("blocks submit until the email is filled", async () => {
 });
 
 test("links back to sign in", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await user.click(screen.getByRole("link", { name: "Back to sign in" }));
@@ -107,7 +107,7 @@ async function fillAndSubmitEmail(user: ReturnType<typeof userEvent.setup>) {
 
 test("sends the email to /api/auth/forgot-password", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -126,7 +126,7 @@ test("sends the email to /api/auth/forgot-password", async () => {
 
 test("moves to the OTP step on a 202 response", async () => {
   stubFetch(() => new Response(null, { status: 202 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -146,7 +146,7 @@ test("shows an inline error, the retry wait, and stays on the email step on a 42
         headers: { "Retry-After": "5" },
       }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -165,7 +165,7 @@ test("shows an inline error and stays on the email step on a 502 response", asyn
         status: 502,
       }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -178,7 +178,7 @@ test("shows an inline error and stays on the email step on a 502 response", asyn
 
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -188,7 +188,7 @@ test("shows a generic error when the request fails outright", async () => {
 
 test("sends one forgot-password request however impatiently Continue is clicked", async () => {
   const respond = stubPendingFetch();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderForgotPassword();
 
   await fillAndSubmitEmail(user);
@@ -211,7 +211,7 @@ async function goToOtpStep(user: ReturnType<typeof userEvent.setup>) {
 }
 
 test("renders the OTP field once the OTP step is reached", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   expect(screen.getByLabelText("Code")).toBeInTheDocument();
@@ -219,7 +219,7 @@ test("renders the OTP field once the OTP step is reached", async () => {
 });
 
 test("updates the OTP field as the user types", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123456");
@@ -228,7 +228,7 @@ test("updates the OTP field as the user types", async () => {
 });
 
 test("blocks the OTP submit until a code is entered", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   const submit = screen.getByRole("button", { name: "Verify" });
@@ -239,7 +239,7 @@ test("blocks the OTP submit until a code is entered", async () => {
 });
 
 test("blocks submit while the code is the wrong length, with a visible hint", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123");
@@ -254,7 +254,7 @@ async function fillAndSubmitOtp(user: ReturnType<typeof userEvent.setup>) {
 }
 
 test("sends the email and code to /api/auth/verify-reset-code", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
   stubFetch(() => new Response(null, { status: 200 }));
 
@@ -271,7 +271,7 @@ test("sends the email and code to /api/auth/verify-reset-code", async () => {
 });
 
 test("shows the server's error and stays on the OTP step on a 400 response", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
   stubFetch(
     () => new Response(JSON.stringify({ detail: "Incorrect or expired code" }), { status: 400 }),
@@ -284,7 +284,7 @@ test("shows the server's error and stays on the OTP step on a 400 response", asy
 });
 
 test("shows the retry wait and disables submit on a verify-reset-code 429 response", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
   stubFetch(
     () =>
@@ -301,7 +301,7 @@ test("shows the retry wait and disables submit on a verify-reset-code 429 respon
 });
 
 test("shows a generic error when the verify-reset-code request fails outright", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
 
@@ -312,7 +312,7 @@ test("shows a generic error when the verify-reset-code request fails outright", 
 });
 
 test("sends one verify-reset-code however impatiently Verify is clicked", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
   const respond = stubPendingFetch();
 
@@ -328,7 +328,7 @@ test("sends one verify-reset-code however impatiently Verify is clicked", async 
 });
 
 test("requesting a new code from the OTP step returns to the email step with the email preserved", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123456");
@@ -347,7 +347,7 @@ async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
 }
 
 test("renders the new password and confirm fields once the password step is reached", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
 
   expect(screen.getByLabelText("New password")).toBeInTheDocument();
@@ -356,7 +356,7 @@ test("renders the new password and confirm fields once the password step is reac
 });
 
 test("blocks the password submit until matching passwords are entered", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
 
   const submit = screen.getByRole("button", { name: "Reset Password" });
@@ -368,7 +368,7 @@ test("blocks the password submit until matching passwords are entered", async ()
 });
 
 test("blocks submit while the new password is too short, with a visible hint", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("New password"), "short");
@@ -380,7 +380,7 @@ test("blocks submit while the new password is too short, with a visible hint", a
 });
 
 test("blocks submit while the passwords don't match, with a visible hint", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");
@@ -397,7 +397,7 @@ async function fillAndSubmitPassword(user: ReturnType<typeof userEvent.setup>) {
 }
 
 test("sends the email and new password to /api/auth/reset-password, no code field", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   stubFetch(() => new Response(null, { status: 204 }));
 
@@ -417,7 +417,7 @@ test("sends the email and new password to /api/auth/reset-password, no code fiel
 });
 
 test("shows the server's error and stays on the password step on a 400 response", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   stubFetch(
     () => new Response(JSON.stringify({ detail: "Password rejected by policy" }), { status: 400 }),
@@ -430,7 +430,7 @@ test("shows the server's error and stays on the password step on a 400 response"
 });
 
 test("shows the server's error and stays on the password step on a 401 response", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   // The verification cookie is gone or already spent — from here the only way on is
   // starting over, since there is nothing left on this screen to re-answer.
@@ -445,7 +445,7 @@ test("shows the server's error and stays on the password step on a 401 response"
 });
 
 test("shows the server's error, the retry wait, and stays on the password step on a 429 response", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   stubFetch(
     () =>
@@ -462,7 +462,7 @@ test("shows the server's error, the retry wait, and stays on the password step o
 });
 
 test("retries the password submit alone on failure, without re-verifying the code", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   // The OTP step's own call already spent the code by the time this screen is
   // reached — nothing on the password step can trigger verify-reset-code again, so a
@@ -490,7 +490,7 @@ test("retries the password submit alone on failure, without re-verifying the cod
 });
 
 test("shows a generic error when the reset-password request fails outright", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
 
@@ -501,7 +501,7 @@ test("shows a generic error when the reset-password request fails outright", asy
 });
 
 test("sends one reset-password request however impatiently Reset Password is clicked", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   const respond = stubPendingFetch();
 
@@ -517,7 +517,7 @@ test("sends one reset-password request however impatiently Reset Password is cli
 });
 
 test("reaches the confirmation view once both steps succeed, and its link signs back in", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
   stubFetch(() => new Response(null, { status: 204 }));
 
@@ -529,7 +529,7 @@ test("reaches the confirmation view once both steps succeed, and its link signs 
 });
 
 test("starting over from the password step returns to the email step with the email preserved", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await goToPasswordStep(user);
 
   await user.type(screen.getByLabelText("New password"), "granite-otter-42-quiz");

@@ -40,7 +40,7 @@ async function renderPage() {
 }
 
 test("links back to settings", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("link", { name: "Back to settings" }));

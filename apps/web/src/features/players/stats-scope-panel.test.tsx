@@ -45,7 +45,7 @@ test("starts collapsed, showing the current filters as a summary", () => {
 });
 
 test("tapping the trigger expands the panel, not a popup", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderPanel();
 
   await user.click(screen.getByText("All matches"));
@@ -55,7 +55,7 @@ test("tapping the trigger expands the panel, not a popup", async () => {
 });
 
 test("selecting chips doesn't commit until Apply", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
 
@@ -68,7 +68,7 @@ test("selecting chips doesn't commit until Apply", async () => {
 });
 
 test("Apply commits the draft, updates the summary, and closes the panel", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
   await user.click(screen.getByRole("button", { name: "Set 2" }));
@@ -90,7 +90,7 @@ test("Apply commits the draft, updates the summary, and closes the panel", async
 // ("All matches · Set 2"), and the trigger row is the only feedback a coach
 // has that both committed, since the panel closes on Apply.
 test("Apply commits both Set and Phase, and the summary shows both together", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
   await user.click(screen.getByRole("button", { name: "Set 2" }));
@@ -108,7 +108,7 @@ test("Apply commits both Set and Phase, and the summary shows both together", as
 });
 
 test("the opponent picker only shows once scope is 'vs opponent', grouped by most played", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderPanel();
   await user.click(screen.getByText("All matches"));
 
@@ -126,7 +126,7 @@ test("the opponent picker only shows once scope is 'vs opponent', grouped by mos
 // sitting where a committed value belongs — and quietly fell back to the
 // all-matches record for Recent Form.
 test("Apply is disabled for 'vs opponent' until an opponent is actually picked", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
   await user.click(screen.getByRole("button", { name: "vs opponent" }));
@@ -149,7 +149,7 @@ test("Apply is disabled for 'vs opponent' until an opponent is actually picked",
 });
 
 test("searching the opponent list filters it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderPanel();
   await user.click(screen.getByText("All matches"));
   await user.click(screen.getByRole("button", { name: "vs opponent" }));
@@ -162,7 +162,7 @@ test("searching the opponent list filters it", async () => {
 });
 
 test("picking an opponent and applying sets opponentId and echoes their name", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
   await user.click(screen.getByRole("button", { name: "vs opponent" }));

@@ -50,7 +50,7 @@ function renderSheet(
       onDismiss={onDismiss}
     />,
   );
-  return { match, onSetScore, onEndMatch, onDismiss, user: userEvent.setup() };
+  return { match, onSetScore, onEndMatch, onDismiss, user: userEvent.setup({ delay: null }) };
 }
 
 /** `count` clean games to one side. */

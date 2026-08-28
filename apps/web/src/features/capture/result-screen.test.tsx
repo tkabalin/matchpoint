@@ -53,7 +53,7 @@ function renderResult(options: { match?: Match; wins?: boolean[]; onUndo?: () =>
       onViewResults={onViewResults}
     />,
   );
-  return { onHome, onViewResults, onFinish, user: userEvent.setup() };
+  return { onHome, onViewResults, onFinish, user: userEvent.setup({ delay: null }) };
 }
 
 test("a match won in straight sets reads as a win, with the score from its points", () => {

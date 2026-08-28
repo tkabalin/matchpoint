@@ -197,7 +197,7 @@ test("greets the coach by name once loaded", async () => {
 
 test("links to the profile page", async () => {
   stubUnauthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.click(screen.getByRole("link", { name: "Profile" }));
@@ -207,7 +207,7 @@ test("links to the profile page", async () => {
 
 test("links to the settings page", async () => {
   stubUnauthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.click(screen.getByRole("link", { name: "Settings" }));
@@ -294,7 +294,7 @@ test("shows no results list until the user types", async () => {
 
 test("filters players as the user types", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.type(screen.getByLabelText("Search players"), "sipho");
@@ -306,7 +306,7 @@ test("filters players as the user types", async () => {
 
 test("shows an empty state when no player matches", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.type(screen.getByLabelText("Search players"), "nobody");
@@ -326,7 +326,7 @@ test("renders a bubble with initials for each player", async () => {
 
 test("clicking a player bubble offers viewing them or starting a match", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
   await screen.findByText("AN");
 
@@ -338,7 +338,7 @@ test("clicking a player bubble offers viewing them or starting a match", async (
 
 test("choosing View player opens the profile and records them as last-viewed", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
   await screen.findByText("AN");
 
@@ -351,7 +351,7 @@ test("choosing View player opens the profile and records them as last-viewed", a
 
 test("'See all' links to the players roster", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.click(screen.getByRole("link", { name: "See all" }));
@@ -363,7 +363,7 @@ test("'See all' links to the players roster", async () => {
 // to find and press the roster's own Add action (#177 postscript).
 test("'Add' opens the add-player sheet directly", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   await user.click(screen.getByRole("button", { name: "Add" }));
@@ -394,7 +394,7 @@ test("shows the last-viewed player once one has been viewed", async () => {
 test("'View full stats' opens the last-viewed player's profile", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
   await screen.findByRole("heading", { name: "Continue with" });
 
@@ -406,7 +406,7 @@ test("'View full stats' opens the last-viewed player's profile", async () => {
 test("tapping the continue-with player row opens the view/start-match sheet, not straight to stats", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
   const heading = await screen.findByRole("heading", { name: "Continue with" });
   const section = within(heading.closest("section")!);
@@ -480,7 +480,7 @@ test("dismissing the attention card hides it", async () => {
     "/api/players": () => Response.json([...players, flaggedPlayer]),
     "/api/matches": () => Response.json([]),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
   await screen.findByText("Zanele Khumalo");
 
@@ -506,7 +506,7 @@ test("best/worst form show last-5 and forced:unforced as icon+number pairs, like
 
 test("tapping a squad-snapshot row goes straight to that player's stats page", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));

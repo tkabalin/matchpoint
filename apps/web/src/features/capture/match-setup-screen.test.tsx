@@ -10,7 +10,7 @@ function renderSetup(props: Partial<ComponentProps<typeof MatchSetupScreen>> = {
   const onBack = vi.fn();
   const onStart = vi.fn<(config: MatchSetupConfig) => void>();
   render(<MatchSetupScreen playerName="Rivera" onBack={onBack} onStart={onStart} {...props} />);
-  return { onBack, onStart, user: userEvent.setup() };
+  return { onBack, onStart, user: userEvent.setup({ delay: null }) };
 }
 
 test("names the player the match is for", () => {

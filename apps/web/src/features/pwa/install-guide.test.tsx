@@ -117,7 +117,7 @@ test("always shows what happens if signal is lost", async () => {
 test("links back to settings", async () => {
   stubMatchMedia(false);
   stubUserAgent(IPHONE_UA);
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
 
   await renderInstallGuide();
   await user.click(screen.getByRole("link", { name: "Back to settings" }));

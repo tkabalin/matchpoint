@@ -62,7 +62,7 @@ test("adds a player with no photo", async () => {
       return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onOpenChange } = renderSheet();
 
   await fillRequiredFields(user);
@@ -87,7 +87,7 @@ test("adds a player with a photo, uploaded after creation", async () => {
       return Response.json({ id: NEW_PLAYER_ID, photo_url: "/api/media/abc.webp" });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Add a player photo" }));
@@ -108,7 +108,7 @@ test("a photo-upload failure still creates the player and closes the sheet", asy
       Response.json({ id: NEW_PLAYER_ID, photo_url: null }, { status: 201 }),
     [`POST /api/players/${NEW_PLAYER_ID}/photo`]: () => new Response(null, { status: 500 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onOpenChange } = renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Add a player photo" }));
@@ -135,7 +135,7 @@ test("hand and notes reach the request, and an untouched notes box sends null", 
       return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
 
   await fillRequiredFields(user);
@@ -153,7 +153,7 @@ test("a refused creation keeps the sheet open and shows the server's reason", as
   stubFetch({
     "POST /api/players": () => Response.json({ detail: "That username is taken" }, { status: 409 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onOpenChange } = renderSheet();
 
   await fillRequiredFields(user);
@@ -166,7 +166,7 @@ test("a refused creation keeps the sheet open and shows the server's reason", as
 // Dismissing has to clear the draft: the sheet is remounted open by the roster, so a
 // half-typed player left behind would reappear as though the coach had started it.
 test("dismissing the sheet clears what was typed", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onOpenChange } = renderSheet();
   await user.type(screen.getByLabelText("First name"), "Amahle");
 
@@ -177,7 +177,7 @@ test("dismissing the sheet clears what was typed", async () => {
 });
 
 test("a pending photo can be removed again before the player exists", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Add a player photo" }));

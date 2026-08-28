@@ -8,7 +8,7 @@ import { FinalShotScreen } from "./final-shot-screen";
 function renderFinalShot() {
   const onAction = vi.fn<(action: CaptureAction) => void>();
   render(<FinalShotScreen onAction={onAction} />);
-  return { onAction, user: userEvent.setup() };
+  return { onAction, user: userEvent.setup({ delay: null }) };
 }
 
 test("offers every stored shot on both wings, and labels the columns", () => {

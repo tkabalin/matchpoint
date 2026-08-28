@@ -113,7 +113,7 @@ test("renders the email and password fields", async () => {
 });
 
 test("updates the fields as the user types", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await user.type(screen.getByLabelText("Email"), "coach@example.com");
@@ -124,7 +124,7 @@ test("updates the fields as the user types", async () => {
 });
 
 test("blocks submit until both fields are filled", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   const submit = screen.getByRole("button", { name: "Sign In" });
@@ -139,7 +139,7 @@ test("blocks submit until both fields are filled", async () => {
 
 test("navigates to /home on a successful sign-in", async () => {
   stubFetch(() => Response.json({ id: "1", email: "coach@example.com", display_name: "Coach" }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -149,7 +149,7 @@ test("navigates to /home on a successful sign-in", async () => {
 
 test("sends the credentials to /api/auth/login", async () => {
   stubFetch(() => Response.json({ id: "1", email: "coach@example.com", display_name: "Coach" }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -175,7 +175,7 @@ test("shows the server's error message on a failed sign-in", async () => {
   stubFetch(
     () => new Response(JSON.stringify({ detail: "Incorrect email or password" }), { status: 401 }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -185,7 +185,7 @@ test("shows the server's error message on a failed sign-in", async () => {
 
 test("falls back to an explicit message when the response has no detail to show", async () => {
   stubFetch(() => new Response(JSON.stringify({}), { status: 500 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -205,7 +205,7 @@ test("shows the retry wait and disables submit on a 429 response", async () => {
         headers: { "Retry-After": "3" },
       }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -216,7 +216,7 @@ test("shows the retry wait and disables submit on a 429 response", async () => {
 
 test("shows a generic error when the request fails outright", async () => {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -225,7 +225,7 @@ test("shows a generic error when the request fails outright", async () => {
 });
 
 test("links to the sign-up page", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await user.click(screen.getByRole("link", { name: "Create account" }));
@@ -234,7 +234,7 @@ test("links to the sign-up page", async () => {
 });
 
 test("links to the forgot-password page", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await user.click(screen.getByRole("link", { name: "Forgot password?" }));
@@ -248,7 +248,7 @@ test("wipes what the previous coach left when a different one signs in", async (
   await purgeIfCoachChanged(COACH_ID, new QueryClient());
   await queuePoint(COACH_ID);
   stubFetch(loginResponse(OTHER_COACH_ID));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -261,7 +261,7 @@ test("keeps the queue when the same coach signs in again", async () => {
   await purgeIfCoachChanged(COACH_ID, new QueryClient());
   await queuePoint(COACH_ID);
   stubFetch(loginResponse(COACH_ID));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -274,7 +274,7 @@ test("keeps the queue when the same coach signs in again", async () => {
 
 test("refuses a 200 that names no coach rather than signing in as nobody", async () => {
   stubFetch(() => new Response(null, { status: 200 }));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
 
   await fillAndSubmit(user);
@@ -289,7 +289,7 @@ test("refuses a 200 that names no coach rather than signing in as nobody", async
 
 test("keeps the coach on the form when this device cannot be cleared", async () => {
   stubFetch(loginResponse(OTHER_COACH_ID));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSignIn();
   // What a browser with storage blocked does. Signing in anyway would hand this coach
   // a device still holding the previous one's data, which is the leak #117 closes.

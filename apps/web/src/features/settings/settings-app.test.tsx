@@ -45,7 +45,7 @@ async function renderPage() {
 }
 
 test("links back to settings", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("link", { name: "Back to settings" }));
@@ -54,7 +54,7 @@ test("links back to settings", async () => {
 });
 
 test("Install MatchPoint links to the real install guide", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("link", { name: "Install MatchPoint" }));
@@ -71,7 +71,7 @@ test("Notifications is still a stub, not interactive", async () => {
 
 test("Appearance toggles between light and dark, and persists the choice", async () => {
   localStorage.removeItem("matchpoint:theme");
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   expect(document.documentElement).not.toHaveClass("dark");

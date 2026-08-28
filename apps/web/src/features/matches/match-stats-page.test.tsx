@@ -94,7 +94,7 @@ test("shows the match's own summary and its result", async () => {
 
 test("links back to the matches list", async () => {
   stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("link", { name: "Back to matches" }));
@@ -112,7 +112,7 @@ test("opens on the Serve tab, with the same Serve/Rally toggle the player page u
 
 test("switches to Rally when its toggle is clicked", async () => {
   stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
   await screen.findByText("Your serve");
 

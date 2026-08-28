@@ -13,7 +13,7 @@ const SERVE_2: Extract<CaptureStep, { name: "SERVE" }> = { name: "SERVE", number
 function renderReturn(options: { step?: typeof SERVE_1 } = {}) {
   const onAction = vi.fn<(action: CaptureAction) => void>();
   render(<ReturnScreen step={options.step ?? SERVE_1} onAction={onAction} />);
-  return { onAction, user: userEvent.setup() };
+  return { onAction, user: userEvent.setup({ delay: null }) };
 }
 
 test("asks where the return landed", () => {

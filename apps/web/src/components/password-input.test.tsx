@@ -16,7 +16,7 @@ test("starts masked", () => {
 });
 
 test("toggling reveals the password, and toggling again re-masks it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<Wrapper />);
 
   await user.click(screen.getByRole("button", { name: "Show password" }));

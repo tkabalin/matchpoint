@@ -28,7 +28,7 @@ function renderRally({
       onAction={onAction}
     />,
   );
-  return { onAction, onRallyBucketChange, user: userEvent.setup() };
+  return { onAction, onRallyBucketChange, user: userEvent.setup({ delay: null }) };
 }
 
 test.each([

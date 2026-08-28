@@ -32,7 +32,7 @@ test("renders nothing when the sheet is closed", () => {
 });
 
 test("Quick note opens a composer, not a disabled button", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
   await screen.findByRole("heading", { name: "Notes" });
 
@@ -44,7 +44,7 @@ test("Quick note opens a composer, not a disabled button", async () => {
 });
 
 test("saving a quick note adds it to the list with its chosen theme", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
   await screen.findByRole("heading", { name: "Notes" });
 
@@ -63,7 +63,7 @@ test("saving a quick note adds it to the list with its chosen theme", async () =
 });
 
 test("Save note is disabled until something is typed", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
   await screen.findByRole("heading", { name: "Notes" });
 
@@ -73,7 +73,7 @@ test("Save note is disabled until something is typed", async () => {
 });
 
 test("deleting a note asks for confirmation before removing it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
   const noteText = await screen.findByText(/Worked on toss height on 2nd serve today/);
 
@@ -88,7 +88,7 @@ test("deleting a note asks for confirmation before removing it", async () => {
 });
 
 test("Cancel on the delete confirmation keeps the note", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderSheet();
   await screen.findByText(/Worked on toss height on 2nd serve today/);
 
@@ -126,7 +126,7 @@ function renderControlled() {
 }
 
 test("Cancel backs out of the composer without saving", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderControlled();
   await screen.findByRole("heading", { name: "Notes" });
 
@@ -142,7 +142,7 @@ test("Cancel backs out of the composer without saving", async () => {
 // An abandoned draft has to go with the sheet. Reopening onto someone else's half-typed
 // note would read as a note the coach had started about this player.
 test("closing mid-compose discards the draft rather than restoring it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderControlled();
   await screen.findByRole("heading", { name: "Notes" });
 

@@ -124,7 +124,7 @@ test("leaderboard defaults to Record order, sub-threshold player dimmed at the b
 
 test("switching the leaderboard metric reorders the ranked rows", async () => {
   stubFetch();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("combobox", { name: "Leaderboard metric" }));
@@ -141,7 +141,7 @@ test("switching the leaderboard metric reorders the ranked rows", async () => {
 
 test("search filters the leaderboard", async () => {
   stubFetch();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.type(screen.getByPlaceholderText("Search players"), "Sam");
@@ -152,7 +152,7 @@ test("search filters the leaderboard", async () => {
 
 test("the trend card's metric selection is independent of the leaderboard's", async () => {
   stubFetch();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
   await user.click(screen.getByRole("combobox", { name: "Leaderboard metric" }));

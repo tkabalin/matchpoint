@@ -54,7 +54,7 @@ test("marks the current tab active and no other", async () => {
 });
 
 test("switches tabs on click", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderAt("/home");
   await screen.findByRole("heading", { name: "/home" });
 

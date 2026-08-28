@@ -28,7 +28,7 @@ test("renders one tap target per zone, named for the coach", () => {
 
 test("a tap flashes before the flow advances", async () => {
   const onTap = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<CourtDiagram zones={[zone("Net", onTap)]} />);
 
   await user.click(screen.getByRole("button", { name: "Net" }));
@@ -42,7 +42,7 @@ test("a tap flashes before the flow advances", async () => {
 test("a second tap during the flash does not advance twice", async () => {
   const first = vi.fn();
   const second = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<CourtDiagram zones={[zone("Long", first), zone("Wide right", second)]} />);
 
   await user.click(screen.getByRole("button", { name: "Long" }));
@@ -56,7 +56,7 @@ test("a second tap during the flash does not advance twice", async () => {
 
 test("reports pending while a tap's flash is in flight", async () => {
   const onPendingChange = vi.fn();
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(<CourtDiagram zones={[zone("Net", vi.fn())]} onPendingChange={onPendingChange} />);
 
   await user.click(screen.getByRole("button", { name: "Net" }));

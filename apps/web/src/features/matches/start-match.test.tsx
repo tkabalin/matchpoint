@@ -92,7 +92,7 @@ test("lists the coach's roster to pick from", async () => {
 });
 
 test("search narrows the roster to matching names", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   stubPlayers(() => Response.json([amahle, thabo]));
   renderStartMatch();
   await screen.findByText("Amahle Nkosi");
@@ -106,7 +106,7 @@ test("search narrows the roster to matching names", async () => {
 // The empty state is the same one an empty roster gets, deliberately: from here the
 // answer to both is to add the player before starting their match.
 test("a search matching nobody explains how to proceed", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   stubPlayers(() => Response.json([amahle]));
   renderStartMatch();
   await screen.findByText("Amahle Nkosi");
@@ -125,7 +125,7 @@ test("an empty roster shows the same guidance rather than a bare list", async ()
 });
 
 test("picking a player carries their id into match setup", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   stubPlayers(() => Response.json([amahle, thabo]));
   renderStartMatch();
 
@@ -135,7 +135,7 @@ test("picking a player carries their id into match setup", async () => {
 });
 
 test("the back control returns to the match list", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   stubPlayers(() => Response.json([amahle]));
   renderStartMatch();
   await screen.findByText("Amahle Nkosi");

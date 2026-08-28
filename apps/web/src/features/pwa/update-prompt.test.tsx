@@ -56,7 +56,7 @@ test("hands focus back to the screen behind it when the user dismisses it", asyn
     );
   }
 
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   render(
     <StrictMode>
       <Host />

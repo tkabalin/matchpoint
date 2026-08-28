@@ -10,7 +10,7 @@ import { FinalBallScreen } from "./final-ball-screen";
 function renderFinalBall(won = true) {
   const onAction = vi.fn<(action: CaptureAction) => void>();
   render(<FinalBallScreen won={won} onAction={onAction} />);
-  return { onAction, user: userEvent.setup() };
+  return { onAction, user: userEvent.setup({ delay: null }) };
 }
 
 test("offers the four zones players asked for", () => {

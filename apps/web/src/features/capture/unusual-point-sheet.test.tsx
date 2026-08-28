@@ -20,7 +20,7 @@ function renderSheet(step: typeof OUTCOME_STEP | typeof REASON_STEP = OUTCOME_ST
       onDismiss={onDismiss}
     />,
   );
-  return { onAction, onDismiss, user: userEvent.setup() };
+  return { onAction, onDismiss, user: userEvent.setup({ delay: null }) };
 }
 
 test("asks who won first, naming both players", () => {

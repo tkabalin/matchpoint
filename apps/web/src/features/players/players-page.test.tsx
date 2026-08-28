@@ -110,7 +110,7 @@ test("renders the page heading and the roster", async () => {
 
 test("tapping a player offers viewing them or starting a match", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
@@ -127,7 +127,7 @@ test("tapping a player offers viewing them or starting a match", async () => {
 
 test("choosing View player opens the profile and records them as last-viewed", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
@@ -139,7 +139,7 @@ test("choosing View player opens the profile and records them as last-viewed", a
 
 test("filters the roster as the coach searches", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await screen.findByText("Amahle Nkosi");
@@ -161,7 +161,7 @@ test("renders the bottom nav with Players active", async () => {
 
 test("the labelled row opens the redeem-transfer-code sheet", async () => {
   stubFetch(() => Response.json([]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Have a transfer code?" }));
@@ -173,7 +173,7 @@ test("the labelled row opens the redeem-transfer-code sheet", async () => {
 
 test("the floating action adds a player rather than starting a match", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Add player" }));
@@ -207,7 +207,7 @@ test("submitting the add-player form posts every required field", async () => {
       return Promise.resolve(Response.json([player]));
     }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Add player" }));
@@ -233,7 +233,7 @@ test("refuses to submit until date of birth and gender are given", async () => {
       return Promise.resolve(Response.json([player]));
     }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Add player" }));
@@ -257,7 +257,7 @@ test("rejects a date of birth in the future before sending it", async () => {
       return Promise.resolve(Response.json([player]));
     }),
   );
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
   await user.click(screen.getByRole("button", { name: "Add player" }));

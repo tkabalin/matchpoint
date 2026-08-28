@@ -35,7 +35,7 @@ test("the headline % in includes aces, not just the plain-in outcome bucket", as
 });
 
 test("tapping a card's header opens its own drill without affecting the other card", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Your serve");
 
@@ -46,7 +46,7 @@ test("tapping a card's header opens its own drill without affecting the other ca
 });
 
 test("both cards' drills can be open at the same time", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Your serve");
 
@@ -58,7 +58,7 @@ test("both cards' drills can be open at the same time", async () => {
 });
 
 test("their serve's drill also shows your return outcome", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Their serve");
 
@@ -68,7 +68,7 @@ test("their serve's drill also shows your return outcome", async () => {
 });
 
 test("switching 1st/2nd serve changes the fault-mode numbers shown", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Your serve");
   await user.click(screen.getByText("Your serve"));
@@ -86,7 +86,7 @@ test("switching 1st/2nd serve changes the fault-mode numbers shown", async () =>
 // matter what the toggle said, so a coach reading "2nd serve" fault mode saw
 // it sitting under a headline that was still describing the 1st serve.
 test("switching 1st/2nd serve also updates the headline and outcome stack above it", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Your serve");
   await user.click(screen.getByText("Your serve"));

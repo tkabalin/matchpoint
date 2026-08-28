@@ -104,7 +104,7 @@ test("says nothing about transfer codes when the roster has none outstanding", a
 });
 
 test("Cancel on the first step closes the sheet", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const onOpenChange = vi.fn();
   await renderSheet({ onOpenChange });
 
@@ -114,7 +114,7 @@ test("Cancel on the first step closes the sheet", async () => {
 });
 
 test("Back on the password step returns to the roster warning", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.click(screen.getByRole("button", { name: "Continue" }));
@@ -139,7 +139,7 @@ test("the full happy path deletes with delete_players true, purges local data, a
     timestamp: Date.now(),
     clientState: { mutations: [], queries: [] },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await goToFinalWarn(user);
@@ -162,7 +162,7 @@ test("a wrong password returns to the password step with the error shown there",
     "DELETE /api/coaches/me": () =>
       Response.json({ detail: "Incorrect password" }, { status: 403 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await goToFinalWarn(user);
@@ -180,7 +180,7 @@ test("an outstanding transfer code shows its own message on the final step", asy
         { status: 409 },
       ),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await goToFinalWarn(user);
@@ -200,7 +200,7 @@ test("a 429 shows a retry countdown and disables the delete button", async () =>
         { status: 429, headers: { "Retry-After": "30" } },
       ),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await goToFinalWarn(user);
@@ -215,7 +215,7 @@ test("says so when the device could not be cleared, and Retry clears the message
   const removeItem = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
     throw new Error("storage blocked");
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await goToFinalWarn(user);

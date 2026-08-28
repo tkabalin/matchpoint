@@ -38,7 +38,7 @@ test("renders for a URL that matches no route", async () => {
 });
 
 test("links back to home", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderAtUnmatchedPath();
 
   await user.click(await screen.findByRole("link", { name: "Back to home" }));

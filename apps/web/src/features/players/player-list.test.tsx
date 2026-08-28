@@ -156,7 +156,7 @@ test("prompts to sign in again on a 401, instead of the generic error", async ()
 // players-page.test.tsx, where it's actually rendered.
 test("tapping a player hands it to the caller instead of navigating", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   const { onSelect } = await renderPlayerList();
 
   await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));

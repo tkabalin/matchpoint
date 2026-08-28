@@ -62,7 +62,7 @@ test("shows nothing once the coach already has a photo", () => {
 });
 
 test("hides itself once dismissed, and stays hidden across a remount", async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderNudge();
 
   await user.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -77,7 +77,7 @@ test("choosing a photo uploads it and closes the picker", async () => {
     "POST /api/coaches/me/photo": () =>
       Response.json({ ...coach, photo_url: "/api/media/abc.webp" }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   renderNudge();
 
   await user.click(screen.getByRole("button", { name: "Add" }));

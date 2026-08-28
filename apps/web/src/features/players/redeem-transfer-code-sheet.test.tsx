@@ -83,7 +83,7 @@ test("redeeming a valid code shows the transferred player and links to their pro
       return Response.json(transferredPlayer);
     },
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.type(screen.getByLabelText("Code"), "ABCD1234");
@@ -104,7 +104,7 @@ test("shows the server's message when the code is unknown or already used", asyn
     "POST /api/players/redeem-transfer-code": () =>
       Response.json({ detail: "That code is invalid or has already been used." }, { status: 400 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.type(screen.getByLabelText("Code"), "STALE123");
@@ -120,7 +120,7 @@ test("shows the server's message when the player is already on this coach's rost
     "POST /api/players/redeem-transfer-code": () =>
       Response.json({ detail: "That player is already on your roster." }, { status: 409 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.type(screen.getByLabelText("Code"), "SELF1234");
@@ -137,7 +137,7 @@ test("a 429 shows a retry countdown", async () => {
         headers: { "Retry-After": "30" },
       }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderSheet();
 
   await user.type(screen.getByLabelText("Code"), "ABCD1234");
@@ -192,7 +192,7 @@ test("Done dismisses the sheet from the success step, without visiting the playe
   stubFetch({
     "POST /api/players/redeem-transfer-code": () => Response.json(transferredPlayer),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderControlled();
 
   await user.type(screen.getByLabelText("Code"), "GOODCODE");
@@ -210,7 +210,7 @@ test("reopening after a refused code starts from a clean form", async () => {
     "POST /api/players/redeem-transfer-code": () =>
       Response.json({ detail: "That code is invalid or has already been used." }, { status: 400 }),
   });
-  const user = userEvent.setup();
+  const user = userEvent.setup({ delay: null });
   await renderControlled();
 
   await user.type(screen.getByLabelText("Code"), "STALE123");
