@@ -89,10 +89,9 @@ failed. For the same reason it is skipped entirely whenever anything earlier in 
 land: a transient failure (offline, 429, 5xx) means the points have simply not been sent yet, and
 fencing them off would turn a retry into a loss.
 
-Capture also queues `checkpoint` and `eventDelete` rows, which have no endpoint yet (see
-`docs/scratch/database-changes-needed.md`). They sit pending rather than failing, and while any
-remain the match's outcome is held back too — completing the match would fence out its own
-checkpoints the moment those endpoints land.
+Capture also queues `checkpoint` and `eventDelete` rows, which have no server endpoint yet. They sit
+pending rather than failing, and while any remain the match's outcome is held back too — completing
+the match would fence out its own checkpoints the moment those endpoints land.
 
 ### Server-side idempotency
 
