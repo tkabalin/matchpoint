@@ -9,7 +9,7 @@
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
-import { CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent
@@ -72,15 +72,17 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
         </div>
       </CourtDiagram>
 
-      <Button
-        variant="ghost"
-        onClick={() => {
-          onAction({ type: "TAP_DIDNT_SEE" });
-        }}
-        className="mt-2 h-11 w-full flex-none text-base font-semibold text-muted-foreground"
-      >
-        Didn&apos;t see the shot
-      </Button>
+      <div className={COURT_ACTIONS}>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            onAction({ type: "TAP_DIDNT_SEE" });
+          }}
+          className="text-base font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see the shot
+        </Button>
+      </div>
     </div>
   );
 }

@@ -107,7 +107,7 @@ test("the chosen outcome shows as chosen, the same way the chosen length does", 
 test("an unusual ending hands off to the flow's own unusual path", async () => {
   const { onAction, user } = renderRally();
 
-  await user.click(screen.getByRole("button", { name: "Unusual point end" }));
+  await user.click(screen.getByRole("button", { name: "Unusual end" }));
 
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_UNUSUAL" });
 });

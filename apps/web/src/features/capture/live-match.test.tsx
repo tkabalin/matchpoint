@@ -211,7 +211,7 @@ test("a point the coach only half-saw is kept, not discarded", async () => {
     expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
   });
   await user.click(screen.getByRole("button", { name: "3-5" }));
-  await user.click(screen.getByRole("button", { name: "Didn't see the end" }));
+  await user.click(screen.getByRole("button", { name: "Didn't see" }));
   await user.click(screen.getByRole("button", { name: /Win/ }));
 
   const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];

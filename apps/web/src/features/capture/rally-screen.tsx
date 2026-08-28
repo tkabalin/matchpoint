@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
-import { CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import type { EndReason, RallyBucket } from "./point";
 import { WinnerSheet } from "./winner-sheet";
 
@@ -151,22 +151,22 @@ export function RallyScreen({
         </div>
       </CourtDiagram>
 
-      <div className="grid flex-none grid-cols-2 gap-2 pt-[14px]">
+      <div className={COURT_ACTIONS}>
         <Button
           variant="outline"
           onClick={() => {
             onAction({ type: "TAP_UNUSUAL" });
           }}
-          className="h-14 text-base font-semibold"
+          className="px-2 text-sm font-semibold"
         >
-          Unusual point end
+          Unusual end
         </Button>
         <Button
           variant="ghost"
           onClick={() => {
             onAction({ type: "TAP_LET" });
           }}
-          className="h-14 gap-2 border-primary/30 bg-primary/10 text-base font-semibold text-primary hover:bg-primary/20"
+          className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"
         >
           <RotateCcw className="size-5" />
           Let
@@ -176,9 +176,9 @@ export function RallyScreen({
           onClick={() => {
             setAskingWinner(true);
           }}
-          className="col-span-full h-11 text-base font-semibold text-muted-foreground"
+          className="px-2 text-sm font-semibold text-muted-foreground"
         >
-          Didn&apos;t see the end
+          Didn&apos;t see
         </Button>
       </div>
 

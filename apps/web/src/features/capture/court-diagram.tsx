@@ -65,6 +65,16 @@ const LABEL_ORIENTATIONS = {
   "vertical-down": "[writing-mode:vertical-rl]",
 } as const;
 
+/**
+ * The band of buttons under the court, one fixed height on every capture screen.
+ *
+ * The court is whatever height is left after it, so a screen carrying a taller band
+ * would silently get a smaller court than the screen before it — which is what made the
+ * court change size tap to tap. Columns are equal and counted from the children.
+ */
+export const COURT_ACTIONS =
+  "mt-2 grid h-11 flex-none grid-flow-col auto-cols-fr gap-2 [&>button]:h-full";
+
 // The doubles court: sidelines, baselines, service lines, centre service line.
 const COURT_LINES: CourtBox[] = [
   { left: "15.76%", top: "6.2%", width: "3.03%", height: "87.6%" },
@@ -129,15 +139,15 @@ export function CourtDiagram({
   }
 
   return (
-    // The surface color follows the match's court type, set as --court-surface on a
-    // screen root; --color-court is the hard/unspecified default.
+    // Sized against both axes at once so the court keeps its real proportions: whichever
+    // binds decides, the other is left as margin. Sizing off height alone cropped the
+    // alleys, and the `min-width` guarding that then stretched the court instead.
     <div
-      className={cn(
-        "relative h-full w-full overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))]",
-        className,
-      )}
+      className={cn("flex min-h-0 items-center justify-center [container-type:size]", className)}
     >
-      <div className="absolute top-1/2 left-1/2 h-full min-w-full -translate-x-1/2 -translate-y-1/2 aspect-[165/216]">
+      {/* The surface color follows the match's court type, set as --court-surface on a
+          screen root; --color-court is the hard/unspecified default. */}
+      <div className="relative aspect-[165/216] w-[min(100cqw,calc(100cqh*165/216))] overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))]">
         {COURT_LINES.map((line, index) => (
           <div key={index} className="absolute bg-white" style={line} />
         ))}

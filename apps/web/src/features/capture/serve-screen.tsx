@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
-import { CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import type { CourtBox, CourtTapZone } from "./court-diagram";
 import type { CourtSide, FailureMode, ServeAttempt } from "./point";
 
@@ -156,19 +156,14 @@ export function ServeScreen({
         </p>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <CourtDiagram
-          zones={zones}
-          netLabel="Net"
-          className="min-h-0 flex-1"
-          onPendingChange={setPending}
-        />
-        <p className="mt-2.5 px-0.5 text-center text-xs text-muted-foreground">
-          Outer zones and the net are out
-        </p>
-      </div>
+      <CourtDiagram
+        zones={zones}
+        netLabel="Net"
+        className="min-h-0 flex-1"
+        onPendingChange={setPending}
+      />
 
-      <div className="flex flex-none items-end justify-between pt-4">
+      <div className={COURT_ACTIONS}>
         <Button
           variant="ghost"
           disabled={pending}
@@ -176,7 +171,7 @@ export function ServeScreen({
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_ACE" });
           }}
-          className="h-11 gap-2 border-court/30 bg-court/10 px-[18px] text-base font-semibold text-court hover:bg-court/20"
+          className="gap-1.5 border-court/30 bg-court/10 px-2 text-sm font-semibold text-court hover:bg-court/20"
         >
           <Zap className="size-5" />
           Ace
@@ -188,7 +183,7 @@ export function ServeScreen({
             setLetNotice(null);
             onAction({ type: "TAP_DIDNT_SEE" });
           }}
-          className="h-11 px-[18px] text-base font-semibold text-muted-foreground"
+          className="px-2 text-sm font-semibold text-muted-foreground"
         >
           Didn&apos;t see
         </Button>
@@ -199,7 +194,7 @@ export function ServeScreen({
             setLetNotice("Let — replay the point.");
             onAction({ type: "TAP_LET" });
           }}
-          className="h-11 gap-2 border-primary/30 bg-primary/10 px-[18px] text-base font-semibold text-primary hover:bg-primary/20"
+          className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"
         >
           <RotateCcw className="size-5" />
           Let

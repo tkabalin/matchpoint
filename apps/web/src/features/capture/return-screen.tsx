@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
 import type { CaptureAction, CaptureStep } from "./capture-flow";
-import { CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import type { CourtTapZone } from "./court-diagram";
 import type { FailureMode } from "./point";
 
@@ -115,19 +115,14 @@ export function ReturnScreen({
         </p>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <CourtDiagram
-          zones={zones}
-          netLabel="Net"
-          className="min-h-0 flex-1"
-          onPendingChange={setPending}
-        />
-        <p className="mt-2.5 px-0.5 text-center text-xs text-muted-foreground">
-          Only the safe area counts as in
-        </p>
-      </div>
+      <CourtDiagram
+        zones={zones}
+        netLabel="Net"
+        className="min-h-0 flex-1"
+        onPendingChange={setPending}
+      />
 
-      <div className="grid flex-none grid-cols-3 gap-2 pt-4">
+      <div className={COURT_ACTIONS}>
         <Button
           variant="ghost"
           disabled={pending}
@@ -135,7 +130,7 @@ export function ReturnScreen({
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_ACE" });
           }}
-          className="h-[62px] gap-2 border-court/30 bg-court/10 text-base font-semibold text-court hover:bg-court/20"
+          className="gap-1.5 border-court/30 bg-court/10 px-2 text-sm font-semibold text-court hover:bg-court/20"
         >
           <Zap className="size-5" />
           Ace
@@ -147,7 +142,7 @@ export function ReturnScreen({
             setLetNotice(null);
             onAction({ type: "TAP_SERVE_FAULT" });
           }}
-          className="h-[62px] flex-col gap-1 text-base font-semibold"
+          className="gap-1.5 px-2 text-sm font-semibold"
         >
           <CircleX className="size-5" />
           Fault
@@ -159,7 +154,7 @@ export function ReturnScreen({
             setLetNotice("Let — replay the point.");
             onAction({ type: "TAP_LET" });
           }}
-          className="h-[62px] gap-2 border-primary/30 bg-primary/10 text-base font-semibold text-primary hover:bg-primary/20"
+          className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"
         >
           <RotateCcw className="size-5" />
           Let
@@ -171,9 +166,9 @@ export function ReturnScreen({
             setLetNotice(null);
             onAction({ type: "TAP_DIDNT_SEE" });
           }}
-          className="col-span-full h-11 text-base font-semibold text-muted-foreground"
+          className="px-2 text-sm font-semibold text-muted-foreground"
         >
-          Didn&apos;t see the serve
+          Didn&apos;t see
         </Button>
       </div>
 

@@ -14,7 +14,7 @@
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
-import { CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import type { CourtDepth, CourtSide } from "./point";
 
 // Percentages follow court-diagram.tsx's own lines rather than the handoff, which drew
@@ -79,15 +79,17 @@ export function FinalBallScreen({
 
       <CourtDiagram zones={zones} className="min-h-0 flex-1" />
 
-      <Button
-        variant="ghost"
-        onClick={() => {
-          onAction({ type: "TAP_DIDNT_SEE" });
-        }}
-        className="mt-2 h-11 w-full flex-none text-base font-semibold text-muted-foreground"
-      >
-        Didn&apos;t see where it landed
-      </Button>
+      <div className={COURT_ACTIONS}>
+        <Button
+          variant="ghost"
+          onClick={() => {
+            onAction({ type: "TAP_DIDNT_SEE" });
+          }}
+          className="text-base font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see where it landed
+        </Button>
+      </div>
     </div>
   );
 }
