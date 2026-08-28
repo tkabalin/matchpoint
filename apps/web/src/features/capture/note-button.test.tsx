@@ -13,21 +13,43 @@ class FakeSpeechRecognition extends EventTarget {
     null;
   onerror: (() => void) | null = null;
   onend: (() => void) | null = null;
+  /** A last result the service still owes at the moment the coach taps Stop. */
+  pendingFinalTranscript = "";
   start = vi.fn();
   // The real API fires onend asynchronously once recognition actually stops — the
-  // fake fires it synchronously, which is close enough for these assertions.
+  // fake fires it synchronously, which is close enough for these assertions. Where a
+  // final result is still owed, stop() has to return before it, so that one defers.
   stop = vi.fn(() => {
+    if (this.pendingFinalTranscript !== "") return;
     this.onend?.();
   });
+  /** What the browser delivers after stop() returns: the last result, then `end`. */
+  flushAfterStop() {
+    this.onresult?.({ results: [[{ transcript: this.pendingFinalTranscript }]] });
+    this.onend?.();
+  }
 }
 
-function installFakeSpeechRecognition() {
+function installFakeSpeechRecognition({
+  startThrows = false,
+  constructionThrows = false,
+  finalResult = "",
+} = {}) {
   const instances: FakeSpeechRecognition[] = [];
   (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = class extends (
     FakeSpeechRecognition
   ) {
     constructor() {
       super();
+      // iOS Safari throws from the constructor when the speech service is unavailable.
+      if (constructionThrows) throw new Error("speech recognition is unavailable");
+      // Chrome throws synchronously from start() when a recognition is already running.
+      if (startThrows) {
+        this.start = vi.fn(() => {
+          throw new Error("recognition has already started");
+        });
+      }
+      this.pendingFinalTranscript = finalResult;
       instances.push(this);
     }
   };
@@ -80,6 +102,51 @@ test("stopping a recording adds the transcript as a note", async () => {
   );
 });
 
+test("a note goes to the caller's latest handler, not the one recording started with", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const atRecordStart = vi.fn();
+  const afterMorePoints = vi.fn();
+  const { rerender } = render(<NoteButton onAddNote={atRecordStart} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "crowding the baseline" }]] });
+  });
+  // Points captured while the coach dictates hand down a handler over newer state.
+  rerender(<NoteButton onAddNote={afterMorePoints} />);
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(atRecordStart).not.toHaveBeenCalled();
+  expect(afterMorePoints).toHaveBeenCalledWith("crowding the baseline");
+});
+
+test("the last words before Stop are part of the note, not cut off", async () => {
+  const instances = installFakeSpeechRecognition({
+    finalResult: "second serve sitting up, punish the forehand",
+  });
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "second serve sitting up" }]] });
+  });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+  // Nothing is added until the service has handed back everything it heard.
+  expect(onAddNote).not.toHaveBeenCalled();
+  act(() => {
+    instances[0]?.flushAfterStop();
+  });
+
+  expect(onAddNote).toHaveBeenCalledWith("second serve sitting up, punish the forehand");
+  expect(screen.getByRole("button", { name: "Add a note" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+});
+
 test("a dictated note longer than the API accepts is capped, not sent whole", async () => {
   const instances = installFakeSpeechRecognition();
   const user = userEvent.setup();
@@ -119,6 +186,73 @@ test("stopping with no speech heard adds nothing", async () => {
   expect(onAddNote).not.toHaveBeenCalled();
 });
 
+test("a session the service ends by itself keeps recording, and the next tap adds the note once", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "second serve sitting up" }]] });
+    // No stop() from the coach: this is the service ending the session on a silence.
+    instances[0]?.onend?.();
+  });
+
+  expect(onAddNote).not.toHaveBeenCalled();
+  const stopButton = screen.getByRole("button", { name: "Stop recording note" });
+  expect(stopButton).toHaveAttribute("aria-pressed", "true");
+
+  await user.click(stopButton);
+
+  expect(onAddNote).toHaveBeenCalledTimes(1);
+  expect(onAddNote).toHaveBeenCalledWith("second serve sitting up");
+  expect(screen.getByRole("button", { name: "Add a note" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+});
+
+test("a session that ends by itself with nothing heard adds nothing", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onend?.();
+  });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(onAddNote).not.toHaveBeenCalled();
+});
+
+test("a recognition that refuses to start falls back to the text sheet, not a stuck button", async () => {
+  installFakeSpeechRecognition({ startThrows: true });
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(screen.getByRole("heading", { name: "Add a note" })).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Add a note" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+});
+
+test("a recognition that can't be constructed at all falls back to the text sheet", async () => {
+  installFakeSpeechRecognition({ constructionThrows: true });
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(screen.getByRole("heading", { name: "Add a note" })).toBeVisible();
+});
+
 test("a recognition error falls back to the text sheet, pre-filled with what was heard so far", async () => {
   const instances = installFakeSpeechRecognition();
   const user = userEvent.setup();
@@ -150,6 +284,110 @@ test("an errored session never auto-adds what it heard, since the sheet already 
 
   expect(onAddNote).not.toHaveBeenCalled();
   expect(screen.getByPlaceholderText("What happened?")).toHaveValue("partial thought");
+});
+
+test("a superseded session's late error doesn't open the sheet over a live recording", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "first note" }]] });
+  });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  // A stopped session raises `aborted` after the next one is already listening.
+  act(() => {
+    instances[0]?.onerror?.();
+  });
+
+  expect(screen.queryByRole("heading", { name: "Add a note" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Stop recording note" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(onAddNote).toHaveBeenCalledTimes(1);
+});
+
+test("a superseded session's late end doesn't stand down a live recording", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "first note" }]] });
+  });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  act(() => {
+    instances[0]?.onend?.();
+  });
+
+  expect(screen.getByRole("button", { name: "Stop recording note" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(onAddNote).toHaveBeenCalledTimes(1);
+});
+
+test("after a recognition error the next tap records afresh, adding only the new note", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "lost to a mic error" }]] });
+    instances[0]?.onerror?.();
+  });
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[1]?.onresult?.({ results: [[{ transcript: "returning from the baseline" }]] });
+  });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(onAddNote).toHaveBeenCalledTimes(1);
+  expect(onAddNote).toHaveBeenCalledWith("returning from the baseline");
+});
+
+test("navigating away mid-dictation still adds what was heard", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  const { unmount } = render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "chasing every ball down" }]] });
+  });
+  unmount();
+
+  expect(onAddNote).toHaveBeenCalledWith("chasing every ball down");
+});
+
+test("navigating away after a recognition error adds nothing, since the sheet held it", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  const { unmount } = render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "partial thought" }]] });
+    instances[0]?.onerror?.();
+  });
+  unmount();
+
+  expect(onAddNote).not.toHaveBeenCalled();
 });
 
 test("cancel closes the sheet without adding a note", async () => {

@@ -36,6 +36,21 @@ interface MinimalSpeechRecognition extends EventTarget {
 }
 type SpeechRecognitionCtor = new () => MinimalSpeechRecognition;
 
+// One recording session, in a ref rather than closure variables the handlers alone
+// can see: a tap has to reach the transcript, because a session the service already
+// ended is committed by that tap while a live one is committed by its own `onend`.
+interface NoteSession {
+  recognition: MinimalSpeechRecognition;
+  transcript: string;
+  failed: boolean;
+  ended: boolean;
+  stopping: boolean;
+  /** Adds what was heard as the note. Every caller clears the ref first, so it runs once. */
+  commit: () => void;
+  /** The coach's stop, and unmount: commits an already-ended session, stops a live one. */
+  finish: () => void;
+}
+
 function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   const w = window as Window & {
     SpeechRecognition?: SpeechRecognitionCtor;
@@ -48,13 +63,21 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
   const [recording, setRecording] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
-  const recognitionRef = useRef<MinimalSpeechRecognition | null>(null);
+  const sessionRef = useRef<NoteSession | null>(null);
+  // The caller rebuilds this prop every render over that render's own capture state, so
+  // committing through the one captured when recording started would roll the flow back
+  // to the moment the mic was tapped, losing the points captured while dictating.
+  const onAddNoteRef = useRef(onAddNote);
+  useEffect(() => {
+    onAddNoteRef.current = onAddNote;
+  });
 
   // Stop a still-running recognition if the coach navigates away mid-point (e.g. a
   // skip-ahead) rather than leaving the mic listening behind an unmounted button.
+  // What it heard is still added, on the same two branches as the coach's own stop.
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      sessionRef.current?.finish();
     };
   }, []);
 
@@ -69,40 +92,83 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
       openTextEntry();
       return;
     }
-    const recognition = new Ctor();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    let transcript = "";
-    // `end` fires after `error`, so without this the same partial transcript would
-    // both be added here and pre-filled into the fallback sheet: one note, twice.
-    let failed = false;
-    recognition.onresult = (event) => {
-      // Capped here as well as on the textarea: the field's maxLength bounds typing,
-      // not a value set from script, and a long dictation arrives in one go.
-      transcript = Array.from(event.results)
-        .map((result) => result[0]?.transcript ?? "")
-        .join(" ")
-        .slice(0, NOTE_MAX_LENGTH);
-    };
-    recognition.onerror = () => {
-      // Denied mic, no speech heard, or (some Chromium builds) no connectivity to
-      // reach the recognition service — fall back to typing instead of a dead end.
-      failed = true;
-      recognitionRef.current = null;
+    try {
+      const recognition = new Ctor();
+      recognition.continuous = true;
+      recognition.interimResults = false;
+      const session: NoteSession = {
+        recognition,
+        transcript: "",
+        failed: false,
+        ended: false,
+        stopping: false,
+        commit: () => {
+          // An errored session's transcript is already sitting in the sheet, and
+          // appendNote joins with a newline: adding it here too is one note, twice.
+          if (session.failed) return;
+          const text = session.transcript.trim();
+          if (text.length > 0) onAddNoteRef.current(text);
+        },
+        finish: () => {
+          // Per spec, stop() on a session the service already ended does nothing and
+          // fires no `end`, so nothing more is coming and the commit belongs here.
+          if (session.ended) {
+            sessionRef.current = null;
+            setRecording(false);
+            session.commit();
+            return;
+          }
+          // A live session still owes a final result, delivered between stop() and
+          // `end`, so its commit waits for onend rather than reading a short transcript.
+          session.stopping = true;
+          recognition.stop();
+        },
+      };
+      recognition.onresult = (event) => {
+        // Capped here as well as on the textarea: the field's maxLength bounds typing,
+        // not a value set from script, and a long dictation arrives in one go.
+        session.transcript = Array.from(event.results)
+          .map((result) => result[0]?.transcript ?? "")
+          .join(" ")
+          .slice(0, NOTE_MAX_LENGTH);
+      };
+      recognition.onerror = () => {
+        // Denied mic, no speech heard, or (some Chromium builds) no connectivity to
+        // reach the recognition service — fall back to typing instead of a dead end.
+        // Guarded, or a superseded session's late `aborted` opens the sheet over a
+        // live mic, pre-filled with a note the coach already added.
+        if (sessionRef.current !== session) return;
+        session.failed = true;
+        setRecording(false);
+        setDraftText(session.transcript.trim());
+        setSheetOpen(true);
+      };
+      recognition.onend = () => {
+        if (sessionRef.current !== session) return;
+        if (session.stopping) {
+          // The coach's stop: the final result the service owed has arrived by now,
+          // so this is where the note is whole and the button leaves the recording colour.
+          sessionRef.current = null;
+          setRecording(false);
+          session.commit();
+          return;
+        }
+        // `continuous` doesn't stop the service ending a session itself, on silence in
+        // Chrome and a short pause on iOS. The mic really is off from here while the
+        // button still reads as recording; the next tap commits what was heard.
+        session.ended = true;
+      };
+      sessionRef.current = session;
+      setRecording(true);
+      recognition.start();
+    } catch {
+      // iOS Safari throws from the constructor when the speech service is unavailable
+      // and Chrome from start(); either would otherwise leave the button in the
+      // recording colour with no tap left that reaches the sheet.
+      sessionRef.current = null;
       setRecording(false);
-      setDraftText(transcript.trim());
-      setSheetOpen(true);
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setRecording(false);
-      if (failed) return;
-      const text = transcript.trim();
-      if (text.length > 0) onAddNote(text);
-    };
-    recognitionRef.current = recognition;
-    setRecording(true);
-    recognition.start();
+      openTextEntry();
+    }
   }
 
   return (
@@ -115,7 +181,7 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
         aria-pressed={recording}
         onClick={() => {
           if (recording) {
-            recognitionRef.current?.stop();
+            sessionRef.current?.finish();
             return;
           }
           if (getSpeechRecognitionCtor() !== null) {
