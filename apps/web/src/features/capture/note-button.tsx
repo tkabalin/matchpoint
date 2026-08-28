@@ -4,12 +4,18 @@
  *
  * Voice-first where the browser can transcribe live: tap to start, the button turns
  * from blue to the recording color while listening, tap again to stop and the
- * transcript is added as the note. Where the browser has no SpeechRecognition (no
- * Firefox, and some cloud-backed Chromium builds fail outright with no connectivity —
- * this is capture, which has to work offline mid-match) the same tap opens a bottom
- * sheet with a text field instead, matching this screen's other quick-input sheets
- * (unusual-point-sheet.tsx). A recognition error lands there too, transcript so far
- * pre-filled, rather than leaving the coach stuck on a dead button.
+ * transcript is added as the note. Press-and-hold instead opens a bottom sheet with a
+ * text field, matching this screen's other quick-input sheets (unusual-point-sheet.tsx)
+ * and the tap/hold split the skip button next to it already has: a coach on a noisy
+ * court, or within earshot of the opponent, should not have to talk to their phone.
+ *
+ * That sheet has three ways in, because typing is the route that needs no microphone,
+ * no permission and no network: the hold; the visually hidden button beside this one,
+ * since a keyboard or switch activation dispatches a click with no pointerdown and so
+ * can never hold; and a plain tap where dictating is impossible at all, meaning no
+ * SpeechRecognition (no Firefox, and some cloud-backed Chromium builds fail outright
+ * with no connectivity, while capture has to work offline mid-match) or a recognition
+ * error, transcript so far pre-filled.
  */
 
 import { MessageCircle } from "lucide-react";
@@ -21,6 +27,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 import { NOTE_MAX_LENGTH } from "./point";
+import { usePressAndHold } from "./use-press-and-hold";
 
 // Not yet in TypeScript's DOM lib. Only the shape this component actually uses,
 // same narrow-cast approach as navigator.standalone in lib/device-platform.ts rather
@@ -64,6 +71,7 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
   const sessionRef = useRef<NoteSession | null>(null);
+  const { holdHandlers, consumeHold } = usePressAndHold();
   // The caller rebuilds this prop every render over that render's own capture state, so
   // committing through the one captured when recording started would roll the flow back
   // to the moment the mic was tapped, losing the points captured while dictating.
@@ -179,9 +187,23 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
         size="icon"
         aria-label={recording ? "Stop recording note" : "Add a note"}
         aria-pressed={recording}
+        {...holdHandlers}
+        onContextMenu={(event) => {
+          // A touch long-press dispatches contextmenu, and left un-prevented it cancels
+          // the touch sequence before its click. Unlike skip's handler this calls
+          // nothing: the click it keeps alive is what opens the sheet.
+          event.preventDefault();
+        }}
         onClick={() => {
+          // Read before the recording branch, or a hold that stopped a recording would
+          // leave the flag set for the next activation to open the sheet with.
+          const held = consumeHold();
           if (recording) {
             sessionRef.current?.finish();
+            return;
+          }
+          if (held) {
+            openTextEntry();
             return;
           }
           if (getSpeechRecognitionCtor() !== null) {
@@ -197,6 +219,17 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
       >
         <MessageCircle className="size-5" />
       </Button>
+
+      {/* A keyboard or switch activation dispatches a click with no pointerdown, so it
+          can never hold: without this there is no route to the typed sheet for anyone
+          who can't perform the gesture. Out of the header's flow until it has focus. */}
+      <button
+        type="button"
+        onClick={openTextEntry}
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-sm focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:ring-2 focus:ring-ring"
+      >
+        Type a note instead
+      </button>
 
       <Sheet
         open={sheetOpen}

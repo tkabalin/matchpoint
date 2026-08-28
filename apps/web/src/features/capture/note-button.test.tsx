@@ -1,9 +1,16 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { NoteButton } from "./note-button";
 import { NOTE_MAX_LENGTH } from "./point";
+
+/** Holds past HOLD_MS and lets go, the gesture that reaches the typed-note sheet. */
+async function holdAndRelease(user: ReturnType<typeof userEvent.setup>, target: HTMLElement) {
+  await user.pointer({ keys: "[MouseLeft>]", target });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]", target });
+}
 
 /** A stand-in for the browser's SpeechRecognition — jsdom implements neither. */
 class FakeSpeechRecognition extends EventTarget {
@@ -83,6 +90,124 @@ test("SpeechRecognition present: tapping starts recording instead of opening the
     "true",
   );
   expect(screen.queryByRole("heading", { name: "Add a note" })).not.toBeInTheDocument();
+});
+
+test("holding opens the text sheet without ever reaching for the mic", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await holdAndRelease(user, screen.getByRole("button", { name: "Add a note" }));
+
+  expect(screen.getByRole("heading", { name: "Add a note" })).toBeVisible();
+  expect(screen.getByPlaceholderText("What happened?")).toHaveValue("");
+  // Neither the hold nor the click its release produces may start a recording.
+  expect(instances).toHaveLength(0);
+});
+
+test("a hold on a touch screen opens the sheet, though its release fires pointerleave first", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  const button = screen.getByRole("button", { name: "Add a note" });
+  await user.pointer({ keys: "[TouchA>]", target: button });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/TouchA]", target: button });
+
+  expect(screen.getByRole("heading", { name: "Add a note" })).toBeVisible();
+  expect(instances).toHaveLength(0);
+});
+
+test("a hold is spent by its own click, so the next activation dictates again", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await holdAndRelease(user, screen.getByRole("button", { name: "Add a note" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  // A keyboard activation is the only one that can catch a flag left set: a tap would
+  // clear it on its own pointerdown, and so would pass either way.
+  const button = screen.getByRole("button", { name: "Add a note" });
+  button.focus();
+  await user.keyboard("{Enter}");
+
+  expect(instances).toHaveLength(1);
+  expect(screen.getByRole("button", { name: "Stop recording note" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+});
+
+test("holding while recording stops and adds the note, rather than opening the sheet", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "serving into the body" }]] });
+  });
+  await holdAndRelease(user, screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(onAddNote).toHaveBeenCalledWith("serving into the body");
+  expect(screen.queryByRole("heading", { name: "Add a note" })).not.toBeInTheDocument();
+
+  // The hold the stop spent must not be left over for the next activation, which a
+  // keyboard one is the only way to catch: a tap would clear it on its pointerdown.
+  const button = screen.getByRole("button", { name: "Add a note" });
+  button.focus();
+  await user.keyboard("{Enter}");
+
+  expect(instances).toHaveLength(2);
+  expect(screen.queryByRole("heading", { name: "Add a note" })).not.toBeInTheDocument();
+});
+
+test("holding while a session the service ended is pending adds the note once, not the sheet", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "second serve sitting up" }]] });
+    // The service ending the session on a silence: the mic is already off while the
+    // button still reads as recording, so the commit is owed to the next activation.
+    instances[0]?.onend?.();
+  });
+  await holdAndRelease(user, screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(onAddNote).toHaveBeenCalledTimes(1);
+  expect(onAddNote).toHaveBeenCalledWith("second serve sitting up");
+  expect(screen.queryByRole("heading", { name: "Add a note" })).not.toBeInTheDocument();
+});
+
+test("a touch long-press's contextmenu is prevented, so the click it precedes survives", () => {
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  // fireEvent rather than user-event: what's under test is the default being
+  // prevented, which is the dispatch's own return value rather than anything on screen.
+  const notPrevented = fireEvent.contextMenu(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(notPrevented).toBe(false);
+});
+
+test("the typed sheet is reachable by keyboard, which can't perform the hold", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await user.tab();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Type a note instead" })).toHaveFocus();
+  await user.keyboard("{Enter}");
+
+  expect(screen.getByRole("heading", { name: "Add a note" })).toBeVisible();
+  expect(screen.getByPlaceholderText("What happened?")).toHaveValue("");
+  expect(instances).toHaveLength(0);
 });
 
 test("stopping a recording adds the transcript as a note", async () => {

@@ -83,7 +83,7 @@ whether an icon means "go to detail" or "expand this section" from its shape alo
 | Copy to clipboard        | `Copy`, swapping to `Check` once copied | Transfer-code display.                                                                                                                                                                                                                   |
 | Let (replay the point)   | `RotateCcw`                             | Capture's serve and return screens, and the rally screen when it lands. A let replays the point and never changes the score.                                                                                                             |
 | Skip a point             | `SkipForward`                           | Capture's match header. Tap records the point winner-only, press-and-hold opens the score editor (which tapping the score itself also does).                                                                                             |
-| Add a note               | `MessageCircle`                         | Capture's match header note button. Round, blue at rest, `--color-recording` while actively transcribing a voice note (see `.claude/rules/web-color.md`).                                                                                |
+| Add a note               | `MessageCircle`                         | Capture's match header note button. Tap dictates a voice note, press-and-hold opens the sheet to type one instead. Round, blue at rest, `--color-recording` while actively transcribing a voice note (see `.claude/rules/web-color.md`). |
 
 ## Before picking a new icon
 

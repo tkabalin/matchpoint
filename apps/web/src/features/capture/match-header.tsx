@@ -17,7 +17,7 @@
  */
 
 import { ArrowLeft, SkipForward } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,11 +28,8 @@ import type { Server } from "./point";
 import { scoreboardFor } from "./score";
 import type { Scoreboard } from "./score";
 import { maxSetsFor } from "./state";
+import { usePressAndHold } from "./use-press-and-hold";
 import { WinnerSheet } from "./winner-sheet";
-
-// Long enough that a deliberate press is unmistakable, short enough to feel like a
-// hold rather than a hang. From the design handoff.
-const HOLD_MS = 450;
 
 // Completed sets recede, the live games read as the score, the current game's call is
 // the one thing a coach looks at mid-point.
@@ -91,31 +88,7 @@ export function MatchHeader({
   onAddNote: (text: string) => void;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set once the hold has crossed HOLD_MS, so the click that follows the release
-  // opens skip-ahead instead of asking who won.
-  const holdFired = useRef(false);
-
-  useEffect(() => {
-    return () => {
-      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
-    };
-  }, []);
-
-  function startHold() {
-    holdFired.current = false;
-    holdTimer.current = setTimeout(() => {
-      holdTimer.current = null;
-      holdFired.current = true;
-    }, HOLD_MS);
-  }
-
-  function cancelHold() {
-    if (holdTimer.current !== null) {
-      clearTimeout(holdTimer.current);
-      holdTimer.current = null;
-    }
-  }
+  const { holdHandlers, cancelHold, consumeHold } = usePressAndHold();
 
   function skipTo(won: boolean) {
     setAskingWinner(false);
@@ -202,9 +175,7 @@ export function MatchHeader({
           variant="ghost"
           size="icon"
           aria-label="Skip point"
-          onPointerDown={startHold}
-          onPointerUp={cancelHold}
-          onPointerLeave={cancelHold}
+          {...holdHandlers}
           onContextMenu={(event) => {
             // The sheet mounts under the still-down finger and swallows the click this
             // gesture would have produced, so nothing consumes the flag. A later tap
@@ -219,8 +190,7 @@ export function MatchHeader({
             // to dismiss, so the sheet's own outside-press handling can't catch its own
             // trigger click and close what it just opened. A keyboard activation never
             // starts a hold, so it always lands here as a plain tap.
-            if (holdFired.current) {
-              holdFired.current = false;
+            if (consumeHold()) {
               onEditScore();
               return;
             }
