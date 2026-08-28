@@ -111,6 +111,25 @@ def deleted_within_window(db: Session, match_id: uuid.UUID) -> bool:
     return deleted_at is not None and deleted_at > datetime.now(UTC) - DELETED_MATCH_TTL
 
 
+def match_for_write(db: Session, match_id: uuid.UUID, coach_id: uuid.UUID) -> Match:
+    """One coach's match, locked for a write, or a 410 where the coach deleted it.
+
+    The tombstone is read where the locked read comes back empty rather than before it: a
+    delete that committed while this statement waited on the row it had locked is in no
+    earlier read's snapshot, so a 404 there parks a row for a match the coach asked to be
+    rid of (#214). Nothing is lost by checking only here, an in-window tombstone refusing
+    every create of that id, so no match that still exists has one.
+    """
+    try:
+        return match_for_coach(db, match_id, coach_id, for_update=True)
+    except HTTPException:
+        # The 404 is match_for_coach's only refusal, and it cannot tell a deleted match
+        # from one that never existed: only the tombstone says the coach asked for it.
+        if deleted_within_window(db, match_id):
+            raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED) from None
+        raise
+
+
 # The 410 is declared because the client branches on it: a match the coach deleted is
 # the one refusal where a queued create is destroyed rather than shown to them, so the
 # sync layer needs a status of its own for it (#214). The 404s stay undeclared, being the
@@ -224,15 +243,11 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
 def update_match(
     match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
 ) -> Match:
-    # Asked before the ownership read, as ingest_points asks it: the row is gone either
-    # way, and only the tombstone says the coach asked for that. A queued finish flushed
-    # after a delete on another device is the case that reaches here.
-    if deleted_within_window(db, match_id):
-        raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
     # Locked for the read like the capture routes: the completed check and the claim
     # clearing below both read then write, so an unlocked read lets a second result
-    # land, and leaves a claim taken since the read standing.
-    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    # land, and leaves a claim taken since the read standing. A queued finish flushed
+    # after a delete on another device is what the 410 from that read answers.
+    match = match_for_write(db, match_id, coach.id)
     submitted = data.model_dump(exclude_unset=True)
     # A recorded result completes the match (#108) and freezes the locked fields alone
     # (#228). A field still null has never been set, so it can be filled in afterwards,
@@ -321,16 +336,10 @@ def ingest_points(
     1 MB request body limit is the real bound, which a batch of points carrying long
     notes reaches sooner.
     """
-    # Asked before the ownership read, which cannot tell a deleted match from one that
-    # never existed: the row is gone either way, and only the tombstone says the coach
-    # asked for it. Nothing else turns on the order, since a match cannot exist while a
-    # tombstone inside the window names it, create_match refusing to re-create one.
-    if deleted_within_window(db, match_id):
-        raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
     # Locked because this reads the result and the claim and then writes points
     # against them, and because delete_match deletes the points and then the match:
     # unlocked, a batch could land under a delete that had already erased its points.
-    match = match_for_coach(db, match_id, coach.id, for_update=True)
+    match = match_for_write(db, match_id, coach.id)
     if match.result is not None:
         raise HTTPException(status_code=409, detail="Match is completed")
     # A flush is evidence the holder is still capturing, so it renews the claim as

@@ -22,8 +22,8 @@ class DeletedMatch(Base):
     # schema refuses everywhere else.
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     # The coach who deleted it, kept only so `DELETE /coaches/me` can find and remove
-    # this row; the create/ingest 410 check in `routers/matches.py` never reads it, and
-    # stays coach-agnostic.
+    # this row; the 410 checks in `routers/matches.py` never read it, and stay
+    # coach-agnostic.
     coach_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("coaches.id"), index=True)
     # The one timestamp, in place of the created_at and updated_at every other table
     # carries: the row is written when the match is deleted and only ever refreshed by a
