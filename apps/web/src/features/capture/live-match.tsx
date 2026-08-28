@@ -546,10 +546,9 @@ export function LiveMatch({
 
   /**
    * Back goes one screen at a time within the point, and stops at the serve or return
-   * screen. Before the match has been queued (see queueMatch), its very first screen
-   * has nothing captured yet, so it steps out to setup instead. Past that, with a
-   * fresh draft, it offers to undo the newest committed event — which is what makes a
-   * mis-tap recoverable rather than permanent.
+   * screen. Before the match is queued (see queueMatch) it steps out to setup; after,
+   * setup is closed for good, so it offers to undo the newest event instead — or, with
+   * nothing captured to undo, leaves the match, which is deletable from the match list.
    */
   const backAction =
     capture.history.length > 0
@@ -565,7 +564,7 @@ export function LiveMatch({
           ? () => {
               setUndoing(true);
             }
-          : null;
+          : onExit;
 
   return (
     // `display: contents` because custom properties inherit down the DOM tree rather
