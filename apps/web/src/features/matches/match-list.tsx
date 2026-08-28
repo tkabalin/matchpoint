@@ -364,22 +364,20 @@ function MatchRow({
       {/* Stacked rather than side by side, matching the ask — edit (blue,
           the app's reserved interactive/brand color) above delete (red, the
           same destructive tone every other delete control in the app uses).
-          Edit drops out once the match has a result: the backend locks a
-          completed match's metadata with a 409, so there's nothing here to
-          offer once that's true (Fitts's Law — no control that always fails). */}
+          Offered on a completed match too: finishing one freezes only its result and
+          scoring system (#228), and the sheet locks that one field itself rather than
+          the row hiding the whole control. */}
       <div className="flex flex-col gap-1">
-        {!match.result && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="text-primary"
-            aria-label={`Edit details for the match vs ${opponent}`}
-            onClick={() => onEdit(match)}
-          >
-            <Pencil />
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="text-primary"
+          aria-label={`Edit details for the match vs ${opponent}`}
+          onClick={() => onEdit(match)}
+        >
+          <Pencil />
+        </Button>
         <Button
           type="button"
           variant="ghost"

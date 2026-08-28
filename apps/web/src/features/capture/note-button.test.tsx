@@ -134,6 +134,24 @@ test("a recognition error falls back to the text sheet, pre-filled with what was
   expect(screen.getByPlaceholderText("What happened?")).toHaveValue("partial thought");
 });
 
+test("an errored session never auto-adds what it heard, since the sheet already holds it", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup();
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "partial thought" }]] });
+    // The real API fires end after error, which is what used to land the note twice.
+    instances[0]?.onerror?.();
+    instances[0]?.onend?.();
+  });
+
+  expect(onAddNote).not.toHaveBeenCalled();
+  expect(screen.getByPlaceholderText("What happened?")).toHaveValue("partial thought");
+});
+
 test("cancel closes the sheet without adding a note", async () => {
   const user = userEvent.setup();
   const onAddNote = vi.fn();

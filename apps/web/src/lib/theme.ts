@@ -20,11 +20,21 @@ function readStoredTheme(): Theme {
   return stored === "dark" ? "dark" : DEFAULT_THEME;
 }
 
+// What the browser paints outside the app's own CSS: the canvas, form controls and
+// scrollbars follow color-scheme, and an installed PWA's status bar follows theme-color.
+// These values are duplicated in index.html's bootstrap, which must set them before
+// first paint; keep the two in step by hand (see .claude/rules/web.md).
+const THEME_COLORS: Record<Theme, string> = { light: "#ffffff", dark: "#090B0C" };
+
 /** The only place `.dark` is ever toggled on `<html>` — index.html's inline
  * bootstrap script does the same thing before first paint, deliberately
- * duplicated there since it has to run before any module loads. */
+ * duplicated there since it has to run before any module loads. The two meta tags
+ * go with it: set once at boot and never again, a Settings toggle would leave the
+ * native chrome in the theme the app had left. */
 export function applyTheme(theme: Theme): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
+  document.getElementById("color-scheme-meta")?.setAttribute("content", theme);
+  document.getElementById("theme-color-meta")?.setAttribute("content", THEME_COLORS[theme]);
 }
 
 export function setStoredTheme(theme: Theme): void {

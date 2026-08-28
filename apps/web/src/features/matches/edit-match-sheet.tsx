@@ -39,9 +39,12 @@ type Step = "form" | "confirm-save";
  * only sends the fields that actually changed. A plain confirm step before
  * saving is the "second popup" this action needs, same as delete's.
  *
- * Not offered once `match.result` is set — the backend locks a completed
- * match's metadata with a 409, so `MatchList`'s row hides the edit icon at
- * that point rather than offering a control that will always fail.
+ * Still offered once the match is complete (#228): finishing one freezes only its
+ * result and its scoring system, the rulebook its points were scored under. Everything
+ * else stays editable, since correcting a typo in the opponent or the date fixes the
+ * analytics that read them rather than rewriting a match already played. The scoring
+ * system is shown locked rather than hidden, so it is clear the field exists and why
+ * it cannot move.
  */
 export function EditMatchSheet({
   match,
@@ -68,6 +71,9 @@ export function EditMatchSheet({
   }
 
   const body = buildMatchUpdateBody(match, values);
+  // Mirrors the server's own predicate: a field still null has never been set, so a
+  // completed match can still have its scoring system filled in for the first time.
+  const scoringSystemLocked = match.result !== null && match.scoring_system !== null;
   const hasChanges = Object.keys(body).length > 0;
   const opponentLabel = match.opponent_name ?? "Unknown opponent";
 
@@ -171,6 +177,7 @@ export function EditMatchSheet({
                   <FieldLabel htmlFor="match-scoring-system">Scoring system</FieldLabel>
                   <Select
                     value={values.scoringSystem === "" ? NONE : values.scoringSystem}
+                    disabled={scoringSystemLocked}
                     onValueChange={(value) =>
                       update("scoringSystem", value === NONE ? "" : (value as ScoringSystem))
                     }
@@ -194,6 +201,12 @@ export function EditMatchSheet({
                     </SelectContent>
                   </Select>
                 </Field>
+                {scoringSystemLocked && (
+                  <p className="text-xs text-muted-foreground">
+                    The scoring system is fixed once a match is finished: its points were scored
+                    under it.
+                  </p>
+                )}
 
                 <Field>
                   <FieldLabel htmlFor="match-event">Event</FieldLabel>

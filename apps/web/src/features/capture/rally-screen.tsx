@@ -13,13 +13,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
-import {
-  COURT_ACTIONS,
-  COURT_COLUMNS,
-  COURT_REGION_GRID,
-  COURT_ROWS,
-  CourtDiagram,
-} from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { COURT_COLUMNS, COURT_REGION_GRID, COURT_ROWS } from "./court-regions";
 import type { EndReason, RallyBucket } from "./point";
 import { WinnerSheet } from "./winner-sheet";
 

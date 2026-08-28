@@ -109,15 +109,15 @@ test("tapping a match row navigates to its stats page", async () => {
   expect(await screen.findByRole("heading", { name: "Match Stats" })).toBeInTheDocument();
 });
 
-test("the edit icon is hidden once the match has a result", async () => {
+// Finishing a match freezes its result and scoring system, not its metadata (#228),
+// so the control stays: it is the sheet that locks the one field that cannot move.
+test("the edit icon is still offered once the match has a result", async () => {
   stubFetch({ "/api/matches": () => Response.json([{ ...match, result: "win" }]) });
   renderMatchesPage();
 
   await screen.findByText("vs T. Naidoo");
 
-  expect(
-    screen.queryByRole("button", { name: /Edit details for the match/ }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
 });
 
 test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what changed", async () => {
@@ -139,6 +139,39 @@ test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what chan
 
   const opponentField = await screen.findByRole("textbox", { name: "Opponent" });
   expect(opponentField).toHaveValue("T. Naidoo");
+  await user.clear(opponentField);
+  await user.type(opponentField, "Sarah K");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByRole("heading", { name: "Save these changes?" });
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await waitFor(() => expect(patches).toHaveLength(1));
+  expect(JSON.parse(patches[0]!)).toEqual({ opponent_name: "Sarah K" });
+});
+
+test("a completed match edits its metadata, with the scoring system locked", async () => {
+  const completed = { ...match, result: "win", scoring_system: "traditional" };
+  const patches: string[] = [];
+  stubFetch({
+    "/api/matches": () => Response.json([completed]),
+    [`/api/matches/${match.id}`]: async (input) => {
+      if (input.method === "PATCH") {
+        patches.push(await input.text());
+        return Response.json({ ...completed, opponent_name: "Sarah K" });
+      }
+      return Response.json(completed);
+    },
+  });
+  const user = userEvent.setup();
+  renderMatchesPage();
+
+  await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
+
+  // The rulebook the points were scored under cannot move, and says why.
+  expect(await screen.findByRole("combobox", { name: "Scoring system" })).toBeDisabled();
+  expect(screen.getByText(/scoring system is fixed once a match is finished/)).toBeVisible();
+
+  const opponentField = screen.getByRole("textbox", { name: "Opponent" });
   await user.clear(opponentField);
   await user.type(opponentField, "Sarah K");
   await user.click(screen.getByRole("button", { name: "Save changes" }));

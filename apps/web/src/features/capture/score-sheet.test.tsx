@@ -209,6 +209,30 @@ test("a refusal names the cell it belongs to, and holds the button", async () =>
   expect(screen.getByRole("button", { name: "Set score" })).toBeDisabled();
 });
 
+test.each(["1.5", "-1"])("survives %s typed into a cell, refusing it per cell", async (typed) => {
+  const { user } = renderSheet({ hasEvents: false });
+
+  await setGames(user, "Rivera", 1, typed);
+
+  // The editor is still standing, which is the point: the checkpoint class refuses
+  // this input by throwing, so it must not be built while the coach is still typing.
+  expect(screen.getByRole("heading", { name: "Score" })).toBeVisible();
+  expect(screen.getByText("Games must be whole numbers from 0 to 99.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Set score" })).toBeDisabled();
+});
+
+test("a fractional tiebreak score is refused the same way", async () => {
+  const { user } = renderSheet({ hasEvents: false });
+
+  await setGames(user, "Rivera", 1, "7");
+  await setGames(user, "Okoye", 1, "6");
+  await user.type(screen.getByLabelText("Rivera set 1 tiebreak points"), "2.5");
+
+  expect(screen.getByRole("heading", { name: "Score" })).toBeVisible();
+  expect(screen.getByText("Tiebreak points must be whole numbers.")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Set score" })).toBeDisabled();
+});
+
 test("a score that changes nothing is refused", () => {
   renderSheet({ wins: games(true, 2) });
 

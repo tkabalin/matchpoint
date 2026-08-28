@@ -8,9 +8,11 @@ import { getInProgressMatchOptions } from "@/lib/analytics/analytics-options";
 /**
  * The resume banner at the top of the home and match screens.
  *
- * Renders nothing until there's a match to resume, which today is always — capture
- * has no screen yet, so `useInProgressMatch` resolves to null by design. The banner
- * is wired now so that landing capture is the only change needed to light it up.
+ * Still renders nothing: capture now leaves a real signal behind (`listInProgress` in
+ * `features/outbox/match-log.ts` lists the coach's unfinished matches), but this reads
+ * the fixture-backed placeholder, which resolves to null. Consuming the real signal
+ * needs a roster lookup for the player's name and a route to resume into, which is
+ * #229's own work.
  */
 export function InProgressBanner() {
   const { data: match } = useQuery(getInProgressMatchOptions());

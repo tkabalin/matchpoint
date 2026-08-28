@@ -84,6 +84,18 @@ export interface Scoreboard {
   ignored: readonly IgnoredEvent[];
 }
 
+/**
+ * A checkpoint before it is one: what the score editor holds while the coach is still
+ * typing. Validation takes this rather than a `ScoreCheckpoint`, so a half-typed cell
+ * can be refused per-cell instead of throwing out of the editor's own render — the
+ * class is constructed only once there is an id, a timestamp and a sequence for it.
+ */
+export interface CheckpointDraft {
+  after: ScoreSnapshot;
+  servesNext: Server;
+  orderChanged: boolean;
+}
+
 /** One refusal, naming the cell it belongs to so the editor can highlight it. */
 export interface ScoreProblem {
   // "sets", "set:2", "set:2:tiebreak", "game" or "servesNext".
@@ -767,7 +779,7 @@ export function firstServerImpliedBy(board: Scoreboard, servesNext: Server): Ser
 export function validateCheckpoint(
   match: Match,
   board: Scoreboard,
-  checkpoint: ScoreCheckpoint,
+  checkpoint: CheckpointDraft,
   { hasEvents }: { hasEvents: boolean },
 ): ScoreProblem[] {
   const read = interpretSnapshot(match, checkpoint.after);

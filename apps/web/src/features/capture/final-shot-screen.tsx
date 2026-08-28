@@ -9,14 +9,13 @@
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
+import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
 import {
-  COURT_ACTIONS,
   COURT_COLUMNS,
   COURT_REGION_COLUMNS,
   COURT_REGION_GRID,
   COURT_ROWS,
-  CourtDiagram,
-} from "./court-diagram";
+} from "./court-regions";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent

@@ -73,10 +73,26 @@ holds it is refused; the holder is exempt, since backing out of capture does not
 (`navigator.locks.request` with `ifAvailable: true`) so two tabs never double-flush; a tab that
 finds the lock held re-arms the trigger instead of waiting.
 
-A drain sweep reads the pending queue, groups rows by match in first-seen order, and for each match
-sends the match create (if queued) followed by its points in batches. Batches are bounded by both a
-count ceiling (500 points, the spec's `maxItems`) and a byte budget (950 KB, under the API's 1 MB
-body limit), whichever is reached first.
+A drain sweep reads the pending queue, groups rows by match in first-seen order, and sends each
+match's rows in one fixed order:
+
+1. the match create, if queued;
+2. its points, in batches;
+3. its outcome (the PATCH recording who won and how), last.
+
+Batches are bounded by both a count ceiling (500 points, the spec's `maxItems`) and a byte budget
+(950 KB, under the API's 1 MB body limit), whichever is reached first.
+
+The outcome goes last because it is what completes the match server-side, and `ingest_points`
+refuses a completed match with a 409. Sent first, it would park every point behind it as permanently
+failed. For the same reason it is skipped entirely whenever anything earlier in that match did not
+land: a transient failure (offline, 429, 5xx) means the points have simply not been sent yet, and
+fencing them off would turn a retry into a loss.
+
+Capture also queues `checkpoint` and `eventDelete` rows, which have no endpoint yet (see
+`apps/web/src/features/capture/database-changes-needed.md`). They sit pending rather than failing,
+and while any remain the match's outcome is held back too — completing the match would fence out its
+own checkpoints the moment those endpoints land.
 
 ### Server-side idempotency
 

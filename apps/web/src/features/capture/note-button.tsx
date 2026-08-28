@@ -73,6 +73,9 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
     recognition.continuous = true;
     recognition.interimResults = false;
     let transcript = "";
+    // `end` fires after `error`, so without this the same partial transcript would
+    // both be added here and pre-filled into the fallback sheet: one note, twice.
+    let failed = false;
     recognition.onresult = (event) => {
       // Capped here as well as on the textarea: the field's maxLength bounds typing,
       // not a value set from script, and a long dictation arrives in one go.
@@ -84,6 +87,7 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
     recognition.onerror = () => {
       // Denied mic, no speech heard, or (some Chromium builds) no connectivity to
       // reach the recognition service — fall back to typing instead of a dead end.
+      failed = true;
       recognitionRef.current = null;
       setRecording(false);
       setDraftText(transcript.trim());
@@ -92,6 +96,7 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
     recognition.onend = () => {
       recognitionRef.current = null;
       setRecording(false);
+      if (failed) return;
       const text = transcript.trim();
       if (text.length > 0) onAddNote(text);
     };

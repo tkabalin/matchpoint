@@ -172,7 +172,7 @@ test("the delete icon hands the match to the caller instead of navigating", asyn
   expect(screen.queryByRole("heading", { name: "Match Stats" })).not.toBeInTheDocument();
 });
 
-test("the edit icon is hidden once the match has a result", async () => {
+test("the edit icon is still offered once the match has a result", async () => {
   stubFetch({
     matches: () => Response.json([{ ...match, result: "win" }]),
     players: () => Response.json([player]),
@@ -180,9 +180,7 @@ test("the edit icon is hidden once the match has a result", async () => {
   renderMatchList();
   await screen.findByText("vs T. Naidoo");
 
-  expect(
-    screen.queryByRole("button", { name: /Edit details for the match/ }),
-  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Delete the match/ })).toBeInTheDocument();
 });
 

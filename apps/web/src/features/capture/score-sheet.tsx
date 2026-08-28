@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
-import { ScoreCheckpoint } from "./checkpoint";
 import type { ScoreSnapshot, SetSnapshot } from "./checkpoint";
 import { MATCH_END_REASONS } from "./match";
 import type { Match, MatchEndReason } from "./match";
@@ -228,22 +227,20 @@ export function ScoreSheet({
   const snapshot: ScoreSnapshot = { sets, game: wantsGame ? game : null };
 
   const gap = games.slice(0, setCount).findIndex((cell) => !entered(cell));
-  const checkpoint =
-    gap === -1
-      ? ScoreCheckpoint.create({
-          id: "score-sheet-preview",
-          matchId: match.matchId,
-          timestamp: 0,
-          sequence: 0,
-          after: snapshot,
-          servesNext,
-          orderChanged,
-        })
-      : null;
+  // Validated as a draft, never as a `ScoreCheckpoint`: the class refuses a fractional
+  // or negative count by throwing, which mid-render would take the editor down with it.
+  // The engine reads the same input as a per-cell problem instead.
   const problems: ScoreProblem[] =
-    checkpoint === null
-      ? [{ cell: `set:${String(gap + 1)}`, message: "Fill in this set before a later one." }]
-      : validateCheckpoint(match, board, checkpoint, { hasEvents });
+    gap === -1
+      ? validateCheckpoint(
+          match,
+          board,
+          { after: snapshot, servesNext, orderChanged },
+          {
+            hasEvents,
+          },
+        )
+      : [{ cell: `set:${String(gap + 1)}`, message: "Fill in this set before a later one." }];
 
   const problemFor = (cell: string) => problems.find((problem) => problem.cell === cell);
   const orderProblem = problemFor("servesNext");
@@ -254,7 +251,7 @@ export function ScoreSheet({
   // On an empty log the answer defines the rotation, so the sheet says what it just
   // decided rather than checking it against a toss the coach may have got wrong.
   const implied =
-    !hasEvents && checkpoint !== null
+    !hasEvents && gap === -1
       ? (() => {
           const read = interpretSnapshot(match, snapshot);
           if ("problems" in read) return null;

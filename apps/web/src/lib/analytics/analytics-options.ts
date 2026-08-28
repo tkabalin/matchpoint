@@ -158,8 +158,9 @@ export const listCoachNotesOptions = (options: { path: { player_id: string } }) 
 /**
  * PLACEHOLDER: GET /matches?status=in_progress
  *
- * Resolves to null rather than a fixture match: capture has no screen yet, so a
- * resume banner would offer to continue something that can't be continued.
+ * Resolves to null rather than a fixture match, which would offer to resume something
+ * that isn't there. The device's own answer already exists — `listInProgress` in
+ * `features/outbox/match-log.ts` — and swapping this for it is #229.
  */
 export const getInProgressMatchOptions = () =>
   fixtureOptions<InProgressMatch | null>(["matches", "in-progress"], null);

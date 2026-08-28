@@ -5,15 +5,17 @@
  * One entry point, drainOutbox. It takes a web lock so two tabs never
  * double-flush, then sweeps the queue: rows grouped by match, the match create
  * first, then its points in enqueue order, in batches bounded by the spec's
- * ceiling and by the body limit. Every server answer lands in one of five
- * buckets: success removes the rows; a 401 halts the whole run with the queue
- * intact, because a revoked session must never cost a match; a 410 means the
- * match those rows belong to was deliberately deleted, so they are discarded
- * rather than parked; any other 4xx, a 404 included, is a permanent refusal, so
- * the match's rows park as failed with the reason recorded; network errors, 5xx
- * and 429 are transient, so the sweep runs again on a doubling backoff until the
- * schedule runs out. Both requests are idempotent server-side, which is what
- * makes re-sending after a lost acknowledgement safe.
+ * ceiling and by the body limit, then the outcome PATCH last. The outcome goes
+ * last because ingest_points answers 409 for a match whose result is set, so a
+ * PATCH sent first would park every point behind it. Every server answer lands
+ * in one of five buckets: success removes the rows; a 401 halts the whole run
+ * with the queue intact, because a revoked session must never cost a match; a
+ * 410 means the match those rows belong to was deliberately deleted, so they are
+ * discarded rather than parked; any other 4xx, a 404 included, is a permanent
+ * refusal, so the match's rows park as failed with the reason recorded; network
+ * errors, 5xx and 429 are transient, so the sweep runs again on a doubling
+ * backoff until the schedule runs out. All three requests are idempotent
+ * server-side, which is what makes re-sending after a lost acknowledgement safe.
  */
 
 import {
@@ -142,6 +144,9 @@ async function sweepQueue(coachId: string, deviceId: string): Promise<Sweep> {
       // for a match it refused) and to "which rows still exist?" (undo before
       // sync deletes rows under a running drain).
       const rows = await readByMatch(matchId);
+      // One parked row holds the whole match back, its outcome included: sending
+      // that PATCH would complete the match server-side and permanently fence
+      // out points a `retryFailed` could still land.
       if (rows.some((row) => row.status === "failed")) continue;
       const halt = await flushMatch(rows, deviceId, sweep);
       if (halt) break;
@@ -159,8 +164,17 @@ function matchIdsInOrder(rows: readonly OutboxRow[]): string[] {
 }
 
 /**
- * Sends one match's rows: the match create if queued, then its points in
- * chunks. Answers true only for a 401, which halts the entire run.
+ * Sends one match's rows in the only order the API accepts: the match create, then its
+ * points in chunks, then the outcome last.
+ *
+ * The outcome goes last because `ingest_points` refuses a match whose `result` is set
+ * (409). Sending the PATCH first would complete the match and then park every point
+ * behind it as permanently failed. For the same reason it is skipped whenever anything
+ * earlier in this match did not land: every non-ok branch below returns before reaching
+ * it, so a transient failure holds the outcome back rather than fencing off a tail that
+ * had simply not been sent yet.
+ *
+ * Answers true only for a 401, which halts the entire run.
  */
 async function flushMatch(
   rows: readonly OutboxRow[],
@@ -172,6 +186,11 @@ async function flushMatch(
   const matchRow = rows.find((row) => row.kind === "match");
   const pointRows = rows.filter((row) => row.kind === "point");
   const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
+  // Queued by capture, with no endpoint to send them to yet (see
+  // database-changes-needed.md). They sit pending rather than failing, and they hold
+  // the outcome back: completing the match would fence out its own checkpoints the
+  // moment those endpoints do land.
+  const undrainable = rows.filter((row) => row.kind === "checkpoint" || row.kind === "eventDelete");
 
   if (matchRow) {
     let payload: MatchCreate;
@@ -201,14 +220,6 @@ async function flushMatch(
       case "ok":
         await acknowledge([matchRow], sweep);
     }
-  }
-
-  // Independent of the points below it: a PATCH to record who won and how does not
-  // need points to have landed, and points should not wait on it either — only an
-  // unauthorized run halts the match entirely, same as everywhere else in here.
-  if (outcomeRow) {
-    const halt = await flushOutcome(outcomeRow, first.matchId, sweep);
-    if (halt) return true;
   }
 
   let start = 0;
@@ -247,13 +258,18 @@ async function flushMatch(
     }
     start = batch.end;
   }
+
+  if (outcomeRow && undrainable.length === 0) {
+    const halt = await flushOutcome(outcomeRow, first.matchId, sweep);
+    if (halt) return true;
+  }
   return false;
 }
 
 /**
- * Sends the match's outcome row, a PATCH independent of both the match create above
- * it and the points below it — nothing else in this match waits on it, and it waits
- * on nothing but the match existing. Answers true only for a 401.
+ * Sends the match's outcome row, the PATCH that records who won and how. Runs last for
+ * its match: it is what completes the match server-side, and a completed match refuses
+ * further points. Answers true only for a 401.
  */
 async function flushOutcome(row: OutboxRow, matchId: string, sweep: Sweep): Promise<boolean> {
   let payload: MatchUpdate;

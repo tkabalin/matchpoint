@@ -487,7 +487,10 @@ describe("match outcome", () => {
   // The outcome and the points are independent requests either way: a batch this
   // app version cannot map yet (#210) must not hold the outcome back, and — the
   // opposite direction, below — a refused outcome must not hold the points back.
-  test("sends the outcome even though the match's points are refused", async () => {
+  // The outcome is what completes the match server-side, and ingest_points refuses a
+  // completed match: sending it while a point is parked would fence that point out for
+  // good rather than leaving it to be retried.
+  test("holds the outcome back when the match's points are refused", async () => {
     const requests = stubTransport((request) =>
       request.pathname === `/matches/${MATCH_A}/points`
         ? jsonResponse(422, {
@@ -501,12 +504,43 @@ describe("match outcome", () => {
 
     expect(requests.map((request) => request.pathname)).toEqual([
       "/matches",
-      `/matches/${MATCH_A}`,
       `/matches/${MATCH_A}/points`,
     ]);
-    expect(result).toMatchObject({ acknowledged: 2, parked: 1 });
-    const rows = await readByMatch(MATCH_A);
-    expect(rows).toEqual([expect.objectContaining({ kind: "point", status: "failed" })]);
+    expect(result).toMatchObject({ acknowledged: 1, parked: 1 });
+    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`]);
+  });
+
+  test("sends the outcome after the match's points, never before them", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}/points`,
+      `/matches/${MATCH_A}`,
+    ]);
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  // A transient failure means the point has simply not been sent yet, so completing the
+  // match would fence it out on the next attempt rather than let it retry.
+  test("holds the outcome back when a point batch was only transiently refused", async () => {
+    useFakeDelays();
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points`
+        ? jsonResponse(503, { detail: "down" })
+        : respondOk(request),
+    );
+    await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A), pointEntry("a1", MATCH_A, 0));
+
+    const result = await settle(drain());
+
+    expect(requests.some((request) => request.method === "PATCH")).toBe(false);
+    // Nothing parked: the point and the outcome are both still owed.
+    expect(result).toMatchObject({ parked: 0 });
+    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`, uid("a1")]);
   });
 
   test("parks a refused outcome without touching the match's points", async () => {
@@ -523,8 +557,8 @@ describe("match outcome", () => {
 
     expect(requests.map((request) => request.pathname)).toEqual([
       "/matches",
-      `/matches/${MATCH_A}`,
       `/matches/${MATCH_A}/points`,
+      `/matches/${MATCH_A}`,
     ]);
     const outcomeRow = (await readByMatch(MATCH_A)).find((row) => row.kind === "matchOutcome");
     expect(outcomeRow?.status).toBe("failed");
@@ -862,11 +896,12 @@ describe("halting and retrying", () => {
 
     expect(requests.map((request) => request.pathname)).toEqual([
       "/matches",
+      `/matches/${MATCH_A}/points`,
       `/matches/${MATCH_A}`,
     ]);
-    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`, uid("a1")]);
+    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`]);
     expect(result).toEqual({
-      acknowledged: 1,
+      acknowledged: 2,
       discarded: 0,
       parked: 0,
       unauthorized: true,
