@@ -2656,6 +2656,10 @@ export type UpdateMatchErrors = {
      */
     409: ErrorDetail;
     /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
+    /**
      * Validation Error
      */
     422: HttpValidationError;

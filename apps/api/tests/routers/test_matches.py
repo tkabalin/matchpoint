@@ -1055,6 +1055,24 @@ def test_update_match_unknown_id_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_update_a_deleted_match_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The finish a device queued before the coach deleted the match from another one.
+    Its points are already discarded on this status, and the edit that ends the same
+    match has to answer it too, or the sync layer parks a row the coach asked to be
+    rid of."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.patch(f"/matches/{match_id}", json={"result": MatchResult.WIN.value})
+
+    assert response.status_code == 410
+    assert response.json()["detail"] == MATCH_WAS_DELETED
+
+
 def test_delete_match_removes_it(client: TestClient, db_session: Session, coach: Coach) -> None:
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()

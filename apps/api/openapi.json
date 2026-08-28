@@ -4737,6 +4737,16 @@
             },
             "description": "A completed match's result or scoring system cannot be changed"
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match was deleted"
+          },
           "422": {
             "content": {
               "application/json": {

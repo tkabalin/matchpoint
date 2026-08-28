@@ -207,7 +207,9 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
 
 # The 409 is declared because the client branches on it: a completed match refuses a
 # change to either locked field, so an edit screen offers those two only while they are
-# still unset rather than as controls whose save will always fail.
+# still unset rather than as controls whose save will always fail. The 410 beside it is
+# declared as it is on the ingest route, and covers the one refusal a queued edit is
+# discarded on rather than parked: the coach deleted the match it names (#214).
 @router.patch(
     "/{match_id}",
     response_model=MatchRead,
@@ -215,12 +217,18 @@ def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
         409: {
             "model": ErrorDetail,
             "description": "A completed match's result or scoring system cannot be changed",
-        }
+        },
+        410: {"model": ErrorDetail, "description": "Match was deleted"},
     },
 )
 def update_match(
     match_id: uuid.UUID, data: MatchUpdate, db: DbSession, coach: CurrentCoach
 ) -> Match:
+    # Asked before the ownership read, as ingest_points asks it: the row is gone either
+    # way, and only the tombstone says the coach asked for that. A queued finish flushed
+    # after a delete on another device is the case that reaches here.
+    if deleted_within_window(db, match_id):
+        raise HTTPException(status_code=410, detail=MATCH_WAS_DELETED)
     # Locked for the read like the capture routes: the completed check and the claim
     # clearing below both read then write, so an unlocked read lets a second result
     # land, and leaves a claim taken since the read standing.
