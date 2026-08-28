@@ -5,6 +5,7 @@ import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { PlayerLoadError } from "@/components/player-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveMatch } from "@/features/capture/live-match";
+import { getRecordedOwner } from "@/lib/local-data";
 
 // Avoids a circular import between this component and its route file — same pattern as
 // player-profile.tsx.
@@ -28,7 +29,14 @@ export function NewMatch() {
     isError,
     error,
   } = useQuery(getPlayerOptions({ path: { player_id: playerId } }));
+  // Read where it arrives, never waited for: the coach carries nothing but the setup
+  // screen's defaults, and blocking on /coaches/me is what stranded a coach who reached
+  // the court offline with no cached copy of it.
   const { data: coach } = useQuery(getCurrentCoachOptions());
+  // Whose device this is, off localStorage rather than the wire, and the same id the
+  // sync layer drains the outbox under (flush-triggers.ts) — so a match queued here is
+  // queued under the id that will send it.
+  const coachId = getRecordedOwner();
 
   // Without this the flow offers to start a match for a player the coach cannot reach
   // — the 404 has to stop it rather than leave a blank (#78).
@@ -39,7 +47,19 @@ export function NewMatch() {
       </div>
     );
 
-  if (player === undefined || coach === undefined) {
+  // No owner means no sign-in has ever completed here, so every row capture queued
+  // would carry a coach the drain cannot run for. Rare enough to be a sentence rather
+  // than a screen, and never worth starting a match nothing can send.
+  if (coachId === null) {
+    return (
+      <div className="mx-auto max-w-sm p-4 text-sm text-muted-foreground">
+        This device has no coach recorded yet. Sign in once with a connection before starting a
+        match here.
+      </div>
+    );
+  }
+
+  if (player === undefined) {
     return (
       <div className="mx-auto flex w-full max-w-md flex-col gap-3 p-4">
         <Skeleton className="h-10 w-40" />
@@ -51,9 +71,14 @@ export function NewMatch() {
   return (
     <div className="mx-auto flex h-dvh w-full max-w-md flex-col px-5 pt-4 pb-8">
       <LiveMatch
-        coachId={coach.id}
+        coachId={coachId}
         trackedPlayerId={player.id}
         playerName={player.first_name}
+        // Null is a coach who saved no default; undefined is what lets the setup
+        // screen's own fall back. The API's ScoringSystem and capture's are the same
+        // members and have to stay that way for this to pass straight through.
+        defaultScoringSystem={coach?.default_scoring_system ?? undefined}
+        defaultSurfaceType={coach?.default_surface ?? undefined}
         onExit={() => {
           void navigate({ to: "/home" });
         }}

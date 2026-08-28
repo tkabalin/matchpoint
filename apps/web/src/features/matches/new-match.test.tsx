@@ -11,6 +11,8 @@ import {
 import { render, screen } from "@testing-library/react";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { recordOwnerIfUnknown } from "@/lib/local-data";
+
 import { NewMatch } from "./new-match";
 
 // Capture appends to IndexedDB, which jsdom has none of; the flow itself is covered by
@@ -44,18 +46,24 @@ const coach: CoachRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-function stubFetch(playerResponse: () => Response = () => Response.json(player)) {
+function stubFetch(
+  playerResponse: () => Response = () => Response.json(player),
+  coachResponse: () => Promise<Response> = () => Promise.resolve(Response.json(coach)),
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
-      if (pathname === "/api/coaches/me") return Promise.resolve(Response.json(coach));
+      if (pathname === "/api/coaches/me") return coachResponse();
       return Promise.resolve(playerResponse());
     }),
   );
 }
 
-function renderNewMatch() {
+// The owner record stands in for a sign-in having happened on this device, which is
+// where capture gets the coach it queues under.
+function renderNewMatch({ owner = coach.id }: { owner?: string | null } = {}) {
+  if (owner !== null) recordOwnerIfUnknown(owner);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({
@@ -89,6 +97,7 @@ function renderNewMatch() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
 test("hands the player and coach to capture, and starts at setup", async () => {
@@ -98,6 +107,39 @@ test("hands the player and coach to capture, and starts at setup", async () => {
   expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
   expect(screen.getByText("Amahle")).toBeInTheDocument();
   expect(screen.getByLabelText("Opponent")).toBeInTheDocument();
+});
+
+// The court is where the connection isn't, and a version bump discards the persisted
+// query cache — so /coaches/me can be unreachable with nothing cached behind it. It
+// carries the setup defaults and nothing else, and capture must still start.
+test("starts a match with the coach unreachable", async () => {
+  stubFetch(undefined, () => Promise.reject(new Error("offline")));
+  renderNewMatch();
+
+  expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Opponent")).toBeInTheDocument();
+});
+
+test("opens the form on the defaults the coach saved", async () => {
+  stubFetch(undefined, () =>
+    Promise.resolve(
+      Response.json({ ...coach, default_scoring_system: "short_sets", default_surface: "grass" }),
+    ),
+  );
+  renderNewMatch();
+
+  expect(await screen.findByLabelText("Scoring system")).toHaveTextContent("Short Sets");
+  expect(screen.getByLabelText("Court type")).toHaveTextContent("Grass");
+});
+
+// Nothing recorded the device's owner, so a queued match would name a coach the sync
+// layer never drains for.
+test("says so instead of starting a match no drain can send", async () => {
+  stubFetch();
+  renderNewMatch({ owner: null });
+
+  expect(await screen.findByText(/no coach recorded yet/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Start match" })).not.toBeInTheDocument();
 });
 
 // Reachable by typing a url, or from a stale link after the player was deleted.

@@ -35,7 +35,7 @@ import type { ScoreSnapshot } from "./checkpoint";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
 import { Match } from "./match";
-import type { MatchEndReason, SurfaceType } from "./match";
+import type { MatchEndReason, ScoringSystem, SurfaceType } from "./match";
 import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
@@ -82,12 +82,18 @@ export function LiveMatch({
   coachId,
   trackedPlayerId,
   playerName,
+  defaultScoringSystem,
+  defaultSurfaceType,
   onExit,
   onViewResults,
 }: {
   coachId: string;
   trackedPlayerId: string;
   playerName: string;
+  // The coach's saved match defaults, forwarded rather than defaulted here — the setup
+  // screen owns what a coach who saved none gets.
+  defaultScoringSystem?: ScoringSystem;
+  defaultSurfaceType?: SurfaceType;
   onExit: () => void;
   onViewResults: (matchId: string) => void;
 }) {
@@ -449,6 +455,8 @@ export function LiveMatch({
       <MatchSetupScreen
         playerName={playerName}
         initial={setupConfig}
+        defaultScoringSystem={defaultScoringSystem}
+        defaultSurfaceType={defaultSurfaceType}
         onBack={onExit}
         onStart={startMatch}
       />
