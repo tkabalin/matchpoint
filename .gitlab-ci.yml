@@ -40,8 +40,12 @@ workflow:
     # resolved from the repo root — a relative path caches a directory that the
     # jobs never write to.
     UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
+  # The prefix is explicit so every job names this archive the same way. Without
+  # one GitLab prefixes it with the entry's index in that job's cache list, so a
+  # job listing it second looks for an archive nothing writes.
   cache:
     key:
+      prefix: uv
       files:
         - apps/api/uv.lock
     paths:
@@ -212,6 +216,7 @@ api-test:
   # uv.lock invalidates it whenever the pyright pin moves.
   cache:
     - key:
+        prefix: uv
         files:
           - apps/api/uv.lock
       paths:
@@ -314,6 +319,7 @@ web-e2e:
         - .pnpm-store
       policy: pull
     - key:
+        prefix: uv
         files:
           - apps/api/uv.lock
       paths:
