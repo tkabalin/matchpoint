@@ -272,10 +272,6 @@ skills-lock.json            # pins the vendored skills under .claude/skills/
 The web app is sliced by **feature**, not by file type, so architectural rules can be scoped to a
 directory.
 
-`docs/` holds only final, professional documentation — the kind you'd be comfortable handing to a
-new team member or an external reader. Drafts and in-progress notes belong in `docs/scratch/`
-(gitignored, so it's never committed).
-
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commit and code-style conventions.
