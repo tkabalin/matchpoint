@@ -80,8 +80,8 @@ Also on every pipeline:
   fails on the MR rather than on `main`. The two builds have separate input lists.
 - **Dependency caches** — the pnpm store, uv's cache, pyright's Node download — **are keyed on
   lockfile content**, and each is pushed only by the job that owns it; the rest restore it
-  read-only. The runner holds a copy per job slot, so a job can miss a cache another slot already
-  has.
+  read-only. The runner keeps them in one directory mounted from its host, so every job slot
+  restores what any other slot last pushed.
 - **Test reports surface in the MR**: every suite emits JUnit XML, so failures appear in the
   merge-request widget rather than job logs. Coverage feeds the project badge, and a failed e2e run
   attaches its Playwright HTML report, traces included.

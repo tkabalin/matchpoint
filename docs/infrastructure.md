@@ -73,7 +73,9 @@ machine that already runs Docker and other services. It's there instead of on th
   MatchPoint
 
 It uses the **Docker executor**: every job runs in its own container, and the host's Docker socket
-is mounted in so image builds go to the host daemon and reuse its layer cache between pipelines.
+is mounted in so image builds go to the host daemon and reuse its layer cache between pipelines. The
+dependency caches are mounted from the host the same way, which is what lets a job restore one that
+a job in another slot pushed rather than downloading the lockfile's contents again.
 
 **How many jobs run at once is a runner-side setting**, configured on ThinkTank and not in this
 repository. It is the ceiling on pipeline parallelism regardless of what the pipeline definition
