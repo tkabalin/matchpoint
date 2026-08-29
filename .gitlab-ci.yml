@@ -294,6 +294,10 @@ web-e2e:
     - postgres:18
   variables:
     UV_CACHE_DIR: $CI_PROJECT_DIR/.uv-cache
+    # The API this job boots imports nothing from the dev group, and skipping it
+    # drops ruff and pyright from the install. scripts/e2e-api.sh's own `uv run`
+    # reads this too, so its implicit sync matches the one below.
+    UV_NO_DEV: "1"
     POSTGRES_USER: matchpoint
     POSTGRES_PASSWORD: matchpoint
     POSTGRES_DB: matchpoint
@@ -328,6 +332,10 @@ web-e2e:
     # image tag currently resolves to; bump both together.
     - curl -LsSf https://astral.sh/uv/0.11.33/install.sh | sh
     - export PATH="$HOME/.local/bin:$PATH"
+    # Build the venv here rather than leaving it to the first `uv run` inside
+    # scripts/e2e-api.sh: Playwright allows that server 180s, which a cache-cold
+    # install off a slow link does not fit into.
+    - uv sync --locked --project apps/api
     - pnpm --filter @matchpoint/web run test:e2e
   artifacts:
     when: always
