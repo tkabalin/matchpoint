@@ -18,9 +18,10 @@ Installed, it opens full-screen and keeps working without a connection.
 
 ## Team
 
-- **Thomas Kabalin**: API, data model, security, infrastructure and CI/CD.
-- **Danny Gebhard**: frontend, accounts, roster and analytics dashboard.
-- **Luke Bryant**: frontend, live capture screen and scoring engine.
+- **Thomas Kabalin**: API, data model, offline sync, security, infrastructure, and CI/CD.
+- **Danny Gebhard**: frontend — accounts, player roster, match management, statistics dashboard, and
+  styling.
+- **Luke Bryant**: frontend — match setup, live capture, and scoring engine.
 
 ## Architecture
 
