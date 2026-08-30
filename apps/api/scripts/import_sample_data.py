@@ -6,6 +6,9 @@ this file into a shell in the api container so it reuses the container's own
 matchpoint_api package and MATCHPOINT_DATABASE_URL rather than opening a separate
 connection to prod Postgres.
 
+The CSVs themselves live in sample-data/ next to this script; see sample-data/README.md
+for the full column and enum spec.
+
 Running this against prod:
 
   1. Take a manual backup on top of the daily snapshot, since this is a write to shared
