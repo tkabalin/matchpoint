@@ -30,7 +30,8 @@ email,display_name
 ```
 
 One row per coach. `email` is lowercased on write, so casing in the file doesn't
-matter.
+matter. There's no password column: every imported coach shares one generated
+password, printed by the script when it finishes — see its docstring.
 
 ## `players.csv`
 
