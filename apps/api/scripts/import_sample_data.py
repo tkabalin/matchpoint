@@ -6,8 +6,9 @@ this file into a shell in the api container so it reuses the container's own
 matchpoint_api package and MATCHPOINT_DATABASE_URL rather than opening a separate
 connection to prod Postgres.
 
-The CSVs themselves live in sample-data/ next to this script; see sample-data/README.md
-for the full column and enum spec.
+A ready-made demo season is committed at apps/web/scripts/fake-data/import/, written by
+the web app's gen-fake-data script. See import_sample_data.md next to this script for the
+column and enum spec, which is what a dataset built by hand has to satisfy.
 
 Running this against prod:
 
@@ -16,9 +17,9 @@ Running this against prod:
        ssh matchpoint-prod
        docker compose -f /opt/matchpoint/compose.yml exec -T postgres \\
            pg_dump -U matchpoint matchpoint > backup-before-import.sql
-  2. scp coaches.csv players.csv matches.csv, and points.csv if there is one, to the
-     VPS, then copy each into the api container (compose has no volume mount for
-     arbitrary host files):
+  2. From apps/web/scripts/fake-data/import/, scp coaches.csv, players.csv, matches.csv,
+     and points.csv if there is one, to the VPS, then copy each into the api container
+     (compose has no volume mount for arbitrary host files):
        docker compose -f /opt/matchpoint/compose.yml cp coaches.csv api:/tmp/coaches.csv
        docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
        docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv

@@ -33,7 +33,7 @@ ball to land finished, never where a miss went.
 ## Importing it
 
 `import/` is what `apps/api/scripts/import_sample_data.py` ingests; that script's docstring
-covers running it and `apps/api/scripts/sample-data/README.md` is the format's spec.
+covers running it and `apps/api/scripts/import_sample_data.md` is the format's spec.
 The squad is split between 3 coaches (thandi.mokoena@example.com, derek.wallace@example.com, farah.ismail@example.com),
 so the demo can show one coach seeing only their own players. They share the one password the
 import prints when it finishes.

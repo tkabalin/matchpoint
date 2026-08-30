@@ -228,7 +228,9 @@ apps/
     index.html              # Vite entry point
     components.json         # shadcn CLI config (style, aliases, base colour)
     playwright.config.ts
-    scripts/                # gen-icons.mjs: PWA icons from icon.svg
+    scripts/                # gen-icons.mjs (PWA icons), generate-fake-data.ts
+      fake-data/            # generated demo season, committed rather than ignored
+        import/             # the same season in the CSV format import_sample_data.py reads
     src/
       routes/
       features/             # feature slices, one directory each

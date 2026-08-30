@@ -82,8 +82,8 @@ docs/scratch/
 design/
 
 # -----------------------------------------------------------------------------
-# The fake dataset's JSON bundle — the same data as the CSVs beside it, in the match
-# log's own nested shape, and 20 MB of it. Regenerate with `pnpm --filter
+# The fake dataset's JSON bundle — the same season as the capture-model CSVs beside it,
+# in the match log's own nested shape, and 20 MB of it. Regenerate with `pnpm --filter
 # @matchpoint/web gen-fake-data` when you need that shape.
 # -----------------------------------------------------------------------------
 apps/web/scripts/fake-data/capture-data.json

@@ -948,7 +948,7 @@ function pointRow(generated: GeneratedMatch, payload: ReturnType<Point["toJSON"]
 // --- The importer's own CSVs -------------------------------------------------------------
 //
 // `apps/api/scripts/import_sample_data.py` reads these four files and
-// `apps/api/scripts/sample-data/README.md` is their spec: the same season under the API's
+// `apps/api/scripts/import_sample_data.md` is their spec: the same season under the API's
 // column names and lower-case enum values, with a match_key standing in for the match id
 // it never stores.
 
@@ -1400,7 +1400,7 @@ writeFileSync(
     "## Importing it",
     "",
     "`import/` is what `apps/api/scripts/import_sample_data.py` ingests; that script's docstring",
-    "covers running it and `apps/api/scripts/sample-data/README.md` is the format's spec.",
+    "covers running it and `apps/api/scripts/import_sample_data.md` is the format's spec.",
     `The squad is split between ${String(COACHES.length)} coaches (${COACHES.map((coach) => coach.email).join(", ")}),`,
     "so the demo can show one coach seeing only their own players. They share the one password the",
     "import prints when it finishes.",
