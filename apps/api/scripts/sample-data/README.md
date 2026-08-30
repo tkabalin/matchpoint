@@ -1,10 +1,10 @@
 # Writing sample data for `import_sample_data.py`
 
-This is the CSV format the importer reads. It has nothing to do with
-`apps/web/scripts/fake-data/` — that's the frontend's own internal capture-model dump
-(different column names, different enum casing, and some rows the backend can't
-accept at all), not an input to this script. Build these four files directly; don't
-try to convert one into the other.
+This is the CSV format the importer reads. The CSVs directly under
+`apps/web/scripts/fake-data/` are not it — those are the frontend's own capture-model
+dump, in different column names and different enum casing. What that generator writes to
+`apps/web/scripts/fake-data/import/` is this format, and is the fastest way to a full
+demo season; build these four files by hand only for a dataset it can't produce.
 
 The script's own docstring covers *running* it (prod backup, scp'ing files into the
 container, the demo password). This covers *constructing valid rows*.

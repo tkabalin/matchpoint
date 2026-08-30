@@ -12,5 +12,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src", "vite.config.ts", "e2e", "playwright.config.ts"]
+  // scripts/ is in the program because what it imports from src/ is checked against the
+  // API's generated types: the fake-data generator maps the capture model's enums to
+  // PointCreate's member by member, and that mapping is only a guarantee while tsc reads it.
+  "include": ["src", "scripts", "vite.config.ts", "e2e", "playwright.config.ts"]
 }

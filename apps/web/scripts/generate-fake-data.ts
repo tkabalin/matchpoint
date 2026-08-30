@@ -7,11 +7,16 @@
  * cannot come out of here either. The tennis itself is a coin-weighting model, not a
  * simulation of shot mechanics — realistic distributions, not realistic rallies.
  *
+ * Two sets of CSVs come out: the capture model's own columns, and `import/`, the four
+ * files `apps/api/scripts/import_sample_data.py` reads. The second is why no point here
+ * leaves its serve, its ending or its final ball unrecorded — `PointCreate` takes those
+ * columns non-null, so a coach's gap there is a point the demo could not import.
+ *
  * The CSVs it writes are committed; the JSON bundle beside them is the same data in
  * the log's own nested shape, and is gitignored — it is 20 MB and regenerates from
  * the seed.
  *
- * Run: pnpm --filter @matchpoint/web gen-fake-data [-- --seed 7 --players 12
+ * Run: pnpm --filter @matchpoint/web gen-fake-data [-- --seed 13 --players 12
  *      --matches 120 --out apps/web/scripts/fake-data]
  */
 
@@ -19,23 +24,28 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { PointCreate } from "@matchpoint/api-client";
+import { zPointCreate } from "@matchpoint/api-client/zod";
+
 import { startPoint, commitDraft, transition } from "../src/features/capture/capture-flow.ts";
 import type { CaptureAction, CaptureState } from "../src/features/capture/capture-flow.ts";
-import { ScoreCheckpoint } from "../src/features/capture/checkpoint.ts";
 import { Match } from "../src/features/capture/match.ts";
 import type { MatchEndReason, ScoringSystem, SurfaceType } from "../src/features/capture/match.ts";
 import { Point } from "../src/features/capture/point.ts";
 import type {
   CourtDepth,
   CourtSide,
+  EndReason,
   FailureMode,
   RallyBucket,
+  ReturnOutcome,
+  Server,
+  ServeOutcome,
   ShotType,
   UnusualReason,
   Wing,
 } from "../src/features/capture/point.ts";
 import {
-  applyCheckpoint,
   applyPoint,
   contextFor,
   coverageOf,
@@ -43,8 +53,6 @@ import {
   initialBoard,
   nextCourtSideFor,
   nextServerFor,
-  snapshotOf,
-  validateCheckpoint,
 } from "../src/features/capture/score.ts";
 import type { Scoreboard } from "../src/features/capture/score.ts";
 
@@ -55,7 +63,9 @@ function flag(name: string, fallback: string): string {
   return index === -1 ? fallback : (process.argv[index + 1] ?? fallback);
 }
 
-const SEED = Number(flag("seed", "7"));
+// 13 rather than any other: the squad lands at 61 wins of 120 with no unbeaten and no
+// winless player, so the ranking screens have a spread to rank on.
+const SEED = Number(flag("seed", "13"));
 const PLAYER_COUNT = Number(flag("players", "12"));
 const MATCH_COUNT = Number(flag("matches", "120"));
 const OUT_DIR = resolve(
@@ -127,6 +137,11 @@ function hashUnit(input: string): number {
     hash = (hash * 31 + input.charCodeAt(index)) >>> 0;
   }
   return (hash % 1000) / 1000;
+}
+
+/** Thousands separators by hand: toLocaleString would read the environment's locale. */
+function grouped(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
 function isoDate(date: Date): string {
@@ -224,7 +239,29 @@ const PLAYER_NOTES = [
   null,
 ];
 
-const COACH_ID = uuid();
+interface DemoCoach {
+  id: string;
+  email: string;
+  displayName: string;
+}
+
+/**
+ * The roster is split between these, so a demo can show a coach seeing only their own
+ * players. The importer keys a coach on the email and gives every one it creates the
+ * same password; example.com is reserved, so no demo account can reach a real inbox.
+ */
+const COACHES: readonly DemoCoach[] = [
+  { id: uuid(), email: "thandi.mokoena@example.com", displayName: "Thandi Mokoena" },
+  { id: uuid(), email: "derek.wallace@example.com", displayName: "Derek Wallace" },
+  { id: uuid(), email: "farah.ismail@example.com", displayName: "Farah Ismail" },
+];
+
+const COACH_BY_ID = new Map(COACHES.map((coach) => [coach.id, coach]));
+
+/** The email the importer joins a player's rows on — their coach's. */
+function emailOf(player: RosterPlayer): string {
+  return COACH_BY_ID.get(player.coach_id)!.email;
+}
 
 function makeSkill(): Skill {
   return {
@@ -264,7 +301,8 @@ function makeRoster(count: number): RosterPlayer[] {
         ["other", 1],
       ] as const),
       notes: pick(PLAYER_NOTES),
-      coach_id: COACH_ID,
+      // Round-robin rather than random, so no coach draws an empty roster.
+      coach_id: COACHES[players.length % COACHES.length]!.id,
       photo_url: null,
       created_at: created.toISOString(),
       updated_at: created.toISOString(),
@@ -302,6 +340,21 @@ const OPPONENT_NAMES = [
   "U. Mthembu",
 ];
 
+interface Opponent {
+  id: string;
+  /** Null for a squad-mate, whose name the match reads off their own profile. */
+  name: string | null;
+  display: string;
+  skill: Skill;
+}
+
+/**
+ * How many opponents one player meets across a season. Drawing every match fresh from
+ * the 24 names above gave almost every pairing a single match, and opponent performance
+ * is a deliverable: at four, ten matches a season leave a record worth reading.
+ */
+const CIRCUIT_SIZE = 4;
+
 /** An unrostered opponent has no profile to read, so their strength comes off their name. */
 function opponentSkill(name: string): Skill {
   const seed = hashUnit(name);
@@ -314,68 +367,49 @@ function opponentSkill(name: string): Skill {
   };
 }
 
+/** The opponents one player meets this season, one of them a squad-mate under their coach. */
+function circuitFor(player: RosterPlayer, squad: readonly RosterPlayer[]): Opponent[] {
+  const circuit: Opponent[] = [];
+  const mates = squad.filter(
+    (other) => other.id !== player.id && other.coach_id === player.coach_id,
+  );
+  if (mates.length > 0) {
+    const mate = pick(mates);
+    circuit.push({
+      id: mate.id,
+      name: null,
+      display: `${mate.first_name} ${mate.last_name}`,
+      skill: mate.skill,
+    });
+  }
+  const used = new Set<string>();
+  while (circuit.length < CIRCUIT_SIZE) {
+    const name = pick(OPPONENT_NAMES);
+    if (used.has(name)) continue;
+    used.add(name);
+    circuit.push({ id: uuid(), name, display: name, skill: opponentSkill(name) });
+  }
+  return circuit;
+}
+
 // --- How much the coach saw --------------------------------------------------------
 
 /**
- * A coach watching a match is not a camera: some serves, endings and whole games go
- * unrecorded. Each match draws one of these, so the gaps cluster the way they really
- * do rather than sprinkling evenly across every match.
+ * A coach watching a match is not a camera: the shot that ended a point often goes
+ * unrecorded. Each match draws one of these, so the gaps cluster the way they really do
+ * rather than sprinkling evenly across every match. It is only the shot detail because
+ * every other gap capture allows is a column the API takes non-null.
  */
 interface Attention {
   label: "close" | "typical" | "light";
-  missServe: number;
-  missEnding: number;
   missShot: number;
-  missBall: number;
-  rallyLength: number;
-  skipPoint: number;
-  checkpoint: number;
   note: number;
 }
 
 const ATTENTION: readonly (readonly [Attention, number])[] = [
-  [
-    {
-      label: "close",
-      missServe: 0.01,
-      missEnding: 0.01,
-      missShot: 0.02,
-      missBall: 0.03,
-      rallyLength: 0.96,
-      skipPoint: 0.004,
-      checkpoint: 0.004,
-      note: 0.006,
-    },
-    35,
-  ],
-  [
-    {
-      label: "typical",
-      missServe: 0.05,
-      missEnding: 0.04,
-      missShot: 0.09,
-      missBall: 0.11,
-      rallyLength: 0.85,
-      skipPoint: 0.02,
-      checkpoint: 0.02,
-      note: 0.01,
-    },
-    45,
-  ],
-  [
-    {
-      label: "light",
-      missServe: 0.16,
-      missEnding: 0.14,
-      missShot: 0.24,
-      missBall: 0.28,
-      rallyLength: 0.6,
-      skipPoint: 0.06,
-      checkpoint: 0.06,
-      note: 0.014,
-    },
-    20,
-  ],
+  [{ label: "close", missShot: 0.02, note: 0.006 }, 35],
+  [{ label: "typical", missShot: 0.09, note: 0.01 }, 45],
+  [{ label: "light", missShot: 0.24, note: 0.014 }, 20],
 ];
 
 const COACH_NOTES = [
@@ -451,13 +485,6 @@ function serverRallyEdge(server: Skill, receiver: Skill, onFirstServe: boolean):
   return Math.min(0.75, Math.max(0.25, base + gap));
 }
 
-/** The tracked player's share of all points, both serves averaged — what a skipped span is played out on. */
-function trackedPointShare(tracked: Skill, opponent: Skill): number {
-  return (
-    (serverRallyEdge(tracked, opponent, true) + 1 - serverRallyEdge(opponent, tracked, true)) / 2
-  );
-}
-
 /** One day's form, so the same pairing doesn't produce the same match twice. */
 function onTheDay(skill: Skill): Skill {
   return { ...skill, rally: Math.min(1, Math.max(0, skill.rally + between(-0.05, 0.05))) };
@@ -492,77 +519,62 @@ function capturePoint(
   // The header's note button, which is valid on any step and doesn't advance the flow.
   if (chance(attention.note)) act({ type: "ADD_NOTE", text: pick(COACH_NOTES) });
 
-  // The header's skip: winner only, everything else left unseen.
-  if (chance(attention.skipPoint)) {
-    const won = chance(
-      trackedServing
-        ? serverRallyEdge(tracked, opponent, true)
-        : 1 - serverRallyEdge(opponent, tracked, true),
-    );
-    act({ type: "TAP_UNUSUAL" });
-    act({ type: "TAP_UNUSUAL_OUTCOME", won });
-    act({ type: "TAP_UNUSUAL_REASON", reason: null, note: null });
-    return finish(state, match, board, sequence, timestamp);
-  }
-
   let onFirstServe = true;
 
-  if (chance(attention.missServe)) {
-    // Nothing is recorded for the serve at all — the coach looked up mid-rally.
-    act({ type: "TAP_DIDNT_SEE" });
-  } else {
-    const firstIn = chance(serverSkill.firstServeIn);
-    if (firstIn && chance(serverSkill.aceRate)) {
-      act({ type: "TAP_SERVE_ACE" });
-      return finish(state, match, board, sequence, timestamp);
-    }
-    if (!firstIn) {
-      onFirstServe = false;
+  const firstIn = chance(serverSkill.firstServeIn);
+  if (firstIn && chance(serverSkill.aceRate)) {
+    act({ type: "TAP_SERVE_ACE" });
+    return finish(state, match, board, sequence, timestamp);
+  }
+  if (!firstIn) {
+    onFirstServe = false;
+    act(
+      trackedServing
+        ? { type: "TAP_SERVE_FAULT", location: failureMode() }
+        : { type: "TAP_SERVE_FAULT" },
+    );
+    const secondIn = chance(serverSkill.secondServeIn);
+    if (!secondIn) {
       act(
         trackedServing
           ? { type: "TAP_SERVE_FAULT", location: failureMode() }
           : { type: "TAP_SERVE_FAULT" },
       );
-      const secondIn = chance(serverSkill.secondServeIn);
-      if (!secondIn) {
-        act(
-          trackedServing
-            ? { type: "TAP_SERVE_FAULT", location: failureMode() }
-            : { type: "TAP_SERVE_FAULT" },
-        );
-        return finish(state, match, board, sequence, timestamp);
-      }
-      if (chance(serverSkill.aceRate * 0.25)) {
-        act({ type: "TAP_SERVE_ACE" });
-        return finish(state, match, board, sequence, timestamp);
-      }
+      return finish(state, match, board, sequence, timestamp);
     }
-
-    if (trackedServing) {
-      act({ type: "TAP_SERVE_IN" });
-    } else {
-      // Returning: the miss is the tracked player's own, and its placement is the
-      // whole record of it, so the flow ends the point there.
-      const missRate = onFirstServe ? 0.19 : 0.11;
-      if (chance(missRate)) {
-        act({
-          type: "TAP_RETURN",
-          outcome: failureMode(),
-          endReason: chance(onFirstServe ? 0.55 : 0.3) ? "FORCED" : "MISTAKE",
-        });
-        return finish(state, match, board, sequence, timestamp);
-      }
-      act({ type: "TAP_RETURN", outcome: "IN" });
+    if (chance(serverSkill.aceRate * 0.25)) {
+      act({ type: "TAP_SERVE_ACE" });
+      return finish(state, match, board, sequence, timestamp);
     }
   }
 
-  // The rally screen asks two questions and only advances once both are answered, so a
-  // coach who never judged the length has one way off it: "didn't see" the ending.
-  const recordsLength = chance(attention.rallyLength);
-  if (recordsLength) act({ type: "TAP_RALLY_LENGTH", bucket: rallyBucket() });
-
+  // Settled before the point is played out: a missed return is one of the ways the
+  // receiver loses a point on this serve, not a second one stacked on the rally — the
+  // server's edge already prices the returns nobody puts back.
   const serverWins = chance(serverRallyEdge(serverSkill, receiverSkill, onFirstServe));
   const won = trackedServing ? serverWins : !serverWins;
+
+  if (trackedServing) {
+    act({ type: "TAP_SERVE_IN" });
+  } else {
+    // Returning: the miss is the tracked player's own, and its placement is the
+    // whole record of it, so the flow ends the point there.
+    const missShare = onFirstServe ? 0.34 : 0.22;
+    if (!won && chance(missShare)) {
+      act({
+        type: "TAP_RETURN",
+        outcome: failureMode(),
+        endReason: chance(onFirstServe ? 0.55 : 0.3) ? "FORCED" : "MISTAKE",
+      });
+      return finish(state, match, board, sequence, timestamp);
+    }
+    act({ type: "TAP_RETURN", outcome: "IN" });
+  }
+
+  // The rally screen only advances once both its questions are answered, and the one
+  // way off it without judging the length is "didn't see" the ending — which is the
+  // ending the API cannot store, so the length is always judged here.
+  act({ type: "TAP_RALLY_LENGTH", bucket: rallyBucket() });
 
   if (chance(0.008)) {
     act({ type: "TAP_UNUSUAL" });
@@ -573,11 +585,6 @@ function capturePoint(
       reason,
       note: reason === "OTHER" ? "Ball from the next court" : null,
     });
-    return finish(state, match, board, sequence, timestamp);
-  }
-
-  if (!recordsLength || chance(attention.missEnding)) {
-    act({ type: "TAP_DIDNT_SEE", won });
     return finish(state, match, board, sequence, timestamp);
   }
 
@@ -595,13 +602,9 @@ function capturePoint(
     }
   }
 
-  if (chance(attention.missBall)) {
-    act({ type: "TAP_DIDNT_SEE" });
-  } else {
-    // Always in: capture records where the last ball to land finished, never where a
-    // miss went (see point.ts's own comment on ballIn).
-    act({ type: "TAP_BALL_LOCATION", ballIn: true, location: courtZone() });
-  }
+  // Always in: capture records where the last ball to land finished, never where a
+  // miss went (see point.ts's own comment on ballIn).
+  act({ type: "TAP_BALL_LOCATION", ballIn: true, location: courtZone() });
 
   return finish(state, match, board, sequence, timestamp);
 }
@@ -631,30 +634,27 @@ function finish(
 
 // --- One match -----------------------------------------------------------------------
 
-interface LoggedEventRow {
+/** The row live-match queues for each committed point, as the outbox stores it. */
+interface LoggedPointRow {
   id: string;
   matchId: string;
   coachId: string;
   sequence: number;
-  kind: "point" | "checkpoint";
-  payload: unknown;
+  payload: ReturnType<Point["toJSON"]>;
 }
 
 interface GeneratedMatch {
   match: ReturnType<Match["toJSON"]>;
   /** The row live-match queues when the coach ends the match. */
   outcome: { reason: MatchEndReason | "completed"; trackedPlayerWon: boolean };
-  events: LoggedEventRow[];
-  /** Derived from the events, not captured — carried so a row can be read at a glance. */
+  points: LoggedPointRow[];
+  /** Derived from the points, not captured — carried so a row can be read at a glance. */
   summary: {
     trackedPlayerName: string;
     opponentDisplayName: string;
     scoreline: string;
     attention: Attention["label"];
-    points: number;
-    checkpoints: number;
     gamesPlayed: number;
-    gamesWatched: number;
   };
 }
 
@@ -676,24 +676,22 @@ const SURFACES: readonly (readonly [SurfaceType, number])[] = [
   ["unspecified", 14],
 ];
 
-function slotsOf(board: Scoreboard): number {
-  const completed = board.completedSets.reduce((sum, entry) => sum + entry.slotsPlayed, 0);
-  return completed + (board.currentSet?.slotsPlayed ?? 0);
+/** How likely the tracked player is to be given a match that stopped early, from the board. */
+function retirementOdds(match: Match, board: Scoreboard): number {
+  // Sets first, then the set in progress. `winner` rather than the game counts, which a
+  // match-tiebreak set leaves at 0-0 (see match-set.ts).
+  const sets = board.completedSets.reduce(
+    (lead, entry) => lead + (entry.set.winner === match.trackedPlayerId ? 1 : -1),
+    0,
+  );
+  const live = board.currentSet;
+  const lead =
+    sets !== 0 ? sets : Math.sign((live?.trackedGames ?? 0) - (live?.opponentGames ?? 0));
+  if (lead === 0) return 0.5;
+  return lead > 0 ? 0.85 : 0.15;
 }
 
-/** Plays `slots` game slots forward on a copy of the board, recording nothing. */
-function playForward(match: Match, board: Scoreboard, slots: number, edge: number): Scoreboard {
-  let shadow = board;
-  const target = slotsOf(board) + slots;
-  let guard = 0;
-  while (slotsOf(shadow) < target && shadow.matchWinner === null && guard < 400) {
-    shadow = applyPoint(match, shadow, chance(edge));
-    guard += 1;
-  }
-  return shadow;
-}
-
-function scorelineOf(match: Match, board: Scoreboard): string {
+function scorelineOf(board: Scoreboard): string {
   const parts = board.completedSets.map((entry) => {
     const set = entry.set;
     const games = `${String(set.trackedPlayerGames)}-${String(set.opponentGames)}`;
@@ -730,16 +728,22 @@ function generateMatch(
     outcomeOverride: null,
   });
 
-  const events: LoggedEventRow[] = [];
-  const eventObjects: (Point | ScoreCheckpoint)[] = [];
+  const captured: Point[] = [];
   let board = initialBoard(match);
   let sequence = 0;
   let timestamp =
     new Date(`${playedOn}T09:15:00.000Z`).getTime() + Math.floor(rng() * 6 * 3600_000);
 
-  // A walkover never reaches the court, so it has no events at all.
+  const playerForm = onTheDay(player.skill);
+  const opponentForm = onTheDay(opponent.skill);
+
+  // A walkover never reaches the court, so it has no points at all. Nobody played, so
+  // there is no board to read a winner off and the day's form is the only signal there
+  // is; no scoreline is shown against it either way.
   if (chance(0.012)) {
-    const trackedPlayerWon = chance(0.5);
+    const trackedPlayerWon = chance(
+      Math.min(0.8, Math.max(0.2, 0.5 + (playerForm.rally - opponentForm.rally))),
+    );
     match = Match.create({
       ...match.toJSON(),
       outcomeOverride: {
@@ -750,31 +754,25 @@ function generateMatch(
     return {
       match: match.toJSON(),
       outcome: { reason: "walkover", trackedPlayerWon },
-      events,
+      points: [],
       summary: {
         trackedPlayerName: `${player.first_name} ${player.last_name}`,
         opponentDisplayName: opponent.display,
         scoreline: "walkover",
         attention: attention.label,
-        points: 0,
-        checkpoints: 0,
         gamesPlayed: 0,
-        gamesWatched: 0,
       },
     };
   }
 
   // A retirement stops the capture partway; drawn up front so the loop knows when.
   const retiresAfter = chance(0.03) ? 30 + Math.floor(rng() * 60) : null;
-  const playerForm = onTheDay(player.skill);
-  const opponentForm = onTheDay(opponent.skill);
-  const trackedEdge = trackedPointShare(playerForm, opponentForm);
 
   let guard = 0;
   while (board.matchWinner === null && guard < 900) {
     guard += 1;
 
-    if (retiresAfter !== null && events.length >= retiresAfter) break;
+    if (retiresAfter !== null && captured.length >= retiresAfter) break;
 
     const point = capturePoint(
       match,
@@ -785,59 +783,15 @@ function generateMatch(
       opponentForm,
       attention,
     );
-    events.push({
-      id: point.id,
-      matchId: match.matchId,
-      coachId: COACH_ID,
-      sequence,
-      kind: "point",
-      payload: point.toJSON(),
-    });
-    eventObjects.push(point);
+    captured.push(point);
     board = applyPoint(match, board, point.won);
     sequence += 1;
     timestamp += 20_000 + Math.floor(rng() * 45_000);
-
-    // Between games is where a coach loses the thread: they come back, see the score,
-    // and state it rather than have the app invent the points they missed.
-    if (point.context.isGameEnd && board.matchWinner === null && chance(attention.checkpoint)) {
-      const shadow = playForward(match, board, 1 + Math.floor(rng() * 3), trackedEdge);
-      const draft = {
-        after: snapshotOf(shadow),
-        servesNext: nextServerFor(shadow),
-        orderChanged: false,
-      };
-      const problems = validateCheckpoint(match, board, draft, { hasEvents: true });
-      if (problems.length === 0) {
-        const checkpoint = ScoreCheckpoint.create({
-          id: uuid(),
-          matchId: match.matchId,
-          timestamp,
-          sequence,
-          ...draft,
-        });
-        const applied = applyCheckpoint(match, board, checkpoint);
-        if (!("problems" in applied)) {
-          events.push({
-            id: checkpoint.id,
-            matchId: match.matchId,
-            coachId: COACH_ID,
-            sequence,
-            kind: "checkpoint",
-            payload: checkpoint.toJSON(),
-          });
-          eventObjects.push(checkpoint);
-          board = applied.board;
-          sequence += 1;
-          timestamp += 60_000 + Math.floor(rng() * 240_000);
-        }
-      }
-    }
   }
 
   // The fold is the app's own reading of the log; the incremental board must agree
   // with it, or the dataset says one thing and the app would show another.
-  const folded = foldScore(match, eventObjects);
+  const folded = foldScore(match, captured);
   if (folded.ignored.length > 0) {
     throw new Error(
       `match ${match.matchId} logged ${String(folded.ignored.length)} ignored events`,
@@ -848,8 +802,10 @@ function generateMatch(
   let trackedPlayerWon = folded.matchWinner === "TRACKED";
   if (folded.matchWinner === null) {
     // Whoever was still standing takes it; the coach's own answer in the end-match sheet.
+    // Weighted by the board, since the player who stops is usually the one already
+    // losing: a retirement recorded against whoever led reads as a bug in the match list.
     reason = "retirement";
-    trackedPlayerWon = chance(0.5);
+    trackedPlayerWon = chance(retirementOdds(match, folded));
     match = Match.create({
       ...match.toJSON(),
       outcomeOverride: {
@@ -859,20 +815,22 @@ function generateMatch(
     });
   }
 
-  const coverage = coverageOf(folded);
   return {
     match: match.toJSON(),
     outcome: { reason, trackedPlayerWon },
-    events,
+    points: captured.map((point) => ({
+      id: point.id,
+      matchId: match.matchId,
+      coachId: player.coach_id,
+      sequence: point.sequence,
+      payload: point.toJSON(),
+    })),
     summary: {
       trackedPlayerName: `${player.first_name} ${player.last_name}`,
       opponentDisplayName: opponent.display,
-      scoreline: scorelineOf(match, folded),
+      scoreline: scorelineOf(folded),
       attention: attention.label,
-      points: events.filter((event) => event.kind === "point").length,
-      checkpoints: events.filter((event) => event.kind === "checkpoint").length,
-      gamesPlayed: coverage.slotsPlayed,
-      gamesWatched: coverage.slotsObserved,
+      gamesPlayed: coverageOf(folded).slotsPlayed,
     },
   };
 }
@@ -903,9 +861,7 @@ const MATCH_COLUMNS = [
   "tracked_player_won",
   "scoreline",
   "points_captured",
-  "checkpoints",
   "games_played",
-  "games_watched",
   "coach_attention",
 ];
 
@@ -945,17 +901,6 @@ const POINT_COLUMNS = [
   "ball_zone_depth",
   "ball_failure_mode",
   "rally_length_bucket",
-];
-
-const CHECKPOINT_COLUMNS = [
-  "match_id",
-  "checkpoint_id",
-  "sequence",
-  "timestamp",
-  "serves_next",
-  "order_changed",
-  "sets",
-  "game",
 ];
 
 function pointRow(generated: GeneratedMatch, payload: ReturnType<Point["toJSON"]>): unknown[] {
@@ -1000,6 +945,242 @@ function pointRow(generated: GeneratedMatch, payload: ReturnType<Point["toJSON"]
   ];
 }
 
+// --- The importer's own CSVs -------------------------------------------------------------
+//
+// `apps/api/scripts/import_sample_data.py` reads these four files and
+// `apps/api/scripts/sample-data/README.md` is their spec: the same season under the API's
+// column names and lower-case enum values, with a match_key standing in for the match id
+// it never stores.
+
+/**
+ * The capture model's members against the API's, spelled out rather than lower-cased.
+ * A Record over the capture union stops compiling the moment either side gains or
+ * renames a member, where a `toLowerCase()` would carry the divergence into the CSV and
+ * fail mid-import on whoever is running it — the same guarantee the sync layer's payload
+ * mapping gets from its annotated return type (see sync/match-payload.ts).
+ */
+type ApiPoint = Omit<PointCreate, "id">;
+
+const API_SERVER: Record<Server, ApiPoint["server"]> = {
+  TRACKED: "tracked",
+  OPPONENT: "opponent",
+};
+
+const API_SERVE_OUTCOME: Record<ServeOutcome, ApiPoint["serve1_outcome"]> = {
+  IN: "in",
+  FAULT: "fault",
+  ACE: "ace",
+};
+
+const API_COURT_SIDE: Record<CourtSide, NonNullable<ApiPoint["serve1_box"]>> = {
+  DEUCE: "deuce",
+  AD: "ad",
+};
+
+const API_FAILURE_MODE: Record<FailureMode, NonNullable<ApiPoint["serve1_fault_mode"]>> = {
+  NET: "net",
+  LONG: "long",
+  WIDE: "wide",
+};
+
+const API_RETURN_OUTCOME: Record<ReturnOutcome, NonNullable<ApiPoint["return_outcome"]>> = {
+  IN: "in",
+  NET: "net",
+  LONG: "long",
+  WIDE: "wide",
+};
+
+const API_END_REASON: Record<EndReason, ApiPoint["end_reason"]> = {
+  FORCED: "forced",
+  MISTAKE: "mistake",
+  ACE: "ace",
+  DOUBLE_FAULT: "double_fault",
+  UNUSUAL: "unusual",
+};
+
+const API_UNUSUAL_REASON: Record<UnusualReason, NonNullable<ApiPoint["unusual_reason"]>> = {
+  NET_TOUCH: "net_touch",
+  BALL_HIT_PLAYER: "ball_hit_player",
+  REACHED_OVER: "reached_over",
+  DOUBLE_HIT: "double_hit",
+  HINDRANCE: "hindrance",
+  POINT_PENALTY: "point_penalty",
+  OTHER: "other",
+};
+
+const API_WING: Record<Wing, NonNullable<ApiPoint["wing"]>> = {
+  FOREHAND: "forehand",
+  BACKHAND: "backhand",
+};
+
+const API_SHOT_TYPE: Record<ShotType, NonNullable<ApiPoint["shot_type"]>> = {
+  DRIVE: "drive",
+  VOLLEY: "volley",
+  DROPSHOT: "dropshot",
+  LOB: "lob",
+};
+
+const API_COURT_DEPTH: Record<CourtDepth, NonNullable<ApiPoint["ball_depth"]>> = {
+  SHORT: "short",
+  DEEP: "deep",
+};
+
+const API_RALLY_BUCKET: Record<RallyBucket, NonNullable<ApiPoint["rally_length_bucket"]>> = {
+  B1: "b1",
+  B2: "b2",
+  B3: "b3",
+  B4: "b4",
+};
+
+type ServeAttemptPayload = ReturnType<Point["toJSON"]>["serves"][number];
+
+interface ApiServe {
+  outcome: ApiPoint["serve1_outcome"];
+  box: ApiPoint["serve1_box"];
+  faultMode: ApiPoint["serve1_fault_mode"];
+}
+
+/** One serve attempt: its outcome, then the box it landed in or the way it missed. */
+function apiServe(attempt: ServeAttemptPayload, server: Server, courtSide: CourtSide): ApiServe {
+  const outcome = API_SERVE_OUTCOME[attempt.outcome];
+  // Placement is the tracked player's alone, and a serve that landed is placed by the box
+  // the point was played from — capture never records where inside the box it went.
+  if (server !== "TRACKED") return { outcome, box: null, faultMode: null };
+  if (attempt.outcome !== "FAULT")
+    return { outcome, box: API_COURT_SIDE[courtSide], faultMode: null };
+  if (attempt.location === null) {
+    throw new Error("a tracked player's faulted serve records where it missed");
+  }
+  return { outcome, box: null, faultMode: API_FAILURE_MODE[attempt.location] };
+}
+
+/** One captured point as the API stores it, minus the id the importer mints itself. */
+function toApiPoint(payload: ReturnType<Point["toJSON"]>): ApiPoint {
+  // A Point may leave its serve or its ending unwatched and the API may not, so the two
+  // the generator never produces are refused here rather than written out blank.
+  const first = payload.serves[0];
+  if (first === undefined) throw new Error(`point ${payload.id} records no serve to map`);
+  if (payload.endReason === null) throw new Error(`point ${payload.id} records no ending to map`);
+  const serve1 = apiServe(first, payload.server, payload.courtSide);
+  const second = payload.serves[1];
+  const serve2 = second && apiServe(second, payload.server, payload.courtSide);
+  const location = payload.ballLocation;
+  // ballIn is always true from the capture path, so the final ball is always a zone
+  // (point.ts says so on the field itself); a FailureMode here would be imported data.
+  if (typeof location === "string") {
+    throw new Error(`point ${payload.id} records a final ball that went out`);
+  }
+  return {
+    sequence: payload.sequence,
+    server: API_SERVER[payload.server],
+    won: payload.won,
+    serve1_outcome: serve1.outcome,
+    serve1_box: serve1.box,
+    serve1_fault_mode: serve1.faultMode,
+    serve2_outcome: serve2?.outcome ?? null,
+    serve2_box: serve2?.box ?? null,
+    serve2_fault_mode: serve2?.faultMode ?? null,
+    return_outcome:
+      payload.returnOutcome === null ? null : API_RETURN_OUTCOME[payload.returnOutcome],
+    end_reason: API_END_REASON[payload.endReason],
+    unusual_reason:
+      payload.unusualReason === null ? null : API_UNUSUAL_REASON[payload.unusualReason],
+    // One note column on this side of the wire, and a point can carry both a coach's
+    // note and an unusual point's own, so they join the way capture joins two notes.
+    note: [payload.note, payload.unusualNote].filter((text) => text !== null).join("\n") || null,
+    wing: payload.wing === null ? null : API_WING[payload.wing],
+    shot_type: payload.shotType === null ? null : API_SHOT_TYPE[payload.shotType],
+    ball_in: payload.ballIn,
+    ball_half: location === null ? null : API_COURT_SIDE[location.half],
+    ball_depth: location === null ? null : API_COURT_DEPTH[location.depth],
+    ball_out_mode: null,
+    rally_length_bucket:
+      payload.rallyLengthBucket === null ? null : API_RALLY_BUCKET[payload.rallyLengthBucket],
+    set_number: payload.context.setNumber,
+    game_number: payload.context.gameNumber,
+    in_tiebreak: payload.context.inTiebreak,
+    is_break_point: payload.context.isBreakPoint,
+    is_game_point: payload.context.isGamePoint,
+    is_game_end: payload.context.isGameEnd,
+    is_set_point: payload.context.isSetPoint,
+    is_set_end: payload.context.isSetEnd,
+    is_match_point: payload.context.isMatchPoint,
+  };
+}
+
+const IMPORT_PLAYER_COLUMNS = [
+  "coach_email",
+  "first_name",
+  "last_name",
+  "date_of_birth",
+  "dominant_hand",
+  "gender",
+  "notes",
+];
+
+const IMPORT_MATCH_COLUMNS = [
+  "coach_email",
+  "player_first_name",
+  "player_last_name",
+  "opponent_name",
+  "played_on",
+  "surface",
+  "event",
+  "scoring_system",
+  "result",
+  "match_key",
+];
+
+// The point columns the CSV carries from PointCreate itself, in the spec's order. The
+// header and the row are both built from this, so the two cannot drift apart the way a
+// hand-ordered row of 29 same-typed cells can.
+const IMPORT_POINT_FIELDS = [
+  "sequence",
+  "server",
+  "won",
+  "serve1_outcome",
+  "serve1_box",
+  "serve1_fault_mode",
+  "serve2_outcome",
+  "serve2_box",
+  "serve2_fault_mode",
+  "return_outcome",
+  "end_reason",
+  "unusual_reason",
+  "note",
+  "wing",
+  "shot_type",
+  "ball_in",
+  "ball_half",
+  "ball_depth",
+  "ball_out_mode",
+  "rally_length_bucket",
+  "set_number",
+  "game_number",
+  "in_tiebreak",
+  "is_break_point",
+  "is_game_point",
+  "is_game_end",
+  "is_set_point",
+  "is_set_end",
+  "is_match_point",
+] as const satisfies readonly (keyof ApiPoint)[];
+
+const IMPORT_POINT_COLUMNS = ["coach_email", "match_key", ...IMPORT_POINT_FIELDS];
+
+function importPointRow(
+  coachEmail: string,
+  matchKey: string,
+  payload: ReturnType<Point["toJSON"]>,
+): unknown[] {
+  const point = toApiPoint(payload);
+  // The generated schema carries the spec's own enums and required fields, so a member
+  // the API renamed fails here rather than 16,000 rows into someone's prod import. It
+  // checks shape alone: PointCreate's cross-field rules are the import's own to enforce.
+  zPointCreate.parse({ id: payload.id, ...point });
+  return [coachEmail, matchKey, ...IMPORT_POINT_FIELDS.map((field) => point[field])];
+}
+
 // --- Run -------------------------------------------------------------------------------
 
 const players = makeRoster(PLAYER_COUNT);
@@ -1007,27 +1188,22 @@ const matches: GeneratedMatch[] = [];
 
 const seasonDays = Math.round((SEASON_END.getTime() - SEASON_START.getTime()) / 86_400_000);
 
+const circuits = new Map(players.map((player) => [player.id, circuitFor(player, players)]));
+// What each player has already played, as `day:opponent`. The importer recognises a
+// match by (player, played_on, opponent_name, event) and this generator leaves event
+// blank, so a repeated pairing on a repeated day would import as one match and lose the
+// second's points to the conflict clause that keeps a re-import idempotent.
+const scheduled = new Map(players.map((player) => [player.id, new Set<string>()]));
+
 for (let index = 0; index < MATCH_COUNT; index++) {
   const player = players[index % players.length]!;
-  const playedOn = isoDate(
-    new Date(SEASON_START.getTime() + Math.floor(rng() * seasonDays) * 86_400_000),
-  );
+  const opponent = pick(circuits.get(player.id)!);
+  const taken = scheduled.get(player.id)!;
+  let day = Math.floor(rng() * seasonDays);
+  while (taken.has(`${String(day)}:${opponent.display}`)) day = (day + 1) % seasonDays;
+  taken.add(`${String(day)}:${opponent.display}`);
 
-  // Most opponents are free text; a few are squad-mates playing each other.
-  const intraSquad = chance(0.15);
-  const mate = players.filter((other) => other.id !== player.id)[
-    Math.floor(rng() * (players.length - 1))
-  ]!;
-  const name = pick(OPPONENT_NAMES);
-  const opponent = intraSquad
-    ? {
-        id: mate.id,
-        name: null,
-        display: `${mate.first_name} ${mate.last_name}`,
-        skill: mate.skill,
-      }
-    : { id: uuid(), name, display: name, skill: opponentSkill(name) };
-
+  const playedOn = isoDate(new Date(SEASON_START.getTime() + day * 86_400_000));
   matches.push(generateMatch(player, opponent, playedOn));
 }
 
@@ -1038,7 +1214,7 @@ mkdirSync(OUT_DIR, { recursive: true });
 const bundle = {
   generator: "apps/web/scripts/generate-fake-data.ts",
   seed: SEED,
-  coachId: COACH_ID,
+  coaches: COACHES,
   /** Every payload below is a `toJSON()` from the capture model, unchanged. */
   players,
   matches,
@@ -1063,49 +1239,18 @@ writeFileSync(
       generated.outcome.reason,
       generated.outcome.trackedPlayerWon,
       generated.summary.scoreline,
-      generated.summary.points,
-      generated.summary.checkpoints,
+      generated.points.length,
       generated.summary.gamesPlayed,
-      generated.summary.gamesWatched,
       generated.summary.attention,
     ]),
   ),
 );
 
-const pointRows: unknown[][] = [];
-const checkpointRows: unknown[][] = [];
-for (const generated of matches) {
-  for (const event of generated.events) {
-    if (event.kind === "point") {
-      pointRows.push(pointRow(generated, event.payload as ReturnType<Point["toJSON"]>));
-      continue;
-    }
-    const payload = event.payload as ReturnType<ScoreCheckpoint["toJSON"]>;
-    checkpointRows.push([
-      generated.match.matchId,
-      payload.id,
-      payload.sequence,
-      new Date(payload.timestamp).toISOString(),
-      payload.servesNext,
-      payload.orderChanged,
-      payload.after.sets
-        .map(
-          (set) =>
-            `${String(set.tracked)}-${String(set.opponent)}` +
-            (set.tiebreak === null
-              ? ""
-              : `(${String(set.tiebreak.tracked)}-${String(set.tiebreak.opponent)})`),
-        )
-        .join(" "),
-      payload.after.game === null
-        ? ""
-        : `${String(payload.after.game.tracked)}-${String(payload.after.game.opponent)}`,
-    ]);
-  }
-}
+const pointRows = matches.flatMap((generated) =>
+  generated.points.map((row) => pointRow(generated, row.payload)),
+);
 
 writeFileSync(resolve(OUT_DIR, "points.csv"), csv(POINT_COLUMNS, pointRows));
-writeFileSync(resolve(OUT_DIR, "checkpoints.csv"), csv(CHECKPOINT_COLUMNS, checkpointRows));
 
 writeFileSync(
   resolve(OUT_DIR, "players.csv"),
@@ -1135,6 +1280,88 @@ writeFileSync(
   ),
 );
 
+const IMPORT_DIR = resolve(OUT_DIR, "import");
+mkdirSync(IMPORT_DIR, { recursive: true });
+
+writeFileSync(
+  resolve(IMPORT_DIR, "coaches.csv"),
+  csv(
+    ["email", "display_name"],
+    COACHES.map((coach) => [coach.email, coach.displayName]),
+  ),
+);
+
+writeFileSync(
+  resolve(IMPORT_DIR, "players.csv"),
+  csv(
+    IMPORT_PLAYER_COLUMNS,
+    players.map((player) => [
+      emailOf(player),
+      player.first_name,
+      player.last_name,
+      player.date_of_birth,
+      player.dominant_hand,
+      player.gender,
+      player.notes,
+    ]),
+  ),
+);
+
+const playerById = new Map(players.map((player) => [player.id, player]));
+
+writeFileSync(
+  resolve(IMPORT_DIR, "matches.csv"),
+  csv(
+    IMPORT_MATCH_COLUMNS,
+    matches.map((generated) => {
+      const player = playerById.get(generated.match.trackedPlayerId)!;
+      return [
+        emailOf(player),
+        player.first_name,
+        player.last_name,
+        generated.match.opponentName ?? generated.summary.opponentDisplayName,
+        generated.match.playedOn,
+        // The API has no "unspecified" surface; blank is how it says the same thing.
+        generated.match.surfaceType === "unspecified" ? "" : generated.match.surfaceType,
+        "",
+        generated.match.scoringSystem,
+        generated.outcome.trackedPlayerWon ? "win" : "loss",
+        generated.points.length === 0 ? "" : generated.match.matchId,
+      ];
+    }),
+  ),
+);
+
+writeFileSync(
+  resolve(IMPORT_DIR, "points.csv"),
+  csv(
+    IMPORT_POINT_COLUMNS,
+    matches.flatMap((generated) =>
+      generated.points.map((row) =>
+        importPointRow(
+          emailOf(playerById.get(generated.match.trackedPlayerId)!),
+          generated.match.matchId,
+          row.payload,
+        ),
+      ),
+    ),
+  ),
+);
+
+// Quoted in the README below: a blank wing is nearly always a point with no shot to
+// record, and saying so needs the real split rather than an assurance. A forced ending
+// that struck a ball is the only blank the coach's attention accounts for — a missed
+// return ends the point without one, whatever its end reason says.
+const allPoints = matches.flatMap((generated) => generated.points.map((row) => row.payload));
+const blankWings = allPoints.filter((payload) => payload.wing === null).length;
+const unwatchedShots = allPoints.filter(
+  (payload) =>
+    payload.wing === null &&
+    payload.endReason === "FORCED" &&
+    (payload.returnOutcome === null || payload.returnOutcome === "IN"),
+).length;
+const percentUnwatched = ((unwatchedShots / blankWings) * 100).toFixed(0);
+
 writeFileSync(
   resolve(OUT_DIR, "README.md"),
   [
@@ -1147,38 +1374,52 @@ writeFileSync(
     "| File | What it holds |",
     "| --- | --- |",
     "| `players.csv` | The roster. |",
-    "| `matches.csv` | One row per match, with the derived scoreline and how much of it was watched. |",
+    "| `matches.csv` | One row per match, with the derived scoreline. |",
     "| `points.csv` | One row per captured point, every field flattened. |",
-    "| `checkpoints.csv` | One row per score checkpoint (a scoreboard the coach declared). |",
+    "| `import/` | The same season in the four files the API's import script reads. |",
     "",
     "A `capture-data.json` sits here too after a run, holding the same data in the match log's own",
-    "nested shape: a `Match.toJSON()` per match, then its ordered events, each one a `Point.toJSON()`",
-    "or a `ScoreCheckpoint.toJSON()` exactly as the device stores them. It is gitignored for its size.",
+    "nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as",
+    "the device stores them. It is gitignored for its size.",
     "",
     "## Reading a point",
     "",
     "A point's score fields (`won`, `server`, `court_side`, and the nine `context` stamps) are always",
-    "set. Its observation fields are nullable and empty means *the coach didn't see it*, not zero:",
-    "no serve outcome is a serve nobody watched, no `end_reason` is an ending nobody watched. Serve",
-    "placement is only ever recorded for the tracked player's own faults, and `ball_in` is always",
-    "true, because capture records where the last ball to land finished, never where a miss went.",
+    "set. An empty observation field almost always means the field does not apply to that point, not",
+    "that the coach missed something: `wing` and `shot_type` are blank on every unforced error (the",
+    "flow doesn't ask which stroke produced a miss), on aces, double faults and unusual points, and",
+    "on a missed return, which `return_outcome` already places. The one genuine gap is a forced",
+    `ending whose shot went unrecorded: ${grouped(unwatchedShots)} points, ${percentUnwatched}% of the ${grouped(blankWings)} with no \`wing\`.`,
+    "",
+    "Everything else capture may leave unseen — the serve, the ending, the final ball — is a column",
+    "`PointCreate` takes non-null, and a game skipped behind a score checkpoint is a game with no",
+    "points to import, so this dataset generates none of it. Serve placement is only ever recorded",
+    "for the tracked player, and `ball_in` is always true, because capture records where the last",
+    "ball to land finished, never where a miss went.",
+    "",
+    "## Importing it",
+    "",
+    "`import/` is what `apps/api/scripts/import_sample_data.py` ingests; that script's docstring",
+    "covers running it and `apps/api/scripts/sample-data/README.md` is the format's spec.",
+    `The squad is split between ${String(COACHES.length)} coaches (${COACHES.map((coach) => coach.email).join(", ")}),`,
+    "so the demo can show one coach seeing only their own players. They share the one password the",
+    "import prints when it finishes.",
     "",
     "## Regenerating",
     "",
     "```sh",
-    "pnpm --filter @matchpoint/web gen-fake-data -- --seed 7 --players 12 --matches 120",
+    `pnpm --filter @matchpoint/web gen-fake-data -- --seed ${String(SEED)} --players ${String(PLAYER_COUNT)} --matches ${String(MATCH_COUNT)}`,
     "```",
     "",
   ].join("\n"),
 );
 
-const totalPoints = pointRows.length;
 const wins = matches.filter((generated) => generated.outcome.trackedPlayerWon).length;
 process.stdout.write(
   [
     `seed ${String(SEED)} -> ${OUT_DIR}`,
     `${String(players.length)} players, ${String(matches.length)} matches (${String(wins)} won by the tracked player)`,
-    `${String(totalPoints)} points, ${String(checkpointRows.length)} score checkpoints`,
+    `${String(pointRows.length)} points`,
     "",
   ].join("\n"),
 );

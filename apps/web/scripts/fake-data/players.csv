@@ -1,13 +1,13 @@
 player_id,first_name,last_name,username,date_of_birth,dominant_hand,gender,coach_id,notes
-ed025601-c567-4fbb-9522-e53a50ae8dae,Kagiso,Louw,kagiso.louw20,2011-07-18,right,other,00fb8673-8b42-4c83-9484-f3e32248c1e8,
-cf8d6ab8-4300-4fda-899b-f4fac9d2f892,Daniel,Khumalo,daniel.khumalo45,2008-03-22,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Net game is well ahead of the baseline game.
-87824772-0201-4ef0-867b-55cbc8c6948c,Priya,de Villiers,priya.devilliers17,2010-04-23,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Rushes between points when behind.
-584e9fd7-6be8-4a2b-99d6-41abf541becd,Yusuf,Sithole,yusuf.sithole95,2006-03-27,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Best mover in the squad; wins the long ones.
-b788ef21-486e-4d8e-97ea-c5efd02c11e4,Chloe,Molefe,chloe.molefe62,2005-04-22,right,male,00fb8673-8b42-4c83-9484-f3e32248c1e8,Rushes between points when behind.
-682c4bd0-2be4-4da5-81fb-48186c2b233e,Chloe,Nkosi,chloe.nkosi12,2001-01-26,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Net game is well ahead of the baseline game.
-0e4245cd-dcbd-4abb-96a5-379a6b3b876d,Lerato,Petersen,lerato.petersen21,2006-07-15,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,"Strong forehand, avoids the backhand under pressure."
-373df8f2-720b-4c30-9a48-f48b41a187ad,Naledi,Petersen,naledi.petersen75,2009-07-21,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Net game is well ahead of the baseline game.
-4f3e0b8d-425b-4a51-9f12-4b0b0f8f96c4,Sarah,Louw,sarah.louw42,2007-08-21,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Best mover in the squad; wins the long ones.
-ee9bd033-6727-4500-a640-7cd8bff5ddce,Nomsa,Khumalo,nomsa.khumalo71,2001-09-09,right,female,00fb8673-8b42-4c83-9484-f3e32248c1e8,Best mover in the squad; wins the long ones.
-970062ab-ccc8-4ee8-be5e-c7647fb5cbab,Emma,Ferreira,emma.ferreira65,2003-10-03,right,other,00fb8673-8b42-4c83-9484-f3e32248c1e8,Second serve is the weak link — sits up on big points.
-9786a9d1-3d1d-45a5-b327-91f1a82cea02,Naledi,Dlamini,naledi.dlamini62,2007-03-09,right,male,00fb8673-8b42-4c83-9484-f3e32248c1e8,"Strong forehand, avoids the backhand under pressure."
+552ac5df-9018-43d9-bcee-0eb110c25261,Liam,Khumalo,liam.khumalo55,2001-12-27,right,female,95100015-8dac-4428-9991-a6a51b615004,
+c6f82ac4-d594-4bf2-bbd9-12aa2b0dd942,Kagiso,de Villiers,kagiso.devilliers79,2002-11-26,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Rushes between points when behind.
+b643953f-7ec5-4dd0-994b-0903942a5374,Daniel,Adams,daniel.adams16,2002-04-23,right,other,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,
+fdf160ef-8da0-4b5a-8e88-c369e1381f97,Hannah,Naidoo,hannah.naidoo11,2001-02-24,right,other,95100015-8dac-4428-9991-a6a51b615004,Rushes between points when behind.
+1fb7bc75-3216-4b70-8e6d-5867b24acee1,Yusuf,Dlamini,yusuf.dlamini97,2003-05-14,right,female,e5b354b0-8136-4124-b12c-214efc260c23,
+94887155-f5cc-492b-a002-68d87a579d09,Chloe,Fourie,chloe.fourie94,2002-05-09,left,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Rushes between points when behind.
+a50af7e7-891f-4cea-ab28-48c82e5af653,Emma,Adams,emma.adams41,2009-06-03,right,male,95100015-8dac-4428-9991-a6a51b615004,
+27c1afb3-6d2e-4a3a-b5d6-0718fcab9b3c,Aisha,Khumalo,aisha.khumalo10,2003-09-18,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Second serve is the weak link — sits up on big points.
+31206876-ce9e-4341-83fe-113c55d65338,Yusuf,Nkosi,yusuf.nkosi87,2001-09-01,right,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Best mover in the squad; wins the long ones.
+e1c9d26d-80bf-4ddc-86b3-2285f72a1b35,Hannah,van Wyk,hannah.vanwyk61,2008-02-16,right,female,95100015-8dac-4428-9991-a6a51b615004,Net game is well ahead of the baseline game.
+81572184-0dce-4d12-8441-cf4c809d5a85,Jonas,Molefe,jonas.molefe82,2000-09-07,right,female,e5b354b0-8136-4124-b12c-214efc260c23,Best mover in the squad; wins the long ones.
+90d9154a-d8ac-49b3-988d-5b7ca63739bf,Sarah,Petersen,sarah.petersen95,2009-01-23,right,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Best mover in the squad; wins the long ones.

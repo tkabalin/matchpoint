@@ -1,0 +1,121 @@
+coach_email,player_first_name,player_last_name,opponent_name,played_on,surface,event,scoring_system,result,match_key
+derek.wallace@example.com,Jonas,Molefe,N. Radebe,2025-09-07,carpet,,no_ad_scoring,win,6c0c7234-bed7-4431-9e59-602cc494ea64
+farah.ismail@example.com,Yusuf,Nkosi,L. Meyer,2025-09-08,,,traditional,win,9bb219f3-3262-4aea-8864-d891c6844a68
+derek.wallace@example.com,Kagiso,de Villiers,Jonas Molefe,2025-09-09,hard,,traditional,loss,957a6c72-3fa8-4191-9eef-13a7ea54babc
+thandi.mokoena@example.com,Hannah,van Wyk,Hannah Naidoo,2025-09-18,,,traditional,win,8296ad43-ebc1-4fa8-b524-cc1aa2ea6e03
+derek.wallace@example.com,Jonas,Molefe,Kagiso de Villiers,2025-09-25,clay,,traditional,loss,2c0c89f3-2f6f-419e-9fb2-c968315f2c7b
+farah.ismail@example.com,Daniel,Adams,Q. Ndlovu,2025-09-27,hard,,traditional,win,103505f8-551a-48f6-97fd-3b9fe7a49f78
+derek.wallace@example.com,Yusuf,Dlamini,J. Pillay,2025-09-27,,,traditional,loss,d3a441af-062e-4b15-b7c2-9fed39900259
+derek.wallace@example.com,Jonas,Molefe,K. Zulu,2025-09-29,grass,,traditional,win,68417dae-609a-480a-8793-8f207b001c64
+derek.wallace@example.com,Jonas,Molefe,M. Coetzee,2025-10-01,clay,,no_ad_scoring,win,1d084822-d46b-46e7-840f-6f68de171ebb
+thandi.mokoena@example.com,Hannah,Naidoo,Z. Isaacs,2025-10-05,hard,,legacy,loss,3da0e1ca-a731-44c2-a8d8-b32df05759cb
+thandi.mokoena@example.com,Hannah,Naidoo,T. Naidoo,2025-10-07,hard,,no_ad_scoring,win,09790992-aaa4-4ebc-ad6f-e595f740b989
+derek.wallace@example.com,Aisha,Khumalo,K. Zulu,2025-10-09,,,match_tiebreak_10_points,loss,178defa1-cc2d-447e-930f-924f41fc3975
+thandi.mokoena@example.com,Emma,Adams,D. Gouws,2025-10-12,hard,,no_ad_scoring,win,1f805ec2-e73b-4d5a-86d9-a376bd26919b
+thandi.mokoena@example.com,Hannah,van Wyk,B. Hendricks,2025-10-14,hard,,no_ad_scoring,win,255edfc3-4c06-4428-9413-3c5637c2466c
+farah.ismail@example.com,Chloe,Fourie,Yusuf Nkosi,2025-10-19,clay,,short_sets,loss,e61adf81-f126-4d70-9fc3-2bc9b690118d
+farah.ismail@example.com,Daniel,Adams,Sarah Petersen,2025-10-19,clay,,traditional,win,d6766f1a-a3f0-4d58-850a-747365ad7fbe
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2025-10-20,hard,,no_ad_scoring,win,24282377-c63f-486a-b4ef-9979ab37ef34
+thandi.mokoena@example.com,Emma,Adams,A. Tshabalala,2025-10-21,hard,,short_sets,loss,99b8e608-b0d7-4f14-91c8-67bd57c0be33
+thandi.mokoena@example.com,Hannah,Naidoo,T. Naidoo,2025-10-25,hard,,legacy,loss,c5cec008-236c-427a-b356-dc79b23f0d11
+farah.ismail@example.com,Sarah,Petersen,N. Radebe,2025-10-25,,,no_ad_scoring,win,b6c1b548-3efa-422d-aeb1-202e85bf320b
+thandi.mokoena@example.com,Liam,Khumalo,Z. Isaacs,2025-11-04,hard,,pro_set,loss,ffbd33cb-4904-4e8d-b498-d6e69d315992
+farah.ismail@example.com,Chloe,Fourie,L. Meyer,2025-11-07,,,short_sets,win,275c0dd8-3e4d-4fe8-86fa-e976b8bff7b5
+derek.wallace@example.com,Kagiso,de Villiers,O. Brand,2025-11-09,hard,,short_sets,loss,d35a7291-2b25-4e2b-9312-e90891751e32
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2025-11-10,,,traditional,loss,70718f49-7894-4dd5-8e56-74e09941c3a8
+derek.wallace@example.com,Kagiso,de Villiers,R. Jacobs,2025-11-12,clay,,traditional,loss,b1fdb62b-497a-4980-ae82-3eba7ed740b1
+thandi.mokoena@example.com,Hannah,Naidoo,I. Smit,2025-11-13,hard,,traditional,loss,9d829b4b-db11-4e2e-bf5b-5c2bbd09ceb4
+farah.ismail@example.com,Yusuf,Nkosi,L. Meyer,2025-11-19,,,match_tiebreak_10_points,loss,87920ad9-3207-4b91-81a9-70b6d61d90b3
+thandi.mokoena@example.com,Liam,Khumalo,Hannah van Wyk,2025-11-20,hard,,short_sets,loss,81c40f71-0b11-4fb8-abf1-d680e9aa4897
+thandi.mokoena@example.com,Liam,Khumalo,Hannah van Wyk,2025-11-22,,,match_tiebreak_10_points,loss,920e19cc-7624-4176-9226-9133f0d671bb
+derek.wallace@example.com,Aisha,Khumalo,K. Zulu,2025-11-23,hard,,traditional,loss,66ceeb45-2117-4dc4-b007-ccf674656781
+thandi.mokoena@example.com,Liam,Khumalo,U. Mthembu,2025-11-27,carpet,,short_sets,loss,6579ce15-f97a-4bae-a3f5-74f0590097dd
+thandi.mokoena@example.com,Liam,Khumalo,U. Mthembu,2025-11-29,hard,,traditional,win,c797b08d-4f71-4def-8d6f-79767b80a544
+farah.ismail@example.com,Sarah,Petersen,Chloe Fourie,2025-11-30,hard,,traditional,loss,aeef91e4-aec2-4bd9-8ab7-3c2ba02376c1
+thandi.mokoena@example.com,Liam,Khumalo,U. Mthembu,2025-12-07,hard,,no_ad_scoring,win,a9bc57fb-7b5a-49d3-b6a3-ea4d4635ed8c
+thandi.mokoena@example.com,Hannah,van Wyk,B. Hendricks,2025-12-08,,,no_ad_scoring,loss,53c46772-8bd7-425a-b0b3-5f2158491d0b
+derek.wallace@example.com,Yusuf,Dlamini,R. Jacobs,2025-12-14,clay,,traditional,loss,c942fec6-c3b4-4922-b5e5-b70f5711993c
+thandi.mokoena@example.com,Hannah,Naidoo,T. Naidoo,2025-12-14,hard,,traditional,win,7db38707-8f42-432f-b7d7-ff4dc0a90d5b
+farah.ismail@example.com,Sarah,Petersen,Chloe Fourie,2025-12-16,hard,,no_ad_scoring,loss,58f292d1-195b-4fd4-abaa-a7c33ed5c754
+derek.wallace@example.com,Jonas,Molefe,M. Coetzee,2025-12-26,carpet,,traditional,win,2d05bb8a-a2ef-46df-89d5-ac2a81c2c2b3
+farah.ismail@example.com,Yusuf,Nkosi,Daniel Adams,2025-12-28,hard,,traditional,win,13f224aa-f5a1-45af-ba95-d67b0f48758b
+farah.ismail@example.com,Chloe,Fourie,J. Pillay,2025-12-29,,,traditional,loss,0864b668-acb4-4e4d-a854-e7b04bbd1ae3
+derek.wallace@example.com,Yusuf,Dlamini,A. Tshabalala,2026-01-06,hard,,match_tiebreak_10_points,loss,d9d69cf8-2967-4bf9-ac4d-a4ce4625ebbb
+derek.wallace@example.com,Kagiso,de Villiers,O. Brand,2026-01-11,,,traditional,loss,ac4dde62-e893-44fb-b1b0-5fb06a319403
+derek.wallace@example.com,Aisha,Khumalo,O. Brand,2026-01-16,hard,,short_sets,win,5fab4c01-ece7-42a0-9b2d-26680e41d5fc
+thandi.mokoena@example.com,Hannah,Naidoo,T. Naidoo,2026-01-22,hard,,mens_grand_slam,win,bf8a2c8c-5561-4e54-9eb0-25932c5cc7a1
+derek.wallace@example.com,Yusuf,Dlamini,Aisha Khumalo,2026-01-22,hard,,traditional,loss,8a0e564f-880f-4a45-a5ad-f81bdd925b18
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2026-01-25,clay,,no_ad_scoring,win,d71d65f0-f447-4a81-bf29-60547be87b74
+derek.wallace@example.com,Yusuf,Dlamini,Aisha Khumalo,2026-01-27,,,legacy,loss,ddda4404-a747-455f-be14-f18974648f83
+farah.ismail@example.com,Daniel,Adams,Sarah Petersen,2026-01-29,clay,,traditional,loss,4304a843-4071-4ea7-9e90-16de0e7fc934
+thandi.mokoena@example.com,Hannah,van Wyk,B. Hendricks,2026-02-01,hard,,pro_set,loss,05678356-ef26-4e17-b7f6-2c17f4024a45
+thandi.mokoena@example.com,Hannah,van Wyk,B. Hendricks,2026-02-02,,,traditional,loss,b44cb0ff-18de-40b7-b1d2-3c4882ef26ec
+thandi.mokoena@example.com,Hannah,Naidoo,I. Smit,2026-02-09,hard,,no_ad_scoring,loss,0a626b51-7e52-4130-b9c2-dc70cb8e7ba4
+derek.wallace@example.com,Jonas,Molefe,K. Zulu,2026-02-11,hard,,traditional,win,0524b1da-6867-405b-9858-8c3756ee9461
+farah.ismail@example.com,Daniel,Adams,K. Zulu,2026-02-12,hard,,traditional,win,526ac45c-c856-41dc-9f53-76c5f5974cd8
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2026-02-13,hard,,short_sets,win,0aa96d36-318f-4b05-82e0-24983a1857c5
+farah.ismail@example.com,Daniel,Adams,T. Naidoo,2026-02-16,,,traditional,win,487c4f80-e6ba-460e-b16e-b618b899f909
+thandi.mokoena@example.com,Emma,Adams,Hannah Naidoo,2026-02-16,,,traditional,win,c4422f6b-b9b3-4683-b361-b65920b252e0
+farah.ismail@example.com,Daniel,Adams,T. Naidoo,2026-02-17,clay,,traditional,win,4fa9eda9-d08c-4223-bd42-3c80d03faa75
+derek.wallace@example.com,Yusuf,Dlamini,R. Jacobs,2026-02-19,hard,,no_ad_scoring,loss,0f935dd7-8400-4186-a7ae-aa13c0972df8
+farah.ismail@example.com,Daniel,Adams,T. Naidoo,2026-02-21,hard,,match_tiebreak_10_points,loss,e15c2466-e523-4499-88ef-0c24319267fb
+thandi.mokoena@example.com,Hannah,van Wyk,Hannah Naidoo,2026-02-22,hard,,traditional,win,4549a8e1-d9c6-4d39-a74e-9047ca82d609
+derek.wallace@example.com,Jonas,Molefe,N. Radebe,2026-02-24,hard,,traditional,win,2174772e-dc4c-4aef-9e20-7f9c43de67f1
+derek.wallace@example.com,Kagiso,de Villiers,O. Brand,2026-02-24,clay,,no_ad_scoring,win,871c053d-4f29-43b3-a340-7820b0f3d209
+farah.ismail@example.com,Chloe,Fourie,Yusuf Nkosi,2026-02-27,,,traditional,loss,8f8eae66-9973-4d6f-8c38-56030d1a57e4
+farah.ismail@example.com,Yusuf,Nkosi,L. Meyer,2026-02-28,hard,,no_ad_scoring,loss,51b9e927-d52c-4113-9921-370d909f25a5
+derek.wallace@example.com,Kagiso,de Villiers,Jonas Molefe,2026-03-01,hard,,short_sets,loss,86cc3f5a-b16d-4fe8-a568-5d595eb38c26
+thandi.mokoena@example.com,Emma,Adams,Hannah Naidoo,2026-03-01,clay,,traditional,win,2cb03a7a-9b1e-4b19-b8ac-3012106d8c88
+farah.ismail@example.com,Yusuf,Nkosi,B. Hendricks,2026-03-06,clay,,no_ad_scoring,loss,1ad2667f-d838-4a62-a3c8-08eae5a7451a
+thandi.mokoena@example.com,Emma,Adams,Hannah Naidoo,2026-03-12,,,traditional,loss,28bf3040-4d8a-4c21-a87b-b014f0c2bc0b
+farah.ismail@example.com,Yusuf,Nkosi,Daniel Adams,2026-03-13,,,match_tiebreak_10_points,loss,c6a77349-5016-407c-956a-117a196fc43d
+farah.ismail@example.com,Sarah,Petersen,W. Bezuidenhout,2026-03-15,clay,,traditional,win,47d31b94-b8fc-4cc6-a689-1fac913341d1
+derek.wallace@example.com,Kagiso,de Villiers,Jonas Molefe,2026-03-20,hard,,traditional,loss,fe219ed6-e763-4e6f-86ca-20c536bd9112
+farah.ismail@example.com,Sarah,Petersen,Chloe Fourie,2026-03-21,,,legacy,win,5c4fd2ce-f801-4f9b-b91f-03d2e1e5d5b7
+farah.ismail@example.com,Chloe,Fourie,V. Pretorius,2026-03-21,clay,,traditional,win,13fb03dc-3a25-4fb6-865b-92b61756d89a
+thandi.mokoena@example.com,Hannah,Naidoo,Hannah van Wyk,2026-03-21,grass,,no_ad_scoring,win,9643531e-2925-4ff5-ae10-4a42c3211748
+thandi.mokoena@example.com,Emma,Adams,A. Tshabalala,2026-03-22,grass,,short_sets,win,a2a136a5-00d2-4c49-b910-4c00dccb3fb8
+thandi.mokoena@example.com,Liam,Khumalo,Hannah van Wyk,2026-04-01,hard,,match_tiebreak_10_points,loss,f183d742-ecf0-4aca-9ee3-1632956e3055
+farah.ismail@example.com,Chloe,Fourie,Yusuf Nkosi,2026-04-04,hard,,no_ad_scoring,loss,ef213636-5c57-490b-bb61-784ea1299452
+derek.wallace@example.com,Aisha,Khumalo,K. Zulu,2026-04-07,hard,,traditional,win,07f885a1-dba5-4ad2-a8af-653d0a82edc8
+derek.wallace@example.com,Yusuf,Dlamini,R. Jacobs,2026-04-08,hard,,traditional,win,7c094a1b-083b-4133-adae-e84d298dc44e
+derek.wallace@example.com,Yusuf,Dlamini,Aisha Khumalo,2026-04-10,hard,,no_ad_scoring,win,92bea184-fc18-4555-8bff-b6e02c0c50fd
+thandi.mokoena@example.com,Emma,Adams,D. Gouws,2026-04-17,hard,,traditional,win,787d03c1-1252-4c93-a2f8-c325299ac7f8
+farah.ismail@example.com,Yusuf,Nkosi,Daniel Adams,2026-04-19,hard,,traditional,win,db341afb-559e-44a1-96f3-1fcbafcfc59e
+farah.ismail@example.com,Daniel,Adams,K. Zulu,2026-04-20,hard,,traditional,win,4eebebe0-7498-496e-9678-f53c15a01cb7
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2026-04-24,hard,,traditional,win,a4cc8038-046f-4996-9bf4-ce223f01b81d
+thandi.mokoena@example.com,Hannah,van Wyk,B. Hendricks,2026-04-25,,,pro_set,loss,90b45c18-0e74-4788-8c5b-6ff3b491c5e4
+thandi.mokoena@example.com,Hannah,Naidoo,I. Smit,2026-05-04,clay,,no_ad_scoring,loss,6e1c62fb-38a6-410e-8f7a-c77c1de80914
+thandi.mokoena@example.com,Liam,Khumalo,Z. Isaacs,2026-05-04,grass,,traditional,win,9e145504-69d0-486e-874e-f462e4472cc6
+farah.ismail@example.com,Yusuf,Nkosi,Z. Isaacs,2026-05-09,hard,,traditional,win,23649b5a-f3b8-400d-8671-56f9e9580ad8
+thandi.mokoena@example.com,Emma,Adams,O. Brand,2026-05-14,hard,,traditional,loss,58e9bbe0-38c6-44e9-ae3d-4d24a6e3bebc
+thandi.mokoena@example.com,Hannah,Naidoo,T. Naidoo,2026-05-14,hard,,traditional,loss,db159197-4106-42de-8b73-1459c6664fff
+farah.ismail@example.com,Daniel,Adams,Q. Ndlovu,2026-05-18,hard,,traditional,win,2a269c79-de7c-4a14-9e4f-501725e8966d
+derek.wallace@example.com,Kagiso,de Villiers,O. Brand,2026-05-24,hard,,traditional,loss,10160402-71ee-435a-857a-f554bf4095fc
+derek.wallace@example.com,Aisha,Khumalo,Yusuf Dlamini,2026-05-25,hard,,short_sets,win,e7c33c60-4866-44d3-900a-e41974070fe5
+farah.ismail@example.com,Yusuf,Nkosi,L. Meyer,2026-06-05,hard,,traditional,loss,dffbb063-e0f5-4dae-b7c4-ca61208c806d
+farah.ismail@example.com,Sarah,Petersen,N. Radebe,2026-06-07,hard,,mens_grand_slam,win,9ac5f10a-09ae-45c2-8c5d-84a531372636
+farah.ismail@example.com,Chloe,Fourie,V. Pretorius,2026-06-10,grass,,traditional,loss,dbf9d175-9bef-4f69-a95f-5df65c4b7615
+farah.ismail@example.com,Yusuf,Nkosi,B. Hendricks,2026-06-16,hard,,short_sets,win,8b3249a3-a85a-46c6-b7c0-28819f244b29
+thandi.mokoena@example.com,Emma,Adams,O. Brand,2026-06-17,hard,,traditional,loss,39991ce2-7bb0-4155-a9bc-64ad00b6b9a8
+thandi.mokoena@example.com,Emma,Adams,Hannah Naidoo,2026-06-24,clay,,no_ad_scoring,win,df4a31f7-5104-4e31-916b-b007372233a9
+thandi.mokoena@example.com,Hannah,van Wyk,L. Meyer,2026-06-25,hard,,traditional,win,d0d4258e-b880-4465-97c5-3f06260c88d7
+derek.wallace@example.com,Kagiso,de Villiers,Jonas Molefe,2026-06-28,clay,,short_sets,win,3260c828-7541-481d-a154-548fd7d02422
+derek.wallace@example.com,Jonas,Molefe,M. Coetzee,2026-06-29,hard,,traditional,loss,8110b4ed-0586-40fb-bf61-db302e51bc22
+thandi.mokoena@example.com,Hannah,van Wyk,Hannah Naidoo,2026-07-02,carpet,,match_tiebreak_10_points,win,e015561b-8c30-42d6-9eb7-b6f83888a535
+thandi.mokoena@example.com,Hannah,van Wyk,L. Meyer,2026-07-05,hard,,traditional,win,02cc768b-ad0f-41ff-8f18-8b01258605df
+farah.ismail@example.com,Sarah,Petersen,W. Bezuidenhout,2026-07-06,hard,,short_sets,win,9f111800-dfd9-4591-b147-daaa1016cf78
+farah.ismail@example.com,Sarah,Petersen,L. Meyer,2026-07-12,hard,,traditional,win,6356fafc-5ecb-4914-a283-6cf71c5b48b6
+farah.ismail@example.com,Chloe,Fourie,J. Pillay,2026-07-17,hard,,no_ad_scoring,loss,c65ac9d5-35bd-477c-9fa6-38e4b289dbd3
+farah.ismail@example.com,Daniel,Adams,Q. Ndlovu,2026-07-18,hard,,traditional,loss,
+derek.wallace@example.com,Yusuf,Dlamini,J. Pillay,2026-07-21,hard,,traditional,loss,7b37d034-9518-4b26-8cc0-7f22a71d2459
+thandi.mokoena@example.com,Liam,Khumalo,L. Meyer,2026-07-23,hard,,short_sets,loss,3d4313e3-b6a7-4fc6-99e9-91539a02fc89
+thandi.mokoena@example.com,Liam,Khumalo,L. Meyer,2026-07-26,clay,,traditional,win,e15adf63-2935-4531-b830-2f39c6ed16f4
+derek.wallace@example.com,Jonas,Molefe,Kagiso de Villiers,2026-07-27,hard,,mens_grand_slam,win,157b8fb8-008c-4332-b3cc-32c1b66205fc
+derek.wallace@example.com,Kagiso,de Villiers,O. Brand,2026-08-11,hard,,traditional,loss,18e4965d-f0e1-4662-8c2f-838823e91506
+farah.ismail@example.com,Chloe,Fourie,V. Pretorius,2026-08-12,hard,,traditional,loss,f10f8581-e0e0-49cc-a2b1-abb2f8bbd53c
+derek.wallace@example.com,Yusuf,Dlamini,J. Pillay,2026-08-12,clay,,traditional,loss,bc93ed3f-21cc-4947-8087-a5a326aa29a8
+farah.ismail@example.com,Sarah,Petersen,Chloe Fourie,2026-08-13,hard,,traditional,win,4b357a61-d9f1-4770-add5-1af43a870229
+derek.wallace@example.com,Jonas,Molefe,Kagiso de Villiers,2026-08-18,grass,,traditional,win,77be88e5-b5ad-4c00-9ac3-6f2f13085448
+farah.ismail@example.com,Chloe,Fourie,V. Pretorius,2026-08-21,carpet,,pro_set,win,20cb833d-dddd-48da-af93-18dafa203922
+farah.ismail@example.com,Sarah,Petersen,Chloe Fourie,2026-08-21,,,traditional,loss,dc70ba89-54ac-4838-9aa8-a232156a2d40
