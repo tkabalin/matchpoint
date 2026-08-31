@@ -41,6 +41,19 @@ class PointPhase(enum.StrEnum):
     SET_ENDING = "set_ending"
 
 
+class OpponentSummary(BaseModel):
+    """One opponent a player has met, as the scope panel's picker lists them (#244)."""
+
+    # The normalised name keying this matchup, which is what the tabs' `opponent_key`
+    # parameter takes. Never shown to a coach; `name` is.
+    key: str
+    # The most recent spelling the coach used for the name.
+    name: str
+    # Every match against them, resulted or not: the tabs this scopes count points,
+    # and a match carries those long before anyone records who won it.
+    matches: int
+
+
 class Metric(BaseModel):
     """One number a coach is shown, with everything needed to judge it."""
 

@@ -272,6 +272,17 @@ export const zMetric = z.object({
 });
 
 /**
+ * OpponentSummary
+ *
+ * One opponent a player has met, as the scope panel's picker lists them (#244).
+ */
+export const zOpponentSummary = z.object({
+    key: z.string(),
+    matches: z.int(),
+    name: z.string()
+});
+
+/**
  * OtpRequest
  */
 export const zOtpRequest = z.object({
@@ -1378,8 +1389,23 @@ export const zUpdatePlayerPath = z.object({
  */
 export const zUpdatePlayerResponse = zPlayerRead;
 
+export const zListOpponentsPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Response List Opponents
+ *
+ * Successful Response
+ */
+export const zListOpponentsResponse = z.array(zOpponentSummary);
+
 export const zGetPlayerOverviewPath = z.object({
     player_id: z.uuid()
+});
+
+export const zGetPlayerOverviewQuery = z.object({
+    opponent_key: z.string().min(1).nullish()
 });
 
 /**
@@ -1393,7 +1419,8 @@ export const zGetRallyStatsPath = z.object({
 
 export const zGetRallyStatsQuery = z.object({
     set_number: z.int().gte(1).lte(5).nullish(),
-    phase: zPointPhase.optional().default('full')
+    phase: zPointPhase.optional().default('full'),
+    opponent_key: z.string().min(1).nullish()
 });
 
 /**
@@ -1407,7 +1434,8 @@ export const zGetServeStatsPath = z.object({
 
 export const zGetServeStatsQuery = z.object({
     set_number: z.int().gte(1).lte(5).nullish(),
-    phase: zPointPhase.optional().default('full')
+    phase: zPointPhase.optional().default('full'),
+    opponent_key: z.string().min(1).nullish()
 });
 
 /**

@@ -19,6 +19,7 @@ from matchpoint_api.models import (
     CourtSide,
     EndReason,
     FailureMode,
+    Match,
     MatchResult,
     MatchSide,
     RallyBucket,
@@ -28,7 +29,6 @@ from matchpoint_api.models import (
     UnusualReason,
     Wing,
 )
-from matchpoint_api.routers.analytics import _meetings_by_opponent
 from tests.factories import (
     make_coach,
     make_match,
@@ -57,6 +57,7 @@ ENDPOINTS = [
     "overview",
     "serve",
     "rally",
+    "opponents",
 ]
 
 
@@ -1402,6 +1403,258 @@ def test_filters_reject_a_value_outside_the_contract(
     assert response.status_code == 422
 
 
+# --- the opponent axis (#244) ---
+
+
+def _make_meeting(db_session: Session, player_id: uuid.UUID, name: str | None, day: int) -> Match:
+    """One of the player's matches, dated so the newest spelling of a name is decidable."""
+    return make_match(
+        db_session, player_id=player_id, opponent_name=name, played_on=date(2026, 8, day)
+    )
+
+
+def test_opponents_lists_each_matchup_most_met_first(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Spelling variants are one matchup, whose name is the newest spelling.
+
+    A nameless match joins no matchup, and another player's opponents are their own.
+    Torres leads on two meetings; the two on one break to `abbott` before `Naidoo`,
+    which is the normalised key ordering and not the display name's.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _make_meeting(db_session, player.id, " torres ", 1)
+    _make_meeting(db_session, player.id, "Naidoo", 2)
+    _make_meeting(db_session, player.id, "Torres", 3)
+    _make_meeting(db_session, player.id, "abbott", 4)
+    _make_meeting(db_session, player.id, None, 5)
+    _make_meeting(db_session, make_player(db_session, coach_id=coach.id).id, "Reyes", 6)
+
+    assert _get(client, player.id, "opponents") == [
+        {"key": "torres", "name": "Torres", "matches": 2},
+        {"key": "abbott", "name": "abbott", "matches": 1},
+        {"key": "naidoo", "name": "Naidoo", "matches": 1},
+    ]
+
+
+def test_opponents_is_empty_without_a_named_opponent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    _make_meeting(db_session, player.id, None, 1)
+
+    assert _get(client, player.id, "opponents") == []
+
+
+def test_the_opponent_axis_counts_a_match_without_a_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match carries points long before anyone records who won it.
+
+    So the axis groups every match naming the opponent, not the resulted ones the
+    win/loss record is counted over, and the picker's count says the same.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    resulted = make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Torres",
+        played_on=date(2026, 8, 1),
+        result=MatchResult.WIN,
+    )
+    in_flight = _make_meeting(db_session, player.id, "Torres", 2)
+    make_point(db_session, match_id=resulted.id, sequence=0)
+    make_point(db_session, match_id=in_flight.id, sequence=0)
+
+    body = _get(client, player.id, "rally?opponent_key=torres")
+
+    assert body["errors_overall"]["sample_size"] == "n=2"
+    assert _get(client, player.id, "opponents") == [
+        {"key": "torres", "name": "Torres", "matches": 2}
+    ]
+
+
+def test_serve_narrows_to_one_opponent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two service points against Torres, one double-faulted against Naidoo."""
+    player = make_player(db_session, coach_id=coach.id)
+    torres = _make_meeting(db_session, player.id, "Torres", 1)
+    naidoo = _make_meeting(db_session, player.id, "Naidoo", 2)
+    make_point(db_session, match_id=torres.id, sequence=0)
+    make_point(db_session, match_id=torres.id, sequence=1, is_game_end=True)
+    make_point(
+        db_session,
+        match_id=naidoo.id,
+        sequence=0,
+        won=False,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.LONG,
+        end_reason=EndReason.DOUBLE_FAULT,
+        wing=None,
+        shot_type=None,
+    )
+
+    serving = _get(client, player.id, "serve?opponent_key=torres")["serving"]
+
+    assert serving["hero"]["value"] == 100
+    assert [
+        (metric["label"], metric["value"], metric["sample_size"]) for metric in serving["metrics"]
+    ] == [
+        ("1st serve in %", 100, "n=2"),
+        ("1st serve points won", 100, "n=2"),
+        ("Double faults / set", 0.0, "n=1 sets"),
+        ("Aces / match", 0.0, "n=1"),
+    ]
+
+
+def test_rally_narrows_to_one_opponent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A forehand drive won against Torres, a backhand volley against Naidoo."""
+    player = make_player(db_session, coach_id=coach.id)
+    torres = _make_meeting(db_session, player.id, "Torres", 1)
+    naidoo = _make_meeting(db_session, player.id, "Naidoo", 2)
+    make_point(db_session, match_id=torres.id, sequence=0)
+    make_point(
+        db_session,
+        match_id=naidoo.id,
+        sequence=0,
+        wing=Wing.BACKHAND,
+        shot_type=ShotType.VOLLEY,
+    )
+
+    body = _get(client, player.id, "rally?opponent_key=naidoo")
+
+    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert body["won_by_shot"] == [
+        {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
+    ]
+
+
+def test_overview_narrows_to_one_opponent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Three results against Torres and one against Naidoo, all this year.
+
+    Every field narrows together: the record and the form are counted over the three
+    meetings, and the hold percentage over the one service game held inside them,
+    where all matches together hold half of two.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    meetings = [
+        make_match(
+            db_session,
+            player_id=player.id,
+            opponent_name="Torres",
+            played_on=date(THIS_YEAR, 7, day),
+            result=MatchResult(result),
+        )
+        for day, result in enumerate(["win", "loss", "win"], start=1)
+    ]
+    make_point(db_session, match_id=meetings[0].id, sequence=0, is_game_end=True)
+    naidoo = make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Naidoo",
+        played_on=date(THIS_YEAR, 7, 4),
+        result=MatchResult.WIN,
+    )
+    make_point(db_session, match_id=naidoo.id, sequence=0, is_game_end=True, won=False)
+
+    body = _get(client, player.id, "overview?opponent_key=torres")
+
+    assert body["recent_results"] == ["win", "loss", "win"]
+    assert body["all_time_record"] == {"wins": 2, "losses": 1}
+    assert body["season_record"] == {"wins": 2, "losses": 1}
+    assert (body["form"]["value"], body["form"]["sample_size"]) == (67, "n=3")
+    assert (body["hold_percentage"]["value"], body["hold_percentage"]["sample_size"]) == (
+        100,
+        "n=1",
+    )
+    assert _get(client, player.id, "overview")["hold_percentage"]["value"] == 50
+
+
+def test_opponent_set_and_phase_narrow_together(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A break point in each set against Torres, and one in set 2 against Naidoo."""
+    player = make_player(db_session, coach_id=coach.id)
+    torres = _make_meeting(db_session, player.id, "Torres", 1)
+    naidoo = _make_meeting(db_session, player.id, "Naidoo", 2)
+    make_point(db_session, match_id=torres.id, sequence=0, is_break_point=True)
+    make_point(db_session, match_id=torres.id, sequence=1, set_number=2, is_break_point=True)
+    make_point(db_session, match_id=torres.id, sequence=2, set_number=2)
+    make_point(db_session, match_id=naidoo.id, sequence=0, set_number=2, is_break_point=True)
+
+    serving = _get(client, player.id, "serve?opponent_key=torres&set_number=2&phase=break_points")[
+        "serving"
+    ]
+
+    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
+        "Break points saved",
+        "n=1",
+    )
+
+
+def test_an_opponent_key_reaches_any_spelling_of_the_name(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The key is trimmed and lowercased on the way in as well as on the way out.
+
+    The display name stays exactly as the coach typed it, so a hand-typed key still
+    lands on the matchup the picker would have handed back.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = _make_meeting(db_session, player.id, "  Torres  ", 1)
+    make_point(db_session, match_id=match.id, sequence=0)
+
+    assert _get(client, player.id, "opponents") == [
+        {"key": "torres", "name": "  Torres  ", "matches": 1}
+    ]
+
+    response = client.get(
+        f"/players/{player.id}/analytics/rally", params={"opponent_key": " TORRES "}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["errors_overall"]["sample_size"] == "n=1"
+
+
+@pytest.mark.parametrize("suffix", ["overview", "serve", "rally"])
+def test_an_unknown_opponent_key_is_refused(
+    client: TestClient, db_session: Session, coach: Coach, suffix: str
+) -> None:
+    """A picker option outlives the match that put it there, so the tab says so."""
+    player = make_player(db_session, coach_id=coach.id)
+    _make_meeting(db_session, player.id, "Torres", 1)
+
+    response = client.get(f"/players/{player.id}/analytics/{suffix}?opponent_key=naidoo")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "No matches against this opponent"
+
+
+@pytest.mark.parametrize("suffix", ["overview", "serve", "rally"])
+def test_a_blank_opponent_key_is_refused(
+    client: TestClient, db_session: Session, coach: Coach, suffix: str
+) -> None:
+    """Every opponent at once is the parameter omitted, never sent empty.
+
+    A blank is a caller bug rather than a matchup nothing answers to, so it is the
+    422 the parameter's own bound raises and not the unknown key's 404.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _make_meeting(db_session, player.id, "Torres", 1)
+
+    response = client.get(f"/players/{player.id}/analytics/{suffix}?opponent_key=")
+
+    assert response.status_code == 422
+
+
 # --- per-match scoping ---
 
 # The match-scoped router answers the same two tabs, so its tests cover the same pair.
@@ -1564,35 +1817,6 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert (player_wide["won"], player_wide["lost"]) == (1, 1)
     assert player_wide["errors_overall"]["sample_size"] == "n=2"
     assert [style["count"] for style in player_wide["styles"]["opponents"]] == [0, 1, 0]
-
-
-# --- opponent grouping ---
-
-
-def test_meetings_group_on_the_normalised_opponent_name(db_session: Session) -> None:
-    """Spelling variants of one name are one matchup, newest meeting first; a
-    resultless match and a nameless one join no matchup at all.
-
-    Called directly rather than through a route: the head-to-head endpoints this fed
-    are gone (#245), and the opponent axis that reads it next (#244) is not written.
-    """
-    player = make_player(db_session)
-    spellings = [("torres", "win", 1), (" Torres ", "win", 2), ("Torres", "loss", 3)]
-    for name, result, day in spellings:
-        make_match(
-            db_session,
-            player_id=player.id,
-            opponent_name=name,
-            played_on=date(2026, 8, day),
-            result=MatchResult(result),
-        )
-    make_match(db_session, player_id=player.id, played_on=date(2026, 8, 4), result=MatchResult.WIN)
-    make_match(db_session, player_id=player.id, opponent_name="Reyes", played_on=date(2026, 8, 5))
-
-    groups = _meetings_by_opponent(db_session, player.id)
-
-    assert list(groups) == ["torres"]
-    assert [row.opponent_name for row in groups["torres"]] == ["Torres", " Torres ", "torres"]
 
 
 # --- squad members (#204) ---

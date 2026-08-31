@@ -7,7 +7,7 @@ from itertools import chain, takewhile
 from statistics import fmean, pstdev
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Row, and_, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,7 @@ from matchpoint_api.schemas.analytics import (
     FaultModeSplit,
     Metric,
     MetricUnit,
+    OpponentSummary,
     OutcomeMixRow,
     PlayerOverview,
     PointEnderKind,
@@ -117,6 +118,23 @@ SetFilter = Annotated[
 PhaseFilter = Annotated[
     PointPhase, Query(description="Count only points the capture client stamped as this moment.")
 ]
+OpponentFilter = Annotated[
+    str | None,
+    # Bounded so a blank key is a 422 rather than the 404 an unknown one earns: the
+    # picker sends "all opponents" by omitting the parameter, and a `<select>` whose
+    # all option carries "" is a wiring bug the spec can name before a request goes out.
+    Query(
+        min_length=1,
+        description="Count only matches against this opponent, keyed as `/opponents` returns.",
+    ),
+]
+
+# A key no match answers to is declared because the client can act on it: a picker
+# option outlives the matches that put it there, so a stale key sends the panel back
+# to all matches, where a tab quietly counting nothing would read as a bad season.
+OPPONENT_NOT_FOUND: dict[int | str, dict[str, Any]] = {
+    404: {"model": ErrorDetail, "description": "No matches against this opponent"}
+}
 
 # Bars need a ceiling even where a rate has no natural one; these match the scale the
 # dashboard was designed against, and a value past one simply becomes its own ceiling.
@@ -524,17 +542,97 @@ def _form_metric(results: Sequence[Row[Any]]) -> Metric | None:
     return current
 
 
-@router.get("/overview", response_model=PlayerOverview)
-def get_player_overview(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> PlayerOverview:
-    """The overview tab: form, the headline rates, and the win/loss record.
+def _normalised(opponent_name: str) -> str:
+    return opponent_name.strip().lower()
 
-    Whole-career only, and takes no set or phase filter (#227): four of its seven
-    fields are counted over matches rather than points, so a scoped request would
-    answer with three narrowed numbers beside four that quietly ignored the scope.
+
+def _matches_by_opponent(db: Session, player_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
+    """The player's named-opponent matches grouped by matchup key, newest first.
+
+    Free text is the whole identity (#172): opponents are rarely in the coach's
+    roster, so the trimmed lowercase name is the matchup key, and a typo splitting
+    one opponent in two is the accepted cost.
+    """
+    groups: dict[str, list[Row[Any]]] = {}
+    for row in db.execute(
+        select(Match.id, Match.result, Match.played_on, Match.opponent_name)
+        .where(Match.player_id == player_id, Match.opponent_name.is_not(None))
+        .order_by(Match.played_on.desc(), Match.created_at.desc())
+    ):
+        groups.setdefault(_normalised(row.opponent_name), []).append(row)
+    return groups
+
+
+def _opponent_matches(
+    db: Session, player_id: uuid.UUID, opponent_key: str | None
+) -> list[Row[Any]] | None:
+    """The player's matches against one opponent, or None where none was named.
+
+    The incoming key is normalised again so a caller may send a name as the coach
+    spelled it, and an unmatched one is the refusal `OPPONENT_NOT_FOUND` declares.
+    """
+    if opponent_key is None:
+        return None
+    matches = _matches_by_opponent(db, player_id).get(_normalised(opponent_key))
+    if matches is None:
+        raise HTTPException(status_code=404, detail="No matches against this opponent")
+    return matches
+
+
+def _player_scope(
+    db: Session,
+    player_id: uuid.UUID,
+    opponent_key: str | None,
+    set_number: int | None,
+    phase: PointPhase,
+) -> PointScope:
+    """The three axes the stats scope panel commits at once, as one scope (#244)."""
+    matches = _opponent_matches(db, player_id, opponent_key)
+    return PointScope(
+        match_ids=None if matches is None else [row.id for row in matches],
+        set_number=set_number,
+        phase=phase,
+    )
+
+
+@router.get("/opponents", response_model=list[OpponentSummary])
+def list_opponents(
+    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+) -> list[OpponentSummary]:
+    """Every opponent this player has met, most-met first, then by key.
+
+    What the scope panel's picker offers, so each row's key is exactly what the tabs
+    take back as `opponent_key`. Ordered on the key rather than the display name
+    because it is the one spelling of a matchup that cannot vary.
     """
     owned_player(db, player_id, coach.id)
-    results = _results_newest_first(db, player_id)
-    counts = _point_counts(db, player_id, PointScope())
+    summaries = [
+        # The group is newest first, so its first row carries the latest spelling.
+        OpponentSummary(key=key, name=matches[0].opponent_name, matches=len(matches))
+        for key, matches in _matches_by_opponent(db, player_id).items()
+    ]
+    return sorted(summaries, key=lambda summary: (-summary.matches, summary.key))
+
+
+@router.get("/overview", response_model=PlayerOverview, responses=OPPONENT_NOT_FOUND)
+def get_player_overview(
+    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach, opponent_key: OpponentFilter = None
+) -> PlayerOverview:
+    """The overview tab: form, the headline rates, and the win/loss record.
+
+    Takes the opponent axis and not the set or phase one (#227, #244): an opponent
+    narrows matches, which all seven fields are counted over one way or the other,
+    where a set or a phase could reach only the three counted over points.
+    """
+    owned_player(db, player_id, coach.id)
+    matches = _opponent_matches(db, player_id, opponent_key)
+    if matches is None:
+        results = _results_newest_first(db, player_id)
+        scope = PointScope()
+    else:
+        results = [row for row in matches if row.result is not None]
+        scope = PointScope(match_ids=[row.id for row in matches])
+    counts = _point_counts(db, player_id, scope)
 
     this_year = [row for row in results if row.played_on.year == date.today().year]
     recent = results[:5]
@@ -851,17 +949,18 @@ def _serve_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> ServeSta
     )
 
 
-@router.get("/serve", response_model=ServeStats)
+@router.get("/serve", response_model=ServeStats, responses=OPPONENT_NOT_FOUND)
 def get_serve_stats(
     player_id: uuid.UUID,
     db: DbSession,
     coach: CurrentCoach,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
+    opponent_key: OpponentFilter = None,
 ) -> ServeStats:
     """The serve tab, both sides at once so toggling costs no second request."""
     owned_player(db, player_id, coach.id)
-    return _serve_tab(db, player_id, PointScope(set_number=set_number, phase=phase))
+    return _serve_tab(db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase))
 
 
 @match_router.get("/serve", response_model=ServeStats)
@@ -1077,17 +1176,18 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
     )
 
 
-@router.get("/rally", response_model=RallyStats)
+@router.get("/rally", response_model=RallyStats, responses=OPPONENT_NOT_FOUND)
 def get_rally_stats(
     player_id: uuid.UUID,
     db: DbSession,
     coach: CurrentCoach,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
+    opponent_key: OpponentFilter = None,
 ) -> RallyStats:
     """The rally tab: how points end once the ball is in play."""
     owned_player(db, player_id, coach.id)
-    return _rally_tab(db, player_id, PointScope(set_number=set_number, phase=phase))
+    return _rally_tab(db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase))
 
 
 @match_router.get("/rally", response_model=RallyStats)
@@ -1102,28 +1202,6 @@ def get_match_rally_stats(
     match = match_for_coach(db, match_id, coach.id)
     scope = PointScope(match_ids=[match.id], set_number=set_number, phase=phase)
     return _rally_tab(db, match.player_id, scope)
-
-
-# Without a caller until the opponent axis (#244) lands: the head-to-head endpoints
-# these two fed went with the tabs that drew them (#245), and the grouping is the part
-# that survives, being what makes one free-text name one opponent.
-def _normalised(opponent_name: str) -> str:
-    return opponent_name.strip().lower()
-
-
-def _meetings_by_opponent(db: Session, player_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
-    """The player's resulted matches grouped by normalised opponent name.
-
-    Free text is the whole identity (#172): opponents are rarely in the coach's
-    roster, so the trimmed lowercase name is the matchup key, and a typo splitting
-    one opponent in two is the accepted cost.
-    """
-    groups: dict[str, list[Row[Any]]] = {}
-    for row in _results_newest_first(db, player_id):
-        if row.opponent_name is None:
-            continue
-        groups.setdefault(_normalised(row.opponent_name), []).append(row)
-    return groups
 
 
 def _percent_value(part: int, whole: int) -> float:

@@ -528,6 +528,26 @@ export type Metric = {
 export type MetricUnit = 'percent' | 'ratio' | 'per_set' | 'per_match';
 
 /**
+ * OpponentSummary
+ *
+ * One opponent a player has met, as the scope panel's picker lists them (#244).
+ */
+export type OpponentSummary = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Matches
+     */
+    matches: number;
+    /**
+     * Name
+     */
+    name: string;
+};
+
+/**
  * OtpRequest
  */
 export type OtpRequest = {
@@ -3066,7 +3086,7 @@ export type UpdatePlayerResponses = {
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
 
-export type GetPlayerOverviewData = {
+export type ListOpponentsData = {
     body?: never;
     path: {
         /**
@@ -3075,6 +3095,53 @@ export type GetPlayerOverviewData = {
         player_id: string;
     };
     query?: never;
+    url: '/players/{player_id}/analytics/opponents';
+};
+
+export type ListOpponentsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListOpponentsError = ListOpponentsErrors[keyof ListOpponentsErrors];
+
+export type ListOpponentsResponses = {
+    /**
+     * Response List Opponents
+     *
+     * Successful Response
+     */
+    200: Array<OpponentSummary>;
+};
+
+export type ListOpponentsResponse = ListOpponentsResponses[keyof ListOpponentsResponses];
+
+export type GetPlayerOverviewData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: {
+        /**
+         * Opponent Key
+         *
+         * Count only matches against this opponent, keyed as `/opponents` returns.
+         */
+        opponent_key?: string | null;
+    };
     url: '/players/{player_id}/analytics/overview';
 };
 
@@ -3083,6 +3150,10 @@ export type GetPlayerOverviewErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * No matches against this opponent
+     */
+    404: ErrorDetail;
     /**
      * Validation Error
      */
@@ -3123,6 +3194,12 @@ export type GetRallyStatsData = {
          * Count only points the capture client stamped as this moment.
          */
         phase?: PointPhase;
+        /**
+         * Opponent Key
+         *
+         * Count only matches against this opponent, keyed as `/opponents` returns.
+         */
+        opponent_key?: string | null;
     };
     url: '/players/{player_id}/analytics/rally';
 };
@@ -3132,6 +3209,10 @@ export type GetRallyStatsErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * No matches against this opponent
+     */
+    404: ErrorDetail;
     /**
      * Validation Error
      */
@@ -3172,6 +3253,12 @@ export type GetServeStatsData = {
          * Count only points the capture client stamped as this moment.
          */
         phase?: PointPhase;
+        /**
+         * Opponent Key
+         *
+         * Count only matches against this opponent, keyed as `/opponents` returns.
+         */
+        opponent_key?: string | null;
     };
     url: '/players/{player_id}/analytics/serve';
 };
@@ -3181,6 +3268,10 @@ export type GetServeStatsErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * No matches against this opponent
+     */
+    404: ErrorDetail;
     /**
      * Validation Error
      */

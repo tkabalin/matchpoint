@@ -971,6 +971,30 @@
         "title": "MetricUnit",
         "type": "string"
       },
+      "OpponentSummary": {
+        "description": "One opponent a player has met, as the scope panel's picker lists them (#244).",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "matches": {
+            "title": "Matches",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "matches"
+        ],
+        "title": "OpponentSummary",
+        "type": "object"
+      },
       "OtpRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5485,9 +5509,77 @@
         ]
       }
     },
+    "/players/{player_id}/analytics/opponents": {
+      "get": {
+        "description": "Every opponent this player has met, most-met first, then by key.\n\nWhat the scope panel's picker offers, so each row's key is exactly what the tabs\ntake back as `opponent_key`. Ordered on the key rather than the display name\nbecause it is the one spelling of a matchup that cannot vary.",
+        "operationId": "list_opponents",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OpponentSummary"
+                  },
+                  "title": "Response List Opponents",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Opponents",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/players/{player_id}/analytics/overview": {
       "get": {
-        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nWhole-career only, and takes no set or phase filter (#227): four of its seven\nfields are counted over matches rather than points, so a scoped request would\nanswer with three narrowed numbers beside four that quietly ignored the scope.",
+        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nTakes the opponent axis and not the set or phase one (#227, #244): an opponent\nnarrows matches, which all seven fields are counted over one way or the other,\nwhere a set or a phase could reach only the three counted over points.",
         "operationId": "get_player_overview",
         "parameters": [
           {
@@ -5498,6 +5590,25 @@
               "format": "uuid",
               "title": "Player Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+            "in": "query",
+            "name": "opponent_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+              "title": "Opponent Key"
             }
           }
         ],
@@ -5521,6 +5632,16 @@
               }
             },
             "description": "Not signed in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "No matches against this opponent"
           },
           "422": {
             "content": {
@@ -5594,6 +5715,25 @@
               "default": "full",
               "description": "Count only points the capture client stamped as this moment."
             }
+          },
+          {
+            "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+            "in": "query",
+            "name": "opponent_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+              "title": "Opponent Key"
+            }
           }
         ],
         "responses": {
@@ -5616,6 +5756,16 @@
               }
             },
             "description": "Not signed in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "No matches against this opponent"
           },
           "422": {
             "content": {
@@ -5689,6 +5839,25 @@
               "default": "full",
               "description": "Count only points the capture client stamped as this moment."
             }
+          },
+          {
+            "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+            "in": "query",
+            "name": "opponent_key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
+              "title": "Opponent Key"
+            }
           }
         ],
         "responses": {
@@ -5711,6 +5880,16 @@
               }
             },
             "description": "Not signed in"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "No matches against this opponent"
           },
           "422": {
             "content": {
