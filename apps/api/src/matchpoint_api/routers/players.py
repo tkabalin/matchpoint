@@ -21,6 +21,7 @@ from matchpoint_api.models import (
     DeletedMatch,
     Match,
     Player,
+    PlayerNote,
     PlayerSession,
     PlayerTransferCode,
     Point,
@@ -35,6 +36,11 @@ from matchpoint_api.schemas.player import (
     PlayerTransferCodeRead,
     PlayerUpdate,
     RedeemTransferCodeRequest,
+)
+from matchpoint_api.schemas.player_note import (
+    PlayerNoteCreate,
+    PlayerNoteRead,
+    PlayerNoteUpdate,
 )
 from matchpoint_api.security import hash_password
 from matchpoint_api.usernames import next_username
@@ -218,6 +224,9 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     # Their logins go with them: a session row authenticating a deleted player is a
     # foreign-key refusal waiting at the flush, and a credential nobody should hold.
     db.execute(delete(PlayerSession).where(PlayerSession.player_id == player.id))
+    # The coach's notes about them go too: they are writing about a player who no
+    # longer exists, and the foreign key would refuse the delete over them anyway.
+    db.execute(delete(PlayerNote).where(PlayerNote.player_id == player.id))
     db.delete(player)
     db.commit()
     # After the commit, as everywhere else a row and a file change together: the row is
@@ -291,6 +300,82 @@ def delete_player_photo(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach
     if player.photo_key is not None:
         photos.replace_key(db, player, None)
     return player
+
+
+# Coach notes (#246): what the coach noticed in a session, kept as a dated timeline
+# rather than in the single `players.notes` blurb, which is the profile's standing
+# description and is overwritten every time it is edited. Both are the coach's own and
+# neither is readable by the player.
+
+
+def owned_note(
+    db: Session, player_id: uuid.UUID, note_id: uuid.UUID, coach_id: uuid.UUID
+) -> PlayerNote:
+    """One note of one of the coach's players, or the 404 an unknown id gets.
+
+    The player is taken `for_update` on the way through, as every writing route takes
+    it: that lock also serialises concurrent writes to the same player's notes, so the
+    note row itself needs none of its own.
+    """
+    player = owned_player(db, player_id, coach_id, for_update=True)
+    note = db.get(PlayerNote, note_id)
+    # Another player's note is as unknown as an id that was never written, including
+    # when the other player is this coach's: the note is addressed through a player,
+    # so one reached through the wrong one is not the row the caller named.
+    if note is None or note.player_id != player.id:
+        raise HTTPException(status_code=404, detail="Note not found")
+    return note
+
+
+@router.get("/{player_id}/notes", response_model=list[PlayerNoteRead])
+def list_player_notes(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list[PlayerNote]:
+    """This player's notes, most recent session first."""
+    player = owned_player(db, player_id, coach.id)
+    statement = select(PlayerNote).where(PlayerNote.player_id == player.id)
+    # By the session the note is about, not the moment it was typed, which is the order
+    # the coach reads it in. created_at breaks a tie, so two notes about one session
+    # come back newest-written first rather than arbitrarily.
+    return list(
+        db.scalars(statement.order_by(PlayerNote.recorded_on.desc(), PlayerNote.created_at.desc()))
+    )
+
+
+@router.post("/{player_id}/notes", status_code=201, response_model=PlayerNoteRead)
+def create_player_note(
+    player_id: uuid.UUID, data: PlayerNoteCreate, db: DbSession, coach: CurrentCoach
+) -> PlayerNote:
+    player = owned_player(db, player_id, coach.id, for_update=True)
+    # PlayerNoteCreate carries exactly the client-settable columns, which is what makes
+    # the splat safe: player_id is not on it, so the note lands against the player in
+    # the path and no other.
+    note = PlayerNote(**data.model_dump(), player_id=player.id)
+    db.add(note)
+    db.commit()
+    return note
+
+
+@router.patch("/{player_id}/notes/{note_id}", response_model=PlayerNoteRead)
+def update_player_note(
+    player_id: uuid.UUID,
+    note_id: uuid.UUID,
+    data: PlayerNoteUpdate,
+    db: DbSession,
+    coach: CurrentCoach,
+) -> PlayerNote:
+    note = owned_note(db, player_id, note_id, coach.id)
+    data.apply_to(note)
+    db.commit()
+    return note
+
+
+@router.delete("/{player_id}/notes/{note_id}", status_code=204)
+def delete_player_note(
+    player_id: uuid.UUID, note_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+) -> None:
+    """Erase one note. Nothing undoes it, and nothing else goes with it."""
+    note = owned_note(db, player_id, note_id, coach.id)
+    db.delete(note)
+    db.commit()
 
 
 # Transferring a player (#173): players change coach as they grow up, and the roster is

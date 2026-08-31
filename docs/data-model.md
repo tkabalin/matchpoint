@@ -16,6 +16,7 @@ erDiagram
     coaches ||--o| password_resets : "resets password via"
     players ||--o{ player_sessions : "signs in as"
     players ||--o| player_transfer_codes : "moves coach via"
+    players ||--o{ player_notes : "is written up in"
     players ||--o{ matches : plays
     matches ||--o{ match_sets : "is scored in"
     matches ||--o{ points : "is captured as"
@@ -85,6 +86,16 @@ erDiagram
         uuid player_id FK "the signed-in player"
         varchar(64) token_hash UK "sha-256 of the cookie token, never the token"
         timestamptz expires_at "a deadline slid forward on use"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    player_notes {
+        uuid id PK
+        uuid player_id FK "the player the note is about, and the note's only owner"
+        text body "what the coach noticed"
+        date recorded_on "the session the note is about, not when it was written"
+        varchar[] focus_areas "varchar(9) elements: technical, mental, physical, tactical; empty when filed under none"
         timestamptz created_at
         timestamptz updated_at
     }
@@ -207,6 +218,13 @@ follow through the player. One row per player; minting again replaces the old co
 refuses deletion of the player or closure of the minting coach's account, since the code is a claim
 another coach may still act on.
 
+`player_notes` is the coach's running record of what they noticed, one row per note, dated to the
+session rather than to the moment it was typed so a write-up done later files under the day it is
+about. `players.notes` is a different field and stays: it is the profile's standing description,
+overwritten on each edit, where these accumulate. A note reaches its coach through its player, as a
+match does, so a transfer carries the notes to the new coach and neither field is readable by the
+player.
+
 ## Conventions
 
 **UUID primary keys, not serials.** Capture happens offline, so a row needs an identity before any
@@ -218,6 +236,8 @@ a batch of rows synced together would share a creation time. Every table carries
 
 **Enums are VARCHAR with a named CHECK constraint**, not native Postgres enums. Postgres cannot
 remove a value from a native enum, so a migration adding one could not be rolled back.
+`player_notes.focus_areas` is the one multi-valued enum: a VARCHAR array whose CHECK constrains the
+elements rather than the column, so it keeps the same rollback property.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** A delete that would orphan rows
 is refused. Routes that intend to cascade (deleting a match, a player, or closing an account) delete

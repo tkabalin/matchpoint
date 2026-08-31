@@ -528,6 +528,13 @@ export type Metric = {
 export type MetricUnit = 'percent' | 'ratio' | 'per_set' | 'per_match';
 
 /**
+ * NoteFocus
+ *
+ * A training focus area a note is filed under.
+ */
+export type NoteFocus = 'technical' | 'mental' | 'physical' | 'tactical';
+
+/**
  * OpponentSummary
  *
  * One opponent a player has met, as the scope panel's picker lists them (#244).
@@ -687,6 +694,83 @@ export type PlayerLoginRequest = {
      * Username
      */
     username: string;
+};
+
+/**
+ * PlayerNoteCreate
+ *
+ * A coach's note about one player. The player is the path, never the body.
+ */
+export type PlayerNoteCreate = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Focus Areas
+     */
+    focus_areas?: Array<NoteFocus>;
+    /**
+     * Recorded On
+     */
+    recorded_on: string;
+};
+
+/**
+ * PlayerNoteRead
+ */
+export type PlayerNoteRead = {
+    /**
+     * Body
+     */
+    body: string;
+    /**
+     * Created At
+     */
+    created_at: string;
+    /**
+     * Focus Areas
+     */
+    focus_areas: Array<NoteFocus>;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Player Id
+     */
+    player_id: string;
+    /**
+     * Recorded On
+     */
+    recorded_on: string;
+    /**
+     * Updated At
+     */
+    updated_at: string;
+};
+
+/**
+ * PlayerNoteUpdate
+ *
+ * Every field a note may change after it is written, each optional.
+ *
+ * player_id is absent for MatchUpdate's reason: a note reaches its owner through its
+ * player, so a writable one would let a note walk across that ownership boundary.
+ */
+export type PlayerNoteUpdate = {
+    /**
+     * Body
+     */
+    body?: string;
+    /**
+     * Focus Areas
+     */
+    focus_areas?: Array<NoteFocus>;
+    /**
+     * Recorded On
+     */
+    recorded_on?: string;
 };
 
 /**
@@ -3292,6 +3376,168 @@ export type GetServeStatsResponses = {
 };
 
 export type GetServeStatsResponse = GetServeStatsResponses[keyof GetServeStatsResponses];
+
+export type ListPlayerNotesData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/notes';
+};
+
+export type ListPlayerNotesErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListPlayerNotesError = ListPlayerNotesErrors[keyof ListPlayerNotesErrors];
+
+export type ListPlayerNotesResponses = {
+    /**
+     * Response List Player Notes
+     *
+     * Successful Response
+     */
+    200: Array<PlayerNoteRead>;
+};
+
+export type ListPlayerNotesResponse = ListPlayerNotesResponses[keyof ListPlayerNotesResponses];
+
+export type CreatePlayerNoteData = {
+    body: PlayerNoteCreate;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/notes';
+};
+
+export type CreatePlayerNoteErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type CreatePlayerNoteError = CreatePlayerNoteErrors[keyof CreatePlayerNoteErrors];
+
+export type CreatePlayerNoteResponses = {
+    /**
+     * Successful Response
+     */
+    201: PlayerNoteRead;
+};
+
+export type CreatePlayerNoteResponse = CreatePlayerNoteResponses[keyof CreatePlayerNoteResponses];
+
+export type DeletePlayerNoteData = {
+    body?: never;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+        /**
+         * Note Id
+         */
+        note_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/notes/{note_id}';
+};
+
+export type DeletePlayerNoteErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeletePlayerNoteError = DeletePlayerNoteErrors[keyof DeletePlayerNoteErrors];
+
+export type DeletePlayerNoteResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePlayerNoteResponse = DeletePlayerNoteResponses[keyof DeletePlayerNoteResponses];
+
+export type UpdatePlayerNoteData = {
+    body: PlayerNoteUpdate;
+    path: {
+        /**
+         * Player Id
+         */
+        player_id: string;
+        /**
+         * Note Id
+         */
+        note_id: string;
+    };
+    query?: never;
+    url: '/players/{player_id}/notes/{note_id}';
+};
+
+export type UpdatePlayerNoteErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type UpdatePlayerNoteError = UpdatePlayerNoteErrors[keyof UpdatePlayerNoteErrors];
+
+export type UpdatePlayerNoteResponses = {
+    /**
+     * Successful Response
+     */
+    200: PlayerNoteRead;
+};
+
+export type UpdatePlayerNoteResponse = UpdatePlayerNoteResponses[keyof UpdatePlayerNoteResponses];
 
 export type RegeneratePlayerPasswordData = {
     body?: never;

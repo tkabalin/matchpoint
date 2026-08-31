@@ -18,6 +18,7 @@ from matchpoint_api.models import (
     DominantHand,
     Match,
     Player,
+    PlayerNote,
     PlayerSession,
     PlayerTransferCode,
     Point,
@@ -42,6 +43,7 @@ from tests.factories import (
     make_coach,
     make_match,
     make_player,
+    make_player_note,
     make_player_session,
     make_player_transfer_code,
     make_point,
@@ -935,6 +937,10 @@ def test_delete_player_unknown_id_is_404(client: TestClient) -> None:
         ("post", f"/players/{uuid.UUID(int=0)}/transfer-code"),
         ("delete", f"/players/{uuid.UUID(int=0)}/transfer-code"),
         ("post", "/players/redeem-transfer-code"),
+        ("get", f"/players/{uuid.UUID(int=0)}/notes"),
+        ("post", f"/players/{uuid.UUID(int=0)}/notes"),
+        ("patch", f"/players/{uuid.UUID(int=0)}/notes/{uuid.UUID(int=0)}"),
+        ("delete", f"/players/{uuid.UUID(int=0)}/notes/{uuid.UUID(int=0)}"),
     ],
 )
 def test_player_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
@@ -1356,3 +1362,315 @@ def test_a_transferred_player_keeps_their_photo(
 
     assert response.status_code == 200
     assert response.json()["photo_url"] is not None
+
+
+# Coach notes (#246). The sheet that writes these had no endpoint behind it, so the
+# first test here is the bug it was filed for: a note that does not outlive the page.
+
+
+def _note_payload(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {"body": "Toss drifted left.", "recorded_on": "2026-08-15"}
+    return payload | overrides
+
+
+def test_a_note_survives_the_write_and_comes_back_on_the_next_read(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """#246 in one test: the note is stored, not held in the tab that wrote it, so the
+    read that a reload performs answers with it."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    created = client.post(f"/players/{player.id}/notes", json=_note_payload())
+
+    assert created.status_code == 201
+    body = created.json()
+    assert body["body"] == "Toss drifted left."
+    assert body["recorded_on"] == "2026-08-15"
+    assert body["player_id"] == str(player.id)
+
+    reread = client.get(f"/players/{player.id}/notes")
+    assert reread.status_code == 200
+    assert [note["id"] for note in reread.json()] == [body["id"]]
+
+    saved = db_session.get(PlayerNote, uuid.UUID(body["id"]))
+    assert saved is not None
+    assert saved.player_id == player.id
+
+
+def test_create_note_files_it_under_the_areas_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Filed in the enum's order rather than the order they were tapped, so the same
+    two areas always read back the same way."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(
+        f"/players/{player.id}/notes", json=_note_payload(focus_areas=["mental", "technical"])
+    )
+
+    assert response.status_code == 201
+    assert response.json()["focus_areas"] == ["technical", "mental"]
+
+
+def test_create_note_defaults_to_no_focus_areas(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The quick-note path: a body, a date, and nothing else to tap."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(f"/players/{player.id}/notes", json=_note_payload())
+
+    assert response.status_code == 201
+    assert response.json()["focus_areas"] == []
+
+
+def test_create_note_cannot_name_a_player_in_the_body(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The note's player is the path and nothing else, which is what makes the splat in
+    the route safe: a body naming one is a 422 from extra="forbid"."""
+    player = make_player(db_session, coach_id=coach.id)
+    other = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.post(
+        f"/players/{player.id}/notes", json=_note_payload(player_id=str(other.id))
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_note_against_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The ownership 404 every player route answers, and it stores nothing."""
+    theirs = make_player(db_session)
+    db_session.commit()
+
+    response = client.post(f"/players/{theirs.id}/notes", json=_note_payload())
+
+    assert response.status_code == 404
+    assert db_session.scalar(select(func.count()).select_from(PlayerNote)) == 0
+
+
+def test_list_notes_is_newest_session_first(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Ordered by the session the note is about, not by when it was typed: a note
+    written today about last week's session belongs under this week's."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_player_note(db_session, player_id=player.id, body="Older", recorded_on=date(2026, 8, 1))
+    make_player_note(db_session, player_id=player.id, body="Newer", recorded_on=date(2026, 8, 20))
+    make_player_note(db_session, player_id=player.id, body="Middle", recorded_on=date(2026, 8, 10))
+    db_session.commit()
+
+    response = client.get(f"/players/{player.id}/notes")
+
+    assert response.status_code == 200
+    assert [note["body"] for note in response.json()] == ["Newer", "Middle", "Older"]
+
+
+def test_list_notes_breaks_a_tie_on_when_the_note_was_written(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two notes about one session come back newest-written first, which is why the
+    created_at default is clock_timestamp() and not now()."""
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+    first = client.post(f"/players/{player.id}/notes", json=_note_payload(body="First"))
+    second = client.post(f"/players/{player.id}/notes", json=_note_payload(body="Second"))
+
+    response = client.get(f"/players/{player.id}/notes")
+
+    assert response.status_code == 200
+    assert [note["id"] for note in response.json()] == [
+        second.json()["id"],
+        first.json()["id"],
+    ]
+
+
+def test_list_notes_carries_only_this_players_notes(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One roster, two players: a note is about the player it names, so the other's
+    must be absent outright rather than merely ordered elsewhere."""
+    player = make_player(db_session, coach_id=coach.id)
+    stablemate = make_player(db_session, coach_id=coach.id)
+    make_player_note(db_session, player_id=player.id, body="Theirs")
+    make_player_note(db_session, player_id=stablemate.id, body="Somebody else's")
+    db_session.commit()
+
+    response = client.get(f"/players/{player.id}/notes")
+
+    assert response.status_code == 200
+    assert [note["body"] for note in response.json()] == ["Theirs"]
+
+
+def test_list_notes_with_none_written_is_an_empty_list(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.get(f"/players/{player.id}/notes")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_notes_of_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A coach's notes are the most private thing on the player: the ownership 404 has
+    to answer before any of them is read."""
+    theirs = make_player(db_session)
+    make_player_note(db_session, player_id=theirs.id)
+    db_session.commit()
+
+    response = client.get(f"/players/{theirs.id}/notes")
+
+    assert response.status_code == 404
+
+
+def test_update_note_changes_only_the_fields_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """exclude_unset again: the date is absent from the body, so editing the wording
+    leaves the session the note is about where it was."""
+    player = make_player(db_session, coach_id=coach.id)
+    note = make_player_note(
+        db_session,
+        player_id=player.id,
+        body="Toss drifted left.",
+        recorded_on=date(2026, 8, 15),
+        focus_areas=["technical"],
+    )
+    db_session.commit()
+    # Read before the request, as the player's own PATCH test reads it: the route shares
+    # this session, so afterwards the attribute already holds the value being asserted
+    # against. Nothing in the route touches updated_at, so this pins the column's
+    # onupdate as what moves it.
+    before = note.updated_at
+
+    response = client.patch(
+        f"/players/{player.id}/notes/{note.id}", json={"body": "Toss drifted left all session."}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["body"] == "Toss drifted left all session."
+    assert body["recorded_on"] == "2026-08-15"
+    assert body["focus_areas"] == ["technical"]
+    assert datetime.fromisoformat(body["updated_at"]) > before
+
+    saved = db_session.get(PlayerNote, note.id)
+    assert saved is not None
+    assert saved.body == "Toss drifted left all session."
+
+
+def test_update_note_clears_the_focus_areas_with_an_empty_list(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Empty is how a coach unfiles a note, null being a 422 over a NOT NULL column."""
+    player = make_player(db_session, coach_id=coach.id)
+    note = make_player_note(db_session, player_id=player.id, focus_areas=["mental"])
+    db_session.commit()
+
+    response = client.patch(f"/players/{player.id}/notes/{note.id}", json={"focus_areas": []})
+
+    assert response.status_code == 200
+    assert response.json()["focus_areas"] == []
+
+
+def test_update_note_of_another_coachs_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    theirs = make_player(db_session)
+    note = make_player_note(db_session, player_id=theirs.id, body="Theirs")
+    db_session.commit()
+
+    response = client.patch(f"/players/{theirs.id}/notes/{note.id}", json={"body": "Rewritten"})
+
+    assert response.status_code == 404
+    saved = db_session.get(PlayerNote, note.id)
+    assert saved is not None
+    assert saved.body == "Theirs"
+
+
+def test_a_note_reached_through_the_wrong_player_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Both players are this coach's, so ownership alone would let the note through: a
+    note is addressed by player and id together, and the pair has to agree."""
+    player = make_player(db_session, coach_id=coach.id)
+    stablemate = make_player(db_session, coach_id=coach.id)
+    note = make_player_note(db_session, player_id=stablemate.id)
+    db_session.commit()
+
+    assert client.get(f"/players/{player.id}/notes").json() == []
+    assert client.patch(f"/players/{player.id}/notes/{note.id}", json={}).status_code == 404
+    assert client.delete(f"/players/{player.id}/notes/{note.id}").status_code == 404
+
+
+def test_delete_note_removes_it_and_leaves_the_rest(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    doomed = make_player_note(db_session, player_id=player.id, body="Wrong player")
+    make_player_note(db_session, player_id=player.id, body="Keep")
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}/notes/{doomed.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(PlayerNote, doomed.id) is None
+    assert [note["body"] for note in client.get(f"/players/{player.id}/notes").json()] == ["Keep"]
+
+
+def test_delete_note_unknown_id_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player = make_player(db_session, coach_id=coach.id)
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}/notes/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+
+
+def test_delete_player_takes_their_notes_with_them(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The foreign key declares no ondelete, so a note left behind would stop the
+    player delete outright rather than be orphaned by it."""
+    player = make_player(db_session, coach_id=coach.id)
+    note = make_player_note(db_session, player_id=player.id)
+    db_session.commit()
+
+    response = client.delete(f"/players/{player.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(PlayerNote, note.id) is None
+
+
+def test_a_transferred_player_keeps_their_notes(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Notes reach their coach through the player, so they move with them, which is
+    what `POST /players/{id}/transfer-code` already promises, the history being what
+    the new coach most needs."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_player_note(db_session, player_id=player.id, body="Serve +1 pattern is landing.")
+    db_session.commit()
+    code = _mint(client, player.id)
+    new_coach = make_coach(db_session)
+    sign_in(client, db_session, new_coach)
+
+    assert client.post("/players/redeem-transfer-code", json={"code": code}).status_code == 200
+
+    notes = client.get(f"/players/{player.id}/notes")
+    assert notes.status_code == 200
+    assert [note["body"] for note in notes.json()] == ["Serve +1 pattern is landing."]

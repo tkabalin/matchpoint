@@ -35,6 +35,7 @@ from matchpoint_api.models import (
     MatchSide,
     PasswordReset,
     Player,
+    PlayerNote,
     PlayerSession,
     PlayerTransferCode,
     Point,
@@ -212,6 +213,20 @@ def make_player(session: Session, **overrides: Any) -> Player:
     session.add(player)
     session.flush()
     return player
+
+
+def make_player_note(session: Session, **overrides: Any) -> PlayerNote:
+    if "player_id" not in overrides:
+        overrides["player_id"] = make_player(session).id
+    # Filed under nothing by default, which is what the quick-note path writes; a test
+    # about the focus areas passes its own. The date is fixed rather than today's, so
+    # ordering assertions never depend on when the suite runs.
+    note = PlayerNote(
+        **{"body": "Served well under pressure.", "recorded_on": date(2026, 8, 1)} | overrides
+    )
+    session.add(note)
+    session.flush()
+    return note
 
 
 def make_player_session(session: Session, **overrides: Any) -> PlayerSession:

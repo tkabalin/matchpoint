@@ -442,9 +442,10 @@ than stored. It discloses nothing: only the SHA-256 is kept, so showing the code
 by construction, and the coach who reads the flag is the one who minted it.
 
 **The whole profile moves, notes included.** `players.notes` is the current coach's own prose about
-the player, and it travels with the row. Handing over the context a new coach would otherwise lack
-is what the transfer is for, and the notes are the part written closest to that; they are the
-minting coach's to edit or clear beforehand, so the mint endpoint names them among what leaves.
+the player, and it travels with the row, as does the dated `player_notes` timeline hanging off it.
+Handing over the context a new coach would otherwise lack is what the transfer is for, and the notes
+are the part written closest to that; they are the minting coach's to edit or clear beforehand, so
+the mint endpoint names them among what leaves.
 
 ## Profile photos
 

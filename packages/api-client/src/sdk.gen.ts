@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetMatchData, GetMatchErrors, GetMatchRallyStatsData, GetMatchRallyStatsErrors, GetMatchRallyStatsResponses, GetMatchResponses, GetMatchServeStatsData, GetMatchServeStatsErrors, GetMatchServeStatsResponses, GetPlayerData, GetPlayerErrors, GetPlayerOverviewData, GetPlayerOverviewErrors, GetPlayerOverviewResponses, GetPlayerResponses, GetRallyStatsData, GetRallyStatsErrors, GetRallyStatsResponses, GetServeStatsData, GetServeStatsErrors, GetServeStatsResponses, GetSquadTrendData, GetSquadTrendErrors, GetSquadTrendResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListInProgressMatchesData, ListInProgressMatchesErrors, ListInProgressMatchesResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListOpponentsData, ListOpponentsErrors, ListOpponentsResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, ListSquadMemberStatsData, ListSquadMemberStatsErrors, ListSquadMemberStatsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
+import type { ChangePasswordData, ChangePasswordErrors, ChangePasswordResponses, ChangePlayerPasswordData, ChangePlayerPasswordErrors, ChangePlayerPasswordResponses, ClaimCaptureData, ClaimCaptureErrors, ClaimCaptureResponses, CreateCoachData, CreateCoachErrors, CreateCoachResponses, CreateMatchData, CreateMatchErrors, CreateMatchResponses, CreatePlayerData, CreatePlayerErrors, CreatePlayerNoteData, CreatePlayerNoteErrors, CreatePlayerNoteResponses, CreatePlayerResponses, CreatePlayerTransferCodeData, CreatePlayerTransferCodeErrors, CreatePlayerTransferCodeResponses, DeleteCoachPhotoData, DeleteCoachPhotoErrors, DeleteCoachPhotoResponses, DeleteCurrentCoachData, DeleteCurrentCoachErrors, DeleteCurrentCoachResponses, DeleteMatchData, DeleteMatchErrors, DeleteMatchResponses, DeletePlayerData, DeletePlayerErrors, DeletePlayerNoteData, DeletePlayerNoteErrors, DeletePlayerNoteResponses, DeletePlayerPhotoData, DeletePlayerPhotoErrors, DeletePlayerPhotoResponses, DeletePlayerResponses, DeletePlayerTransferCodeData, DeletePlayerTransferCodeErrors, DeletePlayerTransferCodeResponses, ForgotPasswordData, ForgotPasswordErrors, ForgotPasswordResponses, GetCurrentCoachData, GetCurrentCoachErrors, GetCurrentCoachResponses, GetCurrentPlayerData, GetCurrentPlayerErrors, GetCurrentPlayerResponses, GetMatchData, GetMatchErrors, GetMatchRallyStatsData, GetMatchRallyStatsErrors, GetMatchRallyStatsResponses, GetMatchResponses, GetMatchServeStatsData, GetMatchServeStatsErrors, GetMatchServeStatsResponses, GetPlayerData, GetPlayerErrors, GetPlayerOverviewData, GetPlayerOverviewErrors, GetPlayerOverviewResponses, GetPlayerResponses, GetRallyStatsData, GetRallyStatsErrors, GetRallyStatsResponses, GetServeStatsData, GetServeStatsErrors, GetServeStatsResponses, GetSquadTrendData, GetSquadTrendErrors, GetSquadTrendResponses, HealthData, HealthResponses, IngestPointsData, IngestPointsErrors, IngestPointsResponses, ListInProgressMatchesData, ListInProgressMatchesErrors, ListInProgressMatchesResponses, ListMatchesData, ListMatchesErrors, ListMatchesResponses, ListOpponentsData, ListOpponentsErrors, ListOpponentsResponses, ListPlayerNotesData, ListPlayerNotesErrors, ListPlayerNotesResponses, ListPlayersData, ListPlayersErrors, ListPlayersResponses, ListPointsData, ListPointsErrors, ListPointsResponses, ListSquadMemberStatsData, ListSquadMemberStatsErrors, ListSquadMemberStatsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PlayerLoginData, PlayerLoginErrors, PlayerLoginResponses, PlayerLogoutData, PlayerLogoutResponses, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeErrors, RedeemPlayerTransferCodeResponses, RegeneratePlayerPasswordData, RegeneratePlayerPasswordErrors, RegeneratePlayerPasswordResponses, ReleaseCaptureData, ReleaseCaptureErrors, ReleaseCaptureResponses, RequestOtpData, RequestOtpErrors, RequestOtpResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, RevokeOtherSessionsData, RevokeOtherSessionsErrors, RevokeOtherSessionsResponses, UpdateCurrentCoachData, UpdateCurrentCoachErrors, UpdateCurrentCoachResponses, UpdateMatchData, UpdateMatchErrors, UpdateMatchResponses, UpdatePlayerData, UpdatePlayerErrors, UpdatePlayerNoteData, UpdatePlayerNoteErrors, UpdatePlayerNoteResponses, UpdatePlayerResponses, UploadCoachPhotoData, UploadCoachPhotoErrors, UploadCoachPhotoResponses, UploadPlayerPhotoData, UploadPlayerPhotoErrors, UploadPlayerPhotoResponses, VerifyCoachPasswordData, VerifyCoachPasswordErrors, VerifyCoachPasswordResponses, VerifyOtpData, VerifyOtpErrors, VerifyOtpResponses, VerifyResetCodeData, VerifyResetCodeErrors, VerifyResetCodeResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -492,6 +492,44 @@ export const getRallyStats = <ThrowOnError extends boolean = false>(options: Opt
  * The serve tab, both sides at once so toggling costs no second request.
  */
 export const getServeStats = <ThrowOnError extends boolean = false>(options: Options<GetServeStatsData, ThrowOnError>): RequestResult<GetServeStatsResponses, GetServeStatsErrors, ThrowOnError> => (options.client ?? client).get<GetServeStatsResponses, GetServeStatsErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/serve', ...options });
+
+/**
+ * List Player Notes
+ *
+ * This player's notes, most recent session first.
+ */
+export const listPlayerNotes = <ThrowOnError extends boolean = false>(options: Options<ListPlayerNotesData, ThrowOnError>): RequestResult<ListPlayerNotesResponses, ListPlayerNotesErrors, ThrowOnError> => (options.client ?? client).get<ListPlayerNotesResponses, ListPlayerNotesErrors, ThrowOnError>({ url: '/players/{player_id}/notes', ...options });
+
+/**
+ * Create Player Note
+ */
+export const createPlayerNote = <ThrowOnError extends boolean = false>(options: Options<CreatePlayerNoteData, ThrowOnError>): RequestResult<CreatePlayerNoteResponses, CreatePlayerNoteErrors, ThrowOnError> => (options.client ?? client).post<CreatePlayerNoteResponses, CreatePlayerNoteErrors, ThrowOnError>({
+    url: '/players/{player_id}/notes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Player Note
+ *
+ * Erase one note. Nothing undoes it, and nothing else goes with it.
+ */
+export const deletePlayerNote = <ThrowOnError extends boolean = false>(options: Options<DeletePlayerNoteData, ThrowOnError>): RequestResult<DeletePlayerNoteResponses, DeletePlayerNoteErrors, ThrowOnError> => (options.client ?? client).delete<DeletePlayerNoteResponses, DeletePlayerNoteErrors, ThrowOnError>({ url: '/players/{player_id}/notes/{note_id}', ...options });
+
+/**
+ * Update Player Note
+ */
+export const updatePlayerNote = <ThrowOnError extends boolean = false>(options: Options<UpdatePlayerNoteData, ThrowOnError>): RequestResult<UpdatePlayerNoteResponses, UpdatePlayerNoteErrors, ThrowOnError> => (options.client ?? client).patch<UpdatePlayerNoteResponses, UpdatePlayerNoteErrors, ThrowOnError>({
+    url: '/players/{player_id}/notes/{note_id}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Regenerate Player Password

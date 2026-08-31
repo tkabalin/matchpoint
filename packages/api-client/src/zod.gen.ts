@@ -272,6 +272,18 @@ export const zMetric = z.object({
 });
 
 /**
+ * NoteFocus
+ *
+ * A training focus area a note is filed under.
+ */
+export const zNoteFocus = z.enum([
+    'technical',
+    'mental',
+    'physical',
+    'tactical'
+]);
+
+/**
  * OpponentSummary
  *
  * One opponent a player has met, as the scope panel's picker lists them (#244).
@@ -353,6 +365,44 @@ export const zPlayerCreatedRead = z.object({
  */
 export const zPlayerLoginRequest = z.object({
     username: z.string().max(20)
+});
+
+/**
+ * PlayerNoteCreate
+ *
+ * A coach's note about one player. The player is the path, never the body.
+ */
+export const zPlayerNoteCreate = z.object({
+    body: z.string().min(1).max(2000),
+    focus_areas: z.array(zNoteFocus).optional().default([]),
+    recorded_on: z.iso.date()
+});
+
+/**
+ * PlayerNoteRead
+ */
+export const zPlayerNoteRead = z.object({
+    body: z.string(),
+    created_at: z.iso.datetime(),
+    focus_areas: z.array(zNoteFocus),
+    id: z.uuid(),
+    player_id: z.uuid(),
+    recorded_on: z.iso.date(),
+    updated_at: z.iso.datetime()
+});
+
+/**
+ * PlayerNoteUpdate
+ *
+ * Every field a note may change after it is written, each optional.
+ *
+ * player_id is absent for MatchUpdate's reason: a note reaches its owner through its
+ * player, so a writable one would let a note walk across that ownership boundary.
+ */
+export const zPlayerNoteUpdate = z.object({
+    body: z.string().min(1).max(2000).optional(),
+    focus_areas: z.array(zNoteFocus).optional(),
+    recorded_on: z.iso.date().optional()
 });
 
 /**
@@ -1442,6 +1492,50 @@ export const zGetServeStatsQuery = z.object({
  * Successful Response
  */
 export const zGetServeStatsResponse = zServeStats;
+
+export const zListPlayerNotesPath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Response List Player Notes
+ *
+ * Successful Response
+ */
+export const zListPlayerNotesResponse = z.array(zPlayerNoteRead);
+
+export const zCreatePlayerNoteBody = zPlayerNoteCreate;
+
+export const zCreatePlayerNotePath = z.object({
+    player_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zCreatePlayerNoteResponse = zPlayerNoteRead;
+
+export const zDeletePlayerNotePath = z.object({
+    player_id: z.uuid(),
+    note_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePlayerNoteResponse = z.void();
+
+export const zUpdatePlayerNoteBody = zPlayerNoteUpdate;
+
+export const zUpdatePlayerNotePath = z.object({
+    player_id: z.uuid(),
+    note_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zUpdatePlayerNoteResponse = zPlayerNoteRead;
 
 export const zRegeneratePlayerPasswordPath = z.object({
     player_id: z.uuid()

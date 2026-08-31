@@ -971,6 +971,17 @@
         "title": "MetricUnit",
         "type": "string"
       },
+      "NoteFocus": {
+        "description": "A training focus area a note is filed under.",
+        "enum": [
+          "technical",
+          "mental",
+          "physical",
+          "tactical"
+        ],
+        "title": "NoteFocus",
+        "type": "string"
+      },
       "OpponentSummary": {
         "description": "One opponent a player has met, as the scope panel's picker lists them (#244).",
         "properties": {
@@ -1267,6 +1278,114 @@
           "password"
         ],
         "title": "PlayerLoginRequest",
+        "type": "object"
+      },
+      "PlayerNoteCreate": {
+        "additionalProperties": false,
+        "description": "A coach's note about one player. The player is the path, never the body.",
+        "properties": {
+          "body": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "focus_areas": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/NoteFocus"
+            },
+            "title": "Focus Areas",
+            "type": "array"
+          },
+          "recorded_on": {
+            "format": "date",
+            "title": "Recorded On",
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "recorded_on"
+        ],
+        "title": "PlayerNoteCreate",
+        "type": "object"
+      },
+      "PlayerNoteRead": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "focus_areas": {
+            "items": {
+              "$ref": "#/components/schemas/NoteFocus"
+            },
+            "title": "Focus Areas",
+            "type": "array"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "player_id": {
+            "format": "uuid",
+            "title": "Player Id",
+            "type": "string"
+          },
+          "recorded_on": {
+            "format": "date",
+            "title": "Recorded On",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "player_id",
+          "body",
+          "recorded_on",
+          "focus_areas",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "PlayerNoteRead",
+        "type": "object"
+      },
+      "PlayerNoteUpdate": {
+        "additionalProperties": false,
+        "description": "Every field a note may change after it is written, each optional.\n\nplayer_id is absent for MatchUpdate's reason: a note reaches its owner through its\nplayer, so a writable one would let a note walk across that ownership boundary.",
+        "properties": {
+          "body": {
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "focus_areas": {
+            "items": {
+              "$ref": "#/components/schemas/NoteFocus"
+            },
+            "title": "Focus Areas",
+            "type": "array"
+          },
+          "recorded_on": {
+            "format": "date",
+            "title": "Recorded On",
+            "type": "string"
+          }
+        },
+        "title": "PlayerNoteUpdate",
         "type": "object"
       },
       "PlayerOverview": {
@@ -5915,6 +6034,293 @@
         "summary": "Get Serve Stats",
         "tags": [
           "analytics"
+        ]
+      }
+    },
+    "/players/{player_id}/notes": {
+      "get": {
+        "description": "This player's notes, most recent session first.",
+        "operationId": "list_player_notes",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PlayerNoteRead"
+                  },
+                  "title": "Response List Player Notes",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Player Notes",
+        "tags": [
+          "players"
+        ]
+      },
+      "post": {
+        "operationId": "create_player_note",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerNoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerNoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Create Player Note",
+        "tags": [
+          "players"
+        ]
+      }
+    },
+    "/players/{player_id}/notes/{note_id}": {
+      "delete": {
+        "description": "Erase one note. Nothing undoes it, and nothing else goes with it.",
+        "operationId": "delete_player_note",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Player Note",
+        "tags": [
+          "players"
+        ]
+      },
+      "patch": {
+        "operationId": "update_player_note",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "player_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Player Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "note_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Note Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlayerNoteUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlayerNoteRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Update Player Note",
+        "tags": [
+          "players"
         ]
       }
     },

@@ -36,6 +36,7 @@ from matchpoint_api.models import (
     MatchSet,
     PasswordReset,
     Player,
+    PlayerNote,
     PlayerSession,
     PlayerTransferCode,
     Point,
@@ -59,6 +60,7 @@ from tests.factories import (
     make_match_set,
     make_password_reset,
     make_player,
+    make_player_note,
     make_player_session,
     make_player_transfer_code,
     make_point,
@@ -1176,6 +1178,7 @@ def test_closing_an_account_may_take_the_roster_along(
     reset = make_password_reset(db_session, coach_id=coach.id)
     session_row = make_coach_session(db_session, coach_id=coach.id)
     player_session = make_player_session(db_session, player_id=player.id)
+    note = make_player_note(db_session, player_id=player.id)
     db_session.commit()
 
     response = _close(client, delete_players=True)
@@ -1191,6 +1194,7 @@ def test_closing_an_account_may_take_the_roster_along(
     assert db_session.get(PasswordReset, reset.id) is None
     assert db_session.get(CoachSession, session_row.id) is None
     assert db_session.get(PlayerSession, player_session.id) is None
+    assert db_session.get(PlayerNote, note.id) is None
     assert client.get("/coaches/me").status_code == 401
 
 
