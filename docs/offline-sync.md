@@ -67,6 +67,11 @@ early; the holder's own ingest flushes renew it automatically.
 Finishing the match (recording a `result`) clears the claim. Deleting a match while another device
 holds it is refused; the holder is exempt, since backing out of capture does not release its claim.
 
+A live claim with no result recorded is also what makes a match "in progress":
+`GET /matches/in-progress` lists those for the signed-in coach, which is what the resume banner
+renders. That read is scoped to the coach and not to the asking device, so a match claimed on the
+phone still shows on the tablet.
+
 ## Drain engine
 
 `drainOutbox(coachId, deviceId)` is the single entry point. It takes a Web Lock
