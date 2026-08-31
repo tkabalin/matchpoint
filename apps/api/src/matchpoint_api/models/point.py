@@ -89,9 +89,11 @@ class ShotType(enum.StrEnum):
     LOB = "lob"
 
 
+# Two bands, not three: short against deep is the call a coach can make reliably from
+# the sideline, where a middle band is the one nobody agrees on. Capture settled that
+# first and the API followed (#248).
 class CourtDepth(enum.StrEnum):
     SHORT = "short"
-    MID = "mid"
     DEEP = "deep"
 
 

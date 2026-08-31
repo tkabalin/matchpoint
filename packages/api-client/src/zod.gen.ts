@@ -61,11 +61,7 @@ export const zCoachVerifyPassword = z.object({
 /**
  * CourtDepth
  */
-export const zCourtDepth = z.enum([
-    'short',
-    'mid',
-    'deep'
-]);
+export const zCourtDepth = z.enum(['short', 'deep']);
 
 /**
  * CourtSide
@@ -79,7 +75,7 @@ export const zCourtSide = z.enum(['deuce', 'ad']);
  *
  * How many of a style's final balls landed in one zone of the court.
  *
- * Nine zones: the six in-court cells, deuce or ad by short, mid or deep, and the
+ * Seven zones: the four in-court cells, deuce or ad by short or deep, and the
  * three ways a ball goes out, net, long and wide.
  */
 export const zCourtZoneCount = z.object({

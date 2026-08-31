@@ -230,7 +230,7 @@ class WingSplit(BaseModel):
 class CourtZoneCount(BaseModel):
     """How many of a style's final balls landed in one zone of the court.
 
-    Nine zones: the six in-court cells, deuce or ad by short, mid or deep, and the
+    Seven zones: the four in-court cells, deuce or ad by short or deep, and the
     three ways a ball goes out, net, long and wide.
     """
 

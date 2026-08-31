@@ -143,7 +143,7 @@ erDiagram
         varchar(8) shot_type "nullable: drive, volley, dropshot, lob"
         boolean ball_in "nullable"
         varchar(5) ball_half "nullable: deuce, ad; set together with ball_depth"
-        varchar(5) ball_depth "nullable: short, mid, deep"
+        varchar(5) ball_depth "nullable: short, deep"
         varchar(4) ball_out_mode "nullable: net, long, wide"
         varchar(2) rally_length_bucket "nullable: b1, b2, b3, b4; null means genuinely unknown"
         int set_number "1-based"

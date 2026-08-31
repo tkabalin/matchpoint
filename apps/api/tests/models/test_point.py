@@ -273,7 +273,7 @@ def _insert_raw_point(session: Session, **columns: object) -> None:
         {"wing": "forehand"},
         {"shot_type": "drive"},
         {"ball_half": "deuce"},
-        {"ball_depth": "mid"},
+        {"ball_depth": "deep"},
     ],
 )
 def test_database_rejects_a_half_set_pair(db_session: Session, half: dict[str, object]) -> None:
@@ -289,6 +289,15 @@ def test_database_rejects_end_reason_outside_the_enum(db_session: Session) -> No
     end_reason draws the line at reachability (FORCED/MISTAKE), not at a clean hit."""
     with pytest.raises(IntegrityError):
         _insert_raw_point(db_session, end_reason="winner")
+
+
+def test_database_rejects_a_mid_ball_depth(db_session: Session) -> None:
+    """The court is two bands, and "mid" is the third one capture dropped (#248).
+
+    Named on its own because ENUM_COLUMNS below only ever asserts the members that
+    are still there, so nothing else notices a CHECK left wide enough for this."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_point(db_session, ball_half="deuce", ball_depth="mid")
 
 
 # Every enum column, with whatever companion its paired CHECK insists on. Listed per
@@ -308,7 +317,7 @@ ENUM_COLUMNS: list[tuple[str, type[enum.StrEnum], dict[str, str]]] = [
     ("unusual_reason", UnusualReason, {}),
     ("wing", Wing, {"shot_type": "drive"}),
     ("shot_type", ShotType, {"wing": "forehand"}),
-    ("ball_half", CourtSide, {"ball_depth": "mid"}),
+    ("ball_half", CourtSide, {"ball_depth": "deep"}),
     ("ball_depth", CourtDepth, {"ball_half": "deuce"}),
     ("ball_out_mode", FailureMode, {}),
     ("rally_length_bucket", RallyBucket, {}),

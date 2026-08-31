@@ -168,14 +168,12 @@ _POINT_ENDER_LABEL = {
     (False, PointEnderKind.UNUSUAL): "Unusual (against you)",
 }
 
-# The nine zones a final ball can land in, in the order the court diagram reads
+# The seven zones a final ball can land in, in the order the court diagram reads
 # them: each half from the net outward, then the three ways a ball goes out.
 COURT_ZONES = (
     "Deuce short",
-    "Deuce mid",
     "Deuce deep",
     "Ad short",
-    "Ad mid",
     "Ad deep",
     "Net",
     "Long",

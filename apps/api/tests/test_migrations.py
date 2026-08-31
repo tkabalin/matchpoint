@@ -172,6 +172,71 @@ def test_the_username_backfill_numbers_existing_players_deterministically(
         settings.database_url = original_url
 
 
+def test_dropping_mid_clears_the_placement_rather_than_the_point(round_trip_url: str) -> None:
+    """A ball captured as "mid" loses its half along with its depth, and keeps its point.
+
+    Clearing the depth alone would leave a half without one, which is the pair
+    `point_ball_zone_paired` refuses, so an unattended `alembic upgrade head` would stop
+    on a constraint that has nothing to do with the revision (#248)."""
+    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    original_url = settings.database_url
+    settings.database_url = round_trip_url
+    engine = create_engine(round_trip_url)
+    try:
+        # The revision before 3cc713083c2a, and so the only place a "mid" ball can be
+        # arranged: after it the CHECK refuses the value outright.
+        command.upgrade(config, "36b383a5bcc2")
+        with engine.begin() as connection:
+            coach_id = connection.execute(
+                text(
+                    "INSERT INTO coaches (id, email, display_name, password_hash) "
+                    "VALUES (gen_random_uuid(), 'coach@example.com', 'Coach', 'not-a-hash') "
+                    "RETURNING id"
+                )
+            ).scalar()
+            player_id = connection.execute(
+                text(
+                    "INSERT INTO players (id, first_name, last_name, username, coach_id) "
+                    "VALUES (gen_random_uuid(), 'Sam', 'Smith', 'smtsam001', :coach_id) "
+                    "RETURNING id"
+                ),
+                {"coach_id": coach_id},
+            ).scalar()
+            match_id = connection.execute(
+                text(
+                    "INSERT INTO matches (id, player_id, played_on) "
+                    "VALUES (gen_random_uuid(), :player_id, '2026-08-01') RETURNING id"
+                ),
+                {"player_id": player_id},
+            ).scalar()
+            # Same half on both, so the only thing that can tell them apart afterwards
+            # is the band the revision was aimed at.
+            for sequence, depth in [(0, "mid"), (1, "deep")]:
+                connection.execute(
+                    text(
+                        "INSERT INTO points (id, match_id, sequence, server, won, "
+                        "serve1_outcome, end_reason, ball_in, ball_half, ball_depth, "
+                        "set_number, game_number, in_tiebreak, is_break_point, is_game_point, "
+                        "is_game_end, is_set_point, is_set_end, is_match_point) "
+                        "VALUES (gen_random_uuid(), :match_id, :sequence, 'tracked', true, "
+                        "'in', 'forced', true, 'ad', :depth, 1, 1, false, false, false, "
+                        "false, false, false, false)"
+                    ),
+                    {"match_id": match_id, "sequence": sequence, "depth": depth},
+                )
+
+        command.upgrade(config, "head")
+
+        with engine.begin() as connection:
+            placements = connection.execute(
+                text("SELECT ball_in, ball_half, ball_depth FROM points ORDER BY sequence")
+            ).all()
+        assert placements == [(True, None, None), (True, "ad", "deep")]
+    finally:
+        engine.dispose()
+        settings.database_url = original_url
+
+
 def test_the_schema_at_head_matches_the_models(_test_engine: Engine) -> None:
     """Alembic's own autogenerate comparison, asserted rather than printed.
 

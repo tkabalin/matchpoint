@@ -756,10 +756,8 @@ def test_serve_trend_keeps_only_the_most_recent_matches(
 SHOT_TYPES = ("Drive", "Volley", "Dropshot", "Lob")
 COURT_ZONES = (
     "Deuce short",
-    "Deuce mid",
     "Deuce deep",
     "Ad short",
-    "Ad mid",
     "Ad deep",
     "Net",
     "Long",
@@ -963,7 +961,7 @@ def test_rally_length_buckets_are_reported_whole(
 def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coach) -> None:
     """Ten points, one of every shape a style card has to survive.
 
-    Won: 3 forced (2 forehand drives and a backhand volley, landing deuce mid, ad
+    Won: 3 forced (2 forehand drives and a backhand volley, landing ad short, ad
     deep and in the net), 1 unforced backhand lob landing deuce short, and 3
     unusual, one of which never recorded why. Lost: a forced backhand lob that went
     long, and a missed return that records no shot at all. The ace belongs to the
@@ -977,8 +975,8 @@ def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coac
         match_id=match.id,
         sequence=0,
         **in_court,
-        ball_half=CourtSide.DEUCE,
-        ball_depth=CourtDepth.MID,
+        ball_half=CourtSide.AD,
+        ball_depth=CourtDepth.SHORT,
     )
     make_point(
         db_session,
@@ -1066,7 +1064,7 @@ def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coac
             "detail": {
                 "wing": {"forehand": 2, "backhand": 1},
                 "shot_type": _shot_rows(2, drive=2, volley=1),
-                "court_zones": _zone_rows(deuce_mid=1, ad_deep=1, net=1),
+                "court_zones": _zone_rows(ad_short=1, ad_deep=1, net=1),
                 "unusual_reasons": None,
             },
         },

@@ -103,7 +103,7 @@ blank, whatever the point's other fields look like.
 | `unusual_reason`                       | `net_touch` \| `ball_hit_player` \| `reached_over` \| `double_hit` \| `hindrance` \| `point_penalty` \| `other` |
 | `wing`                                  | `forehand` \| `backhand`                                                            |
 | `shot_type`                             | `drive` \| `volley` \| `dropshot` \| `lob`                                          |
-| `ball_depth`                            | `short` \| `mid` \| `deep`                                                          |
+| `ball_depth`                            | `short` \| `deep`                                                                   |
 | `rally_length_bucket`                   | `b1` \| `b2` \| `b3` \| `b4`                                                        |
 
 ### Which fields go together
