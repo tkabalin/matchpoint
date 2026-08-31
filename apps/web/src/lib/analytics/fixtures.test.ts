@@ -62,7 +62,7 @@ test("rallyStatsFor scales won/lost/hero together, so they stay reconciled", () 
 });
 
 test("rallyStatsFor never produces a negative count from a small scale", () => {
-  const variant = rallyStatsFor({ set: "1", phase: "matchPoints", scale: 0.01 });
+  const variant = rallyStatsFor({ set: "1", phase: "match_points", scale: 0.01 });
 
   for (const side of ["you", "opponents"] as const) {
     for (const style of variant.styles[side]) {
@@ -82,7 +82,10 @@ test("serveStatsFor's outcome triples still sum to 100 after scaling", () => {
 
   for (const side of [variant.serving, variant.returning]) {
     for (const outcome of [side.outcome.firstServe, side.outcome.secondServe]) {
-      expect(outcome.in + outcome.fault + outcome.ace).toBe(100);
+      // A half is null once that serve number was never attempted; the invariant
+      // is about the halves that carry shares, not about inventing one that doesn't.
+      expect(outcome).not.toBeNull();
+      expect(outcome!.in + outcome!.fault + outcome!.ace).toBe(100);
     }
   }
 });

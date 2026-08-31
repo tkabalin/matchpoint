@@ -75,10 +75,24 @@ export interface ServeOutcomeCounts {
 
 export type ServeNumber = "first" | "second";
 
-/** Where a fault landed, split by which serve attempt it was. */
+export interface FaultModeShares {
+  net: number;
+  long: number;
+  wide: number;
+}
+
+/**
+ * Where a fault landed, split by which serve attempt it was.
+ *
+ * A half is null until that serve number has actually faulted, and **both are
+ * null on the returning side throughout**: capture records where the tracked
+ * player's own serve missed and nothing about the opponent's. Nullable here to
+ * match the real contract, so a consumer is made to handle the absence rather
+ * than reading `.net` off nothing the first time real data arrives.
+ */
 export interface FaultModeSplit {
-  firstServe: { net: number; long: number; wide: number };
-  secondServe: { net: number; long: number; wide: number };
+  firstServe: FaultModeShares | null;
+  secondServe: FaultModeShares | null;
 }
 
 /** One match's serve-in rate, for the recent-matches trend line. */
@@ -91,9 +105,12 @@ export interface ServeTrendPoint {
 export interface ServeSideStats {
   /** Split by serve number, like `faultMode` already is below — the hero
    *  headline and the outcome stack read from whichever half the 1st/2nd
-   *  serve toggle has selected, rather than a fixed value that ignores it. */
-  outcome: { firstServe: ServeOutcomeCounts; secondServe: ServeOutcomeCounts };
+   *  serve toggle has selected, rather than a fixed value that ignores it.
+   *  A half is null until that serve number has been attempted. */
+  outcome: { firstServe: ServeOutcomeCounts | null; secondServe: ServeOutcomeCounts | null };
   faultMode: FaultModeSplit;
+  /** Oldest first. At most one entry on a match-scoped request, and none at all
+   *  where this side never served — a line needs two points to be a line. */
   trend: ServeTrendPoint[];
 }
 
@@ -174,16 +191,27 @@ export interface RallyStats {
  * mockup itself shows changing on Apply.
  */
 export type MatchScope = "all" | "vs-opponent";
+
+/**
+ * `"all"` is the panel's own sentinel and never reaches the wire: the endpoint
+ * takes `set_number` as an integer 1-5, and "every set" is that parameter being
+ * omitted rather than a value it accepts. Sets 4 and 5 exist server-side for the
+ * best-of-five men's Grand Slam format; the panel offers three because no other
+ * system reaches them.
+ */
 export type SetFilter = "all" | "1" | "2" | "3";
+
+/** Spelled as the API spells them, so the value a chip carries is the value the
+ *  query sends. `phase` is snake_case on the wire and there is no "all". */
 export type PhaseFilter =
   | "full"
   | "tiebreaks"
-  | "breakPoints"
-  | "gamePoints"
-  | "setPoints"
-  | "matchPoints"
-  | "gameEnding"
-  | "setEnding";
+  | "break_points"
+  | "game_points"
+  | "set_points"
+  | "match_points"
+  | "game_ending"
+  | "set_ending";
 
 export interface StatsFilters {
   scope: MatchScope;

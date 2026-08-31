@@ -6,6 +6,7 @@ import type {
   PlayerOverview,
   RallyStats,
   RecentForm,
+  ServeOutcomeCounts,
   ServeStats,
   ServeTrendPoint,
   SetFilter,
@@ -337,12 +338,12 @@ const RALLY_SET_SCALE: Record<SetFilter, number> = { all: 1, "1": 0.55, "2": 0.8
 const RALLY_PHASE_SCALE: Record<PhaseFilter, number> = {
   full: 1,
   tiebreaks: 0.12,
-  breakPoints: 0.2,
-  gamePoints: 0.35,
-  setPoints: 0.15,
-  matchPoints: 0.08,
-  gameEnding: 0.5,
-  setEnding: 0.25,
+  break_points: 0.2,
+  game_points: 0.35,
+  set_points: 0.15,
+  match_points: 0.08,
+  game_ending: 0.5,
+  set_ending: 0.25,
 };
 
 function scaleCount(count: number, factor: number): number {
@@ -410,12 +411,12 @@ const SERVE_SET_WEIGHT: Record<SetFilter, [number, number, number]> = {
 const SERVE_PHASE_WEIGHT: Record<PhaseFilter, [number, number, number]> = {
   full: [1, 1, 1],
   tiebreaks: [0.7, 1.4, 1.6],
-  breakPoints: [0.85, 1.2, 0.6],
-  gamePoints: [1.05, 0.9, 1.1],
-  setPoints: [0.9, 1.15, 0.8],
-  matchPoints: [0.75, 1.3, 1.2],
-  gameEnding: [1, 1, 1.4],
-  setEnding: [0.95, 1.05, 1],
+  break_points: [0.85, 1.2, 0.6],
+  game_points: [1.05, 0.9, 1.1],
+  set_points: [0.9, 1.15, 0.8],
+  match_points: [0.75, 1.3, 1.2],
+  game_ending: [1, 1, 1.4],
+  set_ending: [0.95, 1.05, 1],
 };
 
 function normalizedTriple(values: readonly [number, number, number]): {
@@ -458,7 +459,11 @@ export function serveStatsFor(filters: {
     setWeight[2] * phaseWeight[2] * oppWeight[2] * matchWeight[2],
   ];
 
-  function scaleOutcome(outcome: { in: number; fault: number; ace: number }) {
+  // Null passes straight through: a serve number that was never attempted has no
+  // shares to scale, and inventing a zeroed triple for it would turn "not asked"
+  // into a measurement.
+  function scaleOutcome(outcome: ServeOutcomeCounts | null) {
+    if (!outcome) return null;
     return normalizedTriple([
       outcome.in * weight[0],
       outcome.fault * weight[1],

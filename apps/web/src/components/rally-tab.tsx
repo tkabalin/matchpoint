@@ -288,6 +288,20 @@ function StyleCard({
   );
 }
 
+/** Points counted on the card that no breakdown can describe — a point ending on a
+ *  missed return records no shot and no final ball, so it is real, counted, and
+ *  invisible in every drill below. Saying so is the honest answer; the alternative
+ *  is a court diagram confidently reading 0% in every cell under a card saying 3. */
+function NothingToBreakDown({ count }: { count: number }) {
+  return (
+    <p className="text-xs text-muted-foreground">
+      {count === 1
+        ? "This point ended without a shot to record, so there is nothing to break down."
+        : `These ${count} points ended without a shot to record, so there is nothing to break down.`}
+    </p>
+  );
+}
+
 function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: boolean }) {
   const { wing, shotType, courtZones, unusualReasons } = style.detail;
 
@@ -295,17 +309,33 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
     return (
       <div className="border-t pt-3">
         <p className="mb-2 text-base font-bold text-foreground">Reason</p>
-        <BreakdownBars rows={unusualReasons ?? []} pattern="indigo" />
+        {unusualReasons && unusualReasons.length > 0 ? (
+          <BreakdownBars rows={unusualReasons} pattern="indigo" />
+        ) : (
+          <NothingToBreakDown count={style.count} />
+        )}
       </div>
     );
   }
 
   const wingTotal = wing.forehand + wing.backhand;
 
+  // `wing` being a real object with two zeroes is not the same as no wing at all,
+  // and neither is a truthiness check enough to tell them apart. With no wing, no
+  // shot type and no zones there is nothing under any of the three headings, so
+  // the headings themselves should not appear.
+  if (wingTotal === 0 && shotType.length === 0 && courtZones.length === 0) {
+    return (
+      <div className="border-t pt-3">
+        <NothingToBreakDown count={style.count} />
+      </div>
+    );
+  }
+
   return (
     <div className="border-t pt-3">
       <p className="mb-2 text-base font-bold text-foreground">Wing: setup shot</p>
-      {wingTotal > 0 && (
+      {wingTotal > 0 ? (
         <>
           <OutcomeStack
             segments={[
@@ -332,17 +362,27 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
             </span>
           </div>
         </>
+      ) : (
+        <p className="text-xs text-muted-foreground">No setup shot recorded.</p>
       )}
 
       <p className="mt-3 mb-2 text-base font-bold text-foreground">Shot type</p>
-      <BreakdownBars
-        rows={shotType}
-        pattern="indigo"
-        icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
-      />
+      {shotType.length > 0 ? (
+        <BreakdownBars
+          rows={shotType}
+          pattern="indigo"
+          icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">No shot type recorded.</p>
+      )}
 
       <p className="mt-3 mb-2 text-base font-bold text-foreground">Final ball: where it landed</p>
-      <CourtHeatmap zones={courtZones} flip={flipCourt} />
+      {courtZones.length > 0 ? (
+        <CourtHeatmap zones={courtZones} flip={flipCourt} />
+      ) : (
+        <p className="text-xs text-muted-foreground">No final ball recorded.</p>
+      )}
     </div>
   );
 }

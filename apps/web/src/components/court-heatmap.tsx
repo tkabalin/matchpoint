@@ -48,6 +48,24 @@ const textHalo = {
   paintOrder: "stroke" as const,
 };
 
+/**
+ * Every zone this diagram renders, and therefore the whole of what its
+ * percentages are a share of. Four in-court cells because capture records two
+ * depths: `151b28b` dropped MID after players asked for short against deep, "the
+ * call a coach can make reliably from the sideline". Keep this list and what is
+ * actually drawn below in step — a zone in one and not the other is the silent
+ * skew this constant exists to prevent.
+ */
+const DRAWN_ZONES = [
+  "Ad short",
+  "Deuce short",
+  "Ad deep",
+  "Deuce deep",
+  "Net",
+  "Long",
+  "Wide",
+] as const;
+
 export function CourtHeatmap({
   zones,
   flip = false,
@@ -66,8 +84,14 @@ export function CourtHeatmap({
 }) {
   const byZone = new Map(zones.map((zone) => [zone.zone, zone.count]));
   const count = (zone: string) => byZone.get(zone) ?? 0;
-  const max = Math.max(1, ...zones.map((zone) => zone.count));
-  const total = zones.reduce((sum, zone) => sum + zone.count, 0) || 1;
+  // Scale over the zones this diagram actually draws, not over everything handed
+  // in. A zone counted but never rendered still deflates every percentage here and
+  // stops them summing to 100, silently. That is currently true of the API's two
+  // `mid` zones, which capture can no longer produce (they are always 0, so the
+  // arithmetic survives by luck) and which #248 removes from the contract.
+  const drawn = DRAWN_ZONES.map(count);
+  const max = Math.max(1, ...drawn);
+  const total = drawn.reduce((sum, value) => sum + value, 0) || 1;
 
   const intensity = (value: number) => 0.14 + (value / max) * 0.72;
   const pct = (value: number) => Math.round((value / total) * 100);

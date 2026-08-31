@@ -20,7 +20,7 @@ test("both serve cards render, headline and stack visible, drills collapsed", as
   expect(await screen.findByText("Your serve")).toBeInTheDocument();
   expect(screen.getByText("Their serve")).toBeInTheDocument();
   expect(screen.getAllByText("1st serves in")).toHaveLength(2);
-  expect(screen.queryByText("Fault mode")).not.toBeInTheDocument();
+  expect(screen.queryByText(/Fault mode/)).not.toBeInTheDocument();
 });
 
 // The headline used to reuse `stats.hero.value` directly (68%), which double
@@ -41,11 +41,14 @@ test("tapping a card's header opens its own drill without affecting the other ca
 
   await user.click(screen.getByText("Your serve"));
 
-  expect(await screen.findByText("Fault mode")).toBeInTheDocument();
-  expect(screen.queryByText("Their fault mode")).not.toBeInTheDocument();
+  expect(await screen.findByText(/Fault mode/)).toBeInTheDocument();
+  expect(screen.queryByText(/Your return outcome/)).not.toBeInTheDocument();
 });
 
-test("both cards' drills can be open at the same time", async () => {
+// The returning card can never have a fault mode — capture records where the
+// tracked player's own serve missed and nothing about the opponent's — so it
+// shows the return-outcome drill instead, never both.
+test("both cards' drills can be open at the same time, each showing its own drill", async () => {
   const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Your serve");
@@ -53,18 +56,20 @@ test("both cards' drills can be open at the same time", async () => {
   await user.click(screen.getByText("Your serve"));
   await user.click(screen.getByText("Their serve"));
 
-  expect(await screen.findByText("Fault mode")).toBeInTheDocument();
-  expect(screen.getByText("Their fault mode")).toBeInTheDocument();
+  expect(await screen.findByText(/Fault mode/)).toBeInTheDocument();
+  expect(screen.getByText(/Your return outcome/)).toBeInTheDocument();
+  expect(screen.queryByText(/Their fault mode/)).not.toBeInTheDocument();
 });
 
-test("their serve's drill also shows your return outcome", async () => {
+test("their serve's drill shows your return outcome, not a fault mode", async () => {
   const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Their serve");
 
   await user.click(screen.getByText("Their serve"));
 
-  expect(await screen.findByText("Your return outcome")).toBeInTheDocument();
+  expect(await screen.findByText(/Your return outcome/)).toBeInTheDocument();
+  expect(screen.queryByText(/Fault mode/)).not.toBeInTheDocument();
 });
 
 test("switching 1st/2nd serve changes the fault-mode numbers shown", async () => {
@@ -72,7 +77,7 @@ test("switching 1st/2nd serve changes the fault-mode numbers shown", async () =>
   renderTab();
   await screen.findByText("Your serve");
   await user.click(screen.getByText("Your serve"));
-  await screen.findByText("Fault mode");
+  await screen.findByText(/Fault mode/);
 
   expect(screen.getByText("55%")).toBeInTheDocument();
 
@@ -90,7 +95,7 @@ test("switching 1st/2nd serve also updates the headline and outcome stack above 
   renderTab();
   await screen.findByText("Your serve");
   await user.click(screen.getByText("Your serve"));
-  await screen.findByText("Fault mode");
+  await screen.findByText(/Fault mode/);
 
   expect(screen.getAllByText("1st serves in")).toHaveLength(2);
   expect(screen.getByText("76%")).toBeInTheDocument();

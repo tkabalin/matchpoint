@@ -124,10 +124,15 @@ function ServeSideCard({
   // the fault-mode/return-outcome drill all move together when the 1st/2nd
   // serve toggle changes, rather than only the drill responding to it.
   const outcome = serveNumber === "first" ? stats.outcome.firstServe : stats.outcome.secondServe;
-  const outcomeTotal = outcome.in + outcome.fault + outcome.ace;
+  const outcomeTotal = outcome ? outcome.in + outcome.fault + outcome.ace : 0;
   const heroLabel = serveNumber === "first" ? "1st serves in" : "2nd serves in";
   const faultMode =
     serveNumber === "first" ? stats.faultMode.firstServe : stats.faultMode.secondServe;
+  // The returning card is the one handed a return outcome, and it is also the one
+  // that can never have a fault mode: capture records where the tracked player's
+  // own serve missed and nothing about the opponent's, so the API returns null on
+  // both halves of this side throughout. The two drills are therefore exclusive —
+  // this card shows one or the other, never an empty heading for the wrong one.
   const returnRows = returnOutcome
     ? serveNumber === "first"
       ? returnOutcome.firstServe
@@ -155,10 +160,15 @@ function ServeSideCard({
           serve, so the headline % in has to include it, and computing it from
           the same numbers the stack below draws is what keeps the two from
           disagreeing. Both read from the 1st/2nd serve toggle's current
-          selection, not a fixed value that ignores it. */}
-      <StatHero icon={HeroIcon} value={`${outcome.in + outcome.ace}%`} label={heroLabel} />
+          selection, not a fixed value that ignores it. A dash where that serve
+          number has not been attempted: zero would read as a measurement. */}
+      <StatHero
+        icon={HeroIcon}
+        value={outcome ? `${outcome.in + outcome.ace}%` : "—"}
+        label={heroLabel}
+      />
 
-      {outcomeTotal > 0 && (
+      {outcome && outcomeTotal > 0 && (
         <OutcomeStack
           segments={[
             // "In" here means landed in and wasn't an ace — a disjoint third of
@@ -202,31 +212,48 @@ function ServeSideCard({
               { value: "second", label: "2nd serve", icon: FlagOff },
             ]}
           />
-          <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-            {returnOutcome ? "Their fault mode" : "Fault mode"}
-          </p>
-          <BreakdownBars
-            rows={[
-              { label: "Net", value: faultMode.net, max: 100 },
-              { label: "Long", value: faultMode.long, max: 100 },
-              { label: "Wide", value: faultMode.wide, max: 100 },
-            ]}
-            pattern="unforced"
-            icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
-            unit="%"
-          />
+          {/* Serving side only. Percentages are of that serve number's *faults*,
+              not of its attempts — said in the caption because the stack directly
+              above is a share of attempts, and two adjacent percentages measuring
+              against different denominators is exactly how a coach misreads
+              "Net 55%" as "55% of my serves hit the net". */}
+          {!returnOutcome && (
+            <>
+              <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+                Fault mode · share of faults
+              </p>
+              {faultMode ? (
+                <BreakdownBars
+                  rows={[
+                    { label: "Net", value: faultMode.net, max: 100 },
+                    { label: "Long", value: faultMode.long, max: 100 },
+                    { label: "Wide", value: faultMode.wide, max: 100 },
+                  ]}
+                  pattern="unforced"
+                  icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
+                  unit="%"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">No faults on this serve yet.</p>
+              )}
+            </>
+          )}
 
           {returnRows && (
             <>
               <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                Your return outcome
+                Your return outcome · share of returns played
               </p>
-              <BreakdownBars
-                rows={returnRows}
-                pattern={(row) => (row.label === "In" ? "win" : "unforced")}
-                icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
-                unit="%"
-              />
+              {returnRows.length > 0 ? (
+                <BreakdownBars
+                  rows={returnRows}
+                  pattern={(row) => (row.label === "In" ? "win" : "unforced")}
+                  icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
+                  unit="%"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">No returns recorded on this serve.</p>
+              )}
             </>
           )}
         </div>
@@ -245,6 +272,25 @@ function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStat
     firstServeIn: { label: "1st serve % in", color: PATTERN_VAR.yellow },
     secondServeIn: { label: "2nd serve % in", color: PATTERN_VAR.indigo },
   };
+
+  // A line needs two points to be a line. One match (what a match-scoped request
+  // returns) or none (a side that never served) would otherwise draw axes, a
+  // 0-100 scale and a legend naming both series over an empty plot, since every
+  // Line here is dot={false} and a single datum leaves no visible mark at all.
+  if (trend.length < 2) {
+    return (
+      <div>
+        <p className="mb-1 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+          {title}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {trend.length === 0
+            ? "No matches with a serve recorded yet."
+            : "One match so far, which is not yet a trend."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>

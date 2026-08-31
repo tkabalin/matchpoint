@@ -44,6 +44,21 @@ test("handles every zone at zero without dividing by zero", () => {
   expect(screen.getByRole("img", { name: "Final ball landing zones" })).toBeInTheDocument();
 });
 
+// The API still declares (though capture can no longer produce, and #248 will
+// remove) two "mid" zones. Counting them in the total is the silent-skew bug
+// #232 flagged: a zone this diagram never draws still lowered every rendered
+// percentage. This locks in that percentages are computed only over the seven
+// zones actually drawn.
+test("a zone the diagram never draws does not skew the percentages of the ones it does", () => {
+  const withMidZones = [...ZONES, { zone: "Deuce mid", count: 5 }, { zone: "Ad mid", count: 5 }];
+
+  render(<CourtHeatmap zones={withMidZones} />);
+
+  // Same 38% as the base fixture (Net 3 of 8 drawn points) — unmoved by the
+  // extra 10 points sitting in zones this diagram doesn't render.
+  expect(screen.getByText("NET 38%")).toBeInTheDocument();
+});
+
 test("flip swaps net and long between the top and bottom bars", () => {
   const { unmount } = render(<CourtHeatmap zones={ZONES} />);
   const unflippedNetY = Number(screen.getByText("NET 38%").getAttribute("y"));

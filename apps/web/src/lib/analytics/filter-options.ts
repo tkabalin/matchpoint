@@ -19,12 +19,12 @@ export const SET_OPTIONS: { value: SetFilter; label: string }[] = [
 export const PHASE_OPTIONS: { value: PhaseFilter; label: string }[] = [
   { value: "full", label: "Full match" },
   { value: "tiebreaks", label: "Tiebreaks" },
-  { value: "breakPoints", label: "Break points" },
-  { value: "gamePoints", label: "Game points" },
-  { value: "setPoints", label: "Set points" },
-  { value: "matchPoints", label: "Match points" },
-  { value: "gameEnding", label: "Game-ending" },
-  { value: "setEnding", label: "Set-ending" },
+  { value: "break_points", label: "Break points" },
+  { value: "game_points", label: "Game points" },
+  { value: "set_points", label: "Set points" },
+  { value: "match_points", label: "Match points" },
+  { value: "game_ending", label: "Game-ending" },
+  { value: "set_ending", label: "Set-ending" },
 ];
 
 export const SET_LABEL: Record<SetFilter, string> = Object.fromEntries(
