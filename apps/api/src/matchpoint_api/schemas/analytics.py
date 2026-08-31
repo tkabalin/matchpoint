@@ -25,14 +25,6 @@ class MetricUnit(enum.StrEnum):
     PER_MATCH = "per_match"
 
 
-class TrendWindow(enum.StrEnum):
-    """Which slice of a player's most recent matches a trends query covers."""
-
-    LAST5 = "last5"
-    LAST10 = "last10"
-    SEASON = "season"
-
-
 # Each member below TIEBREAKS names a boolean the capture client already stamps on
 # every point (`models/point.py`), so narrowing to one is a column test rather than a
 # replay of the score. FULL is the absence of a filter and stamps nothing.
@@ -330,68 +322,6 @@ class RallyStats(BaseModel):
     shot_frequency: ShotFrequencySides
     # The four buckets whole, or empty while no point carries one.
     rally_length: list[RallyLengthBucket]
-
-
-class DistributionBucket(BaseModel):
-    """One histogram bar: how many of the window's matches fell in this range."""
-
-    bucket: str
-    matches: int
-
-
-class CorrelationPoint(BaseModel):
-    """One match on the unforced-errors vs games-lost scatter."""
-
-    unforced_errors: int
-    games_lost: int
-
-
-class TrendStats(BaseModel):
-    """The trends tab, computed over the requested window of recent matches."""
-
-    metrics: list[Metric]
-    distribution_label: str
-    distribution: list[DistributionBucket]
-    correlation: list[CorrelationPoint]
-
-
-class HeadToHeadSummary(BaseModel):
-    """One opponent row on the head-to-head list."""
-
-    # The normalised name that keys this matchup, used as the detail path segment.
-    opponent_key: str
-    # The most recent spelling the coach used for the name.
-    opponent_name: str
-    meetings: int
-    record: WinLossRecord
-    # Null below the sample-size floor, where a rate would mislead.
-    win_rate: float | None
-
-
-class SlopeLine(BaseModel):
-    """One metric's first-two vs last-two meeting average, drawn as a slope line."""
-
-    label: str
-    first: float
-    last: float
-
-
-class HeadToHeadDetail(HeadToHeadSummary):
-    """The full matchup view against one opponent."""
-
-    hero: Metric
-    # Meeting by meeting, oldest first.
-    results: list[MatchResult]
-    # Exactly three lines when present; null until four meetings carry the point
-    # data every line needs, so the chart never draws a half-computed comparison.
-    slope: list[SlopeLine] | None
-    loss_patterns: list[BreakdownRow]
-    your_serve: list[Metric]
-    their_serve: list[Metric]
-    won_by_shot: list[BreakdownRow]
-    # The player's own point-winning shots alone, where the rally tab carries both
-    # sides: this view has no won/lost toggle for a second set to answer.
-    shot_frequency: list[ShotShare]
 
 
 class TrackedStatKey(enum.StrEnum):

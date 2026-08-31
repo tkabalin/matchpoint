@@ -7,7 +7,7 @@ from itertools import chain, takewhile
 from statistics import fmean, pstdev
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import Row, and_, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
@@ -18,7 +18,6 @@ from matchpoint_api.models import (
     FailureMode,
     Match,
     MatchResult,
-    MatchSet,
     MatchSide,
     Player,
     Point,
@@ -33,14 +32,10 @@ from matchpoint_api.routers.matches import match_for_coach
 from matchpoint_api.routers.players import owned_player
 from matchpoint_api.schemas.analytics import (
     BreakdownRow,
-    CorrelationPoint,
     CourtZoneCount,
     CurrentStreak,
-    DistributionBucket,
     FaultModeShares,
     FaultModeSplit,
-    HeadToHeadDetail,
-    HeadToHeadSummary,
     Metric,
     MetricUnit,
     OutcomeMixRow,
@@ -60,14 +55,11 @@ from matchpoint_api.schemas.analytics import (
     ServeTrendPoint,
     ShotFrequencySides,
     ShotShare,
-    SlopeLine,
     SquadMemberStats,
     SquadMetric,
     SquadTrendPoint,
     TrackedStat,
     TrackedStatKey,
-    TrendStats,
-    TrendWindow,
     WingSplit,
     WinLossRecord,
 )
@@ -126,10 +118,6 @@ PhaseFilter = Annotated[
     PointPhase, Query(description="Count only points the capture client stamped as this moment.")
 ]
 
-# Mirrored by the head-to-head tab's caption: below this many meetings the list shows
-# the raw record and no rate, a percentage of two matches being noise wearing a unit.
-MIN_MEETINGS_FOR_RATE = 3
-
 # Bars need a ceiling even where a rate has no natural one; these match the scale the
 # dashboard was designed against, and a value past one simply becomes its own ceiling.
 DOUBLE_FAULT_CAP = 5.0
@@ -145,8 +133,8 @@ FIRST_SERVE_IN_LABEL = "1st serve in %"
 SERVE_TREND_MATCHES = 6
 
 # The baseline a squad-snapshot tracked stat's latest value is judged against: the ten
-# matches before it, the widest window the trends tab already counts over. Wide enough
-# that one match cannot set the deviation on its own, recent enough to still be normal.
+# matches before it. Wide enough that one match cannot set the deviation on its own,
+# recent enough to still be normal.
 BASELINE_MATCHES = 10
 
 # The fewest points of its own kind a match must record before a tracked stat takes a
@@ -1053,8 +1041,8 @@ def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
 def _rally_length(counts: Row[Any]) -> list[RallyLengthBucket]:
     """The four buckets whole, or nothing while no point carries one.
 
-    Whole so the histogram shows the shape of the distribution, gaps included, as the
-    trends tab's own buckets do; points that recorded no bucket are simply absent.
+    Whole so the histogram shows the shape of the distribution, gaps included; points
+    that recorded no bucket are simply absent.
     """
     counted = [
         (_RALLY_LENGTH_LABEL[bucket], getattr(counts, f"rally_{bucket.value}"))
@@ -1118,204 +1106,11 @@ def get_match_rally_stats(
     return _rally_tab(db, match.player_id, scope)
 
 
-def _window_values(
-    counts: Row[Any], results: Sequence[Row[Any]]
-) -> dict[str, tuple[float, str] | None]:
-    """Each trend metric's value and sample over one window, or None where empty.
-
-    One shape for the current window, the previous one and all time, so baseline and
-    delta are the same arithmetic whatever the metric.
-    """
-
-    def pct(part: int, whole: int, sample: str | None = None) -> tuple[float, str] | None:
-        if whole == 0:
-            return None
-        return round(100 * part / whole), sample if sample is not None else f"n={whole}"
-
-    ratio = None
-    if counts.mistake_lost:
-        ratio = (
-            round(counts.forced_won / counts.mistake_lost, 2),
-            f"n={counts.forced_won + counts.mistake_lost}",
-        )
-    double_faults = None
-    if counts.sets_played:
-        double_faults = (
-            round(counts.double_faults / counts.sets_played, 1),
-            f"n={counts.sets_played} sets",
-        )
-    return {
-        "form": pct(_wins(results), len(results)),
-        "hold": pct(counts.hold_won, counts.hold_games),
-        "return_games": pct(counts.return_won, counts.return_games),
-        "ratio": ratio,
-        "bp_converted": pct(counts.bp_converted, counts.bp_chances),
-        "second_won": pct(counts.second_won, counts.second_points),
-        "double_faults": double_faults,
-    }
-
-
-# What each trend key renders as: label, unit, ceiling, and which direction is good.
-_TREND_SHAPE: dict[str, tuple[str, MetricUnit, float, bool]] = {
-    "form": ("Form (win %)", MetricUnit.PERCENT, 100, True),
-    "hold": ("Hold %", MetricUnit.PERCENT, 100, True),
-    "return_games": ("Return games won %", MetricUnit.PERCENT, 100, True),
-    "ratio": (FORCED_UNFORCED_LABEL, MetricUnit.RATIO, RATIO_CAP, True),
-    "bp_converted": ("Break points converted", MetricUnit.PERCENT, 100, True),
-    "second_won": ("2nd serve points won", MetricUnit.PERCENT, 100, True),
-    "double_faults": ("Double faults / set", MetricUnit.PER_SET, DOUBLE_FAULT_CAP, False),
-}
-
-
-@router.get("/trends", response_model=TrendStats)
-def get_trend_stats(
-    player_id: uuid.UUID, window: TrendWindow, db: DbSession, coach: CurrentCoach
-) -> TrendStats:
-    """The trends tab: the window's metrics against all time, plus the two charts.
-
-    Baselines are the same metric over every match; deltas compare the window before
-    this one, so they exist only for the counted windows, never for the season.
-    """
-    owned_player(db, player_id, coach.id)
-    matches = list(
-        db.execute(
-            select(Match.id, Match.result, Match.played_on)
-            .where(Match.player_id == player_id)
-            .order_by(Match.played_on.desc(), Match.created_at.desc())
-        )
-    )
-    if window == TrendWindow.SEASON:
-        current = [row for row in matches if row.played_on.year == date.today().year]
-        previous: list[Row[Any]] = []
-    else:
-        size = 5 if window == TrendWindow.LAST5 else 10
-        current = matches[:size]
-        # Deltas compare a whole previous window or none, as the overview's form
-        # metric does: against a partial one, early swings would read as trends.
-        previous = matches[size : 2 * size]
-        if len(previous) < size:
-            previous = []
-
-    def values_over(rows: Sequence[Row[Any]]) -> dict[str, tuple[float, str] | None]:
-        ids = [row.id for row in rows]
-        with_result = [row for row in rows if row.result is not None]
-        return _window_values(_point_counts(db, player_id, PointScope(match_ids=ids)), with_result)
-
-    current_values = values_over(current)
-    previous_values = values_over(previous) if previous else dict.fromkeys(current_values)
-    all_time = _window_values(
-        _point_counts(db, player_id, PointScope()),
-        [row for row in matches if row.result is not None],
-    )
-
-    metrics = []
-    for key, (label, unit, cap, higher_is_better) in _TREND_SHAPE.items():
-        entry = current_values[key]
-        if entry is None:
-            continue
-        value, sample = entry
-        baseline_entry = all_time[key]
-        previous_entry = previous_values[key]
-        metrics.append(
-            Metric(
-                label=label,
-                value=value,
-                unit=unit,
-                sample_size=sample,
-                baseline=baseline_entry[0] if baseline_entry else None,
-                delta=round(value - previous_entry[0], 2) if previous_entry else None,
-                max=max(cap, value),
-                higher_is_better=higher_is_better,
-            )
-        )
-
-    current_ids = [row.id for row in current]
-    return TrendStats(
-        metrics=metrics,
-        distribution_label=FIRST_SERVE_IN_LABEL,
-        distribution=_serve_in_distribution(db, current_ids),
-        correlation=_error_correlation(db, current_ids),
-    )
-
-
-def _serve_in_distribution(db: Session, match_ids: Sequence[uuid.UUID]) -> list[DistributionBucket]:
-    """Per-match first-serve-in percentages, gathered into five-point buckets.
-
-    Contiguous from the lowest occupied bucket to the highest, zeros included, so the
-    histogram shows the spread rather than deleting the gaps that are the point.
-    """
-    rows = db.execute(
-        select(
-            func.count().filter(Point.serve1_outcome != ServeOutcome.FAULT).label("landed"),
-            func.count().label("serves"),
-        )
-        .select_from(Point)
-        .where(
-            Point.match_id.in_(match_ids),
-            Point.server == MatchSide.TRACKED,
-        )
-        .group_by(Point.match_id)
-    ).all()
-    if not rows:
-        return []
-    # 100% would otherwise mint a bucket of its own above the scale, so it joins the top.
-    buckets = [min(round(100 * row.landed / row.serves) // 5, 19) for row in rows]
-    return [
-        DistributionBucket(
-            bucket=f"{5 * index}–{5 * index + 5}%",
-            matches=sum(bucket == index for bucket in buckets),
-        )
-        for index in range(min(buckets), max(buckets) + 1)
-    ]
-
-
-def _error_correlation(db: Session, match_ids: Sequence[uuid.UUID]) -> list[CorrelationPoint]:
-    """Per match: the player's unforced errors against the games they lost.
-
-    Games lost come off the derived set rows, which ingest recomputes with every
-    flush, so a match appears once it has both points and a set tally.
-    """
-    errors = db.execute(
-        select(
-            Point.match_id,
-            func.count()
-            .filter(and_(~Point.won, Point.end_reason == EndReason.MISTAKE))
-            .label("errors"),
-        )
-        .where(Point.match_id.in_(match_ids))
-        .group_by(Point.match_id)
-    ).all()
-    games_lost: dict[uuid.UUID, int] = {
-        row.match_id: int(row.games)
-        for row in db.execute(
-            select(MatchSet.match_id, func.sum(MatchSet.games_won_opponent).label("games"))
-            .where(MatchSet.match_id.in_(match_ids))
-            .group_by(MatchSet.match_id)
-        )
-    }
-    return [
-        CorrelationPoint(unforced_errors=row.errors, games_lost=games_lost[row.match_id])
-        for row in sorted(errors, key=lambda row: row.errors)
-        if row.match_id in games_lost
-    ]
-
-
+# Without a caller until the opponent axis (#244) lands: the head-to-head endpoints
+# these two fed went with the tabs that drew them (#245), and the grouping is the part
+# that survives, being what makes one free-text name one opponent.
 def _normalised(opponent_name: str) -> str:
     return opponent_name.strip().lower()
-
-
-def _summarise(key: str, meetings: list[Row[Any]]) -> HeadToHeadSummary:
-    wins = _wins(meetings)
-    return HeadToHeadSummary(
-        opponent_key=key,
-        # The list is newest first, so the first row carries the latest spelling.
-        opponent_name=meetings[0].opponent_name,
-        meetings=len(meetings),
-        record=WinLossRecord(wins=wins, losses=len(meetings) - wins),
-        win_rate=(
-            round(100 * wins / len(meetings)) if len(meetings) >= MIN_MEETINGS_FOR_RATE else None
-        ),
-    )
 
 
 def _meetings_by_opponent(db: Session, player_id: uuid.UUID) -> dict[str, list[Row[Any]]]:
@@ -1331,176 +1126,6 @@ def _meetings_by_opponent(db: Session, player_id: uuid.UUID) -> dict[str, list[R
             continue
         groups.setdefault(_normalised(row.opponent_name), []).append(row)
     return groups
-
-
-@router.get("/head-to-head", response_model=list[HeadToHeadSummary])
-def list_head_to_head(
-    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach
-) -> list[HeadToHeadSummary]:
-    """Every opponent this player has a resulted match against, most-met first."""
-    owned_player(db, player_id, coach.id)
-    summaries = [
-        _summarise(key, meetings) for key, meetings in _meetings_by_opponent(db, player_id).items()
-    ]
-    return sorted(summaries, key=lambda summary: (-summary.meetings, summary.opponent_name))
-
-
-def _half_slope_values(counts: Row[Any]) -> dict[str, float] | None:
-    """One half's three slope values on a shared 0-100 scale, or None if any is empty."""
-    if not counts.hold_games or not counts.bp_chances or not counts.mistake_lost:
-        return None
-    ratio = counts.forced_won / counts.mistake_lost
-    return {
-        "Hold %": round(100 * counts.hold_won / counts.hold_games),
-        "BP conv": round(100 * counts.bp_converted / counts.bp_chances),
-        # The ratio runs 0-3 where the other two run 0-100, so it is scaled onto
-        # their axis to share the chart, and clamped where it runs past its cap.
-        "F:UE": round(min(ratio, RATIO_CAP) / RATIO_CAP * 100),
-    }
-
-
-def _slope(
-    db: Session, player_id: uuid.UUID, meetings_oldest_first: list[Row[Any]]
-) -> list[SlopeLine] | None:
-    if len(meetings_oldest_first) < 4:
-        return None
-    first = _half_slope_values(
-        _point_counts(
-            db, player_id, PointScope(match_ids=[row.id for row in meetings_oldest_first[:2]])
-        )
-    )
-    last = _half_slope_values(
-        _point_counts(
-            db, player_id, PointScope(match_ids=[row.id for row in meetings_oldest_first[-2:]])
-        )
-    )
-    if first is None or last is None:
-        return None
-    return [SlopeLine(label=label, first=first[label], last=last[label]) for label in first]
-
-
-def _loss_patterns(db: Session, loss_ids: list[uuid.UUID], losses: int) -> list[BreakdownRow]:
-    """How the losses arrived, each classified once, in priority order.
-
-    Tiebreak means the deciding set held one; late-set fade is a deciding set lost
-    from four games or more, tight until the end; broken early is a first-set break
-    inside the first four games. A loss without point data stays unclassified.
-    """
-    sets_by_match: dict[uuid.UUID, list[Row[Any]]] = {}
-    for row in db.execute(
-        select(MatchSet.match_id, MatchSet.set_number, MatchSet.games_won_tracked).where(
-            MatchSet.match_id.in_(loss_ids)
-        )
-    ):
-        sets_by_match.setdefault(row.match_id, []).append(row)
-    tiebreak_sets = {
-        (row.match_id, row.set_number)
-        for row in db.execute(
-            select(Point.match_id, Point.set_number)
-            .where(Point.match_id.in_(loss_ids), Point.in_tiebreak)
-            .distinct()
-        )
-    }
-    broken_early = set(
-        db.scalars(
-            select(Point.match_id)
-            .where(
-                Point.match_id.in_(loss_ids),
-                Point.is_game_end,
-                ~Point.in_tiebreak,
-                Point.set_number == 1,
-                Point.game_number <= 4,
-                Point.server == MatchSide.TRACKED,
-                ~Point.won,
-            )
-            .distinct()
-        )
-    )
-
-    tallies = {"Late-set fade": 0, "Broken early": 0, "Tiebreak": 0}
-    for match_id, sets in sets_by_match.items():
-        deciding = max(sets, key=lambda row: row.set_number)
-        if (match_id, deciding.set_number) in tiebreak_sets:
-            tallies["Tiebreak"] += 1
-        elif deciding.games_won_tracked >= 4:
-            tallies["Late-set fade"] += 1
-        elif match_id in broken_early:
-            tallies["Broken early"] += 1
-    return [
-        BreakdownRow(label=label, value=value, max=max(losses, 1))
-        for label, value in tallies.items()
-    ]
-
-
-# The opponent is a query parameter and not a path segment: the key is free text, and
-# a name holding a slash or trimming down to "." cannot survive one.
-@router.get("/head-to-head/detail", response_model=HeadToHeadDetail)
-def get_head_to_head(
-    player_id: uuid.UUID, opponent: str, db: DbSession, coach: CurrentCoach
-) -> HeadToHeadDetail:
-    """The full matchup view against one opponent, named by the list's key."""
-    owned_player(db, player_id, coach.id)
-    meetings = _meetings_by_opponent(db, player_id).get(_normalised(opponent))
-    if meetings is None:
-        raise HTTPException(status_code=404, detail="No matches against this opponent")
-    summary = _summarise(_normalised(opponent), meetings)
-
-    oldest_first = list(reversed(meetings))
-    meeting_ids = [row.id for row in oldest_first]
-    meeting_scope = PointScope(match_ids=meeting_ids)
-    counts = _point_counts(db, player_id, meeting_scope)
-    won_by_shot, _, shot_frequency = _shot_breakdowns(db, player_id, meeting_scope)
-    loss_ids = [row.id for row in meetings if row.result == MatchResult.LOSS]
-
-    your_serve = [
-        _percent("1st serve points won", counts.first_in_won, counts.first_in),
-        _percent("2nd serve points won", counts.second_won, counts.second_points),
-        _per(
-            "Double faults / set",
-            counts.double_faults,
-            counts.sets_played,
-            unit=MetricUnit.PER_SET,
-            cap=DOUBLE_FAULT_CAP,
-            sample=f"n={counts.sets_played} sets",
-        ),
-    ]
-    their_serve = [
-        _percent(
-            "Their 1st serve points won",
-            counts.their_first_in - counts.their_first_in_won,
-            counts.their_first_in,
-            higher_is_better=False,
-        ),
-        _per(
-            "Their aces / match",
-            counts.their_aces,
-            counts.matches_with_points,
-            unit=MetricUnit.PER_MATCH,
-            cap=ACES_CAP,
-            sample=f"n={counts.matches_with_points}",
-        ),
-    ]
-    return HeadToHeadDetail(
-        **summary.model_dump(),
-        hero=Metric(
-            label=f"{summary.meetings} meeting{'s' if summary.meetings != 1 else ''} · "
-            f"{summary.record.wins}–{summary.record.losses}",
-            value=round(100 * summary.record.wins / summary.meetings),
-            unit=MetricUnit.PERCENT,
-            sample_size=f"n={summary.meetings}",
-            baseline=None,
-            delta=None,
-            max=100,
-            higher_is_better=True,
-        ),
-        results=[row.result for row in oldest_first],
-        slope=_slope(db, player_id, oldest_first),
-        loss_patterns=_loss_patterns(db, loss_ids, summary.record.losses),
-        your_serve=[metric for metric in your_serve if metric is not None],
-        their_serve=[metric for metric in their_serve if metric is not None],
-        won_by_shot=won_by_shot,
-        shot_frequency=shot_frequency.you,
-    )
 
 
 def _percent_value(part: int, whole: int) -> float:

@@ -28,10 +28,10 @@ from matchpoint_api.models import (
     UnusualReason,
     Wing,
 )
+from matchpoint_api.routers.analytics import _meetings_by_opponent
 from tests.factories import (
     make_coach,
     make_match,
-    make_match_set,
     make_player,
     make_point,
     sign_in,
@@ -46,9 +46,9 @@ def coach(client: TestClient, db_session: Session) -> Coach:
     return coach
 
 
-# The season record and the season trend window are the calendar year the server is
-# in, so the tests that assert over them derive their dates instead of pinning a year
-# that would start failing every January.
+# The season record and the squad snapshot's period are the calendar year the server
+# is in, so the tests that assert over them derive their dates instead of pinning a
+# year that would start failing every January.
 THIS_YEAR = date.today().year
 LAST_YEAR = THIS_YEAR - 1
 
@@ -57,9 +57,6 @@ ENDPOINTS = [
     "overview",
     "serve",
     "rally",
-    "trends?window=last5",
-    "head-to-head",
-    "head-to-head/detail?opponent=somebody",
 ]
 
 
@@ -1571,179 +1568,19 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert [style["count"] for style in player_wide["styles"]["opponents"]] == [0, 1, 0]
 
 
-# --- trends ---
+# --- opponent grouping ---
 
 
-def test_trends_last5_windows_baselines_and_charts(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Ten 2026 matches plus two 2025 ones: the window is the newest five, the delta
-    the five before, the baseline everything.
+def test_meetings_group_on_the_normalised_opponent_name(db_session: Session) -> None:
+    """Spelling variants of one name are one matchup, newest meeting first; a
+    resultless match and a nameless one join no matchup at all.
 
-    2026 results by day, 1st to 10th: L L L W W W L W L W. The window holds 3 wins
-    (60), the previous five 2 (40), all time 7 of 12 (58). Points sit in the newest
-    match (window), the 5th (previous window) and 2025 (baseline only).
+    Called directly rather than through a route: the head-to-head endpoints this fed
+    are gone (#245), and the opponent axis that reads it next (#244) is not written.
     """
-    player = make_player(db_session, coach_id=coach.id)
-    results_2026 = ["loss", "loss", "loss", "win", "win", "win", "loss", "win", "loss", "win"]
-    matches = [
-        make_match(
-            db_session,
-            player_id=player.id,
-            played_on=date(2026, 8, day),
-            result=MatchResult(result),
-        )
-        for day, result in enumerate(results_2026, start=1)
-    ]
-    for day in (1, 2):
-        make_match(
-            db_session,
-            player_id=player.id,
-            played_on=date(2025, 6, day),
-            result=MatchResult.WIN,
-        )
-    newest, fifth = matches[9], matches[4]
-    make_point(db_session, match_id=newest.id, sequence=0, is_game_end=True)
-    make_point(
-        db_session,
-        match_id=newest.id,
-        sequence=1,
-        is_game_end=True,
-        won=False,
-        end_reason=EndReason.MISTAKE,
-        wing=Wing.BACKHAND,
-    )
-    make_match_set(db_session, match_id=newest.id, games_won_tracked=6, games_won_opponent=4)
-    make_point(db_session, match_id=fifth.id, sequence=0, is_game_end=True)
-    older = make_match(
-        db_session, player_id=player.id, played_on=date(2025, 6, 3), result=MatchResult.WIN
-    )
-    make_point(db_session, match_id=older.id, sequence=0, is_game_end=True)
-
-    body = _get(client, player.id, "trends?window=last5")
-
-    assert [
-        (metric["label"], metric["value"], metric["baseline"], metric["delta"])
-        for metric in body["metrics"]
-    ] == [
-        # All time is 8 of 13 results (62) once the third 2025 match joins in.
-        ("Form (win %)", 60, 62, 20),
-        ("Hold %", 50, 75, -50),
-        ("Forced : Unforced ratio", 1.0, 3.0, None),
-        ("Double faults / set", 0.0, 0.0, 0.0),
-    ]
-    assert body["metrics"][0]["sample_size"] == "n=5"
-    assert body["metrics"][1]["sample_size"] == "n=2"
-    assert body["distribution_label"] == "1st serve in %"
-    assert body["distribution"] == [{"bucket": "95–100%", "matches": 1}]
-    assert body["correlation"] == [{"unforced_errors": 1, "games_lost": 4}]
-
-    last10 = _get(client, player.id, "trends?window=last10")
-    assert last10["metrics"][0]["value"] == 50
-    assert last10["metrics"][0]["delta"] is None
-
-
-def test_trends_season_covers_this_year_with_no_delta(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-    for day, result in enumerate(["win", "win", "loss"], start=1):
-        make_match(
-            db_session,
-            player_id=player.id,
-            played_on=date(THIS_YEAR, 8, day),
-            result=MatchResult(result),
-        )
-    make_match(
-        db_session, player_id=player.id, played_on=date(LAST_YEAR, 6, 1), result=MatchResult.WIN
-    )
-
-    body = _get(client, player.id, "trends?window=season")
-
-    assert body["metrics"] == [
-        {
-            "label": "Form (win %)",
-            "value": 67,
-            "unit": "percent",
-            "sample_size": "n=3",
-            "baseline": 75,
-            "delta": None,
-            "max": 100,
-            "higher_is_better": True,
-            "display": None,
-        }
-    ]
-    assert body["distribution"] == []
-    assert body["correlation"] == []
-
-
-def test_trends_distribution_buckets_are_contiguous(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """One match at 50% first serves in, one at 75%: the gap buckets render as zero."""
-    player = make_player(db_session, coach_id=coach.id)
-    halves = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
-    make_point(db_session, match_id=halves.id, sequence=0)
-    make_point(
-        db_session,
-        match_id=halves.id,
-        sequence=1,
-        serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
-        serve1_fault_mode=FailureMode.NET,
-        serve2_outcome=ServeOutcome.IN,
-        serve2_box=None,
-    )
-    quarters = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 2))
-    for sequence in range(3):
-        make_point(db_session, match_id=quarters.id, sequence=sequence)
-    make_point(
-        db_session,
-        match_id=quarters.id,
-        sequence=3,
-        serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
-        serve1_fault_mode=FailureMode.WIDE,
-        serve2_outcome=ServeOutcome.IN,
-        serve2_box=None,
-    )
-
-    body = _get(client, player.id, "trends?window=last5")
-
-    assert body["distribution"] == [
-        {"bucket": "50–55%", "matches": 1},
-        {"bucket": "55–60%", "matches": 0},
-        {"bucket": "60–65%", "matches": 0},
-        {"bucket": "65–70%", "matches": 0},
-        {"bucket": "70–75%", "matches": 0},
-        {"bucket": "75–80%", "matches": 1},
-    ]
-    # Both matches have points but no derived set rows yet, so neither correlates.
-    assert body["correlation"] == []
-
-
-def test_trends_rejects_an_unknown_window(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-
-    response = client.get(f"/players/{player.id}/analytics/trends?window=lastweek")
-
-    assert response.status_code == 422
-
-
-# --- head-to-head ---
-
-
-def test_head_to_head_list_groups_on_the_normalised_name(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Spelling variants of one name are one matchup, whose display name is the
-    newest; a resultless match and a nameless one join no matchup at all.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    torres = [("torres", "win", 1), (" Torres ", "win", 2), ("Torres", "loss", 3)]
-    for name, result, day in torres:
+    player = make_player(db_session)
+    spellings = [("torres", "win", 1), (" Torres ", "win", 2), ("Torres", "loss", 3)]
+    for name, result, day in spellings:
         make_match(
             db_session,
             player_id=player.id,
@@ -1751,319 +1588,13 @@ def test_head_to_head_list_groups_on_the_normalised_name(
             played_on=date(2026, 8, day),
             result=MatchResult(result),
         )
-    for result, day in [("win", 4), ("loss", 5)]:
-        make_match(
-            db_session,
-            player_id=player.id,
-            opponent_name="Naidoo",
-            played_on=date(2026, 8, day),
-            result=MatchResult(result),
-        )
-    make_match(
-        db_session,
-        player_id=player.id,
-        played_on=date(2026, 8, 6),
-        result=MatchResult.WIN,
-    )
-    make_match(db_session, player_id=player.id, opponent_name="Reyes", played_on=date(2026, 8, 7))
+    make_match(db_session, player_id=player.id, played_on=date(2026, 8, 4), result=MatchResult.WIN)
+    make_match(db_session, player_id=player.id, opponent_name="Reyes", played_on=date(2026, 8, 5))
 
-    body = _get(client, player.id, "head-to-head")
+    groups = _meetings_by_opponent(db_session, player.id)
 
-    assert body == [
-        {
-            "opponent_key": "torres",
-            "opponent_name": "Torres",
-            "meetings": 3,
-            "record": {"wins": 2, "losses": 1},
-            "win_rate": 67,
-        },
-        {
-            "opponent_key": "naidoo",
-            "opponent_name": "Naidoo",
-            "meetings": 2,
-            "record": {"wins": 1, "losses": 1},
-            "win_rate": None,
-        },
-    ]
-
-
-def test_head_to_head_list_is_empty_without_opponents(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-
-    assert _get(client, player.id, "head-to-head") == []
-
-
-def test_head_to_head_detail_404s_on_an_unknown_opponent(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-
-    response = client.get(f"/players/{player.id}/analytics/head-to-head/detail?opponent=nobody")
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "No matches against this opponent"
-
-
-def test_head_to_head_detail_reaches_a_name_holding_a_slash(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """A doubles pair is one free-text name, which a path segment could not carry."""
-    player = make_player(db_session, coach_id=coach.id)
-    make_match(
-        db_session,
-        player_id=player.id,
-        opponent_name="Smith / Jones",
-        played_on=date(2026, 8, 1),
-        result=MatchResult.LOSS,
-    )
-
-    listed = _get(client, player.id, "head-to-head")
-    assert listed[0]["opponent_key"] == "smith / jones"
-
-    response = client.get(
-        f"/players/{player.id}/analytics/head-to-head/detail",
-        params={"opponent": listed[0]["opponent_key"]},
-    )
-
-    assert response.status_code == 200
-    assert response.json()["opponent_name"] == "Smith / Jones"
-
-
-def test_head_to_head_detail_before_any_points(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Two meetings and nothing captured: the record renders, everything else is
-    honestly empty, and one unclassifiable loss leaves the patterns at zero.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    for result, day in [("win", 1), ("loss", 2)]:
-        make_match(
-            db_session,
-            player_id=player.id,
-            opponent_name="Reyes",
-            played_on=date(2026, 8, day),
-            result=MatchResult(result),
-        )
-
-    body = _get(client, player.id, "head-to-head/detail?opponent=reyes")
-
-    assert body["opponent_key"] == "reyes"
-    assert body["opponent_name"] == "Reyes"
-    assert body["win_rate"] is None
-    assert body["hero"]["label"] == "2 meetings · 1–1"
-    assert body["hero"]["value"] == 50
-    assert body["results"] == ["win", "loss"]
-    assert body["slope"] is None
-    assert body["loss_patterns"] == [
-        {"label": "Late-set fade", "value": 0, "secondary_value": None, "max": 1},
-        {"label": "Broken early", "value": 0, "secondary_value": None, "max": 1},
-        {"label": "Tiebreak", "value": 0, "secondary_value": None, "max": 1},
-    ]
-    assert body["your_serve"] == []
-    assert body["their_serve"] == []
-    assert body["won_by_shot"] == []
-    assert body["shot_frequency"] == []
-
-
-def test_head_to_head_detail_stays_slopeless_when_points_are_missing(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-    for day in range(1, 5):
-        make_match(
-            db_session,
-            player_id=player.id,
-            opponent_name="Quiet",
-            played_on=date(2026, 8, day),
-            result=MatchResult.WIN,
-        )
-
-    body = _get(client, player.id, "head-to-head/detail?opponent=quiet")
-
-    assert body["meetings"] == 4
-    assert body["slope"] is None
-
-
-def test_head_to_head_detail_with_points(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Four meetings, oldest two lost: the slope halves differ where arranged.
-
-    Each meeting has a held game (won, forced, forehand drive), an unforced loss on
-    a tracked serve, and a break-point return converted only in the newer two. The
-    second meeting adds an early break against serve; set rows classify the first
-    loss as a fade (4 games in the deciding set) and the second as broken early.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    meetings = [
-        make_match(
-            db_session,
-            player_id=player.id,
-            opponent_name="Ade",
-            played_on=date(2026, 8, day),
-            result=MatchResult(result),
-        )
-        for day, result in [(1, "loss"), (2, "loss"), (3, "win"), (4, "win")]
-    ]
-    for index, meeting in enumerate(meetings):
-        make_point(db_session, match_id=meeting.id, sequence=0, is_game_end=True)
-        make_point(
-            db_session,
-            match_id=meeting.id,
-            sequence=1,
-            won=False,
-            end_reason=EndReason.MISTAKE,
-            wing=Wing.BACKHAND,
-        )
-        converted = index >= 2
-        make_point(
-            db_session,
-            match_id=meeting.id,
-            sequence=2,
-            server=MatchSide.OPPONENT,
-            serve1_box=None,
-            return_outcome=ReturnOutcome.IN,
-            is_break_point=True,
-            won=converted,
-            wing=Wing.FOREHAND if converted else Wing.BACKHAND,
-            shot_type=ShotType.VOLLEY,
-        )
-    make_point(
-        db_session,
-        match_id=meetings[1].id,
-        sequence=3,
-        won=False,
-        end_reason=EndReason.MISTAKE,
-        wing=Wing.BACKHAND,
-        is_game_end=True,
-        game_number=2,
-    )
-    make_match_set(
-        db_session,
-        match_id=meetings[0].id,
-        games_won_tracked=4,
-        games_won_opponent=6,
-        winner=MatchSide.OPPONENT,
-    )
-    make_match_set(
-        db_session,
-        match_id=meetings[1].id,
-        games_won_tracked=0,
-        games_won_opponent=6,
-        winner=MatchSide.OPPONENT,
-    )
-
-    body = _get(client, player.id, "head-to-head/detail?opponent=ade")
-
-    assert body["meetings"] == 4
-    assert body["record"] == {"wins": 2, "losses": 2}
-    assert body["win_rate"] == 50
-    assert body["hero"]["label"] == "4 meetings · 2–2"
-    assert body["results"] == ["loss", "loss", "win", "win"]
-    # First two meetings: held 2 of 3 games (67), converted 0 break points, forced
-    # 2 against 3 unforced (ratio 0.67, scaled 22 of 100). Last two: all held, all
-    # converted, ratio 4:2 (scaled 67).
-    assert body["slope"] == [
-        {"label": "Hold %", "first": 67, "last": 100},
-        {"label": "BP conv", "first": 0, "last": 100},
-        {"label": "F:UE", "first": 22, "last": 67},
-    ]
-    assert body["loss_patterns"] == [
-        {"label": "Late-set fade", "value": 1, "secondary_value": None, "max": 2},
-        {"label": "Broken early", "value": 1, "secondary_value": None, "max": 2},
-        {"label": "Tiebreak", "value": 0, "secondary_value": None, "max": 2},
-    ]
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in body["your_serve"]
-    ] == [
-        ("1st serve points won", 44, "n=9"),
-        ("Double faults / set", 0.0, "n=4 sets"),
-    ]
-    assert [
-        (metric["label"], metric["value"], metric["higher_is_better"])
-        for metric in body["their_serve"]
-    ] == [
-        ("Their 1st serve points won", 50, False),
-        ("Their aces / match", 0.0, False),
-    ]
-    assert body["won_by_shot"] == [
-        {"label": "Forehand drive", "value": 4, "secondary_value": None, "max": 4},
-        {"label": "Forehand volley", "value": 2, "secondary_value": None, "max": 4},
-    ]
-    assert body["shot_frequency"] == [
-        {"shot": "Drive", "share": 0.67},
-        {"shot": "Volley", "share": 0.33},
-        {"shot": "Drop shot", "share": 0},
-        {"shot": "Lob", "share": 0},
-    ]
-
-
-def test_head_to_head_detail_leaves_a_patternless_loss_unclassified(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Lost 3-6, serve held in the opening games, no tiebreak: none of the three fit."""
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(
-        db_session,
-        player_id=player.id,
-        opponent_name="Plain",
-        played_on=date(2026, 8, 1),
-        result=MatchResult.LOSS,
-    )
-    make_match_set(
-        db_session,
-        match_id=match.id,
-        games_won_tracked=3,
-        games_won_opponent=6,
-        winner=MatchSide.OPPONENT,
-    )
-    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
-
-    body = _get(client, player.id, "head-to-head/detail?opponent=plain")
-
-    assert [row["value"] for row in body["loss_patterns"]] == [0, 0, 0]
-
-
-def test_head_to_head_detail_classifies_a_tiebreak_loss_first(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """A 6-7 deciding set would read as a fade, but the tiebreak names it first."""
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(
-        db_session,
-        player_id=player.id,
-        opponent_name="Tie",
-        played_on=date(2026, 8, 1),
-        result=MatchResult.LOSS,
-    )
-    make_match_set(
-        db_session,
-        match_id=match.id,
-        games_won_tracked=6,
-        games_won_opponent=7,
-        winner=MatchSide.OPPONENT,
-    )
-    make_point(
-        db_session,
-        match_id=match.id,
-        sequence=0,
-        won=False,
-        end_reason=EndReason.MISTAKE,
-        wing=Wing.BACKHAND,
-        in_tiebreak=True,
-        game_number=13,
-    )
-
-    body = _get(client, player.id, "head-to-head/detail?opponent=tie")
-
-    assert body["hero"]["label"] == "1 meeting · 0–1"
-    assert body["loss_patterns"] == [
-        {"label": "Late-set fade", "value": 0, "secondary_value": None, "max": 1},
-        {"label": "Broken early", "value": 0, "secondary_value": None, "max": 1},
-        {"label": "Tiebreak", "value": 1, "secondary_value": None, "max": 1},
-    ]
+    assert list(groups) == ["torres"]
+    assert [row.opponent_name for row in groups["torres"]] == ["Torres", " Torres ", "torres"]
 
 
 # --- squad members (#204) ---

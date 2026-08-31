@@ -69,8 +69,8 @@ DELETED_MATCH_TTL = timedelta(days=30)
 # the scoring system is the rulebook the client scored the points under (the server only
 # stores the label, `docs/scoring-systems.md`), so moving it relabels a match already
 # played. The descriptive fields reach analytics too, played_on splitting the year and
-# opponent_name bucketing the head-to-head, but correcting one fixes those figures rather
-# than rewriting them, which is what keeps a typo cheaper than the match and its points.
+# opponent_name keying a matchup, but correcting one fixes those figures rather than
+# rewriting them, which is what keeps a typo cheaper than the match and its points.
 COMPLETION_LOCKED_FIELDS = ("result", "scoring_system")
 
 

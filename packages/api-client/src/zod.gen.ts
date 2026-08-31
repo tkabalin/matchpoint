@@ -59,16 +59,6 @@ export const zCoachVerifyPassword = z.object({
 });
 
 /**
- * CorrelationPoint
- *
- * One match on the unforced-errors vs games-lost scatter.
- */
-export const zCorrelationPoint = z.object({
-    games_lost: z.int(),
-    unforced_errors: z.int()
-});
-
-/**
  * CourtDepth
  */
 export const zCourtDepth = z.enum([
@@ -95,16 +85,6 @@ export const zCourtSide = z.enum(['deuce', 'ad']);
 export const zCourtZoneCount = z.object({
     count: z.int(),
     zone: z.string()
-});
-
-/**
- * DistributionBucket
- *
- * One histogram bar: how many of the window's matches fell in this range.
- */
-export const zDistributionBucket = z.object({
-    bucket: z.string(),
-    matches: z.int()
 });
 
 /**
@@ -642,17 +622,6 @@ export const zShotType = z.enum([
 ]);
 
 /**
- * SlopeLine
- *
- * One metric's first-two vs last-two meeting average, drawn as a slope line.
- */
-export const zSlopeLine = z.object({
-    first: z.number(),
-    label: z.string(),
-    last: z.number()
-});
-
-/**
  * SquadMetric
  *
  * Which roster-wide figure a squad trend series carries.
@@ -774,29 +743,6 @@ export const zTrackedStat = z.object({
 });
 
 /**
- * TrendStats
- *
- * The trends tab, computed over the requested window of recent matches.
- */
-export const zTrendStats = z.object({
-    correlation: z.array(zCorrelationPoint),
-    distribution: z.array(zDistributionBucket),
-    distribution_label: z.string(),
-    metrics: z.array(zMetric)
-});
-
-/**
- * TrendWindow
- *
- * Which slice of a player's most recent matches a trends query covers.
- */
-export const zTrendWindow = z.enum([
-    'last5',
-    'last10',
-    'season'
-]);
-
-/**
  * UnusualReason
  *
  * Why an UNUSUAL point ended, set only alongside that EndReason.
@@ -851,40 +797,6 @@ export const zVerifyResetCodeRequest = z.object({
 export const zWinLossRecord = z.object({
     losses: z.int(),
     wins: z.int()
-});
-
-/**
- * HeadToHeadDetail
- *
- * The full matchup view against one opponent.
- */
-export const zHeadToHeadDetail = z.object({
-    hero: zMetric,
-    loss_patterns: z.array(zBreakdownRow),
-    meetings: z.int(),
-    opponent_key: z.string(),
-    opponent_name: z.string(),
-    record: zWinLossRecord,
-    results: z.array(zMatchResult),
-    shot_frequency: z.array(zShotShare),
-    slope: z.array(zSlopeLine).nullable(),
-    their_serve: z.array(zMetric),
-    win_rate: z.number().nullable(),
-    won_by_shot: z.array(zBreakdownRow),
-    your_serve: z.array(zMetric)
-});
-
-/**
- * HeadToHeadSummary
- *
- * One opponent row on the head-to-head list.
- */
-export const zHeadToHeadSummary = z.object({
-    meetings: z.int(),
-    opponent_key: z.string(),
-    opponent_name: z.string(),
-    record: zWinLossRecord,
-    win_rate: z.number().nullable()
 });
 
 /**
@@ -1450,30 +1362,6 @@ export const zUpdatePlayerPath = z.object({
  */
 export const zUpdatePlayerResponse = zPlayerRead;
 
-export const zListHeadToHeadPath = z.object({
-    player_id: z.uuid()
-});
-
-/**
- * Response List Head To Head
- *
- * Successful Response
- */
-export const zListHeadToHeadResponse = z.array(zHeadToHeadSummary);
-
-export const zGetHeadToHeadPath = z.object({
-    player_id: z.uuid()
-});
-
-export const zGetHeadToHeadQuery = z.object({
-    opponent: z.string()
-});
-
-/**
- * Successful Response
- */
-export const zGetHeadToHeadResponse = zHeadToHeadDetail;
-
 export const zGetPlayerOverviewPath = z.object({
     player_id: z.uuid()
 });
@@ -1510,19 +1398,6 @@ export const zGetServeStatsQuery = z.object({
  * Successful Response
  */
 export const zGetServeStatsResponse = zServeStats;
-
-export const zGetTrendStatsPath = z.object({
-    player_id: z.uuid()
-});
-
-export const zGetTrendStatsQuery = z.object({
-    window: zTrendWindow
-});
-
-/**
- * Successful Response
- */
-export const zGetTrendStatsResponse = zTrendStats;
 
 export const zRegeneratePlayerPasswordPath = z.object({
     player_id: z.uuid()

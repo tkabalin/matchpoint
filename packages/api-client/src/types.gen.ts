@@ -141,22 +141,6 @@ export type CoachVerifyPassword = {
 };
 
 /**
- * CorrelationPoint
- *
- * One match on the unforced-errors vs games-lost scatter.
- */
-export type CorrelationPoint = {
-    /**
-     * Games Lost
-     */
-    games_lost: number;
-    /**
-     * Unforced Errors
-     */
-    unforced_errors: number;
-};
-
-/**
  * CourtDepth
  */
 export type CourtDepth = 'short' | 'mid' | 'deep';
@@ -198,22 +182,6 @@ export type CurrentStreak = {
      */
     length: number;
     outcome: MatchResult;
-};
-
-/**
- * DistributionBucket
- *
- * One histogram bar: how many of the window's matches fell in this range.
- */
-export type DistributionBucket = {
-    /**
-     * Bucket
-     */
-    bucket: string;
-    /**
-     * Matches
-     */
-    matches: number;
 };
 
 /**
@@ -305,85 +273,6 @@ export type HttpValidationError = {
      * Detail
      */
     detail?: Array<ValidationError>;
-};
-
-/**
- * HeadToHeadDetail
- *
- * The full matchup view against one opponent.
- */
-export type HeadToHeadDetail = {
-    hero: Metric;
-    /**
-     * Loss Patterns
-     */
-    loss_patterns: Array<BreakdownRow>;
-    /**
-     * Meetings
-     */
-    meetings: number;
-    /**
-     * Opponent Key
-     */
-    opponent_key: string;
-    /**
-     * Opponent Name
-     */
-    opponent_name: string;
-    record: WinLossRecord;
-    /**
-     * Results
-     */
-    results: Array<MatchResult>;
-    /**
-     * Shot Frequency
-     */
-    shot_frequency: Array<ShotShare>;
-    /**
-     * Slope
-     */
-    slope: Array<SlopeLine> | null;
-    /**
-     * Their Serve
-     */
-    their_serve: Array<Metric>;
-    /**
-     * Win Rate
-     */
-    win_rate: number | null;
-    /**
-     * Won By Shot
-     */
-    won_by_shot: Array<BreakdownRow>;
-    /**
-     * Your Serve
-     */
-    your_serve: Array<Metric>;
-};
-
-/**
- * HeadToHeadSummary
- *
- * One opponent row on the head-to-head list.
- */
-export type HeadToHeadSummary = {
-    /**
-     * Meetings
-     */
-    meetings: number;
-    /**
-     * Opponent Key
-     */
-    opponent_key: string;
-    /**
-     * Opponent Name
-     */
-    opponent_name: string;
-    record: WinLossRecord;
-    /**
-     * Win Rate
-     */
-    win_rate: number | null;
 };
 
 /**
@@ -1451,26 +1340,6 @@ export type ShotShare = {
 export type ShotType = 'drive' | 'volley' | 'dropshot' | 'lob';
 
 /**
- * SlopeLine
- *
- * One metric's first-two vs last-two meeting average, drawn as a slope line.
- */
-export type SlopeLine = {
-    /**
-     * First
-     */
-    first: number;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Last
-     */
-    last: number;
-};
-
-/**
  * SquadMemberStats
  *
  * One roster player's raw figures, for both screens that rank a whole squad.
@@ -1576,37 +1445,6 @@ export type TrackedStat = {
  * Which statistic one tracked-stat row carries.
  */
 export type TrackedStatKey = 'forced_to_unforced' | 'first_serve_in';
-
-/**
- * TrendStats
- *
- * The trends tab, computed over the requested window of recent matches.
- */
-export type TrendStats = {
-    /**
-     * Correlation
-     */
-    correlation: Array<CorrelationPoint>;
-    /**
-     * Distribution
-     */
-    distribution: Array<DistributionBucket>;
-    /**
-     * Distribution Label
-     */
-    distribution_label: string;
-    /**
-     * Metrics
-     */
-    metrics: Array<Metric>;
-};
-
-/**
- * TrendWindow
- *
- * Which slice of a player's most recent matches a trends query covers.
- */
-export type TrendWindow = 'last5' | 'last10' | 'season';
 
 /**
  * UnusualReason
@@ -3169,89 +3007,6 @@ export type UpdatePlayerResponses = {
 
 export type UpdatePlayerResponse = UpdatePlayerResponses[keyof UpdatePlayerResponses];
 
-export type ListHeadToHeadData = {
-    body?: never;
-    path: {
-        /**
-         * Player Id
-         */
-        player_id: string;
-    };
-    query?: never;
-    url: '/players/{player_id}/analytics/head-to-head';
-};
-
-export type ListHeadToHeadErrors = {
-    /**
-     * Not signed in
-     */
-    401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Too many requests
-     */
-    429: ErrorDetail;
-};
-
-export type ListHeadToHeadError = ListHeadToHeadErrors[keyof ListHeadToHeadErrors];
-
-export type ListHeadToHeadResponses = {
-    /**
-     * Response List Head To Head
-     *
-     * Successful Response
-     */
-    200: Array<HeadToHeadSummary>;
-};
-
-export type ListHeadToHeadResponse = ListHeadToHeadResponses[keyof ListHeadToHeadResponses];
-
-export type GetHeadToHeadData = {
-    body?: never;
-    path: {
-        /**
-         * Player Id
-         */
-        player_id: string;
-    };
-    query: {
-        /**
-         * Opponent
-         */
-        opponent: string;
-    };
-    url: '/players/{player_id}/analytics/head-to-head/detail';
-};
-
-export type GetHeadToHeadErrors = {
-    /**
-     * Not signed in
-     */
-    401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Too many requests
-     */
-    429: ErrorDetail;
-};
-
-export type GetHeadToHeadError = GetHeadToHeadErrors[keyof GetHeadToHeadErrors];
-
-export type GetHeadToHeadResponses = {
-    /**
-     * Successful Response
-     */
-    200: HeadToHeadDetail;
-};
-
-export type GetHeadToHeadResponse = GetHeadToHeadResponses[keyof GetHeadToHeadResponses];
-
 export type GetPlayerOverviewData = {
     body?: never;
     path: {
@@ -3387,46 +3142,6 @@ export type GetServeStatsResponses = {
 };
 
 export type GetServeStatsResponse = GetServeStatsResponses[keyof GetServeStatsResponses];
-
-export type GetTrendStatsData = {
-    body?: never;
-    path: {
-        /**
-         * Player Id
-         */
-        player_id: string;
-    };
-    query: {
-        window: TrendWindow;
-    };
-    url: '/players/{player_id}/analytics/trends';
-};
-
-export type GetTrendStatsErrors = {
-    /**
-     * Not signed in
-     */
-    401: ErrorDetail;
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-    /**
-     * Too many requests
-     */
-    429: ErrorDetail;
-};
-
-export type GetTrendStatsError = GetTrendStatsErrors[keyof GetTrendStatsErrors];
-
-export type GetTrendStatsResponses = {
-    /**
-     * Successful Response
-     */
-    200: TrendStats;
-};
-
-export type GetTrendStatsResponse = GetTrendStatsResponses[keyof GetTrendStatsResponses];
 
 export type RegeneratePlayerPasswordData = {
     body?: never;
