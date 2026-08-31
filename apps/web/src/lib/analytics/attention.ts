@@ -1,10 +1,6 @@
-import type {
-  AttentionResult,
-  FormRankEntry,
-  MatchOutcome,
-  SquadMemberStats,
-  TrackedStat,
-} from "./types.provisional";
+import type { SquadMemberStats, TrackedStat } from "@matchpoint/api-client";
+
+import type { AttentionResult, FormRankEntry, MatchOutcome } from "./types.provisional";
 import { formatRecord } from "@/lib/format-record";
 
 /**
@@ -23,9 +19,12 @@ import { formatRecord } from "@/lib/format-record";
  * squad average, never a fixed target — so a naturally streaky player's
  * ordinary swings don't trip it, but a genuine departure from their own
  * pattern does. Whichever stat has the most negative z-score becomes the
- * reason shown on the card. Requires both a minimum sample
- * (`MIN_MATCHES_FOR_BASELINE`, so there's an actual baseline to deviate
- * from) and a minimum severity (`DECLINE_Z_THRESHOLD`), so ordinary
+ * reason shown on the card. `tracked_stats` already only carries a stat with
+ * a real baseline behind it — the endpoint skips one under two qualifying
+ * matches — so no separate matches-logged gate belongs here; that gate used
+ * to key on the calendar-year `matches_logged_this_period` counter, which
+ * falsely starved Tier 2 for the first few matches of every January (#238).
+ * A minimum severity (`DECLINE_Z_THRESHOLD`) still applies, so ordinary
  * week-to-week noise doesn't get flagged constantly and the feature stays
  * trustworthy.
  *
@@ -44,7 +43,6 @@ import { formatRecord } from "@/lib/format-record";
 export const LOSING_STREAK_THRESHOLD = 3;
 export const STALE_DATA_DAYS = 14;
 
-export const MIN_MATCHES_FOR_BASELINE = 5;
 export const DECLINE_Z_THRESHOLD = 1.5;
 
 /** Below this many matches this period, a form ranking would be swung by a
@@ -53,31 +51,35 @@ export const MIN_MATCHES_FOR_FORM_RANK = 3;
 
 function hardFlagReason(member: SquadMemberStats): string | null {
   if (
-    member.currentStreak.outcome === "loss" &&
-    member.currentStreak.length >= LOSING_STREAK_THRESHOLD
+    member.current_streak !== null &&
+    member.current_streak.outcome === "loss" &&
+    member.current_streak.length >= LOSING_STREAK_THRESHOLD
   ) {
-    return `${member.currentStreak.length}-match losing streak`;
+    return `${member.current_streak.length}-match losing streak`;
   }
-  if (member.daysSinceLastMatch === null || member.daysSinceLastMatch >= STALE_DATA_DAYS) {
+  // Distinct from the stale-data message below: null means this player has
+  // never logged a match at all, not that their data has gone quiet.
+  if (member.days_since_last_match === null) {
+    return "No matches logged yet";
+  }
+  if (member.days_since_last_match >= STALE_DATA_DAYS) {
     return "No matches logged in 14+ days";
   }
   return null;
 }
 
 function formatDecline(stat: TrackedStat): string {
-  const diff = stat.current - stat.rollingMean;
+  const diff = stat.current - stat.rolling_mean;
   const magnitude =
     stat.unit === "percent" ? `${Math.abs(Math.round(diff))}pts` : Math.abs(diff).toFixed(1);
   return `${stat.label} down ${magnitude} vs their own average`;
 }
 
 function largestDecline(member: SquadMemberStats): { stat: TrackedStat; z: number } | null {
-  if (member.matchesLoggedThisPeriod < MIN_MATCHES_FOR_BASELINE) return null;
-
   let worst: { stat: TrackedStat; z: number } | null = null;
-  for (const stat of member.trackedStats) {
-    if (stat.rollingStdDev === 0) continue; // no spread to have deviated from
-    const z = (stat.current - stat.rollingMean) / stat.rollingStdDev;
+  for (const stat of member.tracked_stats) {
+    if (stat.rolling_std_dev === 0) continue; // no spread to have deviated from
+    const z = (stat.current - stat.rolling_mean) / stat.rolling_std_dev;
     if (worst === null || z < worst.z) worst = { stat, z };
   }
   return worst;
@@ -87,13 +89,13 @@ function largestDecline(member: SquadMemberStats): { stat: TrackedStat; z: numbe
 export function attentionFor(member: SquadMemberStats): AttentionResult | null {
   const hardFlag = hardFlagReason(member);
   if (hardFlag) {
-    return { playerId: member.playerId, tier: "hard-flag", reason: hardFlag, severity: Infinity };
+    return { playerId: member.player_id, tier: "hard-flag", reason: hardFlag, severity: Infinity };
   }
 
   const decline = largestDecline(member);
   if (decline && decline.z <= -DECLINE_Z_THRESHOLD) {
     return {
-      playerId: member.playerId,
+      playerId: member.player_id,
       tier: "decline",
       reason: formatDecline(decline.stat),
       severity: Math.abs(decline.z),
@@ -112,7 +114,7 @@ export function pickSquadAttention(members: SquadMemberStats[]): AttentionResult
     const result = attentionFor(member);
     if (!result) continue;
 
-    const recency = member.daysSinceLastMatch ?? Number.POSITIVE_INFINITY;
+    const recency = member.days_since_last_match ?? Number.POSITIVE_INFINITY;
     if (
       winner === null ||
       result.severity > winner.result.severity ||
@@ -130,26 +132,34 @@ function recordFrom(results: MatchOutcome[]): string {
   return formatRecord(wins, results.length - wins);
 }
 
+function winRate(record: { wins: number; losses: number }): number {
+  const total = record.wins + record.losses;
+  return total === 0 ? 0 : record.wins / total;
+}
+
 function toFormRankEntry(member: SquadMemberStats): FormRankEntry {
   return {
-    playerId: member.playerId,
+    playerId: member.player_id,
     last5Record: recordFrom(member.last5),
-    forcedToUnforcedRatio: member.forcedToUnforcedRatio,
+    forcedToUnforcedRatio: member.forced_to_unforced_ratio,
   };
 }
 
-/** Best/worst current form across the squad, ranked by forced:unforced ratio among
- *  players with `MIN_MATCHES_FOR_FORM_RANK`+ matches logged this period. */
+/** Best/worst current form across the squad, ranked by this period's actual
+ *  win rate among players with `MIN_MATCHES_FOR_FORM_RANK`+ matches logged
+ *  this period. Not the forced:unforced ratio shown beside the name — ranking
+ *  by one number while displaying another let "Worst form" show a better W–L
+ *  record than "Best form". */
 export function rankForm(members: SquadMemberStats[]): {
   best: FormRankEntry | null;
   worst: FormRankEntry | null;
 } {
   const eligible = members.filter(
-    (member) => member.matchesLoggedThisPeriod >= MIN_MATCHES_FOR_FORM_RANK,
+    (member) => member.matches_logged_this_period >= MIN_MATCHES_FOR_FORM_RANK,
   );
   if (eligible.length === 0) return { best: null, worst: null };
 
-  const sorted = [...eligible].sort((a, b) => b.forcedToUnforcedRatio - a.forcedToUnforcedRatio);
+  const sorted = [...eligible].sort((a, b) => winRate(b.period_record) - winRate(a.period_record));
   const bestMember = sorted[0]!;
   const worstMember = sorted[sorted.length - 1]!;
 

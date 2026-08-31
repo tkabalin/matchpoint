@@ -1,5 +1,8 @@
 import type { PlayerRead } from "@matchpoint/api-client";
-import { listPlayersOptions } from "@matchpoint/api-client/react-query";
+import {
+  listPlayersOptions,
+  listSquadMemberStatsOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
@@ -17,10 +20,8 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  getPlayerOverviewOptions,
-  listAttentionFlagsOptions,
-} from "@/lib/analytics/analytics-options";
+import { attentionFor } from "@/lib/analytics/attention";
+import { getPlayerOverviewOptions } from "@/lib/analytics/analytics-options";
 import { getErrorStatus } from "@/lib/error-status";
 
 /**
@@ -122,11 +123,11 @@ function PlayerRow({
   onSelect: (player: PlayerRead) => void;
 }) {
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
-  // A flag states a finding about a named player, so it only ever comes from real
-  // trend flagging — never from a fixture. Until that endpoint exists the row shows
-  // the form figure alone, same reasoning as home's needs-attention section.
-  const { data: flags } = useQuery(listAttentionFlagsOptions());
-  const flag = flags?.find((entry) => entry.playerId === player.id)?.reason;
+  // Same query the squad snapshot reads (home.tsx) — same queryKey, so this
+  // doesn't add a second request, just a second reader of the cached one.
+  const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
+  const member = squadStats?.find((entry) => entry.player_id === player.id);
+  const flag = member ? attentionFor(member)?.reason : undefined;
 
   return (
     <Item

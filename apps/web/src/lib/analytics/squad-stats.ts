@@ -6,7 +6,6 @@ import type {
   SquadMetricKey,
   SquadStatsEntry,
 } from "./types.provisional";
-import { formatRecord } from "@/lib/format-record";
 import type { CategoryName } from "@/lib/palette";
 
 /**
@@ -40,32 +39,61 @@ export function winPercent(entry: Pick<SquadStatsEntry, "wins" | "losses">): num
   return total === 0 ? 0 : (entry.wins / total) * 100;
 }
 
-export function metricValue(entry: SquadStatsEntry, key: SquadMetricKey): number {
+export function metricValue(entry: SquadStatsEntry, key: SquadMetricKey): number | null {
   if (key === "record") return winPercent(entry);
   if (key === "forcedToUnforced") return entry.forcedToUnforcedRatio;
   return entry.firstServeInPercent;
 }
 
+/** The leaderboard always displays the number it sorts by — "record" used to
+ *  show the "W–L" string while ranking on win %, so a 3–2 (60%) player could
+ *  outrank a displayed 5–5 (50%) one. */
 export function metricDisplay(entry: SquadStatsEntry, key: SquadMetricKey): string {
-  if (key === "record") return formatRecord(entry.wins, entry.losses);
-  if (key === "forcedToUnforced") return metricValue(entry, key).toFixed(2);
-  return `${Math.round(metricValue(entry, key))}%`;
+  if (key === "record") return `${Math.round(winPercent(entry))}%`;
+  const value = metricValue(entry, key);
+  if (value === null) return "—";
+  return key === "forcedToUnforced" ? value.toFixed(2) : `${Math.round(value)}%`;
+}
+
+/** Each entry's own rate, weighted by its own `matchesLoggedThisPeriod`. The
+ *  API pools `forcedToUnforcedRatio`/`firstServeInPercent` from the real
+ *  point counts behind one player's own matches, but doesn't ship those
+ *  counts back for a second, squad-wide pooling pass — match count is the
+ *  closest available stand-in, better than an unweighted mean that treats a
+ *  1-match player the same as a regular starter. Null rates (nobody with a
+ *  computable rate yet) are excluded rather than treated as zero. */
+function weightedMean(
+  entries: SquadStatsEntry[],
+  value: (entry: SquadStatsEntry) => number | null,
+): number | null {
+  const weighed = entries.filter(
+    (entry) => value(entry) !== null && entry.matchesLoggedThisPeriod > 0,
+  );
+  const totalMatches = weighed.reduce((sum, entry) => sum + entry.matchesLoggedThisPeriod, 0);
+  if (totalMatches === 0) return null;
+  const sum = weighed.reduce(
+    (acc, entry) => acc + value(entry)! * entry.matchesLoggedThisPeriod,
+    0,
+  );
+  return sum / totalMatches;
 }
 
 /** Squad-wide aggregates for the headline card. Record sums wins/losses
  *  across the roster rather than averaging each player's own win% — an
  *  average of percentages would weight a 1-match player the same as a
- *  10-match one. */
+ *  10-match one. `matchesThisPeriod` is the card's own scope caption: the
+ *  true per-stat denominators a real pooled rate would need aren't on this
+ *  payload (#249), so the match count is what tells a coach how much the
+ *  other two numbers are actually standing on. */
 export function squadHeadline(entries: SquadStatsEntry[]): SquadHeadline {
   const wins = entries.reduce((sum, entry) => sum + entry.wins, 0);
   const losses = entries.reduce((sum, entry) => sum + entry.losses, 0);
-  const mean = (values: number[]) =>
-    values.length === 0 ? 0 : values.reduce((a, b) => a + b, 0) / values.length;
 
   return {
     record: { wins, losses },
-    forcedToUnforcedRatio: mean(entries.map((entry) => entry.forcedToUnforcedRatio)),
-    firstServeInPercent: mean(entries.map((entry) => entry.firstServeInPercent)),
+    forcedToUnforcedRatio: weightedMean(entries, (entry) => entry.forcedToUnforcedRatio),
+    firstServeInPercent: weightedMean(entries, (entry) => entry.firstServeInPercent),
+    matchesThisPeriod: entries.reduce((sum, entry) => sum + entry.matchesLoggedThisPeriod, 0),
   };
 }
 
@@ -95,7 +123,7 @@ export function buildLeaderboard(
   const filtered = bySearch(entries, search);
 
   const ranked = rankedOnly(entries, search).sort(
-    (a, b) => metricValue(b, key) - metricValue(a, key),
+    (a, b) => (metricValue(b, key) ?? -Infinity) - (metricValue(a, key) ?? -Infinity),
   );
   const unranked = filtered.filter(
     (entry) => entry.matchesLoggedThisPeriod < MIN_MATCHES_FOR_SQUAD_RANK,
@@ -126,7 +154,9 @@ export function buildHistogram(
   rankedEntries: SquadStatsEntry[],
   key: SquadMetricKey,
 ): SquadHistogramBucket[] {
-  const values = rankedEntries.map((entry) => metricValue(entry, key));
+  const values = rankedEntries
+    .map((entry) => metricValue(entry, key))
+    .filter((value): value is number => value !== null);
   if (values.length === 0) return [];
 
   const min = Math.min(...values);

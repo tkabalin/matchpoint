@@ -10,11 +10,41 @@ import type {
   ServeStats,
   ServeTrendPoint,
   SetFilter,
-  SquadMemberStats,
   SquadMetricKey,
   SquadStatsEntry,
-  SquadTrendPoint,
 } from "./types.provisional";
+
+/**
+ * `squadMemberStatsFor`/`squadTrendFor` below have no remaining call site —
+ * `/squad/analytics/members` and `/squad/analytics/trend` are real endpoints
+ * now — but their own tests still exercise them until fixtures.ts is deleted
+ * in full (#224). These two shapes exist only for that: the real, generated
+ * `SquadMemberStats`/`SquadTrendPoint` (snake_case, nullable rates) replaced
+ * the versions `types.provisional.ts` used to export.
+ */
+interface FixtureTrackedStat {
+  key: string;
+  label: string;
+  unit: Metric["unit"];
+  current: number;
+  rollingMean: number;
+  rollingStdDev: number;
+}
+
+interface FixtureSquadMemberStats {
+  playerId: string;
+  matchesLoggedThisPeriod: number;
+  last5: ("win" | "loss")[];
+  forcedToUnforcedRatio: number;
+  currentStreak: { outcome: "win" | "loss"; length: number };
+  daysSinceLastMatch: number | null;
+  trackedStats: FixtureTrackedStat[];
+}
+
+interface FixtureSquadTrendPoint {
+  week: string;
+  value: number;
+}
 
 /**
  * Deterministic stand-in data for the analytics the API doesn't serve yet, using the
@@ -553,7 +583,7 @@ export const COACH_NOTES: CoachNote[] = [
  * one, a Tier 1 losing-streak flag, a Tier 1 stale-data flag, a Tier 2
  * statistical decline, and an unremarkable middle-of-the-pack player.
  */
-const SQUAD_MEMBER_TEMPLATES: readonly Omit<SquadMemberStats, "playerId">[] = [
+const SQUAD_MEMBER_TEMPLATES: readonly Omit<FixtureSquadMemberStats, "playerId">[] = [
   {
     matchesLoggedThisPeriod: 6,
     last5: ["win", "win", "win", "win", "win"],
@@ -681,7 +711,10 @@ const SQUAD_MEMBER_TEMPLATES: readonly Omit<SquadMemberStats, "playerId">[] = [
   },
 ];
 
-export function squadMemberStatsFor(playerId: string, rosterIndex: number): SquadMemberStats {
+export function squadMemberStatsFor(
+  playerId: string,
+  rosterIndex: number,
+): FixtureSquadMemberStats {
   const template = SQUAD_MEMBER_TEMPLATES[rosterIndex % SQUAD_MEMBER_TEMPLATES.length]!;
   return { ...template, playerId };
 }
@@ -741,7 +774,7 @@ export function squadStatsFor(playerId: string, rosterIndex: number): SquadStats
   return { ...template, playerId };
 }
 
-const SQUAD_TREND: Record<SquadMetricKey, SquadTrendPoint[]> = {
+const SQUAD_TREND: Record<SquadMetricKey, FixtureSquadTrendPoint[]> = {
   record: [
     { week: "Wk 1", value: 52 },
     { week: "Wk 2", value: 55 },
@@ -768,6 +801,6 @@ const SQUAD_TREND: Record<SquadMetricKey, SquadTrendPoint[]> = {
   ],
 };
 
-export function squadTrendFor(key: SquadMetricKey): SquadTrendPoint[] {
+export function squadTrendFor(key: SquadMetricKey): FixtureSquadTrendPoint[] {
   return SQUAD_TREND[key];
 }

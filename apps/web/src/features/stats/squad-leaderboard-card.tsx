@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 const METRIC_LABEL: Record<SquadMetricKey, string> = {
   record: "Record",
   forcedToUnforced: "Forced : Unforced",
-  firstServe: "1st serve %",
+  firstServe: "1st serve in %",
 };
 
 type NamedEntry = SquadStatsEntry & { name: string };

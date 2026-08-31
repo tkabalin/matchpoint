@@ -1,4 +1,4 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { PlayerRead, SquadMemberStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -162,4 +162,36 @@ test("tapping a player hands it to the caller instead of navigating", async () =
   await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
 
   expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: player.id }));
+});
+
+// A real attention flag (not the always-empty fixture this row used to read)
+// replaces the row's plain form figure — same reasoning as home.tsx's own
+// attention card, sourced from the same `/squad/analytics/members` payload.
+test("shows a real attention flag instead of the form figure when one fires", async () => {
+  const flagged: SquadMemberStats = {
+    player_id: player.id,
+    matches_logged_this_period: 5,
+    last5: ["loss", "loss", "loss", "win", "win"],
+    forced_to_unforced_ratio: 1,
+    first_serve_in_percent: 60,
+    period_record: { wins: 1, losses: 4 },
+    current_streak: { outcome: "loss", length: 3 },
+    days_since_last_match: 1,
+    tracked_stats: [],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players") return Promise.resolve(Response.json([player]));
+      if (pathname === "/api/squad/analytics/members") {
+        return Promise.resolve(Response.json([flagged]));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+
+  await renderPlayerList();
+
+  expect(await screen.findByText("3-match losing streak")).toBeInTheDocument();
 });

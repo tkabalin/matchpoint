@@ -1,4 +1,4 @@
-import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
+import type { CoachRead, PlayerRead, SquadMemberStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -60,8 +60,51 @@ const players: PlayerRead[] = [
   },
 ];
 
+// A third roster slot, used by the two attention-card tests below.
+const flaggedPlayer: PlayerRead = {
+  ...players[1]!,
+  id: "3f1c2b4e-0000-4000-8000-000000000003",
+  first_name: "Zanele",
+  last_name: "Khumalo",
+};
+
+function squadMember(
+  overrides: Partial<SquadMemberStats> & { player_id: string },
+): SquadMemberStats {
+  return {
+    matches_logged_this_period: 5,
+    last5: ["win", "win", "win", "loss", "win"],
+    forced_to_unforced_ratio: 1.5,
+    first_serve_in_percent: 60,
+    period_record: { wins: 4, losses: 1 },
+    current_streak: { outcome: "win", length: 1 },
+    days_since_last_match: 1,
+    tracked_stats: [],
+    ...overrides,
+  };
+}
+
+// Deliberately no hard flag and no tracked-stat decline on either — an empty
+// needs-attention result is the legitimate case these two exist to cover.
+const bestFormMember = squadMember({
+  player_id: players[0]!.id,
+  period_record: { wins: 9, losses: 1 },
+  last5: ["win", "win", "win", "win", "win"],
+});
+const worstFormMember = squadMember({
+  player_id: players[1]!.id,
+  period_record: { wins: 1, losses: 9 },
+  last5: ["loss", "loss", "loss", "loss", "win"],
+});
+const flaggedMember = squadMember({
+  player_id: flaggedPlayer.id,
+  current_streak: { outcome: "loss", length: 4 },
+  period_record: { wins: 1, losses: 4 },
+});
+
 /** Routes by pathname rather than returning one canned response for every call:
- * Home now fetches both /coaches/me and /players, which need different shapes. */
+ * Home now fetches /coaches/me, /players, and /squad/analytics/members, which
+ * need different shapes. */
 function stubFetch(routes: Record<string, () => Response>) {
   vi.stubGlobal(
     "fetch",
@@ -79,6 +122,7 @@ function stubAuthenticatedHome() {
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
   });
 }
 
@@ -87,6 +131,7 @@ function stubUnauthenticatedHome() {
     "/api/coaches/me": () => new Response(null, { status: 401 }),
     "/api/players": () => Response.json([]),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([]),
   });
 }
 
@@ -110,6 +155,7 @@ function stubAuthenticatedHomeWithLastViewedPlayer() {
     "/api/players": () => Response.json(players),
     [`/api/players/${players[0]!.id}`]: () => Response.json(players[0]),
     "/api/matches": () => Response.json(lastViewedMatches),
+    "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
   });
 }
 
@@ -279,6 +325,7 @@ test("shows no add-photo nudge once the coach has a photo", async () => {
     "/api/coaches/me": () => Response.json({ ...coach, photo_url: "/api/media/abc.webp" }),
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
   });
   await renderHome();
 
@@ -422,6 +469,7 @@ test("shows the squad's player count", async () => {
     "/api/coaches/me": () => new Response(null, { status: 401 }),
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
   });
   await renderHome();
 
@@ -430,11 +478,9 @@ test("shows the squad's player count", async () => {
   expect(snapshot.getByText("players")).toBeInTheDocument();
 });
 
-// The two-player fixture roster deterministically maps to a "clean best" and a
-// "clean worst" squad-member profile (see `squadMemberStatsFor` in fixtures.ts) —
-// neither trips a needs-attention flag, which is itself the point: an empty
-// result is what "nobody needs attention this week" should look like, not a
-// fallback to whichever player happens to be worst.
+// bestFormMember/worstFormMember trip neither tier — nothing in either flags,
+// which is itself the point: an empty result is what "nobody needs attention
+// this week" should look like, not a fallback to whichever player is worst.
 test("ranks best and worst form, and shows nothing at all for a legitimate empty needs-attention state", async () => {
   stubAuthenticatedHome();
   await renderHome();
@@ -449,20 +495,13 @@ test("ranks best and worst form, and shows nothing at all for a legitimate empty
   expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
 });
 
-// A third roster slot deterministically maps to the losing-streak template
-// (see SQUAD_MEMBER_TEMPLATES[2] in fixtures.ts), a hard flag.
-const flaggedPlayer: PlayerRead = {
-  ...players[1]!,
-  id: "3f1c2b4e-0000-4000-8000-000000000003",
-  first_name: "Zanele",
-  last_name: "Khumalo",
-};
-
 test("shows a dismissible card when a player is flagged", async () => {
   stubFetch({
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json([...players, flaggedPlayer]),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () =>
+      Response.json([bestFormMember, worstFormMember, flaggedMember]),
   });
   await renderHome();
 
@@ -479,6 +518,8 @@ test("dismissing the attention card hides it", async () => {
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json([...players, flaggedPlayer]),
     "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () =>
+      Response.json([bestFormMember, worstFormMember, flaggedMember]),
   });
   const user = userEvent.setup({ delay: null });
   await renderHome();

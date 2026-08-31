@@ -1,10 +1,12 @@
-import { listPlayersOptions } from "@matchpoint/api-client/react-query";
+import {
+  listPlayersOptions,
+  listSquadMemberStatsOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
-import { squadStatsFor } from "@/lib/analytics/analytics-options";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
 
 import { SquadHeadlineCard } from "./squad-headline-card";
@@ -17,6 +19,7 @@ import { SquadTrendCard } from "./squad-trend-card";
  */
 export function StatsPage() {
   const { data: roster } = useQuery(listPlayersOptions());
+  const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
   const [leaderboardMetric, setLeaderboardMetric] = useState<SquadMetricKey>("record");
   const [search, setSearch] = useState("");
   const [trendMetric, setTrendMetric] = useState<SquadMetricKey>("record");
@@ -30,10 +33,22 @@ export function StatsPage() {
     );
   }
 
-  const entries = roster.map((player, index) => ({
-    ...squadStatsFor(player.id, index),
-    name: `${player.first_name} ${player.last_name}`,
-  }));
+  // A player with no row yet (stats haven't loaded, or the endpoint has
+  // nothing for them) reads as a real zero/unranked entry rather than a
+  // spinner — the roster itself already renders from the persisted cache.
+  const statsByPlayerId = new Map((squadStats ?? []).map((entry) => [entry.player_id, entry]));
+  const entries = roster.map((player) => {
+    const member = statsByPlayerId.get(player.id);
+    return {
+      playerId: player.id,
+      name: `${player.first_name} ${player.last_name}`,
+      wins: member?.period_record.wins ?? 0,
+      losses: member?.period_record.losses ?? 0,
+      forcedToUnforcedRatio: member?.forced_to_unforced_ratio ?? null,
+      firstServeInPercent: member?.first_serve_in_percent ?? null,
+      matchesLoggedThisPeriod: member?.matches_logged_this_period ?? 0,
+    };
+  });
 
   return (
     <AppPage>

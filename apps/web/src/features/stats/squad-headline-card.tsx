@@ -29,9 +29,10 @@ function HeadlineStat({
 
 export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
   const headline = squadHeadline(entries);
+  const matchWord = headline.matchesThisPeriod === 1 ? "match" : "matches";
 
   return (
-    <StatCard note="Squad, all matches this period">
+    <StatCard note={`Squad · ${headline.matchesThisPeriod} ${matchWord} this period`}>
       <div className="flex justify-between gap-2">
         <HeadlineStat
           icon={Trophy}
@@ -43,13 +44,21 @@ export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
             .claude/rules/web-icons.md's canonical registry. */}
         <HeadlineStat
           icon={Swords}
-          value={headline.forcedToUnforcedRatio.toFixed(1)}
+          value={
+            headline.forcedToUnforcedRatio === null
+              ? "—"
+              : headline.forcedToUnforcedRatio.toFixed(1)
+          }
           label="Forced : Unforced"
         />
         <HeadlineStat
           icon={Flag}
-          value={`${Math.round(headline.firstServeInPercent)}%`}
-          label="1st serve %"
+          value={
+            headline.firstServeInPercent === null
+              ? "—"
+              : `${Math.round(headline.firstServeInPercent)}%`
+          }
+          label="1st serve in %"
         />
       </div>
     </StatCard>

@@ -1,3 +1,5 @@
+import type { SquadMetric } from "@matchpoint/api-client";
+import { getSquadTrendOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
@@ -13,7 +15,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getSquadTrendOptions } from "@/lib/analytics/analytics-options";
 import { METRIC_PATTERN } from "@/lib/analytics/squad-stats";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
 import { CATEGORICAL_STROKE_DASH, PATTERN_VAR } from "@/lib/palette";
@@ -21,7 +22,16 @@ import { CATEGORICAL_STROKE_DASH, PATTERN_VAR } from "@/lib/palette";
 const TREND_METRIC_LABEL: Record<SquadMetricKey, string> = {
   record: "Record (win %)",
   forcedToUnforced: "Forced : Unforced",
-  firstServe: "1st serve %",
+  firstServe: "1st serve in %",
+};
+
+// The dropdown's own vocabulary (shared with the leaderboard and histogram)
+// isn't the wire's — the API's `SquadMetric` enum spells the last two
+// differently.
+const API_METRIC: Record<SquadMetricKey, SquadMetric> = {
+  record: "record",
+  forcedToUnforced: "forced_to_unforced",
+  firstServe: "first_serve_in",
 };
 
 /** Its own, independent metric selector — deliberately separate state from
@@ -34,7 +44,11 @@ export function SquadTrendCard({
   metric: SquadMetricKey;
   onMetricChange: (metric: SquadMetricKey) => void;
 }) {
-  const { data: trend } = useQuery(getSquadTrendOptions({ query: { metric } }));
+  const { data: trend } = useQuery(getSquadTrendOptions({ query: { metric: API_METRIC[metric] } }));
+  // Every point can legitimately be null at once — a roster with no resulted
+  // matches in the window — which would otherwise draw a blank chart (axes,
+  // no line, no dots) that reads as broken rather than as "not enough data".
+  const hasData = trend?.some((point) => point.value !== null) ?? false;
   const pattern = METRIC_PATTERN[metric];
   const color = PATTERN_VAR[pattern];
   const dash = CATEGORICAL_STROKE_DASH[pattern];
@@ -63,7 +77,11 @@ export function SquadTrendCard({
         </Select>
       </div>
 
-      {trend ? (
+      {trend && !hasData ? (
+        <p className="flex aspect-[5/2] w-full items-center justify-center text-center text-xs text-muted-foreground">
+          Not enough recent matches to show a trend yet.
+        </p>
+      ) : trend ? (
         <ChartContainer config={config} className="aspect-[5/2] w-full">
           <LineChart data={trend}>
             <CartesianGrid vertical={false} />
@@ -99,7 +117,9 @@ export function SquadTrendCard({
         <Skeleton className="aspect-[5/2] w-full" />
       )}
 
-      <p className="text-[0.625rem] text-muted-foreground">last 6 weeks · squad average</p>
+      <p className="text-[0.625rem] text-muted-foreground">
+        last 6 weeks · pooled across the squad
+      </p>
     </StatCard>
   );
 }

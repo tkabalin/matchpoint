@@ -7,12 +7,8 @@ import {
   RECENT_FORM,
   rallyStatsFor,
   serveStatsFor,
-  squadMemberStatsFor,
-  squadStatsFor,
-  squadTrendFor,
 } from "./fixtures";
 import type {
-  AttentionFlag,
   CoachNote,
   InProgressMatch,
   OpponentOption,
@@ -22,8 +18,6 @@ import type {
   RecentForm,
   ServeStats,
   SetFilter,
-  SquadMetricKey,
-  SquadTrendPoint,
 } from "./types.provisional";
 
 /**
@@ -166,46 +160,8 @@ export const getInProgressMatchOptions = () =>
   fixtureOptions<InProgressMatch | null>(["matches", "in-progress"], null);
 
 /**
- * PLACEHOLDER: GET /coaches/me/attention
- *
- * Empty, and not from a fixture. Every other placeholder here is a number a
- * reviewer reads as demo data; a flag is a sentence asserting that a named player
- * has a specific problem, which a coach could act on. That one waits for real
- * trend flagging (#158).
+ * The squad snapshot (home) and the Squad stats page both read
+ * `listSquadMemberStatsOptions` and `getSquadTrendOptions` straight from
+ * `@matchpoint/api-client/react-query` now — real endpoints, not a
+ * placeholder here. Nothing left in this file backs either screen.
  */
-export const listAttentionFlagsOptions = () => fixtureOptions<AttentionFlag[]>(["attention"], []);
-
-/**
- * PLACEHOLDER standing in for a real endpoint: `GET /squad/analytics/members`
- * (generated as `listSquadMemberStatsOptions`) computes each player's rolling
- * stats and streaks server-side, and `squadMemberStatsFor` keeps synthesizing
- * them from hand-authored fixture profiles (see `fixtures.ts`) until the call
- * sites are swapped over. Synchronous, not `queryOptions`: it derives from the
- * roster the caller already has loaded, with nothing of its own to fetch.
- */
-export { squadMemberStatsFor };
-
-/**
- * PLACEHOLDER for the Squad stats page's own per-player fixture: same
- * reasoning as `squadMemberStatsFor` above, and the same endpoint behind it.
- * `GET /squad/analytics/members` carries the leaderboard's `period_record` and
- * `first_serve_in_percent` beside the snapshot's own figures rather than
- * splitting one roster read across two routes. Both of those rates are nullable
- * there where `SquadStatsEntry` types them as plain numbers, so the swap has to
- * say what a player with no ratio yet ranks as.
- */
-export { squadStatsFor };
-
-// PLACEHOLDER: the Squad stats page's trend card, one roster-wide figure a week
-// over the last 6 weeks. `GET /squad/analytics/trend?metric=` serves it, pooling
-// each week's matches rather than averaging the roster, and its `value` is null
-// in a week the roster cannot answer where this fixture's is always a number.
-// Its metric values are `record`, `forced_to_unforced` and `first_serve_in`, so
-// wiring this up maps `SquadMetricKey` onto those and replaces this export with
-// the generated `getSquadTrendOptions`. No version segment: unlike
-// `getServeStatsOptions`, this key has no prior persisted shape to collide with.
-export const getSquadTrendOptions = (options: { query: { metric: SquadMetricKey } }) =>
-  fixtureOptions<SquadTrendPoint[]>(
-    ["analytics", "squad-trend", options.query.metric],
-    squadTrendFor(options.query.metric),
-  );

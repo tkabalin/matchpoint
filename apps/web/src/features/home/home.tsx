@@ -4,6 +4,7 @@ import {
   getPlayerOptions,
   listMatchesOptions,
   listPlayersOptions,
+  listSquadMemberStatsOptions,
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -43,11 +44,7 @@ import {
 } from "@/components/ui/item";
 import { InstallAppNudge } from "@/components/install-app-nudge";
 import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
-import {
-  getPlayerOverviewOptions,
-  getRecentFormOptions,
-  squadMemberStatsFor,
-} from "@/lib/analytics/analytics-options";
+import { getPlayerOverviewOptions, getRecentFormOptions } from "@/lib/analytics/analytics-options";
 import type { AttentionResult } from "@/lib/analytics/types.provisional";
 import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
@@ -64,6 +61,7 @@ import { cn } from "@/lib/utils";
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
+  const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PlayerRead | null>(null);
   const [adding, setAdding] = useState(false);
@@ -81,7 +79,7 @@ export function Home() {
   const searchResults = roster.filter((player) =>
     `${player.first_name} ${player.last_name}`.toLowerCase().includes(search.toLowerCase()),
   );
-  const squadMembers = roster.map((player, index) => squadMemberStatsFor(player.id, index));
+  const squadMembers = squadStats ?? [];
   const formRank = rankForm(squadMembers);
   const attention = pickSquadAttention(squadMembers);
   const findPlayer = (playerId: string) => roster.find((player) => player.id === playerId) ?? null;
@@ -318,8 +316,10 @@ function SquadRow({
   /** Plain caption text — used by rows without a `stats` pair (Needs attention). */
   detail: string | null;
   /** Last-5 record and forced:unforced ratio, shown as the same icon+number
-   *  pair "Continue with" uses, not folded into a single line of text. */
-  stats?: { last5Record: string; forcedToUnforcedRatio: number };
+   *  pair "Continue with" uses, not folded into a single line of text. Ratio
+   *  is null wherever the API's own is — no forced or unforced points at
+   *  all this period. */
+  stats?: { last5Record: string; forcedToUnforcedRatio: number | null };
   emptyDetail: string;
 }) {
   const icon = <Icon className={cn("size-7 shrink-0", TONE_ICON_CLASS[tone])} aria-hidden="true" />;
@@ -366,7 +366,9 @@ function SquadRow({
               <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
               <div>
                 <p className="text-xl font-bold tabular-nums">
-                  {stats.forcedToUnforcedRatio.toFixed(1)}
+                  {stats.forcedToUnforcedRatio === null
+                    ? "—"
+                    : stats.forcedToUnforcedRatio.toFixed(1)}
                 </p>
                 <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
                   Forced : Unforced

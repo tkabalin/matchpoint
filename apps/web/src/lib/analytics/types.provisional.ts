@@ -244,13 +244,6 @@ export interface CoachNote {
   linkedMatchId: string | null;
 }
 
-/** A player flagged on the home screen because something moved the wrong way. */
-export interface AttentionFlag {
-  playerId: string;
-  reason: string;
-  recentResults: MatchOutcome[];
-}
-
 export interface InProgressMatch {
   matchId: string;
   playerId: string;
@@ -258,40 +251,6 @@ export interface InProgressMatch {
   opponentName: string;
   score: string;
   elapsed: string;
-}
-
-/** One stat tracked for a player's own-baseline decline check (the home
- *  screen's "needs attention" Tier 2 — see `lib/analytics/attention.ts`).
- *  Every stat here is oriented so a higher `current` is always the better
- *  direction, so a negative z-score always means "worse than usual for this
- *  player," never "worse in absolute terms." */
-export interface TrackedStat {
-  key: string;
-  label: string;
-  unit: MetricUnit;
-  current: number;
-  /** This player's own rolling average — never the squad average or a fixed
-   *  target, so a naturally streaky player isn't judged against someone
-   *  else's normal. */
-  rollingMean: number;
-  rollingStdDev: number;
-}
-
-/** Per-player inputs behind the home screen's squad snapshot — ranking for
- *  best/worst form, and the two-tier "needs attention" decision. */
-export interface SquadMemberStats {
-  playerId: string;
-  /** Matches logged in the current ranking period (this season, this term —
-   *  whatever window the eventual endpoint scopes to). */
-  matchesLoggedThisPeriod: number;
-  /** Most recent matches, oldest first, same convention as `PlayerOverview`. */
-  last5: MatchOutcome[];
-  forcedToUnforcedRatio: number;
-  /** Zero-length when the player's last match wasn't itself a loss. */
-  currentStreak: { outcome: MatchOutcome; length: number };
-  /** Null when the player has never logged a match. */
-  daysSinceLastMatch: number | null;
-  trackedStats: TrackedStat[];
 }
 
 export type AttentionTier = "hard-flag" | "decline";
@@ -312,23 +271,25 @@ export interface FormRankEntry {
   playerId: string;
   /** "W–L" over the player's own `last5`. */
   last5Record: string;
-  forcedToUnforcedRatio: number;
+  /** Null wherever the API's own ratio is — a player with no forced or
+   *  unforced points at all this period, not an absent player. */
+  forcedToUnforcedRatio: number | null;
 }
 
-/** Per-player inputs behind the Squad stats page — a sibling to
- *  `SquadMemberStats` (the home screen's own per-player shape), not a
- *  replacement: `matchesLoggedThisPeriod` means the same thing in both, but
- *  this carries the raw record and serve figure the leaderboard/headline
- *  need that the home screen doesn't. */
+/** Per-player inputs behind the Squad stats page — built from the real
+ *  `SquadMemberStats` payload plus the roster name it doesn't carry.
+ *  `matchesLoggedThisPeriod` means the same thing here as on that payload. */
 export interface SquadStatsEntry {
   playerId: string;
   wins: number;
   losses: number;
   /** Same field, same "capture can't distinguish a winner from a forced
-   *  error" caveat as `PlayerOverview.forcedToUnforced` (#175/#206). */
-  forcedToUnforcedRatio: number;
-  /** Share of first-serve attempts landing in, 0–100. */
-  firstServeInPercent: number;
+   *  error" caveat as `PlayerOverview.forcedToUnforced` (#175/#206). Null
+   *  wherever the API's own ratio is. */
+  forcedToUnforcedRatio: number | null;
+  /** Share of first-serve attempts landing in, 0–100. Null wherever the
+   *  API's own percentage is. */
+  firstServeInPercent: number | null;
   matchesLoggedThisPeriod: number;
 }
 
@@ -357,15 +318,13 @@ export interface SquadHistogramBucket {
   count: number;
 }
 
-/** The squad headline's three aggregate numbers, all matches, whole roster. */
+/** The squad headline's three aggregate numbers, all matches, whole roster.
+ *  The rate fields are null with nobody eligible to average; `matchesThisPeriod`
+ *  is the card's own scope caption, since the true per-stat denominators behind
+ *  a pooled squad-wide rate aren't on the payload (#249). */
 export interface SquadHeadline {
   record: WinLossRecord;
-  forcedToUnforcedRatio: number;
-  firstServeInPercent: number;
-}
-
-/** One point in the squad trend card's last-6-weeks series. */
-export interface SquadTrendPoint {
-  week: string;
-  value: number;
+  forcedToUnforcedRatio: number | null;
+  firstServeInPercent: number | null;
+  matchesThisPeriod: number;
 }

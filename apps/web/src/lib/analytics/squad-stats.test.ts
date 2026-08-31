@@ -45,25 +45,51 @@ test("metricValue and metricDisplay resolve each metric key", () => {
   expect(metricValue(alex, "forcedToUnforced")).toBe(1.6);
   expect(metricValue(alex, "firstServe")).toBe(68);
 
-  expect(metricDisplay(alex, "record")).toBe("8W – 2L");
+  // "record" displays the win % it sorts by, not the "W–L" string — showing
+  // both risked disagreeing (a 3–2 player can outrank a displayed 5–5 one).
+  expect(metricDisplay(alex, "record")).toBe("80%");
   expect(metricDisplay(alex, "forcedToUnforced")).toBe("1.60");
   expect(metricDisplay(alex, "firstServe")).toBe("68%");
 });
 
-test("squadHeadline sums wins/losses rather than averaging win percentages", () => {
+test("metricDisplay shows an em dash for a metric that isn't computable yet", () => {
+  const noRatioYet: Named = { ...alex, forcedToUnforcedRatio: null };
+
+  expect(metricDisplay(noRatioYet, "forcedToUnforced")).toBe("—");
+});
+
+test("squadHeadline sums wins/losses, and weighs each player's rate by their own match count", () => {
   const headline = squadHeadline([alex, priya]);
 
   expect(headline.record).toEqual({ wins: 9, losses: 10 });
-  expect(headline.forcedToUnforcedRatio).toBeCloseTo((1.6 + 0.9) / 2);
-  expect(headline.firstServeInPercent).toBeCloseTo((68 + 46) / 2);
+  expect(headline.forcedToUnforcedRatio).toBeCloseTo(
+    (1.6 * alex.matchesLoggedThisPeriod + 0.9 * priya.matchesLoggedThisPeriod) /
+      (alex.matchesLoggedThisPeriod + priya.matchesLoggedThisPeriod),
+  );
+  expect(headline.firstServeInPercent).toBeCloseTo(
+    (68 * alex.matchesLoggedThisPeriod + 46 * priya.matchesLoggedThisPeriod) /
+      (alex.matchesLoggedThisPeriod + priya.matchesLoggedThisPeriod),
+  );
+  expect(headline.matchesThisPeriod).toBe(
+    alex.matchesLoggedThisPeriod + priya.matchesLoggedThisPeriod,
+  );
 });
 
-test("squadHeadline returns a zeroed record for an empty squad", () => {
+test("squadHeadline excludes a null rate from the average rather than counting it as zero", () => {
+  const noRatioYet: Named = { ...rookie, forcedToUnforcedRatio: null };
+
+  const headline = squadHeadline([alex, noRatioYet]);
+
+  expect(headline.forcedToUnforcedRatio).toBe(alex.forcedToUnforcedRatio);
+});
+
+test("squadHeadline returns a zeroed record and null rates for an empty squad", () => {
   const headline = squadHeadline([]);
 
   expect(headline.record).toEqual({ wins: 0, losses: 0 });
-  expect(headline.forcedToUnforcedRatio).toBe(0);
-  expect(headline.firstServeInPercent).toBe(0);
+  expect(headline.forcedToUnforcedRatio).toBeNull();
+  expect(headline.firstServeInPercent).toBeNull();
+  expect(headline.matchesThisPeriod).toBe(0);
 });
 
 test("buildLeaderboard ranks eligible players by the selected metric, sub-threshold players unranked", () => {
