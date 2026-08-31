@@ -1,11 +1,130 @@
+import type { RallyStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { RallyTab } from "./rally-tab";
 
+const RALLY_STATS: RallyStats = {
+  errors_overall: null,
+  errors_under_pressure: null,
+  hero: {
+    label: "Forced : Unforced ratio",
+    value: 1.8,
+    unit: "ratio",
+    sample_size: "n=9",
+    baseline: null,
+    delta: null,
+    max: 3,
+    higher_is_better: true,
+  },
+  won: 5,
+  lost: 4,
+  lost_by_shot: [],
+  outcome_mix: [],
+  rally_length: [
+    { label: "1–3 shots", count: 4 },
+    { label: "4–6 shots", count: 3 },
+    { label: "7–9 shots", count: 2 },
+  ],
+  shot_frequency: {
+    you: [
+      { shot: "Drive", share: 0.5 },
+      { shot: "Volley", share: 0.5 },
+    ],
+    opponents: [{ shot: "Drive", share: 1 }],
+  },
+  won_by_shot: [],
+  styles: {
+    you: [
+      {
+        kind: "forced",
+        label: "Forced (their pressure)",
+        count: 2,
+        detail: {
+          wing: { forehand: 1, backhand: 1 },
+          shot_type: [{ label: "Drive", value: 2, max: 2 }],
+          court_zones: [{ zone: "Net", count: 2 }],
+          unusual_reasons: null,
+        },
+      },
+      {
+        kind: "unforced",
+        label: "Unforced (their free error)",
+        count: 2,
+        detail: {
+          wing: { forehand: 1, backhand: 1 },
+          shot_type: [],
+          court_zones: [],
+          unusual_reasons: null,
+        },
+      },
+      {
+        kind: "unusual",
+        label: "Unusual (in your favor)",
+        count: 1,
+        detail: {
+          wing: null,
+          shot_type: [],
+          court_zones: [],
+          unusual_reasons: [{ label: "Net touch", value: 1, max: 1 }],
+        },
+      },
+    ],
+    opponents: [
+      {
+        kind: "forced",
+        label: "Forced (your pressure)",
+        count: 2,
+        detail: {
+          wing: { forehand: 1, backhand: 1 },
+          shot_type: [],
+          court_zones: [],
+          unusual_reasons: null,
+        },
+      },
+      {
+        kind: "unforced",
+        label: "Unforced (your free error)",
+        count: 1,
+        detail: {
+          wing: { forehand: 0, backhand: 1 },
+          shot_type: [],
+          court_zones: [],
+          unusual_reasons: null,
+        },
+      },
+      {
+        kind: "unusual",
+        label: "Unusual (against you)",
+        count: 1,
+        detail: {
+          wing: null,
+          shot_type: [],
+          court_zones: [],
+          unusual_reasons: [{ label: "Point penalty", value: 1, max: 1 }],
+        },
+      },
+    ],
+  },
+};
+
+function stubFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players/player-1/analytics/rally") {
+        return Promise.resolve(Response.json(RALLY_STATS));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+}
+
 function renderTab() {
+  stubFetch();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -13,6 +132,10 @@ function renderTab() {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test("shows the point-ender style cards, none open by default", async () => {
   renderTab();

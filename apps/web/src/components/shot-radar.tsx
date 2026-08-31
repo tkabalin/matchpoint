@@ -1,35 +1,26 @@
 import type { LucideIcon } from "lucide-react";
-import {
-  ChevronDown,
-  ChevronsDown,
-  ChevronsUp,
-  ChevronUp,
-  Rainbow,
-  TrendingDown,
-  TrendingUp,
-  Waves,
-} from "lucide-react";
+import { ChevronDown, ChevronUp, Rainbow, TrendingUp } from "lucide-react";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts";
 
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 
 /**
- * One icon per axis, all eight distinct — this chart's only caller is the Rally
- * tab's wing×shot-type radar, so the eight labels are pinned here rather than
- * passed in (nothing else to stay generic for yet, per the two-call-site rule).
- * Forehand and backhand versions of the same shot deliberately don't share an
- * icon: reusing one across two different axes reads as "these are the same
- * thing," which they aren't.
+ * One icon per axis — this chart's only caller is the Rally tab's shot-type
+ * radar, so the four labels are pinned here rather than passed in (nothing
+ * else to stay generic for yet, per the two-call-site rule). Reuses the same
+ * shot-type icons `.claude/rules/web-icons.md` already assigns for the Rally
+ * tab's own shot-type breakdown, so a shot type means one icon everywhere on
+ * this tab.
+ *
+ * Shot frequency is shot-type only, not wing×shot-type: capture tracks wing
+ * separately (the Style drill's own breakdown), and the radar's real payload
+ * never crosses the two, unlike this component's original 8-axis design.
  */
 const AXIS_ICON: Record<string, LucideIcon> = {
-  "FH Drive": TrendingUp,
-  "BH Drive": TrendingDown,
-  "FH Volley": ChevronUp,
-  "BH Volley": ChevronsUp,
-  "FH Drop": ChevronDown,
-  "BH Drop": ChevronsDown,
-  "FH Lob": Rainbow,
-  "BH Lob": Waves,
+  Drive: TrendingUp,
+  Volley: ChevronUp,
+  "Drop shot": ChevronDown,
+  Lob: Rainbow,
 };
 
 const ICON_SIZE = 18;

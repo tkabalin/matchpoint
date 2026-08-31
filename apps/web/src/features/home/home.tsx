@@ -2,6 +2,7 @@ import type { PlayerRead } from "@matchpoint/api-client";
 import {
   getCurrentCoachOptions,
   getPlayerOptions,
+  getPlayerOverviewOptions,
   listMatchesOptions,
   listPlayersOptions,
   listSquadMemberStatsOptions,
@@ -44,7 +45,6 @@ import {
 } from "@/components/ui/item";
 import { InstallAppNudge } from "@/components/install-app-nudge";
 import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
-import { getPlayerOverviewOptions, getRecentFormOptions } from "@/lib/analytics/analytics-options";
 import type { AttentionResult } from "@/lib/analytics/types.provisional";
 import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
@@ -455,13 +455,10 @@ function ContinueWithCard({
 }) {
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
   const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: player.id } }));
-  const { data: recentForm } = useQuery(
-    getRecentFormOptions({ path: { player_id: player.id }, query: { opponentId: null } }),
-  );
 
   const lastMatch = matches?.[0];
   const lastViewedAt = getLastViewedAt();
-  const last5 = recentForm?.results.slice(-5) ?? [];
+  const last5 = overview?.recent_results.slice(-5) ?? [];
 
   return (
     <Card>
@@ -515,7 +512,7 @@ function ContinueWithCard({
               <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
               <div>
                 <p className="text-xl font-bold tabular-nums">
-                  {overview.forcedToUnforced.value.toFixed(1)}
+                  {overview.forced_to_unforced ? overview.forced_to_unforced.value.toFixed(1) : "—"}
                 </p>
                 <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
                   Forced : Unforced
@@ -546,10 +543,18 @@ function RosterTile({
   onSelect: (player: PlayerRead) => void;
 }) {
   // The underline is a score band on form, which is what the palette rule reserves
-  // these three colours for.
+  // these three colours for — a player with no form yet gets a neutral bar, not
+  // the worst band: `0` would misreport "struggling" for "no data yet".
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
-  const form = overview?.form.value ?? 0;
-  const tone = form >= 65 ? "pattern-win" : form >= 50 ? "pattern-forced" : "pattern-unforced";
+  const form = overview?.form?.value ?? null;
+  const tone =
+    form === null
+      ? "bg-muted"
+      : form >= 65
+        ? "pattern-win"
+        : form >= 50
+          ? "pattern-forced"
+          : "pattern-unforced";
 
   return (
     <button

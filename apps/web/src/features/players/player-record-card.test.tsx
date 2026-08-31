@@ -1,8 +1,41 @@
+import type { PlayerOverview } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
-import { expect, test } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { PlayerRecordCard } from "./player-record-card";
+
+const OVERVIEW: PlayerOverview = {
+  all_time_record: { wins: 52, losses: 28 },
+  season_record: { wins: 14, losses: 6 },
+  form: {
+    label: "Form",
+    value: 80,
+    unit: "percent",
+    sample_size: "n=5",
+    baseline: 62,
+    delta: 12,
+    max: 100,
+    higher_is_better: true,
+  },
+  hold_percentage: null,
+  return_games_won: null,
+  forced_to_unforced: null,
+  recent_results: ["win", "win", "loss", "win", "win"],
+};
+
+function stubFetch(overview: PlayerOverview = OVERVIEW) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players/player-1/analytics/overview") {
+        return Promise.resolve(Response.json(overview));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+}
 
 function renderCard(opponentId: string | null = null) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -14,7 +47,12 @@ function renderCard(opponentId: string | null = null) {
   return queryClient;
 }
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 test("shows the all-time win/loss record, no season row", async () => {
+  stubFetch();
   renderCard();
 
   expect(await screen.findByText("Win/loss record")).toBeInTheDocument();
@@ -24,7 +62,8 @@ test("shows the all-time win/loss record, no season row", async () => {
   expect(screen.queryByText("14W – 6L")).not.toBeInTheDocument();
 });
 
-test("shows recent form in the same card, all-matches by default", async () => {
+test("shows recent form in the same card", async () => {
+  stubFetch();
   renderCard();
 
   expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
@@ -34,6 +73,7 @@ test("shows recent form in the same card, all-matches by default", async () => {
 // `aria-label` on a bare `<span>` isn't announced by most screen readers — no
 // role means no accessible name is exposed. `role="img"` is what makes it one.
 test("each result dot is announced as Won or Lost, not just shown by fill", async () => {
+  stubFetch();
   renderCard();
   await screen.findByText("Recent form · last 5");
 
@@ -47,22 +87,21 @@ test("each result dot is announced as Won or Lost, not just shown by fill", asyn
   ]);
 });
 
-test("scopes recent form to the chosen opponent", async () => {
+// The opponent scope isn't threaded through to the query yet (#244's real
+// dropdown lands separately, see player-record-card.tsx's own comment) — the
+// prop is accepted for the caller's sake but recent form stays unscoped.
+test("recent form isn't yet scoped by the chosen opponent", async () => {
+  stubFetch();
   renderCard("sarah-k");
 
-  expect(await screen.findByText("Recent form · last 5 vs Sarah K")).toBeInTheDocument();
-  expect(screen.getByText("3W – 2L")).toBeInTheDocument();
+  expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
+  expect(screen.getByText("4W – 1L")).toBeInTheDocument();
 });
 
-// Most of `OPPONENTS` don't have a matching fixture yet. Silently falling back
-// to the all-matches record under that opponent's name would mislabel it, so
-// the card hides the recent-form block entirely instead.
-test("hides recent form for an opponent with no fixture, rather than mislabelling the all-matches record", async () => {
-  const queryClient = renderCard("alex-t");
+test("hides recent form for a player with no matches at all", async () => {
+  stubFetch({ ...OVERVIEW, recent_results: [] });
+  renderCard();
 
-  await waitFor(() => {
-    const state = queryClient.getQueryState(["analytics", "recent-form", "player-1", "alex-t"]);
-    expect(state?.status).toBe("success");
-  });
+  await screen.findByText("Win/loss record");
   expect(screen.queryByText(/Recent form/)).not.toBeInTheDocument();
 });

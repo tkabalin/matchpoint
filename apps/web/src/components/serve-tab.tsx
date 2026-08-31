@@ -1,3 +1,8 @@
+import type { BreakdownRow, ServeSideStats } from "@matchpoint/api-client";
+import {
+  getMatchServeStatsOptions,
+  getServeStatsOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowLeftRight,
@@ -30,17 +35,12 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getMatchServeStatsOptions, getServeStatsOptions } from "@/lib/analytics/analytics-options";
-import type {
-  BreakdownRow,
-  PhaseFilter,
-  ReturnOutcomeSplit,
-  ServeNumber,
-  ServeSideStats,
-  SetFilter,
-} from "@/lib/analytics/types.provisional";
+import { toSetNumber } from "@/lib/analytics/filter-options";
+import type { PhaseFilter, SetFilter } from "@/lib/analytics/types.provisional";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
+
+type ServeNumber = "first" | "second";
 
 const FAULT_MODE_ICON: Record<string, typeof Grid2x2> = {
   Net: Grid2x2,
@@ -54,27 +54,45 @@ export function ServeTab({
   matchId,
   set = "all",
   phase = "full",
-  opponentId = null,
 }: {
   playerId: string;
   /** Scopes to one match's own analytics instead of the whole player, for
-   *  the per-match stats page — same tab, different (still fixture) data. */
+   *  the per-match stats page — same tab, different data. */
   matchId?: string;
   set?: SetFilter;
   phase?: PhaseFilter;
+  /** Not yet threaded through to the query — the scope panel's opponent
+   *  picker is still a fixture (#244's real dropdown lands separately), and
+   *  its ids don't match the real `opponent_key` the endpoint expects. */
   opponentId?: string | null;
 }) {
-  const { data, isPending, isError } = useQuery(
-    matchId
-      ? getMatchServeStatsOptions({ path: { match_id: matchId }, query: { set, phase } })
-      : getServeStatsOptions({ path: { player_id: playerId }, query: { set, phase, opponentId } }),
-  );
+  const setNumber = toSetNumber(set);
+  // Two hooks, one enabled at a time, rather than a ternary choosing which
+  // `*Options` call feeds a single `useQuery`: the generated factories have
+  // genuinely different query-key types (`match_id` vs `player_id`), which a
+  // union can't express as one overload — this is the standard TanStack
+  // Query shape for "fetch A or B depending on a prop."
+  const playerQuery = useQuery({
+    ...getServeStatsOptions({
+      path: { player_id: playerId },
+      query: { set_number: setNumber, phase },
+    }),
+    enabled: matchId === undefined,
+  });
+  const matchQuery = useQuery({
+    ...getMatchServeStatsOptions({
+      path: { match_id: matchId ?? "" },
+      query: { set_number: setNumber, phase },
+    }),
+    enabled: matchId !== undefined,
+  });
+  const { data, isPending, isError } = matchId === undefined ? playerQuery : matchQuery;
 
   if (isPending) return <Skeleton className="h-96 w-full" />;
 
-  // A fixture can't fail, but the real endpoint this stands in for can — a
-  // 500 or an offline load must not leave this indefinitely skeletoned (#221's
-  // own "known pitfalls" section calls this exact pattern out).
+  // A real network read can fail — a 500 or an offline load must not leave
+  // this indefinitely skeletoned (#221's own "known pitfalls" section calls
+  // this exact pattern out).
   if (isError) {
     return (
       <Alert variant="destructive">
@@ -90,13 +108,14 @@ export function ServeTab({
         heroIcon={Target}
         trendTitle="Serve % in"
         stats={data.serving}
+        drill="fault-mode"
       />
       <ServeSideCard
         title="Their serve"
         heroIcon={Shield}
         trendTitle="Their serve % in"
         stats={data.returning}
-        returnOutcome={data.returning.returnOutcome}
+        drill="return-outcome"
       />
     </div>
   );
@@ -107,7 +126,7 @@ function ServeSideCard({
   heroIcon: HeroIcon,
   trendTitle,
   stats,
-  returnOutcome,
+  drill,
 }: {
   title: string;
   /** Distinct per card — serving and returning are different actions and should
@@ -115,7 +134,12 @@ function ServeSideCard({
   heroIcon: LucideIcon;
   trendTitle: string;
   stats: ServeSideStats;
-  returnOutcome?: ReturnOutcomeSplit;
+  /** Which drill this card shows when expanded — a caller decision, not one
+   *  inferred from the payload: the serving card's own `return_outcome` is
+   *  always empty (capture records the player's return of the opponent's
+   *  serve and nothing about the opponent's return of theirs), so the two
+   *  drills stay exclusive by construction rather than by checking for data. */
+  drill: "fault-mode" | "return-outcome";
 }) {
   const [expanded, setExpanded] = useState(false);
   const [serveNumber, setServeNumber] = useState<ServeNumber>("first");
@@ -123,21 +147,17 @@ function ServeSideCard({
   // Everything below reads from this one selection — the hero, the stack and
   // the fault-mode/return-outcome drill all move together when the 1st/2nd
   // serve toggle changes, rather than only the drill responding to it.
-  const outcome = serveNumber === "first" ? stats.outcome.firstServe : stats.outcome.secondServe;
-  const outcomeTotal = outcome ? outcome.in + outcome.fault + outcome.ace : 0;
+  const outcome = serveNumber === "first" ? stats.outcome.first_serve : stats.outcome.second_serve;
+  const outcomeTotal = outcome ? outcome.landed + outcome.fault + outcome.ace : 0;
   const heroLabel = serveNumber === "first" ? "1st serves in" : "2nd serves in";
   const faultMode =
-    serveNumber === "first" ? stats.faultMode.firstServe : stats.faultMode.secondServe;
-  // The returning card is the one handed a return outcome, and it is also the one
-  // that can never have a fault mode: capture records where the tracked player's
-  // own serve missed and nothing about the opponent's, so the API returns null on
-  // both halves of this side throughout. The two drills are therefore exclusive —
-  // this card shows one or the other, never an empty heading for the wrong one.
-  const returnRows = returnOutcome
-    ? serveNumber === "first"
-      ? returnOutcome.firstServe
-      : returnOutcome.secondServe
-    : undefined;
+    serveNumber === "first" ? stats.fault_mode.first_serve : stats.fault_mode.second_serve;
+  const returnRows =
+    drill === "return-outcome"
+      ? serveNumber === "first"
+        ? stats.return_outcome.first_serve
+        : stats.return_outcome.second_serve
+      : undefined;
 
   return (
     <StatCard>
@@ -164,7 +184,7 @@ function ServeSideCard({
           number has not been attempted: zero would read as a measurement. */}
       <StatHero
         icon={HeroIcon}
-        value={outcome ? `${outcome.in + outcome.ace}%` : "—"}
+        value={outcome ? `${outcome.landed + outcome.ace}%` : "—"}
         label={heroLabel}
       />
 
@@ -174,7 +194,7 @@ function ServeSideCard({
             // "In" here means landed in and wasn't an ace — a disjoint third of
             // the stack, not a superset of the ace segment below it. Together,
             // in + ace is the headline % in shown above.
-            { pattern: "win", weight: outcome.in, label: `${outcome.in}% in` },
+            { pattern: "win", weight: outcome.landed, label: `${outcome.landed}% in` },
             {
               pattern: "unforced",
               weight: outcome.fault,
@@ -217,7 +237,7 @@ function ServeSideCard({
               above is a share of attempts, and two adjacent percentages measuring
               against different denominators is exactly how a coach misreads
               "Net 55%" as "55% of my serves hit the net". */}
-          {!returnOutcome && (
+          {drill === "fault-mode" && (
             <>
               <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
                 Fault mode · share of faults
@@ -269,8 +289,8 @@ function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStat
   // line is that rate for one match, oldest (M1) to most recent, so a coach sees
   // the trend behind today's headline number, not just its current value.
   const config = {
-    firstServeIn: { label: "1st serve % in", color: PATTERN_VAR.yellow },
-    secondServeIn: { label: "2nd serve % in", color: PATTERN_VAR.indigo },
+    first_serve_in: { label: "1st serve % in", color: PATTERN_VAR.yellow },
+    second_serve_in: { label: "2nd serve % in", color: PATTERN_VAR.indigo },
   };
 
   // A line needs two points to be a line. One match (what a match-scoped request
@@ -311,16 +331,16 @@ function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStat
             content={
               <ChartTooltipContent
                 // Keyed by series (`name` is the line's own dataKey), not by
-                // payload position — a match with no 2nd serve renders a
-                // single-entry payload at index 0, which used to mislabel
-                // whichever line actually survived as "1st serve".
+                // payload position — a match with no 2nd serve carries a null
+                // `second_serve_in` rather than an absent key, and this used to
+                // mislabel whichever line actually survived as "1st serve".
                 formatter={(value, name) => (
                   <div className="flex w-full items-center justify-between gap-2">
                     <span className="text-muted-foreground">
-                      {name === "firstServeIn" ? "1st serve" : "2nd serve"}
+                      {name === "first_serve_in" ? "1st serve" : "2nd serve"}
                     </span>
                     <span className="font-mono font-medium text-foreground tabular-nums">
-                      {value}%
+                      {value === null ? "—" : `${value}%`}
                     </span>
                   </div>
                 )}
@@ -334,23 +354,23 @@ function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStat
               passes WCAG on its own. legendType/tooltipType "none" keeps the halo out of
               both, so it never appears as a second series. */}
           <Line
-            dataKey="firstServeIn"
+            dataKey="first_serve_in"
             stroke="var(--background)"
             strokeWidth={4}
             dot={false}
             legendType="none"
             tooltipType="none"
           />
-          <Line dataKey="firstServeIn" stroke={PATTERN_VAR.yellow} strokeWidth={2} dot={false} />
+          <Line dataKey="first_serve_in" stroke={PATTERN_VAR.yellow} strokeWidth={2} dot={false} />
           <Line
-            dataKey="secondServeIn"
+            dataKey="second_serve_in"
             stroke="var(--background)"
             strokeWidth={4}
             dot={false}
             legendType="none"
             tooltipType="none"
           />
-          <Line dataKey="secondServeIn" stroke={PATTERN_VAR.indigo} strokeWidth={2} dot={false} />
+          <Line dataKey="second_serve_in" stroke={PATTERN_VAR.indigo} strokeWidth={2} dot={false} />
         </LineChart>
       </ChartContainer>
     </div>

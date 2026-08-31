@@ -1,6 +1,5 @@
+import type { CourtZoneCount } from "@matchpoint/api-client";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
-
-import type { CourtZoneCount } from "@/lib/analytics/types.provisional";
 
 /**
  * A real tennis-court diagram for "final ball: where it landed": four in-court

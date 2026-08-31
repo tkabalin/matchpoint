@@ -1,3 +1,8 @@
+import type { BreakdownRow, PointEnderStyle, RallyLengthBucket } from "@matchpoint/api-client";
+import {
+  getMatchRallyStatsOptions,
+  getRallyStatsOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowBigLeftDash,
@@ -27,14 +32,8 @@ import { StatHero } from "@/components/stat-hero";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getMatchRallyStatsOptions, getRallyStatsOptions } from "@/lib/analytics/analytics-options";
-import type {
-  BreakdownRow,
-  PhaseFilter,
-  PointEnderStyle,
-  RallyLengthBucket,
-  SetFilter,
-} from "@/lib/analytics/types.provisional";
+import { toSetNumber } from "@/lib/analytics/filter-options";
+import type { PhaseFilter, SetFilter } from "@/lib/analytics/types.provisional";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
@@ -57,27 +56,55 @@ const SHOT_TYPE_ICON: Record<string, typeof TrendingUp> = {
   Lob: Rainbow,
 };
 
+/**
+ * The explainer paragraph under the radar. No API field carries this — it's
+ * the clearest statement of forced/unforced semantics on the tab, so it lives
+ * here as a client constant rather than being dropped once the fixture that
+ * used to hold it (`fixtures.ts`) goes away.
+ */
+const PLACEMENT_NOTE: Record<WonSide, string> = {
+  you: "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means your shot put the opponent under real pressure and their error (or your winner) followed from that; unforced means they missed a routine ball with no real pressure on it.",
+  opponents:
+    "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means their shot put you under real pressure and your error (or their winner) followed from that; unforced means you missed a routine ball with no real pressure on it.",
+};
+
 export function RallyTab({
   playerId,
   matchId,
   set = "all",
   phase = "full",
-  opponentId = null,
 }: {
   playerId: string;
   /** Scopes to one match's own analytics instead of the whole player, for
-   *  the per-match stats page — same tab, different (still fixture) data. */
+   *  the per-match stats page — same tab, different data. */
   matchId?: string;
   set?: SetFilter;
   phase?: PhaseFilter;
+  /** Not yet threaded through to the query — the scope panel's opponent
+   *  picker is still a fixture (#244's real dropdown lands separately), and
+   *  its ids don't match the real `opponent_key` the endpoint expects. */
   opponentId?: string | null;
 }) {
   const [wonSide, setWonSide] = useState<WonSide>("you");
-  const { data, isPending, isError } = useQuery(
-    matchId
-      ? getMatchRallyStatsOptions({ path: { match_id: matchId }, query: { set, phase } })
-      : getRallyStatsOptions({ path: { player_id: playerId }, query: { set, phase, opponentId } }),
-  );
+  const setNumber = toSetNumber(set);
+  // Two hooks, one enabled at a time — see serve-tab.tsx's own comment on
+  // why a ternary choosing which `*Options` call feeds a single `useQuery`
+  // doesn't type-check here.
+  const playerQuery = useQuery({
+    ...getRallyStatsOptions({
+      path: { player_id: playerId },
+      query: { set_number: setNumber, phase },
+    }),
+    enabled: matchId === undefined,
+  });
+  const matchQuery = useQuery({
+    ...getMatchRallyStatsOptions({
+      path: { match_id: matchId ?? "" },
+      query: { set_number: setNumber, phase },
+    }),
+    enabled: matchId !== undefined,
+  });
+  const { data, isPending, isError } = matchId === undefined ? playerQuery : matchQuery;
   // Starts closed, and stays closed on its own: nothing auto-opens on load or
   // on switching You won/They won, only a tap on a style card opens its own
   // drill, and tapping that same card again closes it.
@@ -85,9 +112,9 @@ export function RallyTab({
 
   if (isPending) return <Skeleton className="h-96 w-full" />;
 
-  // A fixture can't fail, but the real endpoint this stands in for can — a
-  // 500 or an offline load must not leave this indefinitely skeletoned (#221's
-  // own "known pitfalls" section calls this exact pattern out).
+  // A real network read can fail — a 500 or an offline load must not leave
+  // this indefinitely skeletoned (#221's own "known pitfalls" section calls
+  // this exact pattern out).
   if (isError) {
     return (
       <Alert variant="destructive">
@@ -98,16 +125,19 @@ export function RallyTab({
 
   const styles = data.styles[wonSide];
 
-  const shotFrequency = data.shotFrequency[wonSide];
-  const placementNote = data.placementNote[wonSide];
+  const shotFrequency = data.shot_frequency[wonSide];
+  const placementNote = PLACEMENT_NOTE[wonSide];
   const openedStyle = styles.find((style) => style.kind === openStyle) ?? null;
+  // Null exactly when no rally-ending point has been recorded at all in this
+  // scope — a brand-new player, or a filter combination nothing matches.
+  const heroValue = data.hero ? (data.hero.display ?? data.hero.value.toFixed(2)) : "—";
 
   return (
     <div className="flex flex-col gap-3">
-      <RallyLengthCard buckets={data.rallyLength} />
+      <RallyLengthCard buckets={data.rally_length} />
 
       <StatCard title="Point enders">
-        <StatHero icon={Swords} value={String(data.hero.value)} label={data.hero.label} />
+        <StatHero icon={Swords} value={heroValue} label="Forced : Unforced ratio" />
         <OutcomeStack
           segments={[
             { pattern: "win", weight: data.won, label: `${data.won} won` },
@@ -249,7 +279,7 @@ function StyleCard({
         { label: "FH", value: style.detail.wing.forehand },
         { label: "BH", value: style.detail.wing.backhand },
       ]
-    : (style.detail.unusualReasons ?? []).map((row) => ({ label: row.label, value: row.value }));
+    : (style.detail.unusual_reasons ?? []).map((row) => ({ label: row.label, value: row.value }));
   const max = Math.max(1, ...histRows.map((row) => row.value));
 
   return (
@@ -303,7 +333,12 @@ function NothingToBreakDown({ count }: { count: number }) {
 }
 
 function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: boolean }) {
-  const { wing, shotType, courtZones, unusualReasons } = style.detail;
+  const {
+    wing,
+    shot_type: shotType,
+    court_zones: courtZones,
+    unusual_reasons: unusualReasons,
+  } = style.detail;
 
   if (!wing) {
     return (

@@ -1,83 +1,77 @@
-import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
+import type { RallyStats } from "@matchpoint/api-client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
-
-import type { RallyStats } from "@/lib/analytics/types.provisional";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { RallyTab } from "./rally-tab";
 
 // A point-ender style with count > 0 and no breakdown is legitimate: a point
 // ending on a missed return records no shot and no final ball, so it counts
-// toward the card and appears in none of its drills (#232). The fixture never
-// produces this shape, so it needs its own file where getRallyStatsOptions is
-// mocked to a hand-built payload.
-const EMPTY_STYLE = {
-  kind: "unforced" as const,
-  label: "Unforced (their free error)",
-  count: 3,
-  detail: {
-    wing: { forehand: 0, backhand: 0 },
-    shotType: [],
-    courtZones: [],
-    unusualReasons: null,
-  },
-};
-const EMPTY_UNUSUAL_STYLE = {
-  kind: "unusual" as const,
-  label: "Unusual (in your favor)",
-  count: 1,
-  detail: { wing: null, shotType: [], courtZones: [], unusualReasons: null },
+// toward the card and appears in none of its drills (#232). The real API
+// never produces this shape from the fixed demo season, so it needs its own
+// hand-built payload.
+const EMPTY_DETAIL = {
+  wing: { forehand: 0, backhand: 0 },
+  shot_type: [],
+  court_zones: [],
+  unusual_reasons: null,
 };
 
 const RALLY_STATS: RallyStats = {
+  errors_overall: null,
+  errors_under_pressure: null,
   hero: {
     label: "Forced : Unforced ratio",
     value: 1.0,
     unit: "ratio",
-    sampleSize: "n=1",
+    sample_size: "n=1",
     baseline: null,
     delta: null,
     max: 3,
-    higherIsBetter: true,
+    higher_is_better: true,
   },
   won: 3,
   lost: 4,
-  shotFrequency: { you: [], opponents: [] },
-  placementNote: { you: "", opponents: "" },
+  lost_by_shot: [],
+  won_by_shot: [],
+  outcome_mix: [],
+  shot_frequency: { you: [], opponents: [] },
+  rally_length: [{ label: "1–3 shots", count: 7 }],
   styles: {
     you: [
-      { kind: "forced", label: "Forced (their pressure)", count: 0, detail: EMPTY_STYLE.detail },
-      EMPTY_STYLE,
-      EMPTY_UNUSUAL_STYLE,
+      { kind: "forced", label: "Forced (their pressure)", count: 0, detail: EMPTY_DETAIL },
+      { kind: "unforced", label: "Unforced (their free error)", count: 3, detail: EMPTY_DETAIL },
+      {
+        kind: "unusual",
+        label: "Unusual (in your favor)",
+        count: 1,
+        detail: { wing: null, shot_type: [], court_zones: [], unusual_reasons: null },
+      },
     ],
     opponents: [
-      { kind: "forced", label: "Forced (your pressure)", count: 0, detail: EMPTY_STYLE.detail },
-      {
-        kind: "unforced",
-        label: "Unforced (your free error)",
-        count: 4,
-        detail: EMPTY_STYLE.detail,
-      },
-      { kind: "unusual", label: "Unusual (against you)", count: 0, detail: EMPTY_STYLE.detail },
+      { kind: "forced", label: "Forced (your pressure)", count: 0, detail: EMPTY_DETAIL },
+      { kind: "unforced", label: "Unforced (your free error)", count: 4, detail: EMPTY_DETAIL },
+      { kind: "unusual", label: "Unusual (against you)", count: 0, detail: EMPTY_DETAIL },
     ],
   },
-  rallyLength: [{ label: "1–3 shots", count: 7 }],
 };
 
-vi.mock("@/lib/analytics/analytics-options", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/analytics/analytics-options")>();
-  return {
-    ...actual,
-    getRallyStatsOptions: () =>
-      queryOptions({
-        queryKey: ["rally-stats-empty-drill-test"],
-        queryFn: () => Promise.resolve(RALLY_STATS),
-      }),
-  };
-});
+function stubFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players/player-1/analytics/rally") {
+        return Promise.resolve(Response.json(RALLY_STATS));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+}
 
 function renderTab() {
+  stubFetch();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -85,6 +79,10 @@ function renderTab() {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test("an unforced style with a real count but no breakdown says so instead of showing bare headings", async () => {
   const user = userEvent.setup();

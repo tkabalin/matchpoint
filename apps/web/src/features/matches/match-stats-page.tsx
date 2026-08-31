@@ -34,10 +34,10 @@ type Tab = "serve" | "rally";
 /**
  * The per-match counterpart to the player stats page (#199/#213 follow-up):
  * "click a match, see its own stats" — the same Serve/Rally tabs the player
- * page uses, reused verbatim and scoped to this one match's own (still
- * fixture-backed) data instead of the player's whole history. No opponent/
- * scope picker here — a match already has exactly one opponent — but Set/
- * Phase still narrows within this match's own sets.
+ * page uses, reused verbatim and scoped to this one match's own data instead
+ * of the player's whole history. No opponent/scope picker here — a match
+ * already has exactly one opponent — but Set/Phase still narrows within
+ * this match's own sets.
  */
 export function MatchStatsPage() {
   const { matchId } = routeApi.useParams();

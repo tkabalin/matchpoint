@@ -10,177 +10,11 @@
  * slices here rather than letting one slice import another.
  */
 
-export type MetricUnit = "percent" | "ratio" | "perSet" | "perMatch";
-
-/** One number a coach is shown, with everything needed to judge it. */
-export interface Metric {
-  label: string;
-  value: number;
-  unit: MetricUnit;
-  /** Rendered verbatim next to the label ("n=14", "n=20 sets"). */
-  sampleSize: string;
-  /** The comparison this metric is judged against, in the same units. */
-  baseline: number | null;
-  /** Change over the window, in the same units. Sign carries the direction. */
-  delta: number | null;
-  /** Ceiling for the track. 100 for percentages, an explicit cap otherwise. */
-  max: number;
-  /** False for metrics like double faults, where down is the good direction. */
-  higherIsBetter: boolean;
-  /** Set only where the value isn't a plain number, e.g. a "7–3" record. */
-  display?: string;
-}
-
 export type MatchOutcome = "win" | "loss";
 
 export interface WinLossRecord {
   wins: number;
   losses: number;
-}
-
-/** A labelled quantity in a horizontal bar list (fault mode, shot type, etc.). */
-export interface BreakdownRow {
-  label: string;
-  /** Primary count. */
-  value: number;
-  /** Second stacked count where a row splits (unforced vs. forced errors). */
-  secondaryValue?: number;
-  /** Ceiling the row's bar is drawn against, shared across the group. */
-  max: number;
-}
-
-/** Read by the home screen, the roster list, and the player-profile's own
- *  record card — `seasonRecord`/`allTimeRecord` are that card's data. */
-export interface PlayerOverview {
-  form: Metric;
-  holdPercentage: Metric;
-  /** Forced points (a winner or a forced error — capture can't tell them
-   *  apart, #175/#206) against unforced errors. The home screen's
-   *  "Continue with" card is this field's only current reader. */
-  forcedToUnforced: Metric;
-  seasonRecord: WinLossRecord;
-  allTimeRecord: WinLossRecord;
-}
-
-/** In/fault/ace counts for one serve attempt number (1st or 2nd) — three
- *  disjoint buckets that sum to 100, not `in` as a superset of `ace`. The
- *  headline "% in" a coach cares about is `in + ace` together, computed at
- *  the call site rather than stored as a fourth number that could drift out
- *  of sync with these three. */
-export interface ServeOutcomeCounts {
-  in: number;
-  fault: number;
-  ace: number;
-}
-
-export type ServeNumber = "first" | "second";
-
-export interface FaultModeShares {
-  net: number;
-  long: number;
-  wide: number;
-}
-
-/**
- * Where a fault landed, split by which serve attempt it was.
- *
- * A half is null until that serve number has actually faulted, and **both are
- * null on the returning side throughout**: capture records where the tracked
- * player's own serve missed and nothing about the opponent's. Nullable here to
- * match the real contract, so a consumer is made to handle the absence rather
- * than reading `.net` off nothing the first time real data arrives.
- */
-export interface FaultModeSplit {
-  firstServe: FaultModeShares | null;
-  secondServe: FaultModeShares | null;
-}
-
-/** One match's serve-in rate, for the recent-matches trend line. */
-export interface ServeTrendPoint {
-  match: string;
-  firstServeIn: number;
-  secondServeIn: number;
-}
-
-export interface ServeSideStats {
-  /** Split by serve number, like `faultMode` already is below — the hero
-   *  headline and the outcome stack read from whichever half the 1st/2nd
-   *  serve toggle has selected, rather than a fixed value that ignores it.
-   *  A half is null until that serve number has been attempted. */
-  outcome: { firstServe: ServeOutcomeCounts | null; secondServe: ServeOutcomeCounts | null };
-  faultMode: FaultModeSplit;
-  /** Oldest first. At most one entry on a match-scoped request, and none at all
-   *  where this side never served — a line needs two points to be a line. */
-  trend: ServeTrendPoint[];
-}
-
-/** The tracked player's return outcome against the opponent's serve — in, or
- *  which way it missed — split by which serve attempt it was returning. */
-export interface ReturnOutcomeSplit {
-  firstServe: BreakdownRow[];
-  secondServe: BreakdownRow[];
-}
-
-export interface ServeStats {
-  /** Hero metric differs by side, so both sides carry a full set. */
-  serving: ServeSideStats;
-  /** Same shape as `serving`, plus the tracked player's own return outcome
-   *  against the opponent's serve — there's nothing analogous on the serving side. */
-  returning: ServeSideStats & { returnOutcome: ReturnOutcomeSplit };
-}
-
-/** One of the three ways a rally-ending point can be tallied for the drill-down. */
-export type PointEnderKind = "forced" | "unforced" | "unusual";
-
-/** Seven zones: deuce/ad × short/deep (the four in-court cells), plus
- *  net/long/wide for the ones that landed out. Label matches the zone exactly. */
-export interface CourtZoneCount {
-  zone: string;
-  count: number;
-}
-
-/** Wing/shot-type/court-zone breakdown behind one point-ender style, when it
- *  has a setup shot to describe (forced and unforced do; unusual doesn't). */
-export interface PointEnderStyleDetail {
-  wing: { forehand: number; backhand: number } | null;
-  shotType: BreakdownRow[];
-  courtZones: CourtZoneCount[];
-  /** Only set when `wing` is null — what kind of unusual point each one was. */
-  unusualReasons: BreakdownRow[] | null;
-}
-
-/** One of the three tap-to-expand style cards under Point enders — its label
- *  names which side applied the pressure or gave the point away, which flips
- *  with the "You won/They won" toggle (e.g. "Forced (their pressure)" vs.
- *  "Forced (your pressure)"). "Forced" itself can't distinguish a clean
- *  winner from a forced error the point-ending capture stores them the same
- *  way (#175/#206), so the label never claims to. */
-export interface PointEnderStyle {
-  kind: PointEnderKind;
-  label: string;
-  count: number;
-  detail: PointEnderStyleDetail;
-}
-
-/** How many points ended after roughly this many shots — not scoped to the
- *  "You won/They won" toggle, since the read this is for (serve/return vs.
- *  fitness) cuts across who won the point. */
-export interface RallyLengthBucket {
-  label: string;
-  count: number;
-}
-
-export interface RallyStats {
-  hero: Metric;
-  won: number;
-  lost: number;
-  /** Radar axes: share of point-ending shots per wing×shot-type combination,
-   *  0–1. One set per side of the "You won / They won" toggle. */
-  shotFrequency: Record<"you" | "opponents", { shot: string; share: number }[]>;
-  /** The explainer paragraph under the radar — how placement below is derived. */
-  placementNote: Record<"you" | "opponents", string>;
-  styles: Record<"you" | "opponents", readonly [PointEnderStyle, PointEnderStyle, PointEnderStyle]>;
-  rallyLength: RallyLengthBucket[];
 }
 
 /**
@@ -227,11 +61,6 @@ export interface OpponentOption {
   name: string;
   matches: number;
   recent: boolean;
-}
-
-/** Recent match results, scoped to all matches or to one opponent. */
-export interface RecentForm {
-  results: MatchOutcome[];
 }
 
 export interface CoachNote {
@@ -284,8 +113,8 @@ export interface SquadStatsEntry {
   wins: number;
   losses: number;
   /** Same field, same "capture can't distinguish a winner from a forced
-   *  error" caveat as `PlayerOverview.forcedToUnforced` (#175/#206). Null
-   *  wherever the API's own ratio is. */
+   *  error" caveat as the real API's `forced_to_unforced_ratio` (#175/#206).
+   *  Null wherever the API's own ratio is. */
   forcedToUnforcedRatio: number | null;
   /** Share of first-serve attempts landing in, 0–100. Null wherever the
    *  API's own percentage is. */

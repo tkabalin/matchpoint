@@ -1,11 +1,78 @@
+import type { ServeStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { ServeTab } from "./serve-tab";
 
+// The headline % in is `landed + ace`, not the plain "landed" bucket alone —
+// 68 + 8 = 76 on the serving side (serve-tab.test.tsx's own regression case
+// below), 61 + 8 = 69 on the returning side.
+const SERVE_STATS: ServeStats = {
+  serving: {
+    breakdown: [],
+    hero: null,
+    metrics: [],
+    outcome: {
+      first_serve: { landed: 68, fault: 24, ace: 8 },
+      second_serve: { landed: 85, fault: 12, ace: 3 },
+    },
+    fault_mode: {
+      first_serve: { net: 55, long: 20, wide: 25 },
+      second_serve: { net: 38, long: 34, wide: 28 },
+    },
+    return_outcome: { first_serve: [], second_serve: [] },
+    trend: [
+      { match: "M1", first_serve_in: 61, second_serve_in: 52 },
+      { match: "M2", first_serve_in: 64, second_serve_in: 49 },
+    ],
+  },
+  returning: {
+    breakdown: [],
+    hero: null,
+    metrics: [],
+    outcome: {
+      first_serve: { landed: 61, fault: 31, ace: 8 },
+      second_serve: { landed: 80, fault: 15, ace: 5 },
+    },
+    fault_mode: { first_serve: null, second_serve: null },
+    return_outcome: {
+      first_serve: [
+        { label: "In", value: 74, max: 100 },
+        { label: "Net", value: 11, max: 100 },
+        { label: "Long", value: 9, max: 100 },
+        { label: "Wide", value: 6, max: 100 },
+      ],
+      second_serve: [
+        { label: "In", value: 86, max: 100 },
+        { label: "Net", value: 7, max: 100 },
+        { label: "Long", value: 4, max: 100 },
+        { label: "Wide", value: 3, max: 100 },
+      ],
+    },
+    trend: [
+      { match: "M1", first_serve_in: 58, second_serve_in: 47 },
+      { match: "M2", first_serve_in: 60, second_serve_in: 45 },
+    ],
+  },
+};
+
+function stubFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players/player-1/analytics/serve") {
+        return Promise.resolve(Response.json(SERVE_STATS));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+}
+
 function renderTab() {
+  stubFetch();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -13,6 +80,10 @@ function renderTab() {
     </QueryClientProvider>,
   );
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test("both serve cards render, headline and stack visible, drills collapsed", async () => {
   renderTab();

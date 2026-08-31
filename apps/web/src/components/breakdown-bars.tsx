@@ -1,8 +1,8 @@
+import type { BreakdownRow } from "@matchpoint/api-client";
 import type { LucideIcon } from "lucide-react";
 
 import { OutcomeLegend } from "@/components/outcome-swatch";
 import { PATTERN_CLASS, type PatternName } from "@/lib/palette";
-import type { BreakdownRow } from "@/lib/analytics/types.provisional";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,7 +44,7 @@ export function BreakdownBars({
         // — a "NaN%" width is dropped by the browser, so the bar would render
         // with no fill at all rather than as a legitimately empty one.
         const primary = row.max === 0 ? 0 : (row.value / row.max) * 100;
-        const secondary = row.max === 0 ? 0 : ((row.secondaryValue ?? 0) / row.max) * 100;
+        const secondary = row.max === 0 ? 0 : ((row.secondary_value ?? 0) / row.max) * 100;
         const rowPattern = typeof pattern === "function" ? pattern(row) : pattern;
         const Icon = icon?.(row);
 
@@ -55,9 +55,9 @@ export function BreakdownBars({
               <div className="flex justify-between text-xs">
                 <span>{row.label}</span>
                 <span className="tabular-nums">
-                  {row.secondaryValue === undefined
+                  {row.secondary_value === undefined || row.secondary_value === null
                     ? `${row.value}${unit}`
-                    : `${row.value}${unit} UFE · ${row.secondaryValue}${unit} FE`}
+                    : `${row.value}${unit} UFE · ${row.secondary_value}${unit} FE`}
                 </span>
               </div>
               <div className="mt-1 flex h-2 overflow-hidden rounded-sm bg-muted">

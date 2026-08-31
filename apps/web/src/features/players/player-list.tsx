@@ -1,5 +1,6 @@
 import type { PlayerRead } from "@matchpoint/api-client";
 import {
+  getPlayerOverviewOptions,
   listPlayersOptions,
   listSquadMemberStatsOptions,
 } from "@matchpoint/api-client/react-query";
@@ -21,7 +22,6 @@ import {
 } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { attentionFor } from "@/lib/analytics/attention";
-import { getPlayerOverviewOptions } from "@/lib/analytics/analytics-options";
 import { getErrorStatus } from "@/lib/error-status";
 
 /**
@@ -147,7 +147,7 @@ function PlayerRow({
           {player.has_transfer_code && <Badge variant="secondary">Transfer pending</Badge>}
         </ItemTitle>
         <ItemDescription className={flag ? "text-outcome-unforced" : undefined}>
-          {flag ?? `Form ${overview?.form.value ?? "—"}%`}
+          {flag ?? `Form ${overview?.form?.value ?? "—"}%`}
         </ItemDescription>
       </ItemContent>
       <ItemActions>

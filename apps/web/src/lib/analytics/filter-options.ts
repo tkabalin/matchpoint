@@ -1,5 +1,13 @@
 import type { MatchScope, PhaseFilter, SetFilter } from "./types.provisional";
 
+/** `"all"` is the scope panel's own sentinel and never reaches the wire — the
+ *  endpoint takes `set_number` as an integer or an omitted/null parameter for
+ *  "every set". Shared by the Serve and Rally tabs, both player- and
+ *  match-scoped. */
+export function toSetNumber(set: SetFilter): number | null {
+  return set === "all" ? null : Number(set);
+}
+
 /** Shared option lists/labels for the scope filter — the player stats page's
  *  full scope panel and the per-match stats page's smaller Set/Phase-only
  *  panel both need these. */

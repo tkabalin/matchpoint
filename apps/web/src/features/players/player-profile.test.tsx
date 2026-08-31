@@ -1,4 +1,10 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type {
+  PlayerOverview,
+  PlayerRead,
+  RallyStats,
+  ServeSideStats,
+  ServeStats,
+} from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -30,16 +36,87 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
+const DEFAULT_OVERVIEW: PlayerOverview = {
+  all_time_record: { wins: 0, losses: 0 },
+  season_record: { wins: 0, losses: 0 },
+  form: null,
+  hold_percentage: null,
+  return_games_won: null,
+  forced_to_unforced: null,
+  recent_results: ["win", "win", "loss", "win", "win"],
+};
+
+const EMPTY_SERVE_SIDE: ServeSideStats = {
+  breakdown: [],
+  hero: null,
+  metrics: [],
+  outcome: { first_serve: null, second_serve: null },
+  fault_mode: { first_serve: null, second_serve: null },
+  return_outcome: { first_serve: [], second_serve: [] },
+  trend: [],
+};
+const DEFAULT_SERVE_STATS: ServeStats = { serving: EMPTY_SERVE_SIDE, returning: EMPTY_SERVE_SIDE };
+
+const EMPTY_STYLE_DETAIL = {
+  wing: { forehand: 0, backhand: 0 },
+  shot_type: [],
+  court_zones: [],
+  unusual_reasons: null,
+};
+const DEFAULT_RALLY_STATS: RallyStats = {
+  errors_overall: null,
+  errors_under_pressure: null,
+  hero: null,
+  won: 0,
+  lost: 0,
+  lost_by_shot: [],
+  won_by_shot: [],
+  outcome_mix: [],
+  rally_length: [],
+  shot_frequency: { you: [], opponents: [] },
+  styles: {
+    you: [
+      { kind: "forced", label: "Forced (their pressure)", count: 0, detail: EMPTY_STYLE_DETAIL },
+      {
+        kind: "unforced",
+        label: "Unforced (their free error)",
+        count: 0,
+        detail: EMPTY_STYLE_DETAIL,
+      },
+      { kind: "unusual", label: "Unusual (in your favor)", count: 0, detail: EMPTY_STYLE_DETAIL },
+    ],
+    opponents: [
+      { kind: "forced", label: "Forced (your pressure)", count: 0, detail: EMPTY_STYLE_DETAIL },
+      {
+        kind: "unforced",
+        label: "Unforced (your free error)",
+        count: 0,
+        detail: EMPTY_STYLE_DETAIL,
+      },
+      { kind: "unusual", label: "Unusual (against you)", count: 0, detail: EMPTY_STYLE_DETAIL },
+    ],
+  },
+};
+
 /**
- * Routes by pathname — this page fetches both the player and their matches. A
- * handler can read the request (method, body) for routes the edit flow PATCHes.
+ * Routes by pathname — this page fetches the player, their matches, and the
+ * Serve tab's own analytics by default (Rally's, once a test switches to it).
+ * A handler can read the request (method, body) for routes the edit flow
+ * PATCHes. Analytics routes fall back to a generic empty payload so every
+ * existing `stubFetch({...})` call in this file keeps working unchanged —
+ * only a test that cares about specific stats numbers needs to override one.
  */
 function stubFetch(routes: Record<string, (input: Request) => Response | Promise<Response>>) {
+  const defaults: Record<string, () => Response> = {
+    [`/api/players/${player.id}/analytics/overview`]: () => Response.json(DEFAULT_OVERVIEW),
+    [`/api/players/${player.id}/analytics/serve`]: () => Response.json(DEFAULT_SERVE_STATS),
+    [`/api/players/${player.id}/analytics/rally`]: () => Response.json(DEFAULT_RALLY_STATS),
+  };
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
-      const handler = routes[pathname];
+      const handler = routes[pathname] ?? defaults[pathname];
       if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
       return Promise.resolve(handler(input));
     }),
