@@ -24,27 +24,40 @@ const OVERVIEW: PlayerOverview = {
   recent_results: ["win", "win", "loss", "win", "win"],
 };
 
-function stubFetch(overview: PlayerOverview = OVERVIEW) {
+function stubFetch(response: () => Response = () => Response.json(OVERVIEW)) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
       if (pathname === "/api/players/player-1/analytics/overview") {
-        return Promise.resolve(Response.json(overview));
+        return Promise.resolve(response());
       }
       throw new Error(`Unstubbed fetch: ${pathname}`);
     }),
   );
 }
 
-function renderCard(opponentId: string | null = null) {
+function renderCard({
+  opponentKey = null,
+  opponentName = null,
+  onOpponentNotFound = vi.fn(),
+}: {
+  opponentKey?: string | null;
+  opponentName?: string | null;
+  onOpponentNotFound?: () => void;
+} = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
-      <PlayerRecordCard playerId="player-1" opponentId={opponentId} />
+      <PlayerRecordCard
+        playerId="player-1"
+        opponentKey={opponentKey}
+        opponentName={opponentName}
+        onOpponentNotFound={onOpponentNotFound}
+      />
     </QueryClientProvider>,
   );
-  return queryClient;
+  return { queryClient, onOpponentNotFound };
 }
 
 afterEach(() => {
@@ -87,21 +100,35 @@ test("each result dot is announced as Won or Lost, not just shown by fill", asyn
   ]);
 });
 
-// The opponent scope isn't threaded through to the query yet (#244's real
-// dropdown lands separately, see player-record-card.tsx's own comment) — the
-// prop is accepted for the caller's sake but recent form stays unscoped.
-test("recent form isn't yet scoped by the chosen opponent", async () => {
+test("names the opponent in the caption once one is scoped", async () => {
   stubFetch();
-  renderCard("sarah-k");
+  renderCard({ opponentKey: "sarah-k", opponentName: "Sarah K" });
 
-  expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
-  expect(screen.getByText("4W – 1L")).toBeInTheDocument();
+  expect(await screen.findByText("Recent form · last 5 vs Sarah K")).toBeInTheDocument();
 });
 
 test("hides recent form for a player with no matches at all", async () => {
-  stubFetch({ ...OVERVIEW, recent_results: [] });
+  stubFetch(() => Response.json({ ...OVERVIEW, recent_results: [] }));
   renderCard();
 
   await screen.findByText("Win/loss record");
   expect(screen.queryByText(/Recent form/)).not.toBeInTheDocument();
+});
+
+// A stale opponent key (its matches renamed/deleted since the picker offered
+// it) 404s — the card falls back to "all matches" via the callback rather
+// than getting stuck on a permanent error or skeleton.
+test("falls back to all matches when the opponent key 404s", async () => {
+  stubFetch(() => new Response(JSON.stringify({ detail: "No matches" }), { status: 404 }));
+  const { onOpponentNotFound } = renderCard({ opponentKey: "gone", opponentName: "Gone" });
+
+  await vi.waitFor(() => expect(onOpponentNotFound).toHaveBeenCalledTimes(1));
+  expect(screen.queryByText("Win/loss record")).not.toBeInTheDocument();
+});
+
+test("shows a real error for a failure that isn't a stale opponent key", async () => {
+  stubFetch(() => new Response(JSON.stringify({ detail: "boom" }), { status: 500 }));
+  renderCard();
+
+  expect(await screen.findByText("Could not load the win/loss record.")).toBeInTheDocument();
 });

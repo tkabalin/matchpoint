@@ -49,18 +49,11 @@ export type PhaseFilter =
 
 export interface StatsFilters {
   scope: MatchScope;
-  opponentId: string | null;
+  /** The real API's own opponent identity — `OpponentSummary.key`, not a
+   *  UUID id. Named for what it actually is now that it reaches the wire. */
+  opponentKey: string | null;
   set: SetFilter;
   phase: PhaseFilter;
-}
-
-/** One opponent, for the "vs opponent" filter's picker. `recent` marks the
- *  "Most played" group; the rest are listed alphabetically underneath. */
-export interface OpponentOption {
-  id: string;
-  name: string;
-  matches: number;
-  recent: boolean;
 }
 
 export interface CoachNote {

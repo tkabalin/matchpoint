@@ -1,10 +1,13 @@
 import { getPlayerOverviewOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
+import { useEffect } from "react";
 
 import { OutcomeStack } from "@/components/outcome-swatch";
 import { StatCard } from "@/components/stat-card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { getErrorStatus } from "@/lib/error-status";
 import { formatRecord } from "@/lib/format-record";
 import { cn } from "@/lib/utils";
 
@@ -18,17 +21,45 @@ import { cn } from "@/lib/utils";
  *  not a side effect of wiring this card to real data. */
 export function PlayerRecordCard({
   playerId,
+  opponentKey,
+  opponentName,
+  onOpponentNotFound,
 }: {
   playerId: string;
-  /** Not yet threaded to the query — the scope panel's opponent picker is
-   *  still a fixture (#244's real dropdown lands separately), and its ids
-   *  don't match the real `opponent_key` the endpoint expects. Recent form
-   *  below is unscoped by opponent until then. */
-  opponentId: string | null;
+  /** Narrows both the record and recent form to one opponent via the real
+   *  `opponent_key` axis — null (or omitted) means every opponent. */
+  opponentKey: string | null;
+  /** Display name for the "Recent form" caption — the caller already reads
+   *  this off the same `listOpponentsOptions` query the scope panel uses. */
+  opponentName: string | null;
+  /** Called once if the committed opponent key doesn't match any of this
+   *  player's real matches — a stale picker selection, not a bug to report.
+   *  The caller falls back to "all matches" rather than leaving this card
+   *  stuck on an error (see `analytics.py`'s own `OPPONENT_NOT_FOUND`
+   *  comment: "a stale key sends the panel back to all matches"). */
+  onOpponentNotFound?: () => void;
 }) {
-  const { data } = useQuery(getPlayerOverviewOptions({ path: { player_id: playerId } }));
+  const { data, isPending, isError, error } = useQuery(
+    getPlayerOverviewOptions({
+      path: { player_id: playerId },
+      query: { opponent_key: opponentKey },
+    }),
+  );
+  const opponentNotFound = opponentKey !== null && getErrorStatus(error) === 404;
 
-  if (!data) return <Skeleton className="h-12 w-full" />;
+  useEffect(() => {
+    if (opponentNotFound) onOpponentNotFound?.();
+  }, [opponentNotFound, onOpponentNotFound]);
+
+  if (isPending || opponentNotFound) return <Skeleton className="h-12 w-full" />;
+
+  if (isError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>Could not load the win/loss record.</AlertDescription>
+      </Alert>
+    );
+  }
 
   const { wins, losses } = data.all_time_record;
 
@@ -53,7 +84,7 @@ export function PlayerRecordCard({
                 same "recent form" concept, per .claude/rules/web-icons.md. */}
             <History className="size-6 shrink-0 text-primary" aria-hidden="true" />
             <span className="text-xs font-semibold text-muted-foreground">
-              {`Recent form · last ${data.recent_results.length}`}
+              {`Recent form · last ${data.recent_results.length}${opponentName ? ` vs ${opponentName}` : ""}`}
             </span>
           </div>
           <div className="flex items-center gap-3">

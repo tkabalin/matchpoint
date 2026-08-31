@@ -8,6 +8,7 @@ import { registerSW } from "virtual:pwa-register";
 import "@/app.css";
 import { UpdatePrompt } from "@/features/pwa/update-prompt";
 import { registerFlushTriggers } from "@/features/sync/flush-triggers";
+import { shouldRetryQuery } from "@/lib/error-status";
 import { QUERY_CACHE_MAX_AGE_MS } from "@/lib/query-persist";
 import { routeTree } from "@/routeTree.gen";
 
@@ -36,7 +37,13 @@ registerErrorStatusInterceptor();
 // resolve, and navigator.onLine says "offline" wrongly often enough. Attempting
 // the request and failing over to the persisted cache is this app's whole model.
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { gcTime: QUERY_CACHE_MAX_AGE_MS, networkMode: "offlineFirst" } },
+  defaultOptions: {
+    queries: {
+      gcTime: QUERY_CACHE_MAX_AGE_MS,
+      networkMode: "offlineFirst",
+      retry: shouldRetryQuery,
+    },
+  },
 });
 const router = createRouter({ routeTree, context: { queryClient } });
 

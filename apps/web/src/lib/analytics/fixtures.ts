@@ -1,9 +1,4 @@
-import type {
-  CoachNote,
-  OpponentOption,
-  SquadMetricKey,
-  SquadStatsEntry,
-} from "./types.provisional";
+import type { CoachNote, SquadMetricKey, SquadStatsEntry } from "./types.provisional";
 
 /**
  * `squadMemberStatsFor`/`squadTrendFor` below have no remaining call site —
@@ -45,21 +40,6 @@ interface FixtureSquadTrendPoint {
  * chart that reshuffles on every reload can't be compared against the design or
  * against yesterday's build.
  */
-
-export const OPPONENTS: OpponentOption[] = [
-  { id: "sarah-k", name: "Sarah K", matches: 14, recent: true },
-  { id: "priya-m", name: "Priya M", matches: 9, recent: true },
-  { id: "danny-g", name: "Danny G", matches: 6, recent: true },
-  { id: "alex-t", name: "Alex T", matches: 5, recent: false },
-  { id: "ben-h", name: "Ben H", matches: 4, recent: false },
-  { id: "chloe-w", name: "Chloe W", matches: 4, recent: false },
-  { id: "femi-o", name: "Femi O", matches: 3, recent: false },
-  { id: "grace-l", name: "Grace L", matches: 2, recent: false },
-  { id: "ivan-s", name: "Ivan S", matches: 2, recent: false },
-  { id: "jules-p", name: "Jules P", matches: 1, recent: false },
-  { id: "nadia-r", name: "Nadia R", matches: 1, recent: false },
-  { id: "owen-b", name: "Owen B", matches: 1, recent: false },
-];
 
 export const COACH_NOTES: CoachNote[] = [
   {

@@ -1,14 +1,42 @@
+import type { OpponentSummary } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import type { StatsFilters } from "@/lib/analytics/types.provisional";
 
 import { StatsScopePanel } from "./stats-scope-panel";
 
-const DEFAULT_FILTERS: StatsFilters = { scope: "all", opponentId: null, set: "all", phase: "full" };
+const DEFAULT_FILTERS: StatsFilters = {
+  scope: "all",
+  opponentKey: null,
+  set: "all",
+  phase: "full",
+};
+
+// Already sorted most-met first, matching the real endpoint's own order — the
+// panel's "Most played" group is the leading slice of this list, not a flag.
+const OPPONENTS: OpponentSummary[] = [
+  { key: "sarah-k", name: "Sarah K", matches: 14 },
+  { key: "priya-m", name: "Priya M", matches: 9 },
+  { key: "danny-g", name: "Danny G", matches: 6 },
+  { key: "alex-t", name: "Alex T", matches: 5 },
+];
+
+function stubFetch() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players/player-1/analytics/opponents") {
+        return Promise.resolve(Response.json(OPPONENTS));
+      }
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+}
 
 /** A real stateful parent — `StatsScopePanel` only echoes what it's actually
  *  given, so a test that checks the summary after Apply needs `filters` to
@@ -28,6 +56,7 @@ function Harness({ onApply }: { onApply: (filters: StatsFilters) => void }) {
 }
 
 function renderPanel(onApply = vi.fn()) {
+  stubFetch();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -36,6 +65,10 @@ function renderPanel(onApply = vi.fn()) {
   );
   return onApply;
 }
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 test("starts collapsed, showing the current filters as a summary", () => {
   renderPanel();
@@ -77,7 +110,7 @@ test("Apply commits the draft, updates the summary, and closes the panel", async
 
   expect(onApply).toHaveBeenCalledWith({
     scope: "all",
-    opponentId: null,
+    opponentKey: null,
     set: "2",
     phase: "full",
   });
@@ -100,7 +133,7 @@ test("Apply commits both Set and Phase, and the summary shows both together", as
 
   expect(onApply).toHaveBeenCalledWith({
     scope: "all",
-    opponentId: null,
+    opponentKey: null,
     set: "2",
     phase: "tiebreaks",
   });
@@ -122,7 +155,7 @@ test("the opponent picker only shows once scope is 'vs opponent', grouped by mos
 });
 
 // Applying with nobody picked used to commit `{ scope: "vs-opponent",
-// opponentId: null }`, which reads as "Choose opponent" — an instruction
+// opponentKey: null }`, which reads as "Choose opponent" — an instruction
 // sitting where a committed value belongs — and quietly fell back to the
 // all-matches record for Recent Form.
 test("Apply is disabled for 'vs opponent' until an opponent is actually picked", async () => {
@@ -142,7 +175,7 @@ test("Apply is disabled for 'vs opponent' until an opponent is actually picked",
 
   expect(onApply).toHaveBeenCalledWith({
     scope: "vs-opponent",
-    opponentId: "sarah-k",
+    opponentKey: "sarah-k",
     set: "all",
     phase: "full",
   });
@@ -161,7 +194,7 @@ test("searching the opponent list filters it", async () => {
   expect(screen.queryByText("Sarah K")).not.toBeInTheDocument();
 });
 
-test("picking an opponent and applying sets opponentId and echoes their name", async () => {
+test("picking an opponent and applying sets opponentKey and echoes their name", async () => {
   const user = userEvent.setup({ delay: null });
   const onApply = renderPanel();
   await user.click(screen.getByText("All matches"));
@@ -171,7 +204,7 @@ test("picking an opponent and applying sets opponentId and echoes their name", a
 
   expect(onApply).toHaveBeenCalledWith({
     scope: "vs-opponent",
-    opponentId: "sarah-k",
+    opponentKey: "sarah-k",
     set: "all",
     phase: "full",
   });

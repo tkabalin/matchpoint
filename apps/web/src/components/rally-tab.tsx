@@ -19,7 +19,7 @@ import {
   TriangleAlert,
   Wind,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { BreakdownBars } from "@/components/breakdown-bars";
@@ -34,6 +34,7 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/
 import { Skeleton } from "@/components/ui/skeleton";
 import { toSetNumber } from "@/lib/analytics/filter-options";
 import type { PhaseFilter, SetFilter } from "@/lib/analytics/types.provisional";
+import { getErrorStatus } from "@/lib/error-status";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
@@ -73,6 +74,8 @@ export function RallyTab({
   matchId,
   set = "all",
   phase = "full",
+  opponentKey = null,
+  onOpponentNotFound,
 }: {
   playerId: string;
   /** Scopes to one match's own analytics instead of the whole player, for
@@ -80,10 +83,16 @@ export function RallyTab({
   matchId?: string;
   set?: SetFilter;
   phase?: PhaseFilter;
-  /** Not yet threaded through to the query — the scope panel's opponent
-   *  picker is still a fixture (#244's real dropdown lands separately), and
-   *  its ids don't match the real `opponent_key` the endpoint expects. */
-  opponentId?: string | null;
+  /** Narrows to one opponent via the real `opponent_key` axis — null (or
+   *  omitted) means every opponent. Never sent on a match-scoped request: a
+   *  match already has exactly one opponent. */
+  opponentKey?: string | null;
+  /** Called once if the committed opponent key doesn't match any of this
+   *  player's real matches — a stale picker selection, not a bug to report.
+   *  The caller falls back to "all matches" rather than leaving this tab
+   *  stuck on an error (see `analytics.py`'s own `OPPONENT_NOT_FOUND`
+   *  comment: "a stale key sends the panel back to all matches"). */
+  onOpponentNotFound?: () => void;
 }) {
   const [wonSide, setWonSide] = useState<WonSide>("you");
   const setNumber = toSetNumber(set);
@@ -93,7 +102,7 @@ export function RallyTab({
   const playerQuery = useQuery({
     ...getRallyStatsOptions({
       path: { player_id: playerId },
-      query: { set_number: setNumber, phase },
+      query: { set_number: setNumber, phase, opponent_key: opponentKey },
     }),
     enabled: matchId === undefined,
   });
@@ -104,13 +113,19 @@ export function RallyTab({
     }),
     enabled: matchId !== undefined,
   });
-  const { data, isPending, isError } = matchId === undefined ? playerQuery : matchQuery;
+  const { data, isPending, isError, error } = matchId === undefined ? playerQuery : matchQuery;
+  const opponentNotFound =
+    matchId === undefined && opponentKey !== null && getErrorStatus(error) === 404;
   // Starts closed, and stays closed on its own: nothing auto-opens on load or
   // on switching You won/They won, only a tap on a style card opens its own
   // drill, and tapping that same card again closes it.
   const [openStyle, setOpenStyle] = useState<string | null>(null);
 
-  if (isPending) return <Skeleton className="h-96 w-full" />;
+  useEffect(() => {
+    if (opponentNotFound) onOpponentNotFound?.();
+  }, [opponentNotFound, onOpponentNotFound]);
+
+  if (isPending || opponentNotFound) return <Skeleton className="h-96 w-full" />;
 
   // A real network read can fail — a 500 or an offline load must not leave
   // this indefinitely skeletoned (#221's own "known pitfalls" section calls

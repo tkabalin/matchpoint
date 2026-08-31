@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { COACH_NOTES, OPPONENTS } from "./fixtures";
-import type { CoachNote, InProgressMatch, OpponentOption } from "./types.provisional";
+import { COACH_NOTES } from "./fixtures";
+import type { CoachNote, InProgressMatch } from "./types.provisional";
 
 /**
  * Query options for the analytics the API doesn't serve yet.
@@ -23,15 +23,6 @@ import type { CoachNote, InProgressMatch, OpponentOption } from "./types.provisi
 function fixtureOptions<T>(key: unknown[], value: T) {
   return queryOptions({ queryKey: key, queryFn: () => Promise.resolve(value) });
 }
-
-// PLACEHOLDER: GET /players/{player_id}/analytics/opponents — feeds the Serve/Rally
-// scope panel's "vs opponent" picker. The player overview, serve, rally and
-// per-match equivalents all read the real endpoints directly now
-// (`@matchpoint/api-client/react-query`) — this one stays a fixture until
-// #244's real dropdown lands, since its ids don't match the real
-// `opponent_key` those endpoints expect.
-export const listOpponentsOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<OpponentOption[]>(["analytics", "opponents", options.path.player_id], OPPONENTS);
 
 // PLACEHOLDER: GET /players/{player_id}/notes
 export const listCoachNotesOptions = (options: { path: { player_id: string } }) =>

@@ -1,3 +1,5 @@
+import type { OpponentSummary } from "@matchpoint/api-client";
+import { listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
@@ -6,7 +8,6 @@ import { ChipRow } from "@/components/chip-row";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemTitle } from "@/components/ui/item";
-import { listOpponentsOptions } from "@/lib/analytics/analytics-options";
 import {
   PHASE_LABEL,
   PHASE_OPTIONS,
@@ -14,8 +15,13 @@ import {
   SET_LABEL,
   SET_OPTIONS,
 } from "@/lib/analytics/filter-options";
-import type { OpponentOption, StatsFilters } from "@/lib/analytics/types.provisional";
+import type { StatsFilters } from "@/lib/analytics/types.provisional";
 import { cn } from "@/lib/utils";
+
+// The real endpoint already sorts most-met opponent first, so the picker's
+// "Most played" group is just that leading slice rather than a server-side
+// flag — 3 to match how many the mockup's own grouping showed.
+const MOST_PLAYED_COUNT = 3;
 
 function summaryFor(filters: StatsFilters, opponentName: string | null): string {
   const scope = filters.scope === "all" ? "All matches" : (opponentName ?? "Choose opponent");
@@ -39,12 +45,9 @@ function summaryFor(filters: StatsFilters, opponentName: string | null): string 
  * `filters` and collapses the panel, echoed back as the trigger row's own summary
  * text — matching the mockup exactly.
  *
- * Scope, Set and Phase all change the numbers on the tab underneath —
- * `getServeStatsOptions`/`getRallyStatsOptions` pick a deterministically
- * scaled fixture variant per combination (no real endpoint buckets by
- * set/phase yet — see the GitLab issue filed against that gap). Recent form
- * (rendered by the caller, above the tabs) is keyed by the committed
- * opponent the same way.
+ * Scope, Set and Phase all change the numbers on the tab underneath — Set and Phase
+ * narrow via `set_number`/`phase` on the real endpoints; Scope's opponent axis
+ * narrows via `opponent_key`, `OpponentSummary.key` as this picker returns it.
  */
 export function StatsScopePanel({
   playerId,
@@ -61,7 +64,7 @@ export function StatsScopePanel({
   const { data: opponents } = useQuery(listOpponentsOptions({ path: { player_id: playerId } }));
 
   const opponentName =
-    (opponents ?? []).find((opponent) => opponent.id === filters.opponentId)?.name ?? null;
+    (opponents ?? []).find((opponent) => opponent.key === filters.opponentKey)?.name ?? null;
 
   function openPanel() {
     setDraft(filters);
@@ -98,7 +101,7 @@ export function StatsScopePanel({
               setDraft({
                 ...draft,
                 scope,
-                opponentId: scope === "vs-opponent" ? draft.opponentId : null,
+                opponentKey: scope === "vs-opponent" ? draft.opponentKey : null,
               })
             }
           />
@@ -115,8 +118,8 @@ export function StatsScopePanel({
               <OpponentPicker
                 opponents={opponents ?? []}
                 search={opponentSearch}
-                selectedId={draft.opponentId}
-                onSelect={(opponentId) => setDraft({ ...draft, opponentId })}
+                selectedKey={draft.opponentKey}
+                onSelect={(opponentKey) => setDraft({ ...draft, opponentKey })}
               />
             </>
           )}
@@ -143,11 +146,11 @@ export function StatsScopePanel({
             type="button"
             className="mt-3 w-full"
             // "vs opponent" with nobody picked would commit as `{ scope:
-            // "vs-opponent", opponentId: null }` — the trigger row then reads
+            // "vs-opponent", opponentKey: null }` — the trigger row then reads
             // "Choose opponent," an instruction sitting where a committed
             // value belongs, and Recent Form quietly falls back to the
             // all-matches record under it.
-            disabled={draft.scope === "vs-opponent" && draft.opponentId === null}
+            disabled={draft.scope === "vs-opponent" && draft.opponentKey === null}
             onClick={() => {
               onApply(draft);
               setOpen(false);
@@ -177,13 +180,13 @@ function ScopeGroupLabel({ children, first }: { children: string; first?: boolea
 function OpponentPicker({
   opponents,
   search,
-  selectedId,
+  selectedKey,
   onSelect,
 }: {
-  opponents: OpponentOption[];
+  opponents: OpponentSummary[];
   search: string;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  selectedKey: string | null;
+  onSelect: (key: string) => void;
 }) {
   const query = search.trim().toLowerCase();
 
@@ -196,9 +199,9 @@ function OpponentPicker({
       <div className="flex flex-col gap-1 rounded-sm border">
         {matches.map((opponent) => (
           <OpponentRow
-            key={opponent.id}
+            key={opponent.key}
             opponent={opponent}
-            selected={opponent.id === selectedId}
+            selected={opponent.key === selectedKey}
             onSelect={onSelect}
           />
         ))}
@@ -206,23 +209,22 @@ function OpponentPicker({
     );
   }
 
-  const recent = opponents.filter((opponent) => opponent.recent);
-  const rest = [...opponents.filter((opponent) => !opponent.recent)].sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  // Already sorted most-met first by the endpoint itself.
+  const mostPlayed = opponents.slice(0, MOST_PLAYED_COUNT);
+  const rest = [...opponents.slice(MOST_PLAYED_COUNT)].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex flex-col gap-1 rounded-sm border">
-      {recent.length > 0 && (
+      {mostPlayed.length > 0 && (
         <>
           <p className="px-2 pt-1.5 text-[0.5625rem] font-semibold text-muted-foreground uppercase">
             Most played
           </p>
-          {recent.map((opponent) => (
+          {mostPlayed.map((opponent) => (
             <OpponentRow
-              key={opponent.id}
+              key={opponent.key}
               opponent={opponent}
-              selected={opponent.id === selectedId}
+              selected={opponent.key === selectedKey}
               onSelect={onSelect}
             />
           ))}
@@ -233,9 +235,9 @@ function OpponentPicker({
       </p>
       {rest.map((opponent) => (
         <OpponentRow
-          key={opponent.id}
+          key={opponent.key}
           opponent={opponent}
-          selected={opponent.id === selectedId}
+          selected={opponent.key === selectedKey}
           onSelect={onSelect}
         />
       ))}
@@ -248,15 +250,15 @@ function OpponentRow({
   selected,
   onSelect,
 }: {
-  opponent: OpponentOption;
+  opponent: OpponentSummary;
   selected: boolean;
-  onSelect: (id: string) => void;
+  onSelect: (key: string) => void;
 }) {
   return (
     <Item
       variant="outline"
       size="sm"
-      render={<button type="button" onClick={() => onSelect(opponent.id)} />}
+      render={<button type="button" onClick={() => onSelect(opponent.key)} />}
       className={cn(selected && "border-primary bg-primary/5")}
     >
       <ItemContent>

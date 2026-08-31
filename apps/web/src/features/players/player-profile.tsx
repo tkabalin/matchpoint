@@ -1,4 +1,4 @@
-import { getPlayerOptions } from "@matchpoint/api-client/react-query";
+import { getPlayerOptions, listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { ArrowLeft, CircleDot, NotebookPen, Play, Repeat2 } from "lucide-react";
@@ -27,20 +27,39 @@ const routeApi = getRouteApi("/_authenticated/players/$playerId");
 
 type Tab = "serve" | "rally";
 
-const DEFAULT_FILTERS: StatsFilters = { scope: "all", opponentId: null, set: "all", phase: "full" };
-
 export function PlayerProfile() {
   const { playerId } = routeApi.useParams();
+  // The committed scope/set/phase filters live in the URL (validated by the
+  // route's own `validateSearch`), not component state — so they survive a
+  // reload or a back/forward navigation instead of silently resetting.
+  const filters = routeApi.useSearch();
+  const navigate = routeApi.useNavigate();
   const [tab, setTab] = useState<Tab>("serve");
   const [editing, setEditing] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const {
     data: player,
     isPending,
     isError,
     error,
   } = useQuery(getPlayerOptions({ path: { player_id: playerId } }));
+  // Same query the scope panel reads (same queryKey, so this doesn't add a
+  // second request) — read here too so the record card's "Recent form"
+  // caption can name the opponent it's scoped to.
+  const { data: opponents } = useQuery(listOpponentsOptions({ path: { player_id: playerId } }));
+
+  function setFilters(next: StatsFilters) {
+    navigate({ search: next, replace: true });
+  }
+
+  // A stale opponent key (its matches renamed or deleted since the picker
+  // offered it, or a bookmarked/shared URL that's gone out of date) sends
+  // the scope back to "all matches" rather than leaving a tab stuck on an
+  // error — matching the API's own reasoning for declaring this as a 404
+  // rather than an empty result (see `analytics.py`'s `OPPONENT_NOT_FOUND`).
+  function handleOpponentNotFound() {
+    setFilters({ ...filters, scope: "all", opponentKey: null });
+  }
 
   if (isPending)
     return (
@@ -57,6 +76,8 @@ export function PlayerProfile() {
     );
 
   const playerName = `${player.first_name} ${player.last_name}`;
+  const opponentName =
+    (opponents ?? []).find((opponent) => opponent.key === filters.opponentKey)?.name ?? null;
 
   return (
     <AppPage nav={false}>
@@ -92,7 +113,12 @@ export function PlayerProfile() {
       <StatsScopePanel playerId={playerId} filters={filters} onApply={setFilters} />
 
       <div className="grid grid-cols-2 items-stretch gap-3">
-        <PlayerRecordCard playerId={playerId} opponentId={filters.opponentId} />
+        <PlayerRecordCard
+          playerId={playerId}
+          opponentKey={filters.opponentKey}
+          opponentName={opponentName}
+          onOpponentNotFound={handleOpponentNotFound}
+        />
         <PlayerDetailsCard player={player} onEdit={() => setEditing(true)} />
       </div>
 
@@ -114,14 +140,16 @@ export function PlayerProfile() {
             playerId={playerId}
             set={filters.set}
             phase={filters.phase}
-            opponentId={filters.opponentId}
+            opponentKey={filters.opponentKey}
+            onOpponentNotFound={handleOpponentNotFound}
           />
         ) : (
           <RallyTab
             playerId={playerId}
             set={filters.set}
             phase={filters.phase}
-            opponentId={filters.opponentId}
+            opponentKey={filters.opponentKey}
+            onOpponentNotFound={handleOpponentNotFound}
           />
         )}
       </div>

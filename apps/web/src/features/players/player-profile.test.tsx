@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { PlayerProfile } from "./player-profile";
+import { validateSearch } from "@/routes/_authenticated.players.$playerId";
 
 const player: PlayerRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000001",
@@ -111,6 +112,7 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
     [`/api/players/${player.id}/analytics/overview`]: () => Response.json(DEFAULT_OVERVIEW),
     [`/api/players/${player.id}/analytics/serve`]: () => Response.json(DEFAULT_SERVE_STATS),
     [`/api/players/${player.id}/analytics/rally`]: () => Response.json(DEFAULT_RALLY_STATS),
+    [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
   };
   vi.stubGlobal(
     "fetch",
@@ -143,6 +145,7 @@ async function renderPlayerProfile(playerId = player.id) {
     getParentRoute: () => authenticatedRoute,
     path: "/players/$playerId",
     component: PlayerProfile,
+    validateSearch,
   });
   const newMatchRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
