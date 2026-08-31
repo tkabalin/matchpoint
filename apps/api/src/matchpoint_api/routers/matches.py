@@ -18,6 +18,7 @@ from matchpoint_api.schemas.match import (
     MatchCaptureClaim,
     MatchCaptureRead,
     MatchCreate,
+    MatchInProgressRead,
     MatchRead,
     MatchSetRead,
     MatchUpdate,
@@ -222,6 +223,50 @@ def capture_holder(match: Match) -> uuid.UUID | None:
     if expires_at is None or expires_at <= datetime.now(UTC):
         return None
     return match.capture_claim_device_id
+
+
+# Declared above the /{match_id} routes because Starlette matches in declaration order
+# and that path parameter would take "in-progress" itself, answering 422 rather than
+# falling through to here.
+@router.get("/in-progress", response_model=list[MatchInProgressRead])
+def list_in_progress_matches(db: DbSession, coach: CurrentCoach) -> list[MatchInProgressRead]:
+    """Every match of this coach's that capture is under way on, freshest claim first.
+
+    Coach-scoped though the claim names a device: the resume banner is chrome on every
+    screen, so a coach who left capture running on their phone needs the tablet to say
+    so, which is exactly the answer a device filter would blank. A list rather than one
+    match because two devices can hold two matches at once, and the banner takes the
+    first.
+    """
+    # capture_holder's test for a live claim, in SQL: a lapsed claim is a device that
+    # went quiet, which the banner must not offer to resume. A null deadline fails the
+    # comparison, so a match nobody has claimed drops out with it.
+    rows = db.execute(
+        select(
+            Match.id,
+            Match.player_id,
+            Player.first_name,
+            Player.last_name,
+            Match.opponent_name,
+        )
+        .join(Player, Match.player_id == Player.id)
+        .where(
+            Player.coach_id == coach.id,
+            Match.result.is_(None),
+            Match.capture_claim_expires_at > datetime.now(UTC),
+        )
+        .order_by(Match.capture_claim_expires_at.desc())
+    )
+    return [
+        MatchInProgressRead(
+            id=row.id,
+            player_id=row.player_id,
+            player_first_name=row.first_name,
+            player_last_name=row.last_name,
+            opponent_name=row.opponent_name,
+        )
+        for row in rows
+    ]
 
 
 @router.get("/{match_id}", response_model=MatchRead)

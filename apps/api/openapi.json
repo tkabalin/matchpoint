@@ -604,6 +604,49 @@
         "title": "MatchCreate",
         "type": "object"
       },
+      "MatchInProgressRead": {
+        "description": "A match with capture under way, as the resume banner shows it.",
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "opponent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opponent Name"
+          },
+          "player_first_name": {
+            "title": "Player First Name",
+            "type": "string"
+          },
+          "player_id": {
+            "format": "uuid",
+            "title": "Player Id",
+            "type": "string"
+          },
+          "player_last_name": {
+            "title": "Player Last Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "player_id",
+          "player_first_name",
+          "player_last_name",
+          "opponent_name"
+        ],
+        "title": "MatchInProgressRead",
+        "type": "object"
+      },
       "MatchRead": {
         "properties": {
           "created_at": {
@@ -4275,6 +4318,52 @@
           }
         },
         "summary": "Create Match",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/in-progress": {
+      "get": {
+        "description": "Every match of this coach's that capture is under way on, freshest claim first.\n\nCoach-scoped though the claim names a device: the resume banner is chrome on every\nscreen, so a coach who left capture running on their phone needs the tablet to say\nso, which is exactly the answer a device filter would blank. A list rather than one\nmatch because two devices can hold two matches at once, and the banner takes the\nfirst.",
+        "operationId": "list_in_progress_matches",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchInProgressRead"
+                  },
+                  "title": "Response List In Progress Matches",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List In Progress Matches",
         "tags": [
           "matches"
         ]

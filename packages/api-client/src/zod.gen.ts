@@ -190,6 +190,19 @@ export const zMatchCaptureRead = z.object({
 });
 
 /**
+ * MatchInProgressRead
+ *
+ * A match with capture under way, as the resume banner shows it.
+ */
+export const zMatchInProgressRead = z.object({
+    id: z.uuid(),
+    opponent_name: z.string().nullable(),
+    player_first_name: z.string(),
+    player_id: z.uuid(),
+    player_last_name: z.string()
+});
+
+/**
  * MatchResult
  *
  * Whether the tracked player won, from their side and never the opponent's.
@@ -1202,6 +1215,13 @@ export const zCreateMatchBody = zMatchCreate;
  * Successful Response
  */
 export const zCreateMatchResponse = zMatchRead;
+
+/**
+ * Response List In Progress Matches
+ *
+ * Successful Response
+ */
+export const zListInProgressMatchesResponse = z.array(zMatchInProgressRead);
 
 export const zDeleteMatchPath = z.object({
     match_id: z.uuid()

@@ -687,6 +687,136 @@ def test_list_matches_with_none_stored_is_an_empty_list(client: TestClient) -> N
     assert response.json() == []
 
 
+# `_claimed_match` is defined further down, with the capture routes it was written for.
+def test_list_in_progress_matches_returns_the_claimed_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The banner renders from this one response, so the player's name comes with it.
+
+    A 200 here also proves the literal path is reached: declared after /{match_id} it
+    would be read as a match id and answer 422 instead.
+    """
+    player = make_player(db_session, coach_id=coach.id, first_name="Iga", last_name="Swiatek")
+    match = make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Aryna",
+        capture_claim_device_id=uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) + CAPTURE_CLAIM_TTL,
+    )
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": str(match.id),
+            "player_id": str(player.id),
+            "player_first_name": "Iga",
+            "player_last_name": "Swiatek",
+            "opponent_name": "Aryna",
+        }
+    ]
+
+
+def test_in_progress_does_not_care_which_device_holds_the_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The scoping call this route settles: coach, not device. A coach who left capture
+    running on their phone opens the tablet to a banner naming that match, which is the
+    answer a device filter would blank."""
+    mine = _claimed_match(db_session, coach, uuid.uuid4())
+    other_device = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert {row["id"] for row in response.json()} == {str(mine.id), str(other_device.id)}
+
+
+def test_in_progress_puts_the_freshest_claim_first(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Claiming and flushing both renew the deadline, so the furthest-out claim is the
+    match the coach is capturing now, and the banner takes the first."""
+    stale = _claimed_match(
+        db_session,
+        coach,
+        uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    fresh = _claimed_match(db_session, coach, uuid.uuid4())
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [str(fresh.id), str(stale.id)]
+
+
+def test_a_match_nobody_is_capturing_is_not_in_progress(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Most of a coach's matches are entered from the scoresheet and never captured."""
+    make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_a_lapsed_claim_is_not_in_progress(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A claim outlives any plausible match, so one that has run out is a device that
+    stopped talking hours ago, and offering to resume it would be a lie."""
+    _claimed_match(
+        db_session,
+        coach,
+        uuid.uuid4(),
+        capture_claim_expires_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_a_completed_match_is_not_in_progress(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Recording the result clears the claim, so this pairs the two only a row written
+    around that route could carry: a result and a claim still standing."""
+    _claimed_match(db_session, coach, uuid.uuid4(), result=MatchResult.WIN)
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_in_progress_omits_another_coachs_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Ownership is reached through the player here as everywhere else on this router,
+    and a second coach capturing must not surface on this coach's banner."""
+    mine = _claimed_match(db_session, coach, uuid.uuid4())
+    _claimed_match(db_session, make_coach(db_session), uuid.uuid4())
+    db_session.commit()
+
+    response = client.get("/matches/in-progress")
+
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [str(mine.id)]
+
+
 def test_get_match_returns_one(client: TestClient, db_session: Session, coach: Coach) -> None:
     match = make_match(
         db_session,
@@ -2191,6 +2321,7 @@ def test_the_routes_that_read_the_claim_lock_the_match_row(
     [
         ("post", "/matches"),
         ("get", "/matches"),
+        ("get", "/matches/in-progress"),
         ("get", f"/matches/{uuid.UUID(int=0)}"),
         ("patch", f"/matches/{uuid.UUID(int=0)}"),
         ("delete", f"/matches/{uuid.UUID(int=0)}"),

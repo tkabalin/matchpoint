@@ -343,6 +343,34 @@ export type MatchCreate = {
 };
 
 /**
+ * MatchInProgressRead
+ *
+ * A match with capture under way, as the resume banner shows it.
+ */
+export type MatchInProgressRead = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Opponent Name
+     */
+    opponent_name: string | null;
+    /**
+     * Player First Name
+     */
+    player_first_name: string;
+    /**
+     * Player Id
+     */
+    player_id: string;
+    /**
+     * Player Last Name
+     */
+    player_last_name: string;
+};
+
+/**
  * MatchRead
  */
 export type MatchRead = {
@@ -2386,6 +2414,37 @@ export type CreateMatchResponses = {
 };
 
 export type CreateMatchResponse = CreateMatchResponses[keyof CreateMatchResponses];
+
+export type ListInProgressMatchesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/matches/in-progress';
+};
+
+export type ListInProgressMatchesErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListInProgressMatchesError = ListInProgressMatchesErrors[keyof ListInProgressMatchesErrors];
+
+export type ListInProgressMatchesResponses = {
+    /**
+     * Response List In Progress Matches
+     *
+     * Successful Response
+     */
+    200: Array<MatchInProgressRead>;
+};
+
+export type ListInProgressMatchesResponse = ListInProgressMatchesResponses[keyof ListInProgressMatchesResponses];
 
 export type DeleteMatchData = {
     body?: never;

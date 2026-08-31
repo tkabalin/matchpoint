@@ -115,6 +115,19 @@ class MatchSetRead(BaseModel):
     updated_at: datetime
 
 
+# The player's name is carried here and nowhere else on a match, so the resume banner
+# renders from one request rather than following each match to its player. The claim's
+# device and deadline stay off it for the reason MatchCaptureRead gives above.
+class MatchInProgressRead(BaseModel):
+    """A match with capture under way, as the resume banner shows it."""
+
+    id: uuid.UUID
+    player_id: uuid.UUID
+    player_first_name: str
+    player_last_name: str
+    opponent_name: str | None
+
+
 class MatchRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
