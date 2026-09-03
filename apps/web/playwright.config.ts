@@ -84,6 +84,10 @@ export default defineConfig({
       testMatch: /offline\.spec\.ts/,
       use: { ...devices["Desktop Chrome"], baseURL: "http://localhost:4173" },
       dependencies: ["setup"],
+      // These specs wait on the drain with 20s polls, several of them in sequence,
+      // and the drain's own backoff (1, 2, 4, 8s) can sit on that path; under the
+      // 30s default one could time out while behaving correctly.
+      timeout: 90_000,
     },
   ],
 });

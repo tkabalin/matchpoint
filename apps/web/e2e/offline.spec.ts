@@ -535,8 +535,8 @@ test.describe("the point half of the round trip", () => {
     page,
   }) => {
     // 501 points through the queue, the wire and the database, twice over: the
-    // heaviest spec in the suite, and the default per-test timeout is less than
-    // the two reconnection waits below already allow for on their own.
+    // heaviest spec in the suite, where the project's 90s timeout is sized for the
+    // drain polls rather than for seeding and replaying a queue this long.
     test.slow();
     await openHome(page);
     const coachId = await recordedOwner(page);
