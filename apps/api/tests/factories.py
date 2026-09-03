@@ -263,7 +263,10 @@ def make_player_transfer_code(session: Session, **overrides: Any) -> PlayerTrans
 def make_match(session: Session, **overrides: Any) -> Match:
     if "player_id" not in overrides:
         overrides["player_id"] = make_player(session).id
-    match = Match(**{"played_on": date(2026, 8, 1)} | overrides)
+    # The first of this year rather than a literal date: the squad snapshot's period is
+    # the current calendar year, so a fixed year would drop every default-dated match
+    # out of it the moment the year turned. Never in the future, whatever today is.
+    match = Match(**{"played_on": date(date.today().year, 1, 1)} | overrides)
     session.add(match)
     session.flush()
     return match

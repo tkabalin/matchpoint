@@ -1135,7 +1135,7 @@ def test_update_match_with_an_empty_body_changes_nothing(
 
     assert response.status_code == 200
     assert response.json()["opponent_name"] == "Aryna"
-    assert response.json()["played_on"] == "2026-08-01"
+    assert response.json()["played_on"] == match.played_on.isoformat()
 
 
 def test_update_match_bumps_updated_at(
