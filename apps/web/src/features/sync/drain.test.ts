@@ -1,9 +1,7 @@
-import type { PointCreate } from "@matchpoint/api-client";
 import { zMatchCreate, zMatchRead, zMatchUpdate, zPointBatch } from "@matchpoint/api-client/zod";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { createMatch } from "@/features/capture/match";
-import type { Point } from "@/features/capture/point";
 import { outboxDb, type OutboxEntry, type OutboxFailure } from "@/features/outbox/db";
 import { appendEvent, findInProgressFor, readLog, saveMatch } from "@/features/outbox/match-log";
 import {
@@ -16,35 +14,6 @@ import {
 } from "@/features/outbox/outbox";
 
 import { BACKOFF_DELAYS_MS, drainOutbox, MAX_POINTS_PER_BATCH } from "./drain";
-
-// The real toPointCreate cannot exist until the capture model carries the nine
-// score stamps (#210), so the engine is tested through a stand-in that fills
-// them with constants; the transport stub below still parses every body it
-// produces with zPointBatch, so the stand-in cannot drift from the contract.
-vi.mock("./point-payload", () => ({
-  toPointCreate: (point: Point): PointCreate => ({
-    id: point.id,
-    sequence: point.sequence,
-    set_number: 1,
-    game_number: 1,
-    in_tiebreak: false,
-    is_break_point: false,
-    is_game_point: false,
-    is_game_end: false,
-    is_set_end: false,
-    is_set_point: false,
-    is_match_point: false,
-    server: "tracked",
-    won: point.won,
-    end_reason: "ace",
-    serve1_outcome: "ace",
-    // The capture model now carries point.note (#175's general coach note, see
-    // note-button.tsx) alongside unusualNote, but which one the real toPointCreate
-    // sends is still blocked on #210 — this stand-in keeps using unusualNote, since
-    // that's the field the byte-bound test below actually sizes its batch against.
-    note: point.unusualNote,
-  }),
-}));
 
 // Spies with real implementations passing through, so one test can reject a
 // single outbox read the way a schema upgrade in another tab would.
