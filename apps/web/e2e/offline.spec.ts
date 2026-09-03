@@ -4,6 +4,7 @@ import { COACH_STORAGE_STATE } from "./coach";
 import { readVerificationCode } from "./mail";
 import {
   buildMatchRow,
+  buildPointRow,
   deleteOutboxRow,
   readOutboxRows,
   seedOutbox,
@@ -17,16 +18,16 @@ import {
  * lean on does not exist under `vite dev`.
  *
  * Rows are seeded straight into the outbox rather than through capture-screen
- * taps, which don't exist yet; upgrade the seeding once that UI lands. Only
- * match rows are seeded: the point mapper throws until #210 gives the capture
- * model its score stamps, so the point half of the round trip waits there too.
+ * taps, which don't exist yet; upgrade the seeding once that UI lands. Point rows
+ * are seeded too, now that #210 lets the point mapper send them: the point half
+ * of the round trip (a multi-batch flush interrupted between chunks, the
+ * completed-match fence, interleaved matches) is the last describe block.
  *
- * What #118 still leaves uncovered, and what each waits on: a multi-batch flush
- * interrupted between chunks, the completed-match fence, and interleaved points
- * all need point rows (#210); retrying a parked match by hand needs the sync
- * status UI (#115); the capture-claim conflict needs both, and re-specifying,
- * since ingest_points deliberately takes another device's batch while a claim is
- * held rather than refusing it (#197).
+ * What #217 still leaves uncovered, and what each waits on: retrying a parked
+ * match by hand needs the sync status UI (#115); the capture-claim conflict
+ * needs the claim lifecycle, and re-specifying, since ingest_points deliberately
+ * takes another device's batch while a claim is held rather than refusing it
+ * (#197).
  */
 
 /** OWNER_KEY in src/lib/local-data.ts: whose rows a drain flushes. */
@@ -89,6 +90,34 @@ async function matchesNamed(page: Page, opponentName: string): Promise<number> {
 
 async function matchStatus(page: Page, matchId: string): Promise<number> {
   return (await page.request.get(`/api/matches/${matchId}`)).status();
+}
+
+/** A match's points as the server holds them, in the order it assigns: by sequence. */
+async function pointsOf(page: Page, matchId: string): Promise<{ id: string; sequence: number }[]> {
+  const response = await page.request.get(`/api/matches/${matchId}/points`);
+  expect(response.status()).toBe(200);
+  return (await response.json()) as { id: string; sequence: number }[];
+}
+
+/**
+ * A match already on the server and already decided, which is the one state the
+ * ingest route refuses for good: sent from a request context, as a second device
+ * or the dashboard would have done it, never through this device's queue.
+ */
+async function completeMatchOnServer(page: Page, playerId: string): Promise<string> {
+  const matchId = crypto.randomUUID();
+  const created = await postJson(page, "/api/matches", {
+    id: matchId,
+    player_id: playerId,
+    played_on: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  });
+  expect(created.status()).toBe(201);
+  const completed = await page.request.patch(`/api/matches/${matchId}`, {
+    data: { result: "win" },
+    headers: { origin: originUnderTest() },
+  });
+  expect(completed.status()).toBe(200);
+  return matchId;
 }
 
 /** Signed-in load that the drain and the seeds both need to have happened. */
@@ -407,6 +436,164 @@ test.describe("drain behaviour", () => {
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
     expect(posts).toBe(1);
     expect(await matchesNamed(page, marker)).toBe(1);
+  });
+});
+
+test.describe("the point half of the round trip", () => {
+  // Seeded rather than tapped: the first case needs more points than a spec should
+  // tap out, and the other two need a match on the server or a second match before
+  // its own points, which the capture screen has no reason to offer. Every seed
+  // sits inside an offline bracket, so the reconnect is what drains it (see
+  // seedOutbox). No service worker: the multi-batch case intercepts the wire.
+  test.use({ storageState: COACH_STORAGE_STATE, serviceWorkers: "block" });
+
+  test("a flush cut between two batches resumes at the second without repeating the first", async ({
+    page,
+  }) => {
+    // 501 points through the queue, the wire and the database, twice over: the
+    // heaviest spec in the suite, and the default per-test timeout is less than
+    // the two reconnection waits below already allow for on their own.
+    test.slow();
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const playerId = await createPlayer(page);
+
+    // One more point than a batch holds (MAX_POINTS_PER_BATCH in drain.ts), so the
+    // match flushes as a chunk of the ceiling and a chunk of one.
+    await page.context().setOffline(true);
+    const marker = `E2E batches ${crypto.randomUUID()}`;
+    const match = buildMatchRow({ coachId, playerId, opponentName: marker });
+    const points = Array.from({ length: 501 }, (_, sequence) =>
+      buildPointRow({ coachId, matchId: match.matchId, sequence }),
+    );
+    await seedOutbox(page, [match, ...points]);
+
+    // Connectivity goes as the second batch leaves: the first is acknowledged
+    // and gone from the queue, the second never reaches the server.
+    let batches = 0;
+    const cut = deferred();
+    await page.route("**/api/matches/*/points", async (route) => {
+      if (route.request().method() !== "POST") return route.continue();
+      batches += 1;
+      if (batches !== 2) return route.continue();
+      await page.context().setOffline(true);
+      cut.resolve();
+      await route.abort("failed");
+    });
+
+    await page.context().setOffline(false);
+    // Waited on rather than read off the queue: the first batch's rows are gone the
+    // moment it is acknowledged, so a spec watching the count alone could run past
+    // the cut it is about, and then reconnect a connection that never dropped.
+    await cut.promise;
+    // The seam: exactly the second batch's row left, pending rather than parked,
+    // since a dropped connection is a retry and not a refusal.
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(1);
+    const remaining = await readOutboxRows(page);
+    expect(remaining[0]).toMatchObject({ id: points[500]!.id, status: "pending" });
+    expect(await pointsOf(page, match.matchId)).toHaveLength(500);
+
+    await page.context().setOffline(false);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
+    // Every point once, in enqueue order, with the first batch not sent again.
+    const stored = await pointsOf(page, match.matchId);
+    expect(stored.map((point) => point.id)).toEqual(points.map((point) => point.id));
+    expect(stored.map((point) => point.sequence)).toEqual(points.map((_, index) => index));
+  });
+
+  test("a completed match parks its points and holds later ones, while another match drains", async ({
+    page,
+  }) => {
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const playerId = await createPlayer(page);
+    // Decided on the server before this device flushes, as a second device
+    // finishing the match would leave it: ingest_points answers 409 from here on.
+    const completedId = await completeMatchOnServer(page, playerId);
+
+    await page.context().setOffline(true);
+    const marker = `E2E fenced ${crypto.randomUUID()}`;
+    const fenced = [0, 1].map((sequence) =>
+      buildPointRow({ coachId, matchId: completedId, sequence }),
+    );
+    const kept = buildMatchRow({ coachId, playerId, opponentName: marker });
+    const keptPoint = buildPointRow({ coachId, matchId: kept.matchId, sequence: 0 });
+    // Fenced first, so the park has to leave the sweep able to reach the match
+    // behind it rather than ending the run.
+    await seedOutbox(page, [...fenced, kept, keptPoint]);
+
+    await page.context().setOffline(false);
+    await expect.poll(() => matchStatus(page, kept.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => pointsOf(page, kept.matchId), { timeout: 20_000 }).toHaveLength(1);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(2);
+    // The whole batch parks with the refusal on it, and nothing of it landed.
+    const parked = await readOutboxRows(page);
+    for (const row of parked) {
+      expect(row).toMatchObject({
+        matchId: completedId,
+        status: "failed",
+        failure: { status: 409, message: "Match is completed" },
+      });
+    }
+    expect(await pointsOf(page, completedId)).toHaveLength(0);
+
+    // A point appended behind the park must wait with it, never flush on its own:
+    // a batch sent now would only park too, and the sync UI's retry (#115) is
+    // what should decide the match's fate. The second match's point is the proof
+    // the sweep ran past the held one.
+    await page.context().setOffline(true);
+    const late = buildPointRow({ coachId, matchId: completedId, sequence: 2 });
+    const secondKept = buildPointRow({ coachId, matchId: kept.matchId, sequence: 1 });
+    await seedOutbox(page, [late, secondKept]);
+    await page.context().setOffline(false);
+    await expect.poll(() => pointsOf(page, kept.matchId), { timeout: 20_000 }).toHaveLength(2);
+    const held = (await readOutboxRows(page)).find((row) => row.id === late.id);
+    expect(held).toMatchObject({ status: "pending" });
+    expect(held).not.toHaveProperty("failure");
+    expect(await pointsOf(page, completedId)).toHaveLength(0);
+  });
+
+  test("two matches captured in alternation each land whole and in order", async ({ page }) => {
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const playerId = await createPlayer(page);
+
+    // A coach switching between two courts: each match is queued before its own
+    // points, and the points of the two interleave in the queue.
+    await page.context().setOffline(true);
+    const marker = `E2E interleaved ${crypto.randomUUID()}`;
+    const first = buildMatchRow({ coachId, playerId, opponentName: marker });
+    const second = buildMatchRow({ coachId, playerId, opponentName: marker });
+    const firstPoints = [0, 1, 2].map((sequence) =>
+      buildPointRow({ coachId, matchId: first.matchId, sequence }),
+    );
+    const secondPoints = [0, 1, 2].map((sequence) =>
+      buildPointRow({ coachId, matchId: second.matchId, sequence }),
+    );
+    await seedOutbox(page, [
+      first,
+      firstPoints[0]!,
+      second,
+      secondPoints[0]!,
+      firstPoints[1]!,
+      secondPoints[1]!,
+      firstPoints[2]!,
+      secondPoints[2]!,
+    ]);
+
+    await page.context().setOffline(false);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
+    // Per-match order holds whatever the queue interleaved, and neither match's
+    // points strayed into the other.
+    for (const [match, points] of [
+      [first, firstPoints],
+      [second, secondPoints],
+    ] as const) {
+      const stored = await pointsOf(page, match.matchId);
+      expect(stored.map((point) => point.id)).toEqual(points.map((point) => point.id));
+      expect(stored.map((point) => point.sequence)).toEqual([0, 1, 2]);
+    }
+    expect(await matchesNamed(page, marker)).toBe(2);
   });
 });
 

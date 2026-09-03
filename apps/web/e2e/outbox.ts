@@ -1,11 +1,13 @@
 import { expect, type Page } from "@playwright/test";
 
 import { Match } from "@/features/capture/match";
+import { Point } from "@/features/capture/point";
 
 // The database and store src/features/outbox/db.ts declares. The offline specs
 // write rows into it directly (the capture screen doesn't exist yet, see
 // offline.spec.ts), so the shape here has to match what the drain reads back;
-// a drifted row fails loudly in-spec when Match.fromJSON refuses the payload.
+// a drifted row fails loudly in-spec when Match.fromJSON or Point.fromJSON
+// refuses the payload.
 const OUTBOX_DB = "matchpoint-outbox";
 const OUTBOX_STORE = "entries";
 
@@ -26,9 +28,7 @@ export interface SeedRow {
 
 /**
  * A pending match-create row, its payload built by the real capture model so the
- * seed can never drift from what the drain's `Match.fromJSON` accepts. Point rows
- * are deliberately absent: `toPointCreate` throws until #210 lands the score
- * stamps, so a seeded point could only ever park as unmappable.
+ * seed can never drift from what the drain's `Match.fromJSON` accepts.
  */
 export function buildMatchRow(fields: {
   coachId: string;
@@ -56,6 +56,59 @@ export function buildMatchRow(fields: {
     matchId,
     kind: "match",
     payload: match.toJSON(),
+    status: "pending",
+    schemaVersion: PAYLOAD_VERSION,
+  };
+}
+
+/**
+ * A pending point row for a match already queued or already on the server: an ace
+ * on the tracked player's serve, the one-tap point, built by the real capture
+ * model for the reason buildMatchRow gives. The stamps place every point in the
+ * first game, which the server stores as sent, never replaying the scoring.
+ */
+export function buildPointRow(fields: {
+  coachId: string;
+  matchId: string;
+  sequence: number;
+}): SeedRow {
+  const point = Point.create({
+    id: crypto.randomUUID(),
+    matchId: fields.matchId,
+    timestamp: Date.now(),
+    sequence: fields.sequence,
+    server: "TRACKED",
+    courtSide: fields.sequence % 2 === 0 ? "DEUCE" : "AD",
+    won: true,
+    context: {
+      setNumber: 1,
+      gameNumber: 1,
+      inTiebreak: false,
+      isBreakPoint: false,
+      isGamePoint: false,
+      isGameEnd: false,
+      isSetPoint: false,
+      isSetEnd: false,
+      isMatchPoint: false,
+    },
+    serves: [{ number: 1, outcome: "ACE", location: null }],
+    returnOutcome: null,
+    endReason: "ACE",
+    unusualReason: null,
+    unusualNote: null,
+    note: null,
+    wing: null,
+    shotType: null,
+    ballIn: null,
+    ballLocation: null,
+    rallyLengthBucket: null,
+  });
+  return {
+    id: point.id,
+    coachId: fields.coachId,
+    matchId: fields.matchId,
+    kind: "point",
+    payload: point.toJSON(),
     status: "pending",
     schemaVersion: PAYLOAD_VERSION,
   };
