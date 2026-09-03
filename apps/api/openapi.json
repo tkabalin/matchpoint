@@ -1826,7 +1826,14 @@
             ]
           },
           "end_reason": {
-            "$ref": "#/components/schemas/EndReason"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "game_number": {
             "maximum": 2147483647.0,
@@ -1927,7 +1934,14 @@
             ]
           },
           "serve1_outcome": {
-            "$ref": "#/components/schemas/ServeOutcome"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "serve2_box": {
             "anyOf": [
@@ -2008,8 +2022,6 @@
           "sequence",
           "server",
           "won",
-          "serve1_outcome",
-          "end_reason",
           "set_number",
           "game_number",
           "in_tiebreak",
@@ -2196,7 +2208,14 @@
             ]
           },
           "end_reason": {
-            "$ref": "#/components/schemas/EndReason"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EndReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "game_number": {
             "title": "Game Number",
@@ -2296,7 +2315,14 @@
             ]
           },
           "serve1_outcome": {
-            "$ref": "#/components/schemas/ServeOutcome"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ServeOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "serve2_box": {
             "anyOf": [

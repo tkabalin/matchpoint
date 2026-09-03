@@ -1808,6 +1808,33 @@ def test_ingest_stores_every_field_the_client_stamped(
     assert saved.is_break_point is True
 
 
+def test_ingest_stores_an_unwatched_serve_and_ending_as_null(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A point the coach saw only the winner of (#210) lands with both holes kept as
+    null rather than being refused, which is what lets a whole batch flush."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = point_payload(
+        serve1_outcome=None,
+        serve1_box=None,
+        end_reason=None,
+        wing=None,
+        shot_type=None,
+        ball_in=None,
+        ball_half=None,
+        ball_depth=None,
+    )
+
+    assert _ingest(client, match, [payload]).status_code == 200
+
+    saved = db_session.get(Point, uuid.UUID(payload["id"]))
+    assert saved is not None
+    assert saved.serve1_outcome is None
+    assert saved.end_reason is None
+    assert saved.won is True
+
+
 def test_ingesting_the_same_batch_again_lands_on_the_same_answer(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:

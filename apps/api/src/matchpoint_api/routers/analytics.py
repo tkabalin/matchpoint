@@ -379,6 +379,9 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
 
     tracked = Point.server == MatchSide.TRACKED
     opponent = Point.server == MatchSide.OPPONENT
+    # A serve nobody watched is null, and drops out of every serve rate: it is neither
+    # in nor a fault, so it counts in no numerator and must not pad the denominator.
+    served = Point.serve1_outcome.is_not(None)
     first_in = Point.serve1_outcome != ServeOutcome.FAULT
     second = Point.serve1_outcome == ServeOutcome.FAULT
     # Tiebreak points are excluded from game tallies: the players alternate serve
@@ -396,6 +399,7 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(game, opponent).label("return_games"),
             _count(game, opponent, Point.won).label("return_won"),
             _count(tracked).label("serve_points"),
+            _count(tracked, served).label("serves_seen"),
             _count(tracked, first_in).label("first_in"),
             _count(tracked, first_in, Point.won).label("first_in_won"),
             _count(tracked, second).label("second_points"),
@@ -793,6 +797,10 @@ def _serve_outcomes(
     first: dict[MatchSide, Counter[ServeOutcome]] = {side: Counter() for side in MatchSide}
     second: dict[MatchSide, Counter[ServeOutcome]] = {side: Counter() for side in MatchSide}
     for row in db.execute(statement):
+        # An unwatched serve has no outcome to share out, and its points would
+        # otherwise sit in the total the three shares are taken of.
+        if row.serve1_outcome is None:
+            continue
         first[row.server][row.serve1_outcome] += row.points
         if row.serve2_outcome is not None:
             second[row.server][row.serve2_outcome] += row.points
@@ -865,7 +873,9 @@ def _serve_trends(
     Grouped by side as well as by match, so each count is a plain condition rather
     than a filter carrying the side around with it.
     """
-    second = Point.serve1_outcome == ServeOutcome.FAULT
+    # Watched second serves only, for the reason the first-serve rate counts watched
+    # first ones: a lone fault is a second serve nobody saw, not one that missed.
+    second = and_(Point.serve1_outcome == ServeOutcome.FAULT, Point.serve2_outcome.is_not(None))
     statement = (
         select(
             Point.server,
@@ -878,7 +888,13 @@ def _serve_trends(
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
-        .where(Match.player_id == player_id, *scope.conditions())
+        # Watched serves only, so `served` is a real denominator: a match whose serves
+        # all went unwatched has no rate to plot and so no entry.
+        .where(
+            Match.player_id == player_id,
+            Point.serve1_outcome.is_not(None),
+            *scope.conditions(),
+        )
         .group_by(Point.match_id, Point.server, Match.played_on, Match.created_at)
         .order_by(Match.played_on.desc(), Match.created_at.desc())
     )
@@ -899,7 +915,7 @@ def _serving_stats(
     matches_sample = f"n={counts.matches_with_points}"
     metrics = [
         _percent("Break points saved", counts.bp_saved, counts.bp_faced),
-        _percent(FIRST_SERVE_IN_LABEL, counts.first_in, counts.serve_points),
+        _percent(FIRST_SERVE_IN_LABEL, counts.first_in, counts.serves_seen),
         _percent("1st serve points won", counts.first_in_won, counts.first_in),
         _percent("2nd serve points won", counts.second_won, counts.second_points),
         _per(
@@ -1304,9 +1320,9 @@ class _TrackedStatSpec:
     """One tracked stat: its label, its value over one match, and that value's sample.
 
     No two stats count the same points, so each brings its own sample: the ratio's are
-    the rally endings that decided a point, the serve percentage's the points this
-    player served. A percentage samples the denominator it divides by, which is what
-    lets `_percent_value` divide without a zero check.
+    the rally endings that decided a point, the serve percentage's the serves this
+    player was watched hitting. A percentage samples the denominator it divides by,
+    which is what lets `_percent_value` divide without a zero check.
     """
 
     key: TrackedStatKey
@@ -1407,7 +1423,11 @@ def _tracked_counts_by_match(
             func.count()
             .filter(and_(~Point.won, Point.end_reason == EndReason.MISTAKE))
             .label("mistake_lost"),
-            func.count().filter(tracked).label("serve_points"),
+            # Watched serves only: this is the first-serve stat's denominator, and an
+            # unwatched serve is in neither its numerator nor its sample.
+            func.count()
+            .filter(and_(tracked, Point.serve1_outcome.is_not(None)))
+            .label("serve_points"),
             func.count()
             .filter(and_(tracked, Point.serve1_outcome != ServeOutcome.FAULT))
             .label("first_in"),

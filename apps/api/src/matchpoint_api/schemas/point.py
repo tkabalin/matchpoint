@@ -75,7 +75,9 @@ class PointCreate(RequestModel):
     # The tracked player's side, always, whoever served.
     won: bool
 
-    serve1_outcome: ServeOutcome
+    # Null is a serve nobody watched, not a fourth outcome: the capture model drops
+    # the attempt rather than inventing one (#210). Its location goes with it.
+    serve1_outcome: ServeOutcome | None = None
     serve1_box: CourtSide | None = None
     serve1_fault_mode: FailureMode | None = None
     serve2_outcome: ServeOutcome | None = None
@@ -84,7 +86,9 @@ class PointCreate(RequestModel):
 
     return_outcome: ReturnOutcome | None = None
 
-    end_reason: EndReason
+    # Null is an ending nobody watched, and every field describing the ending (the
+    # unusual reason, the last shot, the final ball) is null with it.
+    end_reason: EndReason | None = None
     unusual_reason: UnusualReason | None = None
     # A coach's annotation, legal on any point rather than only an unusual one (#175).
     note: LongText | None = None
@@ -113,8 +117,10 @@ class PointCreate(RequestModel):
 
     @model_validator(mode="after")
     def _check_serve_attempts(self) -> Self:
-        if (self.serve2_outcome is not None) != (self.serve1_outcome is ServeOutcome.FAULT):
-            raise ValueError("a second serve is recorded exactly when the first serve faulted")
+        # Only after, not exactly when: a faulted first serve whose second attempt went
+        # unwatched is a lone fault, the same observation hole as no serve at all.
+        if self.serve2_outcome is not None and self.serve1_outcome is not ServeOutcome.FAULT:
+            raise ValueError("a second serve is recorded only after the first serve faulted")
         _check_serve_location(
             1,
             self.serve1_outcome,
@@ -140,6 +146,10 @@ class PointCreate(RequestModel):
     def _check_ending(self) -> Self:
         if self.server is MatchSide.TRACKED and self.return_outcome is not None:
             raise ValueError("return_outcome belongs to a point the opponent served")
+        # A return is a fact about a serve that landed, so it cannot outlive one that
+        # was never watched; the per-serve return split groups on that serve too.
+        if self.return_outcome is not None and self.serve1_outcome is None:
+            raise ValueError("return_outcome requires a watched serve")
         if self.end_reason is not EndReason.UNUSUAL and self.unusual_reason is not None:
             raise ValueError("unusual_reason belongs to a point that ended unusually")
         return self
@@ -149,7 +159,8 @@ class PointCreate(RequestModel):
         # A missed return is placed by return_outcome, so asking for the shot and the
         # ball again would capture the same fact under a second name.
         missed_return = self.return_outcome not in {None, ReturnOutcome.IN}
-        if self.end_reason in _NO_CONTACT_END_REASONS or missed_return:
+        unseen_ending = self.end_reason is None
+        if unseen_ending or self.end_reason in _NO_CONTACT_END_REASONS or missed_return:
             if any(
                 value is not None
                 for value in (
@@ -165,8 +176,12 @@ class PointCreate(RequestModel):
             return self
         if (self.wing is None) != (self.shot_type is None):
             raise ValueError("wing and shot_type are recorded together, or neither is")
+        # A struck point whose final ball went unwatched: the two travel together, so
+        # neither is recorded, the same hole the capture model leaves.
         if self.ball_in is None:
-            raise ValueError("ball_in is required on a point whose last shot was struck")
+            if any(v is not None for v in (self.ball_half, self.ball_depth, self.ball_out_mode)):
+                raise ValueError("a final ball nobody watched records no placement")
+            return self
         if self.ball_in:
             if self.ball_half is None or self.ball_depth is None or self.ball_out_mode is not None:
                 raise ValueError("a final ball that stayed in records ball_half and ball_depth")
@@ -222,7 +237,7 @@ class PointRead(BaseModel):
     server: MatchSide
     won: bool
 
-    serve1_outcome: ServeOutcome
+    serve1_outcome: ServeOutcome | None
     serve1_box: CourtSide | None
     serve1_fault_mode: FailureMode | None
     serve2_outcome: ServeOutcome | None
@@ -231,7 +246,7 @@ class PointRead(BaseModel):
 
     return_outcome: ReturnOutcome | None
 
-    end_reason: EndReason
+    end_reason: EndReason | None
     unusual_reason: UnusualReason | None
     note: str | None
 

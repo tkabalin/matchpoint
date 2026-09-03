@@ -975,7 +975,7 @@ export type PointCreate = {
      */
     ball_in?: boolean | null;
     ball_out_mode?: FailureMode | null;
-    end_reason: EndReason;
+    end_reason?: EndReason | null;
     /**
      * Game Number
      */
@@ -1024,7 +1024,7 @@ export type PointCreate = {
     sequence: number;
     serve1_box?: CourtSide | null;
     serve1_fault_mode?: FailureMode | null;
-    serve1_outcome: ServeOutcome;
+    serve1_outcome?: ServeOutcome | null;
     serve2_box?: CourtSide | null;
     serve2_fault_mode?: FailureMode | null;
     serve2_outcome?: ServeOutcome | null;
@@ -1138,7 +1138,7 @@ export type PointRead = {
      */
     ball_in: boolean | null;
     ball_out_mode: FailureMode | null;
-    end_reason: EndReason;
+    end_reason: EndReason | null;
     /**
      * Game Number
      */
@@ -1191,7 +1191,7 @@ export type PointRead = {
     sequence: number;
     serve1_box: CourtSide | null;
     serve1_fault_mode: FailureMode | null;
-    serve1_outcome: ServeOutcome;
+    serve1_outcome: ServeOutcome | null;
     serve2_box: CourtSide | null;
     serve2_fault_mode: FailureMode | null;
     serve2_outcome: ServeOutcome | null;

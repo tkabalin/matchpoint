@@ -109,6 +109,23 @@ def test_the_default_shape_round_trips() -> None:
             id="opponent serve missed on the return",
         ),
         pytest.param(OPPONENT_SERVE, id="opponent serve with no return recorded"),
+        # The observation holes the capture model leaves (#210): a serve nobody
+        # watched, a first-serve fault whose second attempt went unwatched, an ending
+        # nobody watched, and a final ball nobody watched.
+        pytest.param({"serve1_outcome": None, "serve1_box": None}, id="unwatched serve"),
+        pytest.param(
+            {"serve1_outcome": "fault", "serve1_box": None, "serve1_fault_mode": "long"},
+            id="a faulted first serve whose second attempt went unwatched",
+        ),
+        pytest.param({"end_reason": None} | NO_CONTACT, id="unwatched ending"),
+        pytest.param(
+            {"serve1_outcome": None, "serve1_box": None, "end_reason": None} | NO_CONTACT,
+            id="only the winner seen",
+        ),
+        pytest.param(
+            {"ball_in": None, "ball_half": None, "ball_depth": None},
+            id="a struck point whose final ball went unwatched",
+        ),
         pytest.param(
             {"end_reason": "unusual", "unusual_reason": "hindrance"} | NO_CONTACT,
             id="unusual ending",
@@ -144,10 +161,34 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
         pytest.param({"serve2_outcome": "in"}, id="a second serve after a first serve that landed"),
         pytest.param(
             {"serve1_outcome": "fault", "serve1_box": None}
-            | {"serve1_fault_mode": "net", "end_reason": "double_fault"},
-            id="a faulted first serve with no second attempt",
+            | {"serve1_fault_mode": "net", "end_reason": "double_fault"}
+            | NO_CONTACT,
+            id="the double-fault ending after a lone first-serve fault",
         ),
         pytest.param({"serve1_box": None}, id="a landed serve missing its box"),
+        pytest.param({"serve1_outcome": None}, id="an unwatched serve keeping its box"),
+        pytest.param(
+            {
+                "serve1_outcome": None,
+                "serve1_box": None,
+                "serve2_outcome": "in",
+                "serve2_box": "ad",
+            },
+            id="a second serve after an unwatched first",
+        ),
+        pytest.param(
+            OPPONENT_SERVE | {"serve1_outcome": None, "return_outcome": "in"},
+            id="a return on an unwatched serve",
+        ),
+        pytest.param({"end_reason": None}, id="an unwatched ending carrying a last shot"),
+        pytest.param(
+            {"end_reason": None, "unusual_reason": "other"} | NO_CONTACT,
+            id="an unusual reason on an unwatched ending",
+        ),
+        pytest.param(
+            {"ball_in": None, "ball_half": None, "ball_depth": None, "ball_out_mode": "net"},
+            id="an unwatched final ball carrying an out mode",
+        ),
         pytest.param(
             SECOND_SERVE | {"serve1_box": "deuce"},
             id="a faulted serve keeping its box",
@@ -189,7 +230,6 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
         ),
         pytest.param({"shot_type": None}, id="a wing with no shot type"),
         pytest.param({"wing": None}, id="a shot type with no wing"),
-        pytest.param({"ball_in": None, "ball_half": None, "ball_depth": None}, id="no ball_in"),
         pytest.param({"ball_depth": None}, id="a ball in with no depth"),
         pytest.param({"ball_half": None}, id="a ball in with no half"),
         pytest.param({"ball_out_mode": "net"}, id="a ball in carrying an out mode"),
@@ -222,13 +262,26 @@ def test_shapes_the_contract_refuses(overrides: dict[str, Any]) -> None:
         _point(**overrides)
 
 
-@pytest.mark.parametrize("field", ["sequence", "server", "won", "serve1_outcome", "end_reason"])
+@pytest.mark.parametrize("field", ["sequence", "server", "won"])
 def test_a_missing_required_field_is_refused(field: str) -> None:
     payload = point_payload()
     del payload[field]
 
     with pytest.raises(ValidationError):
         PointCreate.model_validate(payload)
+
+
+def test_an_omitted_serve_or_ending_reads_as_unwatched() -> None:
+    """The two fields the capture model can leave null default the same way the other
+    observation fields do, since an absent observation is the same fact as a null one."""
+    payload = point_payload(serve1_box=None, **NO_CONTACT)
+    del payload["serve1_outcome"]
+    del payload["end_reason"]
+
+    point = PointCreate.model_validate(payload)
+
+    assert point.serve1_outcome is None
+    assert point.end_reason is None
 
 
 @pytest.mark.parametrize(

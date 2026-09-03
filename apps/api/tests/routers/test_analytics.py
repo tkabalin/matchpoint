@@ -655,6 +655,67 @@ def test_return_outcomes_split_by_serve_number(
     assert body["serving"]["return_outcome"] == {"first_serve": [], "second_serve": []}
 
 
+def test_an_unwatched_serve_stays_out_of_every_serve_rate(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two service points, one serve watched and in, one nobody saw (#210). The
+    unwatched one is a real point, so it counts as one served, but it is in no serve
+    rate's sample: counting it would read "not seen" as a fault.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0)
+    make_point(db_session, match_id=match.id, sequence=1, serve1_outcome=None, serve1_box=None)
+    unwatched_only = make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 2))
+    make_point(
+        db_session, match_id=unwatched_only.id, sequence=0, serve1_outcome=None, serve1_box=None
+    )
+
+    serving = _get(client, player.id, "serve")["serving"]
+
+    first_in = next(metric for metric in serving["metrics"] if metric["label"] == "1st serve in %")
+    assert (first_in["value"], first_in["sample_size"]) == (100, "n=1")
+    assert serving["outcome"]["first_serve"] == {"landed": 100, "fault": 0, "ace": 0}
+    # The match with nothing watched has no rate to plot, so the series skips it.
+    assert serving["trend"] == [{"match": "M1", "first_serve_in": 100, "second_serve_in": None}]
+    # All three points were served, so the breakdown of how they went keeps them.
+    assert serving["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 3,
+        "secondary_value": None,
+        "max": 3,
+    }
+    assert _squad(client)[0]["first_serve_in_percent"] == 100
+
+
+def test_an_unwatched_second_serve_is_no_miss_in_the_trend(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two first serves faulted, one second attempt watched and in, the other a lone
+    fault whose second attempt nobody saw (#210). Both points were played on a second
+    serve, but only one has a second serve to score, so the other must not read as one
+    that missed.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=0,
+        **faulted,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.IN,
+    )
+    make_point(
+        db_session, match_id=match.id, sequence=1, **faulted, serve1_fault_mode=FailureMode.LONG
+    )
+
+    serving = _get(client, player.id, "serve")["serving"]
+
+    assert serving["trend"] == [{"match": "M1", "first_serve_in": 0, "second_serve_in": 100}]
+
+
 def test_serve_trend_runs_oldest_to_most_recent(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:

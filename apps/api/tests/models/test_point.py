@@ -190,7 +190,9 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
     on the columns rather than on the scenario."""
     point = make_point(
         db_session,
+        serve1_outcome=None,
         serve1_box=None,
+        end_reason=None,
         note=None,
         wing=None,
         shot_type=None,
@@ -201,7 +203,9 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
 
     saved = db_session.get(Point, point.id)
     assert saved is not None
+    assert saved.serve1_outcome is None
     assert saved.serve1_box is None
+    assert saved.end_reason is None
     assert saved.serve2_outcome is None
     assert saved.return_outcome is None
     assert saved.unusual_reason is None

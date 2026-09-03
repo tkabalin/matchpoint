@@ -139,10 +139,10 @@ class Point(Base):
     server: Mapped[MatchSide] = mapped_column(str_enum(MatchSide, "point_server"))
     won: Mapped[bool]
 
-    # The contract always records at least one attempt; a second only ever follows a
+    # Null when nobody watched the serve; a second attempt only ever follows a
     # first-serve fault. Location is null on an opponent serve, placement there being
     # out of scope, and otherwise the box when it landed or a FailureMode when not.
-    serve1_outcome: Mapped[ServeOutcome] = mapped_column(
+    serve1_outcome: Mapped[ServeOutcome | None] = mapped_column(
         str_enum(ServeOutcome, "point_serve1_outcome")
     )
     serve1_box: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_serve1_box"))
@@ -163,7 +163,9 @@ class Point(Base):
         str_enum(ReturnOutcome, "point_return_outcome")
     )
 
-    end_reason: Mapped[EndReason] = mapped_column(str_enum(EndReason, "point_end_reason"))
+    # Null when nobody watched the point end, which leaves every column describing
+    # the ending null with it.
+    end_reason: Mapped[EndReason | None] = mapped_column(str_enum(EndReason, "point_end_reason"))
     unusual_reason: Mapped[UnusualReason | None] = mapped_column(
         str_enum(UnusualReason, "point_unusual_reason")
     )
