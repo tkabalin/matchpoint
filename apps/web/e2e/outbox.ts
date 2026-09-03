@@ -3,11 +3,11 @@ import { expect, type Page } from "@playwright/test";
 import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
 
-// The database and store src/features/outbox/db.ts declares. The offline specs
-// write rows into it directly (the capture screen doesn't exist yet, see
-// offline.spec.ts), so the shape here has to match what the drain reads back;
-// a drifted row fails loudly in-spec when Match.fromJSON or Point.fromJSON
-// refuses the payload.
+// The database and store src/features/outbox/db.ts declares. Most offline specs
+// fill it through capture-screen taps; the ones that need hundreds of rows, or a
+// state taps cannot set up, write rows into it directly (see offline.spec.ts),
+// so the shape here has to match what the drain reads back. A drifted row fails
+// loudly in-spec when Match.fromJSON or Point.fromJSON refuses the payload.
 const OUTBOX_DB = "matchpoint-outbox";
 const OUTBOX_STORE = "entries";
 
@@ -118,7 +118,8 @@ export function buildPointRow(fields: {
  * Writes rows into the outbox exactly as a capture tap's `append` would land
  * them, once the app's own Dexie instance has the store open (see the poll).
  * Written outside Dexie, though, so the drain's liveQuery nudge never fires for
- * these: a seeded row waits for a launch or for connectivity to return.
+ * these: a seeded row waits for a launch or for connectivity to return, which is
+ * why every seeding spec brackets the seed in setOffline(true)/setOffline(false).
  */
 export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<void> {
   await expect

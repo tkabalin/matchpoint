@@ -17,11 +17,12 @@ import {
  * project, against the production build, because the service worker these specs
  * lean on does not exist under `vite dev`.
  *
- * Rows are seeded straight into the outbox rather than through capture-screen
- * taps, which don't exist yet; upgrade the seeding once that UI lands. Point rows
- * are seeded too, now that #210 lets the point mapper send them: the point half
- * of the round trip (a multi-batch flush interrupted between chunks, the
- * completed-match fence, interleaved matches) is the last describe block.
+ * Rows reach the outbox the way a coach's do, through the setup and capture
+ * screens (tapOutMatch below), so the suite proves the round trip from the tap
+ * rather than from the queue. Four specs seed the outbox directly instead, and
+ * say why where they do: a refusal the screen cannot set up, and the point cases
+ * in the last describe block that need hundreds of rows, a match completed on
+ * the server, or a second match queued before the first one's points.
  *
  * What #217 still leaves uncovered, and what each waits on: retrying a parked
  * match by hand needs the sync status UI (#115); the capture-claim conflict
@@ -92,11 +93,90 @@ async function matchStatus(page: Page, matchId: string): Promise<number> {
   return (await page.request.get(`/api/matches/${matchId}`)).status();
 }
 
+/** The id of the one match carrying this marker, once the server has it. */
+async function matchIdNamed(page: Page, opponentName: string): Promise<string> {
+  let id: string | undefined;
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get("/api/matches");
+        expect(response.status()).toBe(200);
+        const matches = (await response.json()) as { id: string; opponent_name: string | null }[];
+        id = matches.find((match) => match.opponent_name === opponentName)?.id;
+        return id;
+      },
+      { timeout: 20_000 },
+    )
+    .toBeDefined();
+  return id!;
+}
+
+interface StoredPoint {
+  id: string;
+  sequence: number;
+  serve1_outcome: string | null;
+  end_reason: string | null;
+}
+
 /** A match's points as the server holds them, in the order it assigns: by sequence. */
-async function pointsOf(page: Page, matchId: string): Promise<{ id: string; sequence: number }[]> {
+async function pointsOf(page: Page, matchId: string): Promise<StoredPoint[]> {
   const response = await page.request.get(`/api/matches/${matchId}/points`);
   expect(response.status()).toBe(200);
-  return (await response.json()) as { id: string; sequence: number }[];
+  return (await response.json()) as StoredPoint[];
+}
+
+/**
+ * Opens the capture screen for this player and waits for the setup form. Online,
+ * because the screen fetches the player before it renders; a spec that must hold
+ * the rows back goes offline once the form is showing, and the taps that follow
+ * need no network at all (.claude/rules/web-capture.md).
+ */
+async function openCapture(page: Page, playerId: string): Promise<void> {
+  await page.goto(`/new-match/${playerId}`);
+  await expect(page.getByRole("heading", { name: "Match", level: 1 })).toBeVisible();
+}
+
+/**
+ * What a coach records in one point: an ace, the one-tap point, or a point seen
+ * only for its winner, which is the shape #210 opened the API to (an unwatched
+ * serve and an unwatched ending, both null on the wire).
+ */
+type Tap = "ace" | "winner only";
+
+/**
+ * Starts the match against this opponent and taps out the given points, which is
+ * how rows reach the outbox in production: through `append`, whose Dexie write is
+ * the one the drain's liveQuery trigger observes. Every tap is a point the player
+ * wins, so the scoreboard reading 15, 30, 40 is the signal that the point committed
+ * and its row was queued; three points is therefore the most a spec taps out.
+ */
+async function tapOutMatch(page: Page, opponentName: string, taps: readonly Tap[]): Promise<void> {
+  await page.getByRole("textbox", { name: "Opponent" }).fill(opponentName);
+  await page.getByRole("button", { name: "Start match" }).click();
+  await expect(page.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+  const score = page.getByRole("table", { name: "Score" });
+  for (const [index, tap] of taps.entries()) {
+    if (tap === "ace") {
+      await page.getByRole("button", { name: "Ace" }).click();
+    } else {
+      await page.getByRole("button", { name: "Didn't see" }).click();
+      await expect(page.getByRole("heading", { name: "Rally" })).toBeVisible();
+      await page.getByRole("button", { name: "Didn't see" }).click();
+      await page.getByRole("dialog").getByRole("button", { name: /^Win/ }).click();
+    }
+    await expect(score.getByText(["15", "30", "40"][index]!, { exact: true })).toBeVisible();
+  }
+}
+
+/** The match row and point rows the taps just queued, in enqueue order. */
+async function queuedByTaps(page: Page): Promise<{ matchId: string; pointIds: string[] }> {
+  const rows = await readOutboxRows(page);
+  const match = rows.find((row) => row.kind === "match");
+  expect(match, "no match row queued; did the taps commit a point?").toBeDefined();
+  return {
+    matchId: match!.matchId,
+    pointIds: rows.filter((row) => row.kind === "point").map((row) => row.id),
+  };
 }
 
 /**
@@ -171,30 +251,35 @@ function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => voi
 test.describe("with the service worker", () => {
   test.use({ storageState: COACH_STORAGE_STATE });
 
-  test("matches captured offline survive a reload and sync exactly once", async ({ page }) => {
+  test("a match captured offline survives a reload and syncs exactly once", async ({ page }) => {
     await openHome(page);
     await waitForServiceWorkerControl(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
+    await openCapture(page, playerId);
 
+    // Offline from the first tap: the court has no signal, and the queue has to
+    // hold everything until it does.
     await page.context().setOffline(true);
     const marker = `E2E offline ${crypto.randomUUID()}`;
-    const first = buildMatchRow({ coachId, playerId, opponentName: marker });
-    const second = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [first, second]);
+    await tapOutMatch(page, marker, ["ace", "winner only"]);
+    const { matchId, pointIds } = await queuedByTaps(page);
+    expect(pointIds).toHaveLength(2);
 
-    // Reload while still offline: the shell comes from the precache, the rows
-    // from IndexedDB. This is the durability half of the milestone.
-    await page.reload();
+    // Away and back while still offline: the shell comes from the precache, the
+    // rows from IndexedDB. This is the durability half of the milestone.
+    await page.goto("/home");
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-    expect(await readOutboxRows(page)).toHaveLength(2);
+    expect(await readOutboxRows(page)).toHaveLength(3);
 
     await page.context().setOffline(false);
-    await expect.poll(() => matchStatus(page, first.matchId), { timeout: 20_000 }).toBe(200);
-    await expect.poll(() => matchStatus(page, second.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => matchStatus(page, matchId), { timeout: 20_000 }).toBe(200);
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
     // Exactly once: a duplicate under a fresh server id would still carry the marker.
-    expect(await matchesNamed(page, marker)).toBe(2);
+    expect(await matchesNamed(page, marker)).toBe(1);
+    // Both points, in the order they were tapped, the unwatched one stored as such.
+    const stored = await pointsOf(page, matchId);
+    expect(stored.map((point) => point.id)).toEqual(pointIds);
+    expect(stored[1]).toMatchObject({ serve1_outcome: null, end_reason: null });
   });
 
   test("the app cold-starts offline from the precache", async ({ page }) => {
@@ -225,20 +310,17 @@ test.describe("with the service worker", () => {
   }) => {
     await openHome(page);
     await waitForServiceWorkerControl(page);
-    const coachId = await recordedOwner(page);
     const stamp = crypto.randomUUID().slice(0, 8);
     const playerId = await createPlayer(page, `Cached ${stamp}`);
     const marker = `E2E cached ${stamp}`;
 
-    // Through the queue rather than a hand-written body, so this spec holds no
-    // second copy of the create contract. Offline across the seed, as the specs
-    // above are: a raw IndexedDB write is invisible to the queue's liveQuery, so
-    // connectivity returning is the only trigger this row is guaranteed.
-    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await page.context().setOffline(true);
-    await seedOutbox(page, [row]);
-    await page.context().setOffline(false);
-    await expect.poll(() => matchStatus(page, row.matchId), { timeout: 20_000 }).toBe(200);
+    // Through the capture screen rather than a hand-written body, so this spec
+    // holds no second copy of the create contract. Online throughout: the tap's
+    // own write is the drain's trigger, so the match is on the server shortly.
+    await openCapture(page, playerId);
+    await tapOutMatch(page, marker, ["ace"]);
+    await matchIdNamed(page, marker);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
 
     // The one online visit (#116): a list has to have been read once for the
     // snapshot to carry it. Waited on rather than assumed after each screen,
@@ -272,16 +354,12 @@ test.describe("drain behaviour", () => {
     page,
   }) => {
     await openHome(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
-
-    await page.context().setOffline(true);
-    const marker = `E2E interrupted ${crypto.randomUUID()}`;
-    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [row]);
+    await openCapture(page, playerId);
 
     // First attempt only: forward the request so the server ingests it, then
     // abort the response, so the client sees a network failure and retries.
+    // Installed before the tap, since online the tap's own write starts the drain.
     let interceptedStatus: number | null = null;
     await page.route("**/api/matches", async (route) => {
       if (route.request().method() !== "POST" || interceptedStatus !== null) {
@@ -292,24 +370,21 @@ test.describe("drain behaviour", () => {
       await route.abort("failed");
     });
 
-    await page.context().setOffline(false);
-    await expect.poll(() => matchStatus(page, row.matchId), { timeout: 20_000 }).toBe(200);
+    const marker = `E2E interrupted ${crypto.randomUUID()}`;
+    await tapOutMatch(page, marker, ["ace"]);
+    const matchId = await matchIdNamed(page, marker);
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
     // The interruption really happened after ingestion, and the retry that
     // converged went through the server's insert-or-ignore, not a second write.
     expect(interceptedStatus).toBe(201);
     expect(await matchesNamed(page, marker)).toBe(1);
+    expect(await pointsOf(page, matchId)).toHaveLength(1);
   });
 
   test("a flush the tab died in the middle of drains on the next launch", async ({ page }) => {
     await openHome(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
-
-    await page.context().setOffline(true);
-    const marker = `E2E killed ${crypto.randomUUID()}`;
-    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [row]);
+    await openCapture(page, playerId);
 
     // Forwarded, then never answered: the server has the match and the tab is
     // closed under a request the client is still waiting on, which is what a
@@ -322,7 +397,8 @@ test.describe("drain behaviour", () => {
       await new Promise(() => {});
     });
 
-    await page.context().setOffline(false);
+    const marker = `E2E killed ${crypto.randomUUID()}`;
+    await tapOutMatch(page, marker, ["ace"]);
     expect(await sent.promise).toBe(201);
     const context = page.context();
     await page.close();
@@ -343,15 +419,18 @@ test.describe("drain behaviour", () => {
     });
     await relaunched.goto("/home");
     await attempted.promise;
-    // The first tab died before it could remove the row, so it is still queued
-    // rather than parked or gone.
+    // The first tab died before it could remove the rows, so the match and its
+    // point are still queued rather than parked or gone.
     const kept = await readOutboxRows(relaunched);
-    expect(kept).toHaveLength(1);
-    expect(kept[0]).toMatchObject({ id: row.id, status: "pending" });
+    expect(kept.map((row) => [row.kind, row.status])).toEqual([
+      ["match", "pending"],
+      ["point", "pending"],
+    ]);
 
     release.resolve();
     await expect.poll(() => readOutboxRows(relaunched), { timeout: 20_000 }).toHaveLength(0);
     expect(await matchesNamed(relaunched, marker)).toBe(1);
+    expect(await pointsOf(relaunched, kept[0]!.matchId)).toHaveLength(1);
   });
 
   test("a match the server refuses for good parks, and the queue behind it drains", async ({
@@ -363,6 +442,8 @@ test.describe("drain behaviour", () => {
     const keptPlayerId = await createPlayer(page);
     // The player the queued match tracks is off the roster, which is a refusal no
     // retry can clear: nothing this device sends will make that create land.
+    // Seeded rather than tapped: the capture screen cannot open for a player it
+    // cannot fetch, and the second match has to queue behind the first offline.
     await deletePlayer(page, doomedPlayerId);
 
     await page.context().setOffline(true);
@@ -388,29 +469,30 @@ test.describe("drain behaviour", () => {
     expect(await matchesNamed(page, marker)).toBe(1);
   });
 
-  test("a match deleted from the outbox before sync never reaches the server", async ({ page }) => {
+  test("a point deleted from the outbox before sync never reaches the server", async ({ page }) => {
     await openHome(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
+    await openCapture(page, playerId);
 
+    // Offline, so the second point is still queued when it is taken back: undo
+    // before sync means before the drain has had the row.
     await page.context().setOffline(true);
     const marker = `E2E undone ${crypto.randomUUID()}`;
-    const kept = buildMatchRow({ coachId, playerId, opponentName: marker });
-    const undone = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [kept, undone]);
-    await deleteOutboxRow(page, undone.id);
+    await tapOutMatch(page, marker, ["ace", "ace"]);
+    const { matchId, pointIds } = await queuedByTaps(page);
+    const [kept, undone] = pointIds;
+    await deleteOutboxRow(page, undone!);
 
     await page.context().setOffline(false);
-    await expect.poll(() => matchStatus(page, kept.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => matchStatus(page, matchId), { timeout: 20_000 }).toBe(200);
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
-    // The queue is fully drained, so a 404 now is permanent, not a not-yet.
-    expect(await matchStatus(page, undone.matchId)).toBe(404);
+    // The queue is fully drained, so a point absent now is gone for good, not not-yet.
+    expect((await pointsOf(page, matchId)).map((point) => point.id)).toEqual([kept]);
     expect(await matchesNamed(page, marker)).toBe(1);
   });
 
   test("two tabs sharing the queue flush it exactly once", async ({ page }) => {
     await openHome(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
     // The second tab: same context, so the same IndexedDB and the same real
     // Web Locks arbitration the unit suite only ever stubs.
@@ -424,15 +506,17 @@ test.describe("drain behaviour", () => {
       await route.continue();
     });
 
+    // Captured offline so that neither tab sends until both hear the same event.
+    await openCapture(page, playerId);
     await page.context().setOffline(true);
     const marker = `E2E two tabs ${crypto.randomUUID()}`;
-    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [row]);
+    await tapOutMatch(page, marker, ["ace"]);
+    const { matchId } = await queuedByTaps(page);
 
     // Both tabs hear connectivity return and both schedule a drain; the lock
     // must collapse the race to a single sender.
     await page.context().setOffline(false);
-    await expect.poll(() => matchStatus(page, row.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => matchStatus(page, matchId), { timeout: 20_000 }).toBe(200);
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
     expect(posts).toBe(1);
     expect(await matchesNamed(page, marker)).toBe(1);
@@ -625,13 +709,14 @@ test.describe("a session revoked mid-queue", () => {
     expect((await postJson(page, "/api/auth/login", { email, password })).ok()).toBe(true);
 
     await openHome(page);
-    const coachId = await recordedOwner(page);
     const playerId = await createPlayer(page);
+    await openCapture(page, playerId);
 
+    // Offline across the taps, so the revocation below lands before the first send.
     await page.context().setOffline(true);
     const marker = `E2E revoked ${crypto.randomUUID()}`;
-    const row = buildMatchRow({ coachId, playerId, opponentName: marker });
-    await seedOutbox(page, [row]);
+    await tapOutMatch(page, marker, ["ace"]);
+    const { matchId } = await queuedByTaps(page);
 
     // Revoke server-side from a copy of the cookie jar, so the page keeps
     // presenting a session the server has already ended.
@@ -657,8 +742,10 @@ test.describe("a session revoked mid-queue", () => {
     await page.context().setOffline(false);
     expect((await refused).status()).toBe(401);
     const rows = await readOutboxRows(page);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: row.id, status: "pending" });
+    expect(rows.map((row) => [row.kind, row.status])).toEqual([
+      ["match", "pending"],
+      ["point", "pending"],
+    ]);
 
     // Through the form, not the API: sign-in is the only caller of
     // purgeIfCoachChanged, and its same-coach branch is what has to leave the
@@ -671,7 +758,7 @@ test.describe("a session revoked mid-queue", () => {
       page.getByRole("heading", { name: `Coach ${displayName}`, level: 1 }),
     ).toBeVisible();
     await page.reload();
-    await expect.poll(() => matchStatus(page, row.matchId), { timeout: 20_000 }).toBe(200);
+    await expect.poll(() => matchStatus(page, matchId), { timeout: 20_000 }).toBe(200);
     await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(0);
     expect(await matchesNamed(page, marker)).toBe(1);
   });
