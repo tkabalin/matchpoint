@@ -387,7 +387,8 @@ class SquadMemberStats(BaseModel):
     last5: list[MatchResult]
     # Over this period's matches; null until a rally has ended either way.
     forced_to_unforced_ratio: float | None
-    # Over this period's points; null until the player has served a first serve.
+    # Over this period's points; null until a first serve of the player's was watched,
+    # so a player who served all period with nobody watching still has no rate.
     first_serve_in_percent: float | None
     # Null until one match carries a result, there being no run to measure.
     current_streak: CurrentStreak | None

@@ -688,6 +688,44 @@ def test_an_unwatched_serve_stays_out_of_every_serve_rate(
     assert _squad(client)[0]["first_serve_in_percent"] == 100
 
 
+def test_a_player_whose_serves_all_went_unwatched_keeps_the_breakdown_and_no_rate(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The boundary between the two serve counts: the player did serve, so the
+    breakdown of how those points went still renders, but no serve was watched, so the
+    first-serve percentage is absent rather than zero, on the serve tab and the squad
+    row alike.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, serve1_outcome=None, serve1_box=None)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        serve1_outcome=None,
+        serve1_box=None,
+        won=False,
+        end_reason=EndReason.MISTAKE,
+        wing=Wing.BACKHAND,
+    )
+
+    serving = _get(client, player.id, "serve")["serving"]
+
+    # Absent from the metrics list, not present at zero or null: a rate with no sample
+    # is not a figure the card can show.
+    assert "1st serve in %" not in [metric["label"] for metric in serving["metrics"]]
+    assert serving["outcome"]["first_serve"] is None
+    assert serving["trend"] == []
+    assert serving["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
+    assert _squad(client)[0]["first_serve_in_percent"] is None
+
+
 def test_an_unwatched_second_serve_is_no_miss_in_the_trend(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:

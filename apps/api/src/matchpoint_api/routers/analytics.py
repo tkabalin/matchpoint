@@ -1346,8 +1346,8 @@ _TRACKED_STATS = (
         TrackedStatKey.FIRST_SERVE_IN,
         FIRST_SERVE_IN_LABEL,
         MetricUnit.PERCENT,
-        lambda counts: _percent_value(counts.first_in, counts.serve_points),
-        lambda counts: counts.serve_points,
+        lambda counts: _percent_value(counts.first_in, counts.serves_seen),
+        lambda counts: counts.serves_seen,
     ),
 )
 
@@ -1423,11 +1423,12 @@ def _tracked_counts_by_match(
             func.count()
             .filter(and_(~Point.won, Point.end_reason == EndReason.MISTAKE))
             .label("mistake_lost"),
-            # Watched serves only: this is the first-serve stat's denominator, and an
-            # unwatched serve is in neither its numerator nor its sample.
+            # Watched serves only, named as `_point_counts` names the same figure: this is
+            # the first-serve stat's denominator, and an unwatched serve is in neither its
+            # numerator nor its sample.
             func.count()
             .filter(and_(tracked, Point.serve1_outcome.is_not(None)))
-            .label("serve_points"),
+            .label("serves_seen"),
             func.count()
             .filter(and_(tracked, Point.serve1_outcome != ServeOutcome.FAULT))
             .label("first_in"),
@@ -1514,7 +1515,7 @@ def _squad_member(
         ),
         first_serve_in_percent=_percent_value_or_none(
             sum(counts.first_in for counts in period_counts),
-            sum(counts.serve_points for counts in period_counts),
+            sum(counts.serves_seen for counts in period_counts),
         ),
         current_streak=_current_streak(resulted),
         days_since_last_match=(
@@ -1585,7 +1586,7 @@ class _WeekTally:
     forced: int = 0
     unforced: int = 0
     first_in: int = 0
-    serve_points: int = 0
+    serves_seen: int = 0
 
 
 # Each metric off one week's pooled counts. `_series_ratio` rather than
@@ -1596,7 +1597,7 @@ _SQUAD_METRIC_VALUE: dict[SquadMetric, Callable[[_WeekTally], float | None]] = {
     SquadMetric.RECORD: lambda week: _percent_value_or_none(week.wins, week.wins + week.losses),
     SquadMetric.FORCED_TO_UNFORCED: lambda week: _series_ratio(week.forced, week.unforced),
     SquadMetric.FIRST_SERVE_IN: lambda week: _percent_value_or_none(
-        week.first_in, week.serve_points
+        week.first_in, week.serves_seen
     ),
 }
 
@@ -1635,7 +1636,7 @@ def _week_tallies(
         week.forced += counts.forced_won
         week.unforced += counts.mistake_lost
         week.first_in += counts.first_in
-        week.serve_points += counts.serve_points
+        week.serves_seen += counts.serves_seen
     return weeks
 
 
