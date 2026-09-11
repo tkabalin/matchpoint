@@ -1,7 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { COACH_NOTES } from "./fixtures";
-import type { CoachNote, InProgressMatch } from "./types.provisional";
+import type { InProgressMatch } from "./types.provisional";
 
 /**
  * Query options for the analytics the API doesn't serve yet.
@@ -23,10 +22,6 @@ import type { CoachNote, InProgressMatch } from "./types.provisional";
 function fixtureOptions<T>(key: unknown[], value: T) {
   return queryOptions({ queryKey: key, queryFn: () => Promise.resolve(value) });
 }
-
-// PLACEHOLDER: GET /players/{player_id}/notes
-export const listCoachNotesOptions = (options: { path: { player_id: string } }) =>
-  fixtureOptions<CoachNote[]>(["notes", options.path.player_id], COACH_NOTES);
 
 /**
  * PLACEHOLDER: GET /matches?status=in_progress

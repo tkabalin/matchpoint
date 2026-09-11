@@ -1,4 +1,4 @@
-import type { CoachNote, SquadMetricKey, SquadStatsEntry } from "./types.provisional";
+import type { SquadMetricKey, SquadStatsEntry } from "./types.provisional";
 
 /**
  * `squadMemberStatsFor`/`squadTrendFor` below have no remaining call site —
@@ -40,33 +40,6 @@ interface FixtureSquadTrendPoint {
  * chart that reshuffles on every reload can't be compared against the design or
  * against yesterday's build.
  */
-
-export const COACH_NOTES: CoachNote[] = [
-  {
-    id: "note-toss",
-    body: "Worked on toss height on 2nd serve today — much more consistent by end of session.",
-    tags: ["technical", "worked on toss"],
-    recordedOn: "2026-08-15",
-    context: "practice",
-    linkedMatchId: null,
-  },
-  {
-    id: "note-third-set",
-    body: "Tight in the 3rd set again vs Naidoo — visibly rushing between points on break points.",
-    tags: ["mental", "vs T. Naidoo"],
-    recordedOn: "2026-08-10",
-    context: null,
-    linkedMatchId: "match-naidoo",
-  },
-  {
-    id: "note-shoulder",
-    body: "Reports mild soreness in the hitting shoulder — monitor before next match.",
-    tags: ["physical"],
-    recordedOn: "2026-08-08",
-    context: null,
-    linkedMatchId: null,
-  },
-];
 
 /**
  * PLACEHOLDER for a per-player squad-snapshot endpoint: until the API computes

@@ -64,16 +64,6 @@ export interface StatsFilters {
   surface: SurfaceFilter;
 }
 
-export interface CoachNote {
-  id: string;
-  body: string;
-  tags: string[];
-  /** Calendar date, "YYYY-MM-DD", same convention as the API's date fields. */
-  recordedOn: string;
-  context: string | null;
-  linkedMatchId: string | null;
-}
-
 export interface InProgressMatch {
   matchId: string;
   playerId: string;
