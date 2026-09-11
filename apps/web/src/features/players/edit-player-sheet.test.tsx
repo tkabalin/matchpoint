@@ -322,3 +322,64 @@ test("a failed photo removal explains itself rather than appearing to succeed", 
 
   expect(await screen.findByText("Could not remove that photo.")).toBeInTheDocument();
 });
+
+// #220: the only recovery path once a password is lost, and — for a player who
+// existed before #202 — the only way they get credentials at all.
+test("regenerating a password warns it signs the player out, then reveals the new one", async () => {
+  stubFetch({
+    [`POST /api/players/${player.id}/password`]: () =>
+      Response.json({ username: "nksama001", password: "new-one-time-pw" }, { status: 201 }),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Regenerate password" }));
+
+  expect(
+    await screen.findByText(/signs Amahle out wherever they're currently logged in/),
+  ).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Generate new password" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Amahle's new sign-in details" }),
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Username")).toHaveValue("nksama001");
+  expect(screen.getByLabelText("Password")).toHaveValue("new-one-time-pw");
+});
+
+test("Cancel backs out of the regenerate-password confirmation without generating one", async () => {
+  let generated = 0;
+  stubFetch({
+    [`POST /api/players/${player.id}/password`]: () => {
+      generated += 1;
+      return Response.json({ username: "nksama001", password: "new-one-time-pw" }, { status: 201 });
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Regenerate password" }));
+  await screen.findByRole("heading", { name: "Regenerate Amahle's password?" });
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  expect(await screen.findByLabelText("First name")).toHaveValue("Amahle");
+  expect(generated).toBe(0);
+});
+
+test("Done clears the new password rather than leaving it on screen", async () => {
+  stubFetch({
+    [`POST /api/players/${player.id}/password`]: () =>
+      Response.json({ username: "nksama001", password: "new-one-time-pw" }, { status: 201 }),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Regenerate password" }));
+  await user.click(await screen.findByRole("button", { name: "Generate new password" }));
+  await screen.findByLabelText("Password");
+  await user.click(screen.getByRole("button", { name: "Done" }));
+
+  expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+  expect(screen.queryByDisplayValue("new-one-time-pw")).not.toBeInTheDocument();
+});

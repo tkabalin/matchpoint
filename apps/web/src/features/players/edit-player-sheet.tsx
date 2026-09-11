@@ -1,8 +1,9 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { PlayerPasswordRead, PlayerRead } from "@matchpoint/api-client";
 import {
   createPlayerTransferCode,
   deletePlayer,
   deletePlayerTransferCode,
+  regeneratePlayerPassword,
   updatePlayer,
 } from "@matchpoint/api-client";
 import {
@@ -39,7 +40,9 @@ type Step =
   | "delete-blocked"
   | "transfer-explain"
   | "transfer-code"
-  | "transfer-pending";
+  | "transfer-pending"
+  | "regenerate-password-confirm"
+  | "regenerate-password-reveal";
 
 // Same wording whether caught ahead of time from PlayerRead.has_transfer_code (below)
 // or from the delete request's own 409 — the flag can go stale between a roster read
@@ -83,6 +86,10 @@ export function EditPlayerSheet({
   const [error, setError] = useState<string | null>(null);
   const [pickingPhoto, setPickingPhoto] = useState(false);
   const [mintedCode, setMintedCode] = useState<string | null>(null);
+  const [newCredentials, setNewCredentials] = useState<Pick<
+    PlayerPasswordRead,
+    "username" | "password"
+  > | null>(null);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const retryCountdown = useCountdown(retryAfterSeconds);
   const waitingToRetry = retryCountdown !== null && retryCountdown > 0;
@@ -97,6 +104,7 @@ export function EditPlayerSheet({
     setShowErrors(false);
     setError(null);
     setMintedCode(null);
+    setNewCredentials(null);
   }
 
   function update<K extends keyof PlayerFormValues>(key: K, value: PlayerFormValues[K]) {
@@ -204,6 +212,30 @@ export function EditPlayerSheet({
     },
   });
 
+  // #220: the only recovery path for a lost password, since players have no email
+  // and no reset flow — and, for every player who existed before #202, the only
+  // way they get credentials at all (their password_hash starts NULL).
+  const { mutate: regeneratePassword, isPending: isRegenerating } = useMutation({
+    mutationFn: async () => {
+      const {
+        data,
+        error: regenerateError,
+        response,
+      } = await regeneratePlayerPassword({ path: { player_id: player.id } });
+      if (response?.status === 429) setRetryAfterSeconds(getRetryAfterSeconds(response));
+      if (regenerateError) throw regenerateError;
+      return data;
+    },
+    onSuccess: (data) => {
+      setError(null);
+      setNewCredentials({ username: data.username, password: data.password });
+      setStep("regenerate-password-reveal");
+    },
+    onError: (mutationError) => {
+      setError(parseErrorMessage(mutationError, "Could not regenerate that password."));
+    },
+  });
+
   const mintErrorText =
     error && waitingToRetry ? `${error} Try again in ${retryCountdown}s.` : error;
 
@@ -274,6 +306,18 @@ export function EditPlayerSheet({
               </form>
 
               <Separator />
+
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep("regenerate-password-confirm");
+                }}
+              >
+                Regenerate password
+              </Button>
 
               <Button
                 type="button"
@@ -415,7 +459,7 @@ export function EditPlayerSheet({
                 Done
               </Button>
             </>
-          ) : (
+          ) : step === "transfer-pending" ? (
             <>
               <SheetHeader className="p-0">
                 <SheetTitle>Transfer pending</SheetTitle>
@@ -451,6 +495,71 @@ export function EditPlayerSheet({
                 {isMinting ? "Generating…" : "Generate a new code instead"}
               </Button>
             </>
+          ) : step === "regenerate-password-confirm" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Regenerate {player.first_name}'s password?</SheetTitle>
+              </SheetHeader>
+
+              <p className="text-sm text-muted-foreground">
+                This signs {player.first_name} out wherever they're currently logged in. You'll get
+                a new one-time password to hand over — it won't be shown again.
+              </p>
+
+              {mintErrorText && (
+                <Alert variant="destructive">
+                  <AlertDescription>{mintErrorText}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                type="button"
+                disabled={isRegenerating || waitingToRetry}
+                className="w-full"
+                onClick={() => regeneratePassword()}
+              >
+                {isRegenerating ? "Generating…" : "Generate new password"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={isRegenerating}
+                className="w-full"
+                onClick={() => {
+                  setError(null);
+                  setStep("form");
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          ) : (
+            newCredentials && (
+              <>
+                <SheetHeader className="p-0">
+                  <SheetTitle>{player.first_name}'s new sign-in details</SheetTitle>
+                </SheetHeader>
+
+                <p className="text-sm text-muted-foreground">
+                  This is the only time the password is shown — copy it now and hand both over to{" "}
+                  {player.first_name}.
+                </p>
+
+                <CopyCodeField code={newCredentials.username} label="Username" />
+                <CopyCodeField code={newCredentials.password} label="Password" />
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    reset();
+                    onOpenChange(false);
+                  }}
+                >
+                  Done
+                </Button>
+              </>
+            )
           )}
         </SheetContent>
       </Sheet>
