@@ -23,12 +23,17 @@ async function renderPage() {
     path: "/settings/support",
     component: SettingsSupport,
   });
+  const faqRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings/support/faq",
+    component: () => <h1>FAQ</h1>,
+  });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
     component: () => <h1>Settings</h1>,
   });
-  const routeTree = rootRoute.addChildren([pageRoute, settingsRoute]);
+  const routeTree = rootRoute.addChildren([pageRoute, faqRoute, settingsRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/settings/support"] }),
@@ -50,12 +55,21 @@ test("links back to settings", async () => {
   expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
 });
 
-test("help/feedback and privacy/terms are still stubs, not interactive", async () => {
+// #193: Help & feedback is a real link now, not a stub.
+test("Help & feedback links to the FAQ page", async () => {
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
-  expect(screen.getByText("Help & feedback")).toBeInTheDocument();
+  await user.click(screen.getByRole("link", { name: "Help & feedback" }));
+
+  expect(await screen.findByRole("heading", { name: "FAQ" })).toBeInTheDocument();
+});
+
+test("privacy/terms is still a stub, not interactive", async () => {
+  await renderPage();
+
   expect(screen.getByText("Privacy policy / Terms")).toBeInTheDocument();
-  expect(screen.getAllByText("soon")).toHaveLength(2);
+  expect(screen.getAllByText("soon")).toHaveLength(1);
 });
 
 // #195: real content behind the third row now — the build's own version,
