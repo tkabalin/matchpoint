@@ -117,14 +117,7 @@ export function UnusualPointSheet({
                       selected ? "border-primary bg-accent" : "border-border hover:bg-muted",
                     )}
                   >
-                    <span>
-                      <span className="block text-sm font-medium">{REASON_LABELS[option]}</span>
-                      {/* The stored code, shown so a coach and the data agree on what
-                          was recorded — the handoff asks for it explicitly. */}
-                      <span className="block text-[10px] tracking-[0.06em] text-muted-foreground tabular-nums">
-                        {option}
-                      </span>
-                    </span>
+                    <span className="text-sm font-medium">{REASON_LABELS[option]}</span>
                     <span
                       aria-hidden="true"
                       className={cn(
