@@ -1,5 +1,5 @@
 import type { OpponentSummary } from "@matchpoint/api-client";
-import { listOpponentsOptions } from "@matchpoint/api-client/react-query";
+import { listMatchesOptions, listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
@@ -14,8 +14,10 @@ import {
   SCOPE_OPTIONS,
   SET_LABEL,
   SET_OPTIONS,
+  SURFACE_VALUES,
 } from "@/lib/analytics/filter-options";
-import type { StatsFilters } from "@/lib/analytics/types.provisional";
+import type { StatsFilters, SurfaceFilter } from "@/lib/analytics/types.provisional";
+import { SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
 // The real endpoint already sorts most-met opponent first, so the picker's
@@ -34,6 +36,7 @@ function summaryFor(filters: StatsFilters, opponentName: string | null): string 
     scope,
     filters.set !== "all" && SET_LABEL[filters.set],
     filters.phase !== "full" && PHASE_LABEL[filters.phase],
+    filters.surface !== "all" && SURFACE_LABEL[filters.surface],
   ].filter((part): part is string => Boolean(part));
   return parts.join(" · ");
 }
@@ -62,6 +65,14 @@ export function StatsScopePanel({
   const [draft, setDraft] = useState(filters);
   const [opponentSearch, setOpponentSearch] = useState("");
   const { data: opponents } = useQuery(listOpponentsOptions({ path: { player_id: playerId } }));
+  // Same query the "Performance by surface" card reads (same queryKey, so this
+  // doesn't add a second request) — read here too so the surface chip row only
+  // ever offers a surface this player actually has a match on (#225): a player
+  // with only hard-court matches shouldn't see three dead chips.
+  const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: playerId } }));
+  const presentSurfaces = SURFACE_VALUES.filter((surface) =>
+    (matches ?? []).some((match) => match.surface === surface),
+  );
 
   const opponentName =
     (opponents ?? []).find((opponent) => opponent.key === filters.opponentKey)?.name ?? null;
@@ -141,6 +152,25 @@ export function StatsScopePanel({
             value={draft.phase}
             onChange={(phase) => setDraft({ ...draft, phase })}
           />
+
+          {presentSurfaces.length > 0 && (
+            <>
+              <ScopeGroupLabel>Surface</ScopeGroupLabel>
+              <ChipRow<SurfaceFilter>
+                aria-label="Surface"
+                scroll
+                options={[
+                  { value: "all", label: "All surfaces" },
+                  ...presentSurfaces.map((surface) => ({
+                    value: surface,
+                    label: SURFACE_LABEL[surface],
+                  })),
+                ]}
+                value={draft.surface}
+                onChange={(surface) => setDraft({ ...draft, surface })}
+              />
+            </>
+          )}
 
           <Button
             type="button"

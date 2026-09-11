@@ -1,4 +1,8 @@
-import type { MatchScope, PhaseFilter, SetFilter } from "./types.provisional";
+import type { Surface } from "@matchpoint/api-client";
+
+import { SURFACE_LABEL } from "@/lib/tennis-labels";
+
+import type { MatchScope, PhaseFilter, SetFilter, SurfaceFilter } from "./types.provisional";
 
 /** `"all"` is the scope panel's own sentinel and never reaches the wire — the
  *  endpoint takes `set_number` as an integer or an omitted/null parameter for
@@ -42,3 +46,11 @@ export const SET_LABEL: Record<SetFilter, string> = Object.fromEntries(
 export const PHASE_LABEL: Record<PhaseFilter, string> = Object.fromEntries(
   PHASE_OPTIONS.map((option) => [option.value, option.label]),
 ) as Record<PhaseFilter, string>;
+
+// Not a static options list like the two above: which surfaces are worth offering
+// depends on which ones a given player actually has matches on (#225), so the real
+// chip options are built at render time in stats-scope-panel.tsx. This is only the
+// closed set the player route's own `validateSearch` checks incoming values
+// against — every surface the enum has, plus the panel's own "all" sentinel.
+export const SURFACE_VALUES = Object.keys(SURFACE_LABEL) as Surface[];
+export const SURFACE_FILTER_VALUES: SurfaceFilter[] = ["all", ...SURFACE_VALUES];

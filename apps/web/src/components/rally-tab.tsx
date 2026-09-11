@@ -33,7 +33,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toSetNumber } from "@/lib/analytics/filter-options";
-import type { PhaseFilter, SetFilter } from "@/lib/analytics/types.provisional";
+import type { PhaseFilter, SetFilter, SurfaceFilter } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
@@ -75,6 +75,7 @@ export function RallyTab({
   set = "all",
   phase = "full",
   opponentKey = null,
+  surface = "all",
   onOpponentNotFound,
 }: {
   playerId: string;
@@ -87,6 +88,10 @@ export function RallyTab({
    *  omitted) means every opponent. Never sent on a match-scoped request: a
    *  match already has exactly one opponent. */
   opponentKey?: string | null;
+  /** Narrows to one surface via the real `surface` axis (#225) — `"all"` (or
+   *  omitted) means every surface. Never sent on a match-scoped request: a
+   *  match already has exactly one surface. */
+  surface?: SurfaceFilter;
   /** Called once if the committed opponent key doesn't match any of this
    *  player's real matches — a stale picker selection, not a bug to report.
    *  The caller falls back to "all matches" rather than leaving this tab
@@ -102,7 +107,12 @@ export function RallyTab({
   const playerQuery = useQuery({
     ...getRallyStatsOptions({
       path: { player_id: playerId },
-      query: { set_number: setNumber, phase, opponent_key: opponentKey },
+      query: {
+        set_number: setNumber,
+        phase,
+        opponent_key: opponentKey,
+        surface: surface === "all" ? undefined : surface,
+      },
     }),
     enabled: matchId === undefined,
   });

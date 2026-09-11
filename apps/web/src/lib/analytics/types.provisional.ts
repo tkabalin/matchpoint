@@ -1,3 +1,5 @@
+import type { Surface } from "@matchpoint/api-client";
+
 /**
  * Provisional shapes for analytics the API doesn't serve yet.
  *
@@ -47,6 +49,11 @@ export type PhaseFilter =
   | "game_ending"
   | "set_ending";
 
+/** `"all"` is the panel's own sentinel and never reaches the wire, same
+ *  convention as `SetFilter` — the endpoint takes `surface` as an enum value
+ *  or an omitted parameter for "every surface" (#225). */
+export type SurfaceFilter = "all" | Surface;
+
 export interface StatsFilters {
   scope: MatchScope;
   /** The real API's own opponent identity — `OpponentSummary.key`, not a
@@ -54,6 +61,7 @@ export interface StatsFilters {
   opponentKey: string | null;
   set: SetFilter;
   phase: PhaseFilter;
+  surface: SurfaceFilter;
 }
 
 export interface CoachNote {

@@ -40,10 +40,12 @@ function stubFetch(response: () => Response = () => Response.json(OVERVIEW)) {
 function renderCard({
   opponentKey = null,
   opponentName = null,
+  surface = "all",
   onOpponentNotFound = vi.fn(),
 }: {
   opponentKey?: string | null;
   opponentName?: string | null;
+  surface?: "all" | "hard" | "clay" | "grass" | "carpet";
   onOpponentNotFound?: () => void;
 } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -53,6 +55,7 @@ function renderCard({
         playerId="player-1"
         opponentKey={opponentKey}
         opponentName={opponentName}
+        surface={surface}
         onOpponentNotFound={onOpponentNotFound}
       />
     </QueryClientProvider>,
@@ -131,4 +134,35 @@ test("shows a real error for a failure that isn't a stale opponent key", async (
   renderCard();
 
   expect(await screen.findByText("Could not load the win/loss record.")).toBeInTheDocument();
+});
+
+// #225: the record and form must narrow the same way the rest of the tab does.
+test("sends the surface axis when one is scoped, and omits it for 'all'", async () => {
+  let requestedUrl = "";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      requestedUrl = input.url;
+      return Promise.resolve(Response.json(OVERVIEW));
+    }),
+  );
+  renderCard({ surface: "clay" });
+
+  await screen.findByText("Win/loss record");
+  expect(new URL(requestedUrl).searchParams.get("surface")).toBe("clay");
+});
+
+test("omits the surface param entirely for the 'all' sentinel", async () => {
+  let requestedUrl = "";
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      requestedUrl = input.url;
+      return Promise.resolve(Response.json(OVERVIEW));
+    }),
+  );
+  renderCard();
+
+  await screen.findByText("Win/loss record");
+  expect(new URL(requestedUrl).searchParams.has("surface")).toBe(false);
 });

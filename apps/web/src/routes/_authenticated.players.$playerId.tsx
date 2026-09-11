@@ -1,7 +1,12 @@
 import { createFileRoute, type SearchSchemaInput } from "@tanstack/react-router";
 
 import { PlayerProfile } from "@/features/players/player-profile";
-import { PHASE_OPTIONS, SCOPE_OPTIONS, SET_OPTIONS } from "@/lib/analytics/filter-options";
+import {
+  PHASE_OPTIONS,
+  SCOPE_OPTIONS,
+  SET_OPTIONS,
+  SURFACE_FILTER_VALUES,
+} from "@/lib/analytics/filter-options";
 import type { StatsFilters } from "@/lib/analytics/types.provisional";
 
 const SCOPE_VALUES = SCOPE_OPTIONS.map((option) => option.value);
@@ -28,6 +33,7 @@ export function validateSearch(search: Partial<StatsFilters> & SearchSchemaInput
     opponentKey: scope === "vs-opponent" ? opponentKey : null,
     set: isOneOf(SET_VALUES, search.set) ? search.set : "all",
     phase: isOneOf(PHASE_VALUES, search.phase) ? search.phase : "full",
+    surface: isOneOf(SURFACE_FILTER_VALUES, search.surface) ? search.surface : "all",
   };
 }
 

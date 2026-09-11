@@ -7,6 +7,7 @@ import { OutcomeStack } from "@/components/outcome-swatch";
 import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { SurfaceFilter } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
 import { formatRecord } from "@/lib/format-record";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ export function PlayerRecordCard({
   playerId,
   opponentKey,
   opponentName,
+  surface = "all",
   onOpponentNotFound,
 }: {
   playerId: string;
@@ -32,6 +34,9 @@ export function PlayerRecordCard({
   /** Display name for the "Recent form" caption — the caller already reads
    *  this off the same `listOpponentsOptions` query the scope panel uses. */
   opponentName: string | null;
+  /** Narrows the record and form to one surface via the real `surface` axis
+   *  (#225) — `"all"` (or omitted) means every surface. */
+  surface?: SurfaceFilter;
   /** Called once if the committed opponent key doesn't match any of this
    *  player's real matches — a stale picker selection, not a bug to report.
    *  The caller falls back to "all matches" rather than leaving this card
@@ -42,7 +47,10 @@ export function PlayerRecordCard({
   const { data, isPending, isError, error } = useQuery(
     getPlayerOverviewOptions({
       path: { player_id: playerId },
-      query: { opponent_key: opponentKey },
+      query: {
+        opponent_key: opponentKey,
+        surface: surface === "all" ? undefined : surface,
+      },
     }),
   );
   const opponentNotFound = opponentKey !== null && getErrorStatus(error) === 404;

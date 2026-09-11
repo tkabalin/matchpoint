@@ -19,6 +19,7 @@ import { EditPlayerSheet } from "./edit-player-sheet";
 import { PlayerDetailsCard } from "./player-details-card";
 import { PlayerNotesSheet } from "./player-notes-sheet";
 import { PlayerRecordCard } from "./player-record-card";
+import { PlayerSurfaceRecordCard } from "./player-surface-record-card";
 import { StatsScopePanel } from "./stats-scope-panel";
 
 // Avoids a circular import between this component and its route file — the
@@ -117,10 +118,16 @@ export function PlayerProfile() {
           playerId={playerId}
           opponentKey={filters.opponentKey}
           opponentName={opponentName}
+          surface={filters.surface}
           onOpponentNotFound={handleOpponentNotFound}
         />
         <PlayerDetailsCard player={player} onEdit={() => setEditing(true)} />
       </div>
+
+      {/* Standing, not scoped by the panel above — shows every surface at
+          once so "how do they do on clay" doesn't cost cycling through each
+          one via the scope panel's own surface chip (#225). */}
+      <PlayerSurfaceRecordCard playerId={playerId} />
 
       {/* Matches the mockup's own Serve/Rally toggle exactly — a bordered
           segmented pill, not the app's usual underline tabs. */}
@@ -141,6 +148,7 @@ export function PlayerProfile() {
             set={filters.set}
             phase={filters.phase}
             opponentKey={filters.opponentKey}
+            surface={filters.surface}
             onOpponentNotFound={handleOpponentNotFound}
           />
         ) : (
@@ -149,6 +157,7 @@ export function PlayerProfile() {
             set={filters.set}
             phase={filters.phase}
             opponentKey={filters.opponentKey}
+            surface={filters.surface}
             onOpponentNotFound={handleOpponentNotFound}
           />
         )}
