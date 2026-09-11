@@ -1,9 +1,10 @@
+import { getCurrentCoachOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Play, Plus } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
-import { getInProgressMatchOptions } from "@/lib/analytics/analytics-options";
+import { useInProgressSummary } from "@/features/capture/resume";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,21 +13,25 @@ import { cn } from "@/lib/utils";
  *
  * While a match is being captured the only thing on offer is resuming it: starting
  * a second match from a screen that already has one running is how a coach ends up
- * with a half-recorded match they can't get back to.
+ * with a half-recorded match they can't get back to. Reads the same device-local
+ * signal the in-progress banner does (#251), not a server endpoint — see that
+ * component's own comment for why.
  */
 export function PrimaryMatchAction({ className }: { className?: string }) {
-  const { data: inProgress } = useQuery(getInProgressMatchOptions());
+  const { data: coach } = useQuery(getCurrentCoachOptions());
+  const summary = useInProgressSummary(coach?.id ?? "");
 
   const position =
     // Tracks the page column's right edge rather than the viewport's, so it stays
     // beside the content once the screen is wider than the column.
     "fixed right-[max(1rem,calc(50%-13rem))] bottom-20 z-40 size-12 rounded-full shadow-lg";
 
-  if (inProgress) {
+  if (summary !== null) {
     return (
       <Link
-        to="/matches"
-        aria-label={`Resume ${inProgress.playerName} vs ${inProgress.opponentName}`}
+        to="/new-match/$playerId"
+        params={{ playerId: summary.trackedPlayerId }}
+        aria-label="Resume match in progress"
         className={cn(buttonVariants({ size: "icon" }), position, className)}
       >
         <Play className="size-6" />

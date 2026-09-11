@@ -2038,37 +2038,59 @@ def test_a_flush_from_another_device_is_still_ingested(
     assert _points_of(db_session) == [0]
 
 
-def test_a_flush_does_not_claim_a_match_nobody_holds(
+def test_a_flush_claims_a_match_nobody_holds(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Renewing a claim and taking one are different things: claiming is the capture
-    route's job, and a backlog flushed hours later must not seize a free match."""
-    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
-    db_session.commit()
-
-    assert _ingest(client, match, [point_payload()]).status_code == 200
-
-    saved = db_session.get(Match, match.id)
-    assert saved is not None
-    assert saved.capture_claim_device_id is None
-    assert saved.capture_claim_expires_at is None
-
-
-def test_a_flush_does_not_revive_the_lapsed_claim_it_once_held(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """A lapsed claim counts as free, so the device that let it lapse renews nothing:
-    another device may have taken the match on since."""
+    """Nothing ever calls the claim route from the client, so ingest is the only place
+    a claim can start: a flush against a free match claims it the same way claim_capture
+    does, which is what makes /matches/in-progress ever answer with anything."""
     device_id = uuid.uuid4()
-    lapsed = datetime.now(UTC) - timedelta(minutes=1)
-    match = _claimed_match(db_session, coach, device_id, capture_claim_expires_at=lapsed)
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()
 
     assert _ingest(client, match, [point_payload()], device_id).status_code == 200
 
     saved = db_session.get(Match, match.id)
     assert saved is not None
-    assert saved.capture_claim_expires_at == lapsed
+    assert saved.capture_claim_device_id == device_id
+    assert saved.capture_claim_expires_at is not None
+    assert saved.capture_claim_expires_at > datetime.now(UTC)
+
+
+def test_a_flush_takes_over_a_lapsed_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A lapsed claim counts as free, the same test claim_capture already applies, so a
+    backlog flushed by whichever device gets there first takes the match on."""
+    former_holder = uuid.uuid4()
+    lapsed = datetime.now(UTC) - timedelta(minutes=1)
+    match = _claimed_match(db_session, coach, former_holder, capture_claim_expires_at=lapsed)
+    db_session.commit()
+    new_device = uuid.uuid4()
+
+    assert _ingest(client, match, [point_payload()], new_device).status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.capture_claim_device_id == new_device
+    assert saved.capture_claim_expires_at is not None
+    assert saved.capture_claim_expires_at > datetime.now(UTC)
+
+
+def test_a_flush_that_claims_a_match_puts_it_in_progress(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The end-to-end case /matches/in-progress being permanently empty was really
+    about: a device that never called the claim route still shows up once it flushes."""
+    device_id = uuid.uuid4()
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert _ingest(client, match, [point_payload()], device_id).status_code == 200
+
+    response = client.get("/matches/in-progress")
+    assert response.status_code == 200
+    assert [row["id"] for row in response.json()] == [str(match.id)]
 
 
 def test_ingest_into_another_coachs_match_is_404(

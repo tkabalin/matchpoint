@@ -15,6 +15,8 @@
  * capture path may never await I/O (see `.claude/rules/web-capture.md`).
  */
 
+import { liveQuery, type Observable } from "dexie";
+
 import { outboxDb } from "./db";
 import type { LoggedEvent, LoggedMatch } from "./db";
 
@@ -57,6 +59,18 @@ export async function listInProgress(coachId: string): Promise<LoggedMatch[]> {
   return rows
     .filter((row) => !row.finished)
     .sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+/**
+ * `listInProgress` above, re-emitted whenever the log changes, so the in-progress
+ * banner (#251) needs no polling and no server round trip — capture is offline-first,
+ * and a server-driven banner would be dark exactly when it's needed, at the court.
+ * `saveMatch` writes on every committed point (`live-match.tsx`'s `queueEvent`), which
+ * is what keeps a live score in the banner moving rather than stalling on the moment
+ * capture started.
+ */
+export function watchInProgress(coachId: string): Observable<LoggedMatch[]> {
+  return liveQuery(() => listInProgress(coachId));
 }
 
 /** The one unfinished match for this player, if capture left one behind. */

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { outboxDb } from "./db";
 import type { LoggedEvent, LoggedMatch } from "./db";
@@ -11,6 +11,7 @@ import {
   removeEvent,
   removeMatch,
   saveMatch,
+  watchInProgress,
 } from "./match-log";
 
 const COACH_ID = "coach-1";
@@ -147,5 +148,53 @@ describe("matches", () => {
     expect(await readMatch(MATCH_ID)).toBeUndefined();
     expect(await readLog(MATCH_ID)).toEqual([]);
     expect(await readLog("match-2")).toHaveLength(1);
+  });
+});
+
+describe("watchInProgress", () => {
+  const subscriptions: { unsubscribe: () => void }[] = [];
+
+  // In teardown, not at the end of each test: a failing `waitFor` above would
+  // otherwise leave the subscription live for the rest of the file, the same
+  // reasoning outbox.test.ts's own watchCounts suite gives.
+  afterEach(() => {
+    for (const subscription of subscriptions.splice(0)) subscription.unsubscribe();
+  });
+
+  function watch(coachId: string): LoggedMatch[][] {
+    const seen: LoggedMatch[][] = [];
+    subscriptions.push(watchInProgress(coachId).subscribe((rows) => seen.push(rows)));
+    return seen;
+  }
+
+  test("emits this coach's unfinished matches as the log changes, freshest first", async () => {
+    const seen = watch(COACH_ID);
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([]));
+
+    await saveMatch(matchOf({ updatedAt: 1 }));
+    await vi.waitFor(() => expect(seen.at(-1)?.map((row) => row.matchId)).toEqual([MATCH_ID]));
+
+    await saveMatch(matchOf({ matchId: "match-2", updatedAt: 2 }));
+    await vi.waitFor(() =>
+      expect(seen.at(-1)?.map((row) => row.matchId)).toEqual(["match-2", MATCH_ID]),
+    );
+  });
+
+  test("drops a match once it's marked finished, live", async () => {
+    await saveMatch(matchOf());
+    const seen = watch(COACH_ID);
+    await vi.waitFor(() => expect(seen.at(-1)).toHaveLength(1));
+
+    await saveMatch(matchOf({ finished: true }));
+
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([]));
+  });
+
+  test("never emits another coach's matches", async () => {
+    await saveMatch(matchOf({ coachId: OTHER_COACH }));
+    const seen = watch(COACH_ID);
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen.at(-1)).toEqual([]);
   });
 });

@@ -41,10 +41,10 @@ import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
 import { isMatchOver, retireMatch, startNextPoint, undoLast } from "./match-flow";
-import { Point } from "./point";
 import type { Server } from "./point";
 import { RallyLengthScreen } from "./rally-length-screen";
 import { ResultScreen } from "./result-screen";
+import { restoreInProgress } from "./resume";
 import { ReturnScreen } from "./return-screen";
 import {
   contextFor,
@@ -140,27 +140,24 @@ export function LiveMatch({
     let cancelled = false;
     void (async () => {
       try {
-        const found = await log.findInProgressFor(coachId, trackedPlayerId);
-        if (cancelled || found === undefined) return;
-        const logged = await log.readLog(found.matchId);
-        if (cancelled) return;
-        const resumed = Match.fromJSON(found.payload);
-        const restoredEvents = logged.map((event) =>
-          event.kind === "checkpoint"
-            ? ScoreCheckpoint.fromJSON(event.payload)
-            : Point.fromJSON(event.payload),
-        );
-        const resumedBoard = foldScore(resumed, restoredEvents);
+        const restored = await restoreInProgress(coachId, trackedPlayerId);
+        if (cancelled || restored === null) return;
+        const {
+          match: resumed,
+          events: restoredEvents,
+          board: resumedBoard,
+          nextSequence,
+        } = restored;
         setMatch(resumed);
         setEvents(restoredEvents);
-        setNextSequence(found.nextSequence);
+        setNextSequence(nextSequence);
         // The match row went out with its first event, so Back must not offer setup.
         matchQueuedRef.current = true;
         setMatchQueued(true);
         setCapture(
           isMatchOver(resumed, resumedBoard)
             ? null
-            : startNextPoint(resumed, resumedBoard, found.nextSequence),
+            : startNextPoint(resumed, resumedBoard, nextSequence),
         );
       } catch {
         // A logged row that won't parse (an older build's payload, a half-written

@@ -420,11 +420,15 @@ def ingest_points(
     match = match_for_write(db, match_id, coach.id)
     if match.result is not None:
         raise HTTPException(status_code=409, detail="Match is completed")
-    # A flush is evidence the holder is still capturing, so it renews the claim as
-    # claiming again does. Any other device's batch is still ingested: a device
-    # capturing offline cannot renew, and refusing the backlog of a claim that lapsed
-    # while it was away would strand points that were genuinely played.
-    if capture_holder(match) == data.device_id:
+    # A flush is evidence this device is capturing, so it claims an unheld match the
+    # same way claim_capture does, and renews its own claim the same way. A live claim
+    # held by another device is left standing: two-device collision protection is the
+    # POINT_SEQUENCE_TAKEN unique violation below, not the claim, so a flush is still
+    # ingested either way. This is what makes /matches/in-progress ever non-empty: until
+    # now nothing but the never-called claim_capture route set a claim at all.
+    holder = capture_holder(match)
+    if holder is None or holder == data.device_id:
+        match.capture_claim_device_id = data.device_id
         match.capture_claim_expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
     try:
         # One statement, and DO NOTHING on the client's own id: a point is immutable
