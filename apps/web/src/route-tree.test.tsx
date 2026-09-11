@@ -232,3 +232,18 @@ test("a confirmed 401 keeps the points that never synced", async () => {
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
   expect(await readPending(coach.id)).toHaveLength(1);
 });
+
+// #194: this app's first public, non-auth routes besides the auth screens
+// themselves — no request of any kind, so unlike every test above, neither
+// needs `stubFetch` nor sits under the `_authenticated` guard.
+test("/privacy renders with no signed-in session", async () => {
+  await renderRouteTreeAt("/privacy");
+
+  expect(await screen.findByRole("heading", { name: "Privacy Policy" })).toBeInTheDocument();
+});
+
+test("/terms renders with no signed-in session", async () => {
+  await renderRouteTreeAt("/terms");
+
+  expect(await screen.findByRole("heading", { name: "Terms of Service" })).toBeInTheDocument();
+});

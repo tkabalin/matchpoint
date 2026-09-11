@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from "./routes/__root"
 import { Route as IndexRouteImport } from "./routes/index"
 import { Route as AuthenticatedRouteImport } from "./routes/_authenticated"
 import { Route as ForgotPasswordRouteImport } from "./routes/forgot-password"
+import { Route as PrivacyRouteImport } from "./routes/privacy"
 import { Route as SignUpRouteImport } from "./routes/sign-up"
+import { Route as TermsRouteImport } from "./routes/terms"
 import { Route as AuthenticatedHomeRouteImport } from "./routes/_authenticated.home"
 import { Route as AuthenticatedInstallRouteImport } from "./routes/_authenticated.install"
 import { Route as AuthenticatedProfileRouteImport } from "./routes/_authenticated.profile"
@@ -44,9 +46,19 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: "/forgot-password",
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: "/privacy",
+  path: "/privacy",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignUpRoute = SignUpRouteImport.update({
   id: "/sign-up",
   path: "/sign-up",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: "/terms",
+  path: "/terms",
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedHomeRoute = AuthenticatedHomeRouteImport.update({
@@ -145,7 +157,9 @@ const AuthenticatedSettingsSupportFaqRoute =
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
+  "/privacy": typeof PrivacyRoute
   "/sign-up": typeof SignUpRoute
+  "/terms": typeof TermsRoute
   "/home": typeof AuthenticatedHomeRoute
   "/install": typeof AuthenticatedInstallRoute
   "/profile": typeof AuthenticatedProfileRoute
@@ -166,7 +180,9 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/forgot-password": typeof ForgotPasswordRoute
+  "/privacy": typeof PrivacyRoute
   "/sign-up": typeof SignUpRoute
+  "/terms": typeof TermsRoute
   "/home": typeof AuthenticatedHomeRoute
   "/install": typeof AuthenticatedInstallRoute
   "/profile": typeof AuthenticatedProfileRoute
@@ -189,7 +205,9 @@ export interface FileRoutesById {
   "/": typeof IndexRoute
   "/_authenticated": typeof AuthenticatedRouteWithChildren
   "/forgot-password": typeof ForgotPasswordRoute
+  "/privacy": typeof PrivacyRoute
   "/sign-up": typeof SignUpRoute
+  "/terms": typeof TermsRoute
   "/_authenticated/home": typeof AuthenticatedHomeRoute
   "/_authenticated/install": typeof AuthenticatedInstallRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
@@ -212,7 +230,9 @@ export interface FileRouteTypes {
   fullPaths:
     | "/"
     | "/forgot-password"
+    | "/privacy"
     | "/sign-up"
+    | "/terms"
     | "/home"
     | "/install"
     | "/profile"
@@ -233,7 +253,9 @@ export interface FileRouteTypes {
   to:
     | "/"
     | "/forgot-password"
+    | "/privacy"
     | "/sign-up"
+    | "/terms"
     | "/home"
     | "/install"
     | "/profile"
@@ -255,7 +277,9 @@ export interface FileRouteTypes {
     | "/"
     | "/_authenticated"
     | "/forgot-password"
+    | "/privacy"
     | "/sign-up"
+    | "/terms"
     | "/_authenticated/home"
     | "/_authenticated/install"
     | "/_authenticated/profile"
@@ -278,7 +302,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  PrivacyRoute: typeof PrivacyRoute
   SignUpRoute: typeof SignUpRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module "@tanstack/react-router" {
@@ -304,11 +330,25 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/privacy": {
+      id: "/privacy"
+      path: "/privacy"
+      fullPath: "/privacy"
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/sign-up": {
       id: "/sign-up"
       path: "/sign-up"
       fullPath: "/sign-up"
       preLoaderRoute: typeof SignUpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/terms": {
+      id: "/terms"
+      path: "/terms"
+      fullPath: "/terms"
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/_authenticated/home": {
@@ -486,7 +526,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  PrivacyRoute: PrivacyRoute,
   SignUpRoute: SignUpRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

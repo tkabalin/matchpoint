@@ -51,7 +51,17 @@ async function renderSignUp() {
     path: "/",
     component: () => <h1>Sign In</h1>,
   });
-  const routeTree = rootRoute.addChildren([signUpRoute, signInRoute]);
+  const termsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/terms",
+    component: () => <h1>Terms of Service</h1>,
+  });
+  const privacyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/privacy",
+    component: () => <h1>Privacy Policy</h1>,
+  });
+  const routeTree = rootRoute.addChildren([signUpRoute, signInRoute, termsRoute, privacyRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/sign-up"] }),
@@ -102,6 +112,23 @@ test("links back to sign in", async () => {
   await user.click(screen.getByRole("link", { name: "Back to sign in" }));
 
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+// #194: sign-up previously had no terms/privacy reference at all.
+test("links to the Terms of Service", async () => {
+  const user = userEvent.setup({ delay: null });
+  await renderSignUp();
+
+  await user.click(screen.getByRole("link", { name: "Terms" }));
+  expect(await screen.findByRole("heading", { name: "Terms of Service" })).toBeInTheDocument();
+});
+
+test("links to the Privacy Policy", async () => {
+  const user = userEvent.setup({ delay: null });
+  await renderSignUp();
+
+  await user.click(screen.getByRole("link", { name: "Privacy Policy" }));
+  expect(await screen.findByRole("heading", { name: "Privacy Policy" })).toBeInTheDocument();
 });
 
 test("sends the email to /api/auth/request-otp", async () => {

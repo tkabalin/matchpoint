@@ -6,13 +6,13 @@ import { buttonVariants } from "@/components/ui/button";
 import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { APP_VERSION } from "@/lib/app-version";
 
-import { StubRow } from "./stub-row";
-
-/** Support (#178, wireframe 1c). Privacy/Terms is still a stub — real content
- * lands in #194. Help & feedback is real (#193): a static FAQ page, following
- * `install-guide.tsx`'s own precedent. App version is real (#195): read at
- * build time from package.json (`lib/app-version.ts`), so it updates on
- * release rather than needing a manual edit. */
+/** Support (#178, wireframe 1c). All three original stub rows are real now:
+ * Help & feedback (#193) is a static FAQ page; Privacy policy and Terms of
+ * Service (#194) are their own public routes — split into two rows rather
+ * than the wireframe's one combined row, matching how every other row here
+ * is one destination each; App version (#195) reads at build time from
+ * package.json (`lib/app-version.ts`), so it updates on release rather than
+ * needing a manual edit. */
 export function SettingsSupport() {
   return (
     <AppPage nav={false}>
@@ -38,7 +38,22 @@ export function SettingsSupport() {
             <ChevronRight className="size-4 text-muted-foreground" />
           </ItemActions>
         </Item>
-        <StubRow label="Privacy policy / Terms" />
+        <Item variant="outline" render={<Link to="/privacy" />}>
+          <ItemContent>
+            <ItemTitle>Privacy policy</ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </ItemActions>
+        </Item>
+        <Item variant="outline" render={<Link to="/terms" />}>
+          <ItemContent>
+            <ItemTitle>Terms of Service</ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </ItemActions>
+        </Item>
         <Item variant="outline">
           <ItemContent>
             <ItemTitle>App version</ItemTitle>

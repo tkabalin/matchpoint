@@ -377,11 +377,22 @@ export function SignUp() {
           </Button>
         </form>
       </CardContent>
-      <CardFooter className="flex-col">
+      <CardFooter className="flex-col gap-2">
         <p className="text-center text-sm">
           <Link to="/" className="text-primary underline underline-offset-4">
             Back to sign in
           </Link>
+        </p>
+        <p className="text-center text-xs text-muted-foreground">
+          By continuing, you agree to our{" "}
+          <Link to="/terms" className="underline underline-offset-4">
+            Terms
+          </Link>{" "}
+          and{" "}
+          <Link to="/privacy" className="underline underline-offset-4">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </CardFooter>
     </AuthShell>

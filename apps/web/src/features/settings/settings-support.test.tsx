@@ -28,12 +28,28 @@ async function renderPage() {
     path: "/settings/support/faq",
     component: () => <h1>FAQ</h1>,
   });
+  const privacyRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/privacy",
+    component: () => <h1>Privacy Policy</h1>,
+  });
+  const termsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/terms",
+    component: () => <h1>Terms of Service</h1>,
+  });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
     component: () => <h1>Settings</h1>,
   });
-  const routeTree = rootRoute.addChildren([pageRoute, faqRoute, settingsRoute]);
+  const routeTree = rootRoute.addChildren([
+    pageRoute,
+    faqRoute,
+    privacyRoute,
+    termsRoute,
+    settingsRoute,
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/settings/support"] }),
@@ -65,15 +81,33 @@ test("Help & feedback links to the FAQ page", async () => {
   expect(await screen.findByRole("heading", { name: "FAQ" })).toBeInTheDocument();
 });
 
-test("privacy/terms is still a stub, not interactive", async () => {
+// #194: split into two rows, one destination each, matching every other row
+// on this page — no longer the wireframe's single combined stub.
+test("Privacy policy links to its own page", async () => {
+  const user = userEvent.setup({ delay: null });
   await renderPage();
 
-  expect(screen.getByText("Privacy policy / Terms")).toBeInTheDocument();
-  expect(screen.getAllByText("soon")).toHaveLength(1);
+  await user.click(screen.getByRole("link", { name: "Privacy policy" }));
+
+  expect(await screen.findByRole("heading", { name: "Privacy Policy" })).toBeInTheDocument();
 });
 
-// #195: real content behind the third row now — the build's own version,
-// not a stub.
+test("Terms of Service links to its own page", async () => {
+  const user = userEvent.setup({ delay: null });
+  await renderPage();
+
+  await user.click(screen.getByRole("link", { name: "Terms of Service" }));
+
+  expect(await screen.findByRole("heading", { name: "Terms of Service" })).toBeInTheDocument();
+});
+
+test("no stub rows remain on the Support page", async () => {
+  await renderPage();
+
+  expect(screen.queryByText("soon")).not.toBeInTheDocument();
+});
+
+// #195: real content behind this row — the build's own version, not a stub.
 test("shows the real app version, not a stub", async () => {
   await renderPage();
 
