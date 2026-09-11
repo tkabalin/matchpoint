@@ -22,6 +22,7 @@ from matchpoint_api.models import (
     Match,
     MatchResult,
     MatchSide,
+    Player,
     RallyBucket,
     ReturnOutcome,
     ServeOutcome,
@@ -36,6 +37,7 @@ from tests.factories import (
     make_player,
     make_point,
     sign_in,
+    sign_in_player,
 )
 
 
@@ -2776,3 +2778,81 @@ def test_squad_trend_narrows_by_surface(
 
     assert response.status_code == 200
     assert response.json()[-1]["value"] == 100
+
+
+# --- the player principal ---
+#
+# The six routes above answer a player session about itself, so the figures a coach
+# reads are the ones the player reads. The squad snapshot is roster-wide and stays
+# coach-only.
+
+
+@pytest.fixture
+def signed_in_player(client: TestClient, db_session: Session) -> Player:
+    """The player the client is signed in as, on a roster the factory mints with them."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    return player
+
+
+@pytest.mark.parametrize("suffix", ENDPOINTS)
+def test_routes_answer_a_player_about_itself(
+    client: TestClient, db_session: Session, signed_in_player: Player, suffix: str
+) -> None:
+    """A real match with a point on it, so each tab answers over rows rather than
+    over the empty case every endpoint shares."""
+    match = make_match(db_session, player_id=signed_in_player.id, opponent_name="Torres")
+    make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    assert _get(client, signed_in_player.id, suffix) is not None
+
+
+@pytest.mark.parametrize("suffix", ENDPOINTS)
+def test_routes_hide_a_stablemate_from_a_player(
+    client: TestClient, db_session: Session, signed_in_player: Player, suffix: str
+) -> None:
+    """Same coach, so the coach-scoped check these routes used to make would have
+    answered: the player principal is refused by the same 404 an outsider gets."""
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    db_session.commit()
+
+    response = client.get(f"/players/{stablemate.id}/analytics/{suffix}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Player not found"
+
+
+@pytest.mark.parametrize("suffix", MATCH_ENDPOINTS)
+def test_match_routes_answer_a_player_about_their_own_match(
+    client: TestClient, db_session: Session, signed_in_player: Player, suffix: str
+) -> None:
+    match = make_match(db_session, player_id=signed_in_player.id)
+    make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    assert _get_match(client, match.id, suffix) is not None
+
+
+@pytest.mark.parametrize("suffix", MATCH_ENDPOINTS)
+def test_match_routes_hide_a_stablemates_match_from_a_player(
+    client: TestClient, db_session: Session, signed_in_player: Player, suffix: str
+) -> None:
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    theirs = make_match(db_session, player_id=stablemate.id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{theirs.id}/analytics/{suffix}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Match not found"
+
+
+@pytest.mark.parametrize("path", [SQUAD_PATH, TREND_PATH])
+@pytest.mark.usefixtures("signed_in_player")
+def test_squad_routes_refuse_a_player(client: TestClient, path: str) -> None:
+    """Roster-wide by definition, so they stay coach-only: a player session carries
+    no coach cookie and takes the 401 no session takes."""
+    response = client.get(path, params={"metric": "record"})
+
+    assert response.status_code == 401

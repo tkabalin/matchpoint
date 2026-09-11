@@ -9,10 +9,10 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import CurrentCoach
+from matchpoint_api.auth import CurrentCoach, CurrentPrincipal
 from matchpoint_api.db import get_db
 from matchpoint_api.match_sets import recompute_match_sets
-from matchpoint_api.models import DeletedMatch, Match, MatchSet, Player, Point
+from matchpoint_api.models import Coach, DeletedMatch, Match, MatchSet, Player, Point
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.match import (
     MatchCaptureClaim,
@@ -25,11 +25,16 @@ from matchpoint_api.schemas.match import (
 )
 from matchpoint_api.schemas.point import PointBatch, PointRead
 
-# The 401 is declared once at the router because every route here requires a signed-in
-# coach — current_coach reads the cookie off the request rather than declaring a
+# The 401 is declared once at the router because every route here requires a session:
+# the resolving dependency reads the cookie off the request rather than declaring a
 # Cookie() parameter, so no route's spec would carry it otherwise. Declared with a
 # model so the client can route it to a login screen, per ErrorDetail's note. The 429
-# is the per-coach budget current_coach charges, so it rides along for the same reason.
+# is the per-principal budget that dependency charges, so it rides along for the same
+# reason.
+#
+# The two read routes below take either principal: a coach reads their roster's
+# matches, a player their own. Everything else here is a write or is roster-wide, and
+# stays coach-only.
 #
 # A match belongs to a coach only through its player — Match deliberately carries no
 # coach_id of its own, which would be a second copy of a fact the player already
@@ -47,6 +52,7 @@ DbSession = Annotated[Session, Depends(get_db)]
 
 # Named so a route test can assert the body exactly, the way the transfer-code refusal
 # on the player routes does.
+MATCH_NOT_FOUND = "Match not found"
 MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
 MATCH_WAS_DELETED = "Match was deleted"
 COMPLETED_MATCH_IS_LOCKED = "A completed match's result and scoring system cannot be changed"
@@ -98,8 +104,25 @@ def match_for_coach(
         statement = statement.with_for_update(of=Match)
     match = db.scalar(statement)
     if match is None:
-        raise HTTPException(status_code=404, detail="Match not found")
+        raise HTTPException(status_code=404, detail=MATCH_NOT_FOUND)
     return match
+
+
+def readable_match(db: Session, match_id: uuid.UUID, principal: Coach | Player) -> Match:
+    """One match this principal may read: the coach's own, or the player's own.
+
+    The player's scope needs no join, a match naming their id being theirs by
+    definition, and anything else answers the 404 another coach's match answers.
+    Reads only, and unlocked: every route that writes takes a coach and a row lock.
+    """
+    if isinstance(principal, Player):
+        match = db.scalar(
+            select(Match).where(Match.id == match_id, Match.player_id == principal.id)
+        )
+        if match is None:
+            raise HTTPException(status_code=404, detail=MATCH_NOT_FOUND)
+        return match
+    return match_for_coach(db, match_id, principal.id)
 
 
 def deleted_within_window(db: Session, match_id: uuid.UUID) -> bool:
@@ -192,7 +215,7 @@ def create_match(data: MatchCreate, db: DbSession, coach: CurrentCoach) -> Match
 
 @router.get("", response_model=list[MatchRead])
 def list_matches(
-    db: DbSession, coach: CurrentCoach, player_id: uuid.UUID | None = None
+    db: DbSession, principal: CurrentPrincipal, player_id: uuid.UUID | None = None
 ) -> list[Match]:
     # Filtering server-side rather than leaving it to the client: every analytics view
     # is one player's matches, which is what the index on Match.player_id is for, and
@@ -201,15 +224,20 @@ def list_matches(
     # activity the dashboard opens on. The scope join costs that query nothing it
     # wasn't paying: the player_id filter still hits ix_matches_player_id, and the
     # join resolves each player by primary key.
-    statement = (
-        select(Match)
-        .join(Player, Match.player_id == Player.id)
-        .where(Player.coach_id == coach.id)
-        .order_by(Match.played_on.desc(), Match.created_at.desc())
-    )
+    statement = select(Match)
+    if isinstance(principal, Player):
+        # A player's own matches name their id, so their scope is the column the
+        # coach's join arrives at anyway.
+        statement = statement.where(Match.player_id == principal.id)
+    else:
+        statement = statement.join(Player, Match.player_id == Player.id).where(
+            Player.coach_id == principal.id
+        )
     if player_id is not None:
+        # Narrows a scope, never widens one: a player naming someone else gets the
+        # empty list an unknown id gets, which confirms nothing about either.
         statement = statement.where(Match.player_id == player_id)
-    return list(db.scalars(statement))
+    return list(db.scalars(statement.order_by(Match.played_on.desc(), Match.created_at.desc())))
 
 
 def capture_holder(match: Match) -> uuid.UUID | None:
@@ -270,8 +298,8 @@ def list_in_progress_matches(db: DbSession, coach: CurrentCoach) -> list[MatchIn
 
 
 @router.get("/{match_id}", response_model=MatchRead)
-def get_match(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> Match:
-    return match_for_coach(db, match_id, coach.id)
+def get_match(match_id: uuid.UUID, db: DbSession, principal: CurrentPrincipal) -> Match:
+    return readable_match(db, match_id, principal)
 
 
 # The 409 is declared because the client branches on it: a completed match refuses a

@@ -18,6 +18,7 @@ from matchpoint_api.auth import (
 )
 from matchpoint_api.db import get_db
 from matchpoint_api.models import (
+    Coach,
     DeletedMatch,
     Match,
     Player,
@@ -61,6 +62,11 @@ router = APIRouter(
 
 DbSession = Annotated[Session, Depends(get_db)]
 
+# One message for every refusal of a player by id, whichever principal asked and
+# whatever the reason: an id of another coach's, of another player's, or of nobody's
+# all answer alike, which is what keeps ids unenumerable.
+PLAYER_NOT_FOUND = "Player not found"
+
 # One message for both routes that can destroy a player, the delete below and account
 # closure, which imports it: a live code means the same thing to each of them.
 TRANSFER_CODES_OUTSTANDING = "Outstanding transfer codes must be cancelled or redeemed first"
@@ -83,8 +89,24 @@ def owned_player(
     # Another coach's player gets the 404 an unknown id gets, not a 403: a 403 would
     # confirm the id exists.
     if player is None or player.coach_id != coach_id:
-        raise HTTPException(status_code=404, detail="Player not found")
+        raise HTTPException(status_code=404, detail=PLAYER_NOT_FOUND)
     return player
+
+
+def readable_player(db: Session, player_id: uuid.UUID, principal: Coach | Player) -> Player:
+    """The player this principal may read: the coach's own, or the player themselves.
+
+    A player session reaches exactly its own row, so any other id answers the
+    404 another coach's player answers and confirms nothing. Reads only: every route
+    that writes takes `owned_player` and a coach, the player principal reaching none
+    of them.
+    """
+    if isinstance(principal, Player):
+        if principal.id != player_id:
+            raise HTTPException(status_code=404, detail=PLAYER_NOT_FOUND)
+        # The dependency has already loaded this row, so the read costs no query.
+        return principal
+    return owned_player(db, player_id, principal.id)
 
 
 def limit_player_password_rate(request: Request, coach_id: uuid.UUID) -> None:

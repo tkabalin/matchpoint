@@ -48,6 +48,7 @@ from tests.factories import (
     make_player_transfer_code,
     make_point,
     sign_in,
+    sign_in_player,
 )
 
 NOTES_LIMIT = 2000
@@ -1674,3 +1675,33 @@ def test_a_transferred_player_keeps_their_notes(
     notes = client.get(f"/players/{player.id}/notes")
     assert notes.status_code == 200
     assert [note["body"] for note in notes.json()] == ["Serve +1 pattern is landing."]
+
+
+# The player principal reads its own matches and statistics and no part of this
+# router: the roster is other people's rows, and the profile and the note timeline
+# carry the coach's own columns, which docs/security.md keeps on the coach's side of
+# the line. Their own profile is GET /auth/player/me, in the shape written for them.
+
+
+@pytest.mark.parametrize("suffix", ["", "/notes"])
+def test_a_player_session_cannot_read_its_own_player_row(
+    client: TestClient, db_session: Session, suffix: str
+) -> None:
+    """Their own id, which is the case that decides it: the refusal is about the
+    columns these answer with, not about whose row it is."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = client.get(f"/players/{player.id}{suffix}")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_a_player_session_cannot_read_the_roster(client: TestClient, db_session: Session) -> None:
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+
+    response = client.get("/players")
+
+    assert response.status_code == 401

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Row, and_, distinct, func, select, tuple_
 from sqlalchemy.orm import Session
 
-from matchpoint_api.auth import CurrentCoach
+from matchpoint_api.auth import CurrentCoach, CurrentPrincipal
 from matchpoint_api.db import get_db
 from matchpoint_api.models import (
     EndReason,
@@ -29,8 +29,8 @@ from matchpoint_api.models import (
     UnusualReason,
     Wing,
 )
-from matchpoint_api.routers.matches import match_for_coach
-from matchpoint_api.routers.players import owned_player
+from matchpoint_api.routers.matches import readable_match
+from matchpoint_api.routers.players import readable_player
 from matchpoint_api.schemas.analytics import (
     BreakdownRow,
     CourtZoneCount,
@@ -67,10 +67,15 @@ from matchpoint_api.schemas.analytics import (
 )
 from matchpoint_api.schemas.errors import ErrorDetail
 
-# The 401 is declared once at the router because every route here requires a signed-in
-# coach, as on the player routes; the 429 is the per-coach budget current_coach
+# The 401 is declared once at the router because every route here requires a session,
+# as on the player routes; the 429 is the per-principal budget the resolving dependency
 # charges. Every endpoint is a read over rows the ingest endpoint already validated,
 # so nothing here writes, and the ownership 404 stays undeclared as everywhere else.
+#
+# These four and the two match-scoped ones below take either principal: the
+# figures are the player's own, so a player reads them for themselves and a coach for
+# any of their roster. The squad router stays coach-only, being roster-wide by
+# definition.
 router = APIRouter(
     prefix="/players/{player_id}/analytics",
     tags=["analytics"],
@@ -640,7 +645,10 @@ def _player_scope(
 
 @router.get("/opponents", response_model=list[OpponentSummary])
 def list_opponents(
-    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach, surface: SurfaceFilter = None
+    player_id: uuid.UUID,
+    db: DbSession,
+    principal: CurrentPrincipal,
+    surface: SurfaceFilter = None,
 ) -> list[OpponentSummary]:
     """Every opponent this player has met, most-met first, then by key.
 
@@ -652,7 +660,7 @@ def list_opponents(
     no matches on that surface is dropped rather than shown at zero, since it is not a
     real option to pick.
     """
-    owned_player(db, player_id, coach.id)
+    readable_player(db, player_id, principal)
     summaries: list[OpponentSummary] = []
     for key, matches in _matches_by_opponent(db, player_id).items():
         on_surface = (
@@ -671,7 +679,7 @@ def list_opponents(
 def get_player_overview(
     player_id: uuid.UUID,
     db: DbSession,
-    coach: CurrentCoach,
+    principal: CurrentPrincipal,
     opponent_key: OpponentFilter = None,
     surface: SurfaceFilter = None,
 ) -> PlayerOverview:
@@ -681,7 +689,7 @@ def get_player_overview(
     #225): both narrow matches, which all seven fields are counted over one way or
     the other, where a set or a phase could reach only the three counted over points.
     """
-    owned_player(db, player_id, coach.id)
+    readable_player(db, player_id, principal)
     matches = _scoped_matches(db, player_id, opponent_key, surface)
     if matches is None:
         results = _results_newest_first(db, player_id)
@@ -1010,14 +1018,14 @@ def _serve_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> ServeSta
 def get_serve_stats(
     player_id: uuid.UUID,
     db: DbSession,
-    coach: CurrentCoach,
+    principal: CurrentPrincipal,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
     opponent_key: OpponentFilter = None,
     surface: SurfaceFilter = None,
 ) -> ServeStats:
     """The serve tab, both sides at once so toggling costs no second request."""
-    owned_player(db, player_id, coach.id)
+    readable_player(db, player_id, principal)
     return _serve_tab(
         db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase, surface)
     )
@@ -1027,12 +1035,12 @@ def get_serve_stats(
 def get_match_serve_stats(
     match_id: uuid.UUID,
     db: DbSession,
-    coach: CurrentCoach,
+    principal: CurrentPrincipal,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
 ) -> ServeStats:
     """The serve tab for one match, in the shape the player-wide route answers in."""
-    match = match_for_coach(db, match_id, coach.id)
+    match = readable_match(db, match_id, principal)
     scope = PointScope(match_ids=[match.id], set_number=set_number, phase=phase)
     return _serve_tab(db, match.player_id, scope)
 
@@ -1240,14 +1248,14 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
 def get_rally_stats(
     player_id: uuid.UUID,
     db: DbSession,
-    coach: CurrentCoach,
+    principal: CurrentPrincipal,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
     opponent_key: OpponentFilter = None,
     surface: SurfaceFilter = None,
 ) -> RallyStats:
     """The rally tab: how points end once the ball is in play."""
-    owned_player(db, player_id, coach.id)
+    readable_player(db, player_id, principal)
     return _rally_tab(
         db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase, surface)
     )
@@ -1257,12 +1265,12 @@ def get_rally_stats(
 def get_match_rally_stats(
     match_id: uuid.UUID,
     db: DbSession,
-    coach: CurrentCoach,
+    principal: CurrentPrincipal,
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
 ) -> RallyStats:
     """The rally tab for one match, in the shape the player-wide route answers in."""
-    match = match_for_coach(db, match_id, coach.id)
+    match = readable_match(db, match_id, principal)
     scope = PointScope(match_ids=[match.id], set_number=set_number, phase=phase)
     return _rally_tab(db, match.player_id, scope)
 

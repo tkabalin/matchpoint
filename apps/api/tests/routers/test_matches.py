@@ -1,15 +1,17 @@
 import uuid
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from psycopg.errors import ForeignKeyViolation
 from sqlalchemy import event, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from matchpoint_api.auth import SESSION_COOKIE
 from matchpoint_api.models import (
     Coach,
     DeletedMatch,
@@ -17,17 +19,20 @@ from matchpoint_api.models import (
     MatchResult,
     MatchSet,
     MatchSide,
+    Player,
     Point,
     RallyBucket,
     ReturnOutcome,
     ScoringSystem,
     Surface,
 )
+from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
     COMPLETED_MATCH_IS_LOCKED,
     DELETED_MATCH_TTL,
     MATCH_IS_BEING_CAPTURED,
+    MATCH_NOT_FOUND,
     MATCH_WAS_DELETED,
     POINT_IN_ANOTHER_MATCH,
     POINT_SEQUENCE_TAKEN,
@@ -41,6 +46,7 @@ from tests.factories import (
     make_point,
     point_payload,
     sign_in,
+    sign_in_player,
 )
 
 
@@ -2338,3 +2344,174 @@ def test_match_routes_require_a_session(client: TestClient, method: str, path: s
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Not authenticated"}
+
+
+# --- the player principal ---
+#
+# The two read routes above answer a player session as well as a coach one, each
+# scoped to that principal's own rows. A player session reaching any other route here
+# takes the 401 no session at all takes, since what it lacks is the coach cookie.
+
+
+@pytest.fixture
+def signed_in_player(client: TestClient, db_session: Session) -> Player:
+    """The player the client is signed in as, on a roster the factory mints with them.
+
+    Deliberately not taken alongside the `coach` fixture: two cookies in one jar is
+    its own case, tested at the bottom of this section.
+    """
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    return player
+
+
+def test_list_matches_for_a_player_is_their_own(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    """The scope is the player's own id, not the coach's roster: a stablemate's match
+    has the same owner and must still be absent."""
+    mine = make_match(db_session, player_id=signed_in_player.id, played_on=date(2026, 8, 1))
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    make_match(db_session, player_id=stablemate.id, played_on=date(2026, 8, 2))
+    db_session.commit()
+
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    assert [m["id"] for m in response.json()] == [str(mine.id)]
+
+
+def test_list_matches_filtered_by_another_player_is_empty_for_a_player(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    """The filter narrows the caller's own scope here as it does for a coach, so
+    naming someone else empties the list rather than reaching them."""
+    make_match(db_session, player_id=signed_in_player.id)
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    make_match(db_session, player_id=stablemate.id)
+    db_session.commit()
+
+    response = client.get("/matches", params={"player_id": str(stablemate.id)})
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_get_match_answers_a_player_about_their_own(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    match = make_match(db_session, player_id=signed_in_player.id, opponent_name="Naidoo")
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == str(match.id)
+    assert response.json()["opponent_name"] == "Naidoo"
+
+
+def test_get_match_hides_a_stablemates_match_from_a_player(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    """The same coach owns both, which is exactly the refusal a coach-scoped check
+    would have let through: the answer is the 404 another coach's match gets."""
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    theirs = make_match(db_session, player_id=stablemate.id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{theirs.id}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == MATCH_NOT_FOUND
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", "/matches"),
+        ("get", "/matches/in-progress"),
+        ("patch", f"/matches/{uuid.UUID(int=0)}"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/capture"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/points"),
+        ("get", f"/matches/{uuid.UUID(int=0)}/points"),
+    ],
+)
+@pytest.mark.usefixtures("signed_in_player")
+def test_match_routes_a_player_cannot_reach(client: TestClient, method: str, path: str) -> None:
+    """Every write, and the two roster-wide reads: a player captures nothing and sees
+    no one else's matches, so these keep asking for the coach cookie they always did."""
+    response = client.request(method, path, json={} if method in {"post", "patch"} else None)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+def test_a_coach_cookie_decides_when_both_are_in_the_jar(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One browser can hold both sessions, and the wider credential wins: the coach's
+    whole roster comes back, not the one player also signed in on this device."""
+    player = make_player(db_session, coach_id=coach.id)
+    sign_in_player(client, db_session, player)
+    theirs = make_match(db_session, player_id=player.id, played_on=date(2026, 8, 1))
+    stablemate = make_player(db_session, coach_id=coach.id)
+    stablemates = make_match(db_session, player_id=stablemate.id, played_on=date(2026, 8, 2))
+    db_session.commit()
+
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    assert [m["id"] for m in response.json()] == [str(stablemates.id), str(theirs.id)]
+
+
+def test_a_coach_cookie_that_authenticates_nothing_steps_aside(
+    client: TestClient, db_session: Session
+) -> None:
+    """Signing out everywhere from another device leaves this one a cookie its session
+    row no longer backs, for as long as the browser keeps it. The player signed in
+    beside it reads their own matches rather than a 401 they cannot act on."""
+    player = make_player(db_session)
+    sign_in_player(client, db_session, player)
+    mine = make_match(db_session, player_id=player.id)
+    db_session.commit()
+    client.cookies.set(SESSION_COOKIE, "a-token-no-session-was-ever-opened-with")
+
+    response = client.get("/matches")
+
+    assert response.status_code == 200
+    assert [m["id"] for m in response.json()] == [str(mine.id)]
+
+
+def test_a_coach_cookie_that_authenticates_nothing_is_no_session_of_its_own(
+    client: TestClient,
+) -> None:
+    """Stepping aside is not a widening: with no player cookie behind it, the dead
+    coach cookie answers the 401 it answers on every other route."""
+    client.cookies.set(SESSION_COOKIE, "a-token-no-session-was-ever-opened-with")
+
+    response = client.get("/matches")
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+
+@pytest.mark.usefixtures("clock")
+def test_a_drained_coach_budget_refuses_rather_than_narrowing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Only a failed authentication lets the player cookie answer. A live coach session
+    out of budget is refused, where falling back would serve the same browser a
+    narrower answer than it asked for and step around the bucket that refused it."""
+    player = make_player(db_session, coach_id=coach.id)
+    sign_in_player(client, db_session, player)
+    cast(FastAPI, client.app).state.authenticated_per_coach_limit = RateLimiter(
+        per_minute=60, burst=1
+    )
+
+    assert client.get("/matches").status_code == 200
+    response = client.get("/matches")
+
+    assert response.status_code == 429
+    assert response.json() == {"detail": "Too many requests"}

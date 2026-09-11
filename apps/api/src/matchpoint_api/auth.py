@@ -469,7 +469,27 @@ def recovery_player(request: Request, db: Annotated[Session, Depends(get_db)]) -
     return _authenticated_player(request, db, request.app.state.recovery_per_player_limit)
 
 
+def current_principal(request: Request, db: Annotated[Session, Depends(get_db)]) -> Coach | Player:
+    """Whichever principal's cookie authenticates this request, for the routes both read.
+
+    Routes taking this ask their own helper which rows the principal may see; writes and
+    roster-wide reads stay on `current_coach`. The coach wins where a browser holds both
+    cookies, since the wider credential grants nothing new while the player's would
+    narrow a signed-in coach. A coach cookie that no longer authenticates (signed out
+    everywhere from another device) steps aside for the player beside it rather than
+    refusing; a 429 from a drained coach budget does not.
+    """
+    if SESSION_COOKIE in request.cookies:
+        try:
+            return current_coach(request, db)
+        except HTTPException as refusal:
+            if refusal.status_code != 401:
+                raise
+    return current_player(request, db)
+
+
 CurrentCoach = Annotated[Coach, Depends(current_coach)]
 RecoveryCoach = Annotated[Coach, Depends(recovery_coach)]
 CurrentPlayer = Annotated[Player, Depends(current_player)]
 RecoveryPlayer = Annotated[Player, Depends(recovery_player)]
+CurrentPrincipal = Annotated[Coach | Player, Depends(current_principal)]
