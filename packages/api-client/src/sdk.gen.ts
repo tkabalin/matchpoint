@@ -464,7 +464,11 @@ export const updatePlayer = <ThrowOnError extends boolean = false>(options: Opti
  *
  * What the scope panel's picker offers, so each row's key is exactly what the tabs
  * take back as `opponent_key`. Ordered on the key rather than the display name
- * because it is the one spelling of a matchup that cannot vary.
+ * because it is the one spelling of a matchup that cannot vary. `surface`, if given,
+ * narrows the count to that surface (#225), so the picker's own numbers describe
+ * the scope a coach is about to apply rather than the whole career; an opponent with
+ * no matches on that surface is dropped rather than shown at zero, since it is not a
+ * real option to pick.
  */
 export const listOpponents = <ThrowOnError extends boolean = false>(options: Options<ListOpponentsData, ThrowOnError>): RequestResult<ListOpponentsResponses, ListOpponentsErrors, ThrowOnError> => (options.client ?? client).get<ListOpponentsResponses, ListOpponentsErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/opponents', ...options });
 
@@ -473,9 +477,9 @@ export const listOpponents = <ThrowOnError extends boolean = false>(options: Opt
  *
  * The overview tab: form, the headline rates, and the win/loss record.
  *
- * Takes the opponent axis and not the set or phase one (#227, #244): an opponent
- * narrows matches, which all seven fields are counted over one way or the other,
- * where a set or a phase could reach only the three counted over points.
+ * Takes the opponent and surface axes and not the set or phase one (#227, #244,
+ * #225): both narrow matches, which all seven fields are counted over one way or
+ * the other, where a set or a phase could reach only the three counted over points.
  */
 export const getPlayerOverview = <ThrowOnError extends boolean = false>(options: Options<GetPlayerOverviewData, ThrowOnError>): RequestResult<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/overview', ...options });
 
@@ -603,6 +607,10 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  *
  * Both period rates pool the period's points rather than averaging its matches, so
  * a four-point match weighs what four points are worth.
+ *
+ * `surface`, if given, narrows every count above to matches on that surface (#225).
+ * A player with none on the requested surface still returns a zeroed row rather
+ * than dropping off the roster — the same rule the empty-roster row above follows.
  */
 export const listSquadMemberStats = <ThrowOnError extends boolean = false>(options?: Options<ListSquadMemberStatsData, ThrowOnError>): RequestResult<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError> => (options?.client ?? client).get<ListSquadMemberStatsResponses, ListSquadMemberStatsErrors, ThrowOnError>({ url: '/squad/analytics/members', ...options });
 
@@ -623,5 +631,7 @@ export const listSquadMemberStats = <ThrowOnError extends boolean = false>(optio
  * weigh a player's single match against another's four. A week whose matches cannot
  * answer the metric, one with no recorded result, no unforced error or no serve
  * among them, carries a null rather than a zero.
+ *
+ * `surface`, if given, narrows every week's pooled matches to that surface (#225).
  */
 export const getSquadTrend = <ThrowOnError extends boolean = false>(options: Options<GetSquadTrendData, ThrowOnError>): RequestResult<GetSquadTrendResponses, GetSquadTrendErrors, ThrowOnError> => (options.client ?? client).get<GetSquadTrendResponses, GetSquadTrendErrors, ThrowOnError>({ url: '/squad/analytics/trend', ...options });

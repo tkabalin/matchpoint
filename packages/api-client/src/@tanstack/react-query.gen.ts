@@ -818,7 +818,11 @@ export const listOpponentsQueryKey = (options: Options<ListOpponentsData>) => cr
  *
  * What the scope panel's picker offers, so each row's key is exactly what the tabs
  * take back as `opponent_key`. Ordered on the key rather than the display name
- * because it is the one spelling of a matchup that cannot vary.
+ * because it is the one spelling of a matchup that cannot vary. `surface`, if given,
+ * narrows the count to that surface (#225), so the picker's own numbers describe
+ * the scope a coach is about to apply rather than the whole career; an opponent with
+ * no matches on that surface is dropped rather than shown at zero, since it is not a
+ * real option to pick.
  */
 export const listOpponentsOptions = (options: Options<ListOpponentsData>) => queryOptions<ListOpponentsResponse, ListOpponentsError, ListOpponentsResponse, ReturnType<typeof listOpponentsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
@@ -840,9 +844,9 @@ export const getPlayerOverviewQueryKey = (options: Options<GetPlayerOverviewData
  *
  * The overview tab: form, the headline rates, and the win/loss record.
  *
- * Takes the opponent axis and not the set or phase one (#227, #244): an opponent
- * narrows matches, which all seven fields are counted over one way or the other,
- * where a set or a phase could reach only the three counted over points.
+ * Takes the opponent and surface axes and not the set or phase one (#227, #244,
+ * #225): both narrow matches, which all seven fields are counted over one way or
+ * the other, where a set or a phase could reach only the three counted over points.
  */
 export const getPlayerOverviewOptions = (options: Options<GetPlayerOverviewData>) => queryOptions<GetPlayerOverviewResponse, GetPlayerOverviewError, GetPlayerOverviewResponse, ReturnType<typeof getPlayerOverviewQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
@@ -1096,6 +1100,10 @@ export const listSquadMemberStatsQueryKey = (options?: Options<ListSquadMemberSt
  *
  * Both period rates pool the period's points rather than averaging its matches, so
  * a four-point match weighs what four points are worth.
+ *
+ * `surface`, if given, narrows every count above to matches on that surface (#225).
+ * A player with none on the requested surface still returns a zeroed row rather
+ * than dropping off the roster — the same rule the empty-roster row above follows.
  */
 export const listSquadMemberStatsOptions = (options?: Options<ListSquadMemberStatsData>) => queryOptions<ListSquadMemberStatsResponse, ListSquadMemberStatsError, ListSquadMemberStatsResponse, ReturnType<typeof listSquadMemberStatsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
@@ -1129,6 +1137,8 @@ export const getSquadTrendQueryKey = (options: Options<GetSquadTrendData>) => cr
  * weigh a player's single match against another's four. A week whose matches cannot
  * answer the metric, one with no recorded result, no unforced error or no serve
  * among them, carries a null rather than a zero.
+ *
+ * `surface`, if given, narrows every week's pooled matches to that surface (#225).
  */
 export const getSquadTrendOptions = (options: Options<GetSquadTrendData>) => queryOptions<GetSquadTrendResponse, GetSquadTrendError, GetSquadTrendResponse, ReturnType<typeof getSquadTrendQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

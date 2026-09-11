@@ -5630,7 +5630,7 @@
     },
     "/players/{player_id}/analytics/opponents": {
       "get": {
-        "description": "Every opponent this player has met, most-met first, then by key.\n\nWhat the scope panel's picker offers, so each row's key is exactly what the tabs\ntake back as `opponent_key`. Ordered on the key rather than the display name\nbecause it is the one spelling of a matchup that cannot vary.",
+        "description": "Every opponent this player has met, most-met first, then by key.\n\nWhat the scope panel's picker offers, so each row's key is exactly what the tabs\ntake back as `opponent_key`. Ordered on the key rather than the display name\nbecause it is the one spelling of a matchup that cannot vary. `surface`, if given,\nnarrows the count to that surface (#225), so the picker's own numbers describe\nthe scope a coach is about to apply rather than the whole career; an opponent with\nno matches on that surface is dropped rather than shown at zero, since it is not a\nreal option to pick.",
         "operationId": "list_opponents",
         "parameters": [
           {
@@ -5641,6 +5641,24 @@
               "format": "uuid",
               "title": "Player Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
             }
           }
         ],
@@ -5698,7 +5716,7 @@
     },
     "/players/{player_id}/analytics/overview": {
       "get": {
-        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nTakes the opponent axis and not the set or phase one (#227, #244): an opponent\nnarrows matches, which all seven fields are counted over one way or the other,\nwhere a set or a phase could reach only the three counted over points.",
+        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nTakes the opponent and surface axes and not the set or phase one (#227, #244,\n#225): both narrow matches, which all seven fields are counted over one way or\nthe other, where a set or a phase could reach only the three counted over points.",
         "operationId": "get_player_overview",
         "parameters": [
           {
@@ -5728,6 +5746,24 @@
               ],
               "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
               "title": "Opponent Key"
+            }
+          },
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
             }
           }
         ],
@@ -5853,6 +5889,24 @@
               "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
               "title": "Opponent Key"
             }
+          },
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
+            }
           }
         ],
         "responses": {
@@ -5976,6 +6030,24 @@
               ],
               "description": "Count only matches against this opponent, keyed as `/opponents` returns.",
               "title": "Opponent Key"
+            }
+          },
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
             }
           }
         ],
@@ -6655,8 +6727,28 @@
     },
     "/squad/analytics/members": {
       "get": {
-        "description": "Per-player squad figures, one row per roster player.\n\nServes both screens that rank a squad: the home screen's snapshot (#204) and the\nSquad stats leaderboard and headline (#237). The thresholds that turn these\nnumbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,\n`lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period`, `period_record`, the\nforced : unforced ratio and the first-serve percentage; the streak, the last five\nresults and the days since the last match are counted over every match, so a run\nthat started in December is still a run in January. A tracked stat's `current` is\nits value over the latest match that can answer it, against a baseline of the ten\nmatches before that one.\n\nBoth period rates pool the period's points rather than averaging its matches, so\na four-point match weighs what four points are worth.",
+        "description": "Per-player squad figures, one row per roster player.\n\nServes both screens that rank a squad: the home screen's snapshot (#204) and the\nSquad stats leaderboard and headline (#237). The thresholds that turn these\nnumbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,\n`lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period`, `period_record`, the\nforced : unforced ratio and the first-serve percentage; the streak, the last five\nresults and the days since the last match are counted over every match, so a run\nthat started in December is still a run in January. A tracked stat's `current` is\nits value over the latest match that can answer it, against a baseline of the ten\nmatches before that one.\n\nBoth period rates pool the period's points rather than averaging its matches, so\na four-point match weighs what four points are worth.\n\n`surface`, if given, narrows every count above to matches on that surface (#225).\nA player with none on the requested surface still returns a zeroed row rather\nthan dropping off the roster \u2014 the same rule the empty-roster row above follows.",
         "operationId": "list_squad_member_stats",
+        "parameters": [
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -6682,6 +6774,16 @@
             },
             "description": "Not signed in"
           },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
           "429": {
             "content": {
               "application/json": {
@@ -6701,7 +6803,7 @@
     },
     "/squad/analytics/trend": {
       "get": {
-        "description": "One roster-wide figure a week, over the six weeks ending with this one.\n\nWeeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather\nthan split across two, and the sixth is the current week however few of its days\nhave passed: a card about how the squad is trending now would be up to a week\nstale if it stopped last Sunday. All six come back in order, so a quiet fortnight\ndraws a gap in the line rather than a shorter line.\n\nA week's figure pools every match the roster played in it rather than averaging\nthe roster's players, for the reason the period's own rates are pooled: one match\nis one match's worth of evidence whoever played it, where a per-player mean would\nweigh a player's single match against another's four. A week whose matches cannot\nanswer the metric, one with no recorded result, no unforced error or no serve\namong them, carries a null rather than a zero.",
+        "description": "One roster-wide figure a week, over the six weeks ending with this one.\n\nWeeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather\nthan split across two, and the sixth is the current week however few of its days\nhave passed: a card about how the squad is trending now would be up to a week\nstale if it stopped last Sunday. All six come back in order, so a quiet fortnight\ndraws a gap in the line rather than a shorter line.\n\nA week's figure pools every match the roster played in it rather than averaging\nthe roster's players, for the reason the period's own rates are pooled: one match\nis one match's worth of evidence whoever played it, where a per-player mean would\nweigh a player's single match against another's four. A week whose matches cannot\nanswer the metric, one with no recorded result, no unforced error or no serve\namong them, carries a null rather than a zero.\n\n`surface`, if given, narrows every week's pooled matches to that surface (#225).",
         "operationId": "get_squad_trend",
         "parameters": [
           {
@@ -6712,6 +6814,24 @@
             "schema": {
               "$ref": "#/components/schemas/SquadMetric",
               "description": "Which roster-wide figure the series carries."
+            }
+          },
+          {
+            "description": "Count only matches played on this surface (#225).",
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Surface"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Count only matches played on this surface (#225).",
+              "title": "Surface"
             }
           }
         ],

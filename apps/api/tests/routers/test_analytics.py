@@ -26,6 +26,7 @@ from matchpoint_api.models import (
     ReturnOutcome,
     ServeOutcome,
     ShotType,
+    Surface,
     UnusualReason,
     Wing,
 )
@@ -1391,7 +1392,8 @@ def test_overview_ignores_a_scope_it_does_not_offer(
 
 @pytest.mark.parametrize("suffix", ["serve", "rally"])
 @pytest.mark.parametrize(
-    "query", ["set_number=0", "set_number=6", "set_number=first", "phase=deciding_set"]
+    "query",
+    ["set_number=0", "set_number=6", "set_number=first", "phase=deciding_set", "surface=grasss"],
 )
 def test_filters_reject_a_value_outside_the_contract(
     client: TestClient, db_session: Session, coach: Coach, suffix: str, query: str
@@ -1655,6 +1657,216 @@ def test_a_blank_opponent_key_is_refused(
     assert response.status_code == 422
 
 
+# --- the surface axis, player side (#225) ---
+
+
+def test_serve_narrows_to_one_surface(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two service points on hard, one double-faulted on clay."""
+    player = make_player(db_session, coach_id=coach.id)
+    hard = make_match(
+        db_session, player_id=player.id, surface=Surface.HARD, played_on=date(2026, 8, 1)
+    )
+    clay = make_match(
+        db_session, player_id=player.id, surface=Surface.CLAY, played_on=date(2026, 8, 2)
+    )
+    make_point(db_session, match_id=hard.id, sequence=0)
+    make_point(db_session, match_id=hard.id, sequence=1, is_game_end=True)
+    make_point(
+        db_session,
+        match_id=clay.id,
+        sequence=0,
+        won=False,
+        serve1_outcome=ServeOutcome.FAULT,
+        serve1_box=None,
+        serve1_fault_mode=FailureMode.NET,
+        serve2_outcome=ServeOutcome.FAULT,
+        serve2_fault_mode=FailureMode.LONG,
+        end_reason=EndReason.DOUBLE_FAULT,
+        wing=None,
+        shot_type=None,
+    )
+
+    serving = _get(client, player.id, "serve?surface=hard")["serving"]
+
+    assert serving["hero"]["value"] == 100
+    assert [
+        (metric["label"], metric["value"], metric["sample_size"]) for metric in serving["metrics"]
+    ] == [
+        ("1st serve in %", 100, "n=2"),
+        ("1st serve points won", 100, "n=2"),
+        ("Double faults / set", 0.0, "n=1 sets"),
+        ("Aces / match", 0.0, "n=1"),
+    ]
+
+
+def test_rally_narrows_to_one_surface(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A forehand drive won on hard, a backhand volley won on clay."""
+    player = make_player(db_session, coach_id=coach.id)
+    hard = make_match(
+        db_session, player_id=player.id, surface=Surface.HARD, played_on=date(2026, 8, 1)
+    )
+    clay = make_match(
+        db_session, player_id=player.id, surface=Surface.CLAY, played_on=date(2026, 8, 2)
+    )
+    make_point(db_session, match_id=hard.id, sequence=0)
+    make_point(
+        db_session, match_id=clay.id, sequence=0, wing=Wing.BACKHAND, shot_type=ShotType.VOLLEY
+    )
+
+    body = _get(client, player.id, "rally?surface=clay")
+
+    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert body["won_by_shot"] == [
+        {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
+    ]
+
+
+def test_overview_narrows_to_one_surface_including_the_record(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two wins on hard and a loss on clay, all this year.
+
+    Every field narrows together, the same guarantee the opponent axis makes: the
+    record and the form come off the same surface-scoped matches as the hold
+    percentage, not off the unfiltered career the way an earlier version of this
+    endpoint would have left them.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    hard_matches = [
+        make_match(
+            db_session,
+            player_id=player.id,
+            surface=Surface.HARD,
+            played_on=date(THIS_YEAR, 7, day),
+            result=MatchResult.WIN,
+        )
+        for day in (1, 2)
+    ]
+    make_point(db_session, match_id=hard_matches[0].id, sequence=0, is_game_end=True)
+    clay_match = make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.CLAY,
+        played_on=date(THIS_YEAR, 7, 3),
+        result=MatchResult.LOSS,
+    )
+    make_point(db_session, match_id=clay_match.id, sequence=0, is_game_end=True, won=False)
+
+    body = _get(client, player.id, "overview?surface=hard")
+
+    assert body["all_time_record"] == {"wins": 2, "losses": 0}
+    assert body["season_record"] == {"wins": 2, "losses": 0}
+    assert body["recent_results"] == ["win", "win"]
+    assert (body["hold_percentage"]["value"], body["hold_percentage"]["sample_size"]) == (
+        100,
+        "n=1",
+    )
+    assert _get(client, player.id, "overview")["all_time_record"] == {"wins": 2, "losses": 1}
+
+
+def test_surface_counts_a_match_with_no_opponent_name(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A surface filter must reach every match on that surface, named or not.
+
+    `_matches_by_opponent` only ever selects matches carrying a name; the surface
+    axis has its own query specifically so a nameless match isn't silently dropped.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id, surface=Surface.GRASS, opponent_name=None)
+    make_point(db_session, match_id=match.id, sequence=0)
+
+    assert _get(client, player.id, "rally?surface=grass")["errors_overall"]["sample_size"] == "n=1"
+
+
+def test_surface_excludes_a_match_with_no_surface_recorded(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match with no surface logged counts unfiltered, never under a filter."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id, surface=None)
+    make_point(db_session, match_id=match.id, sequence=0)
+
+    assert _get(client, player.id, "rally")["errors_overall"]["sample_size"] == "n=1"
+    assert _get(client, player.id, "rally?surface=hard")["errors_overall"] is None
+
+
+def test_surface_composes_with_opponent_set_and_phase(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A break point against Torres on hard in set 2, and one against Torres on clay."""
+    player = make_player(db_session, coach_id=coach.id)
+    hard = make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.HARD,
+        opponent_name="Torres",
+        played_on=date(2026, 8, 1),
+    )
+    clay = make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.CLAY,
+        opponent_name="Torres",
+        played_on=date(2026, 8, 2),
+    )
+    make_point(db_session, match_id=hard.id, sequence=0, is_break_point=True)
+    make_point(db_session, match_id=hard.id, sequence=1, set_number=2, is_break_point=True)
+    make_point(db_session, match_id=clay.id, sequence=0, set_number=2, is_break_point=True)
+
+    serving = _get(
+        client,
+        player.id,
+        "serve?opponent_key=torres&surface=hard&set_number=2&phase=break_points",
+    )["serving"]
+
+    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
+        "Break points saved",
+        "n=1",
+    )
+
+
+def test_opponents_narrows_by_surface(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Torres met on both surfaces, Naidoo only on clay.
+
+    A hard filter still lists Torres, but at 1 meeting rather than 2, and drops
+    Naidoo entirely rather than showing them at zero — a dead option the picker
+    would otherwise offer.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Torres",
+        surface=Surface.HARD,
+        played_on=date(2026, 8, 1),
+    )
+    make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Torres",
+        surface=Surface.CLAY,
+        played_on=date(2026, 8, 2),
+    )
+    make_match(
+        db_session,
+        player_id=player.id,
+        opponent_name="Naidoo",
+        surface=Surface.CLAY,
+        played_on=date(2026, 8, 3),
+    )
+
+    assert _get(client, player.id, "opponents?surface=hard") == [
+        {"key": "torres", "name": "Torres", "matches": 1}
+    ]
+
+
 # --- per-match scoping ---
 
 # The match-scoped router answers the same two tabs, so its tests cover the same pair.
@@ -1827,8 +2039,9 @@ FORCED_UNFORCED = "Forced : Unforced ratio"
 FIRST_SERVE_IN = "1st serve in %"
 
 
-def _squad(client: TestClient) -> Any:
-    response = client.get(SQUAD_PATH)
+def _squad(client: TestClient, surface: str | None = None) -> Any:
+    params = {"surface": surface} if surface else {}
+    response = client.get(SQUAD_PATH, params=params)
     assert response.status_code == 200
     return response.json()
 
@@ -2499,3 +2712,67 @@ def test_squad_trend_first_serve_pools_the_weeks_serves(
         )
 
     assert _values(client, "first_serve_in") == [None, 50, None, None, None, None]
+
+
+# --- the surface axis, squad side (#225) ---
+
+
+def test_squad_members_narrows_by_surface_and_zeroes_a_player_with_none(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One player with a hard-court win, another with only a clay match this year.
+
+    The hard filter counts the first player's period record over that one match and
+    zeroes the second rather than dropping them from the roster — the same "every
+    roster row answers" rule the no-matches-at-all case already follows.
+    """
+    hard_player = make_player(db_session, coach_id=coach.id, last_name="Abbott")
+    clay_only_player = make_player(db_session, coach_id=coach.id, last_name="Zubair")
+    make_match(
+        db_session,
+        player_id=hard_player.id,
+        surface=Surface.HARD,
+        played_on=date(THIS_YEAR, 7, 1),
+        result=MatchResult.WIN,
+    )
+    make_match(
+        db_session,
+        player_id=clay_only_player.id,
+        surface=Surface.CLAY,
+        played_on=date(THIS_YEAR, 7, 1),
+        result=MatchResult.WIN,
+    )
+
+    body = _squad(client, surface="hard")
+
+    assert [row["player_id"] for row in body] == [str(hard_player.id), str(clay_only_player.id)]
+    assert body[0]["period_record"] == {"wins": 1, "losses": 0}
+    assert body[0]["matches_logged_this_period"] == 1
+    assert body[1]["period_record"] == {"wins": 0, "losses": 0}
+    assert body[1]["matches_logged_this_period"] == 0
+
+
+def test_squad_trend_narrows_by_surface(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A hard-court win and a same-week clay loss; the hard filter counts only the win."""
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.HARD,
+        played_on=_in_week(5),
+        result=MatchResult.WIN,
+    )
+    make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.CLAY,
+        played_on=_in_week(5, 1),
+        result=MatchResult.LOSS,
+    )
+
+    response = client.get(TREND_PATH, params={"metric": "record", "surface": "hard"})
+
+    assert response.status_code == 200
+    assert response.json()[-1]["value"] == 100

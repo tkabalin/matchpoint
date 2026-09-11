@@ -1443,6 +1443,10 @@ export const zListOpponentsPath = z.object({
     player_id: z.uuid()
 });
 
+export const zListOpponentsQuery = z.object({
+    surface: zSurface.nullish()
+});
+
 /**
  * Response List Opponents
  *
@@ -1455,7 +1459,8 @@ export const zGetPlayerOverviewPath = z.object({
 });
 
 export const zGetPlayerOverviewQuery = z.object({
-    opponent_key: z.string().min(1).nullish()
+    opponent_key: z.string().min(1).nullish(),
+    surface: zSurface.nullish()
 });
 
 /**
@@ -1470,7 +1475,8 @@ export const zGetRallyStatsPath = z.object({
 export const zGetRallyStatsQuery = z.object({
     set_number: z.int().gte(1).lte(5).nullish(),
     phase: zPointPhase.optional().default('full'),
-    opponent_key: z.string().min(1).nullish()
+    opponent_key: z.string().min(1).nullish(),
+    surface: zSurface.nullish()
 });
 
 /**
@@ -1485,7 +1491,8 @@ export const zGetServeStatsPath = z.object({
 export const zGetServeStatsQuery = z.object({
     set_number: z.int().gte(1).lte(5).nullish(),
     phase: zPointPhase.optional().default('full'),
-    opponent_key: z.string().min(1).nullish()
+    opponent_key: z.string().min(1).nullish(),
+    surface: zSurface.nullish()
 });
 
 /**
@@ -1584,6 +1591,10 @@ export const zCreatePlayerTransferCodePath = z.object({
  */
 export const zCreatePlayerTransferCodeResponse = zPlayerTransferCodeRead;
 
+export const zListSquadMemberStatsQuery = z.object({
+    surface: zSurface.nullish()
+});
+
 /**
  * Response List Squad Member Stats
  *
@@ -1592,7 +1603,8 @@ export const zCreatePlayerTransferCodeResponse = zPlayerTransferCodeRead;
 export const zListSquadMemberStatsResponse = z.array(zSquadMemberStats);
 
 export const zGetSquadTrendQuery = z.object({
-    metric: zSquadMetric
+    metric: zSquadMetric,
+    surface: zSurface.nullish()
 });
 
 /**

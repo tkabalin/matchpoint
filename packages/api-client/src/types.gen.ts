@@ -3178,7 +3178,14 @@ export type ListOpponentsData = {
          */
         player_id: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
+    };
     url: '/players/{player_id}/analytics/opponents';
 };
 
@@ -3225,6 +3232,12 @@ export type GetPlayerOverviewData = {
          * Count only matches against this opponent, keyed as `/opponents` returns.
          */
         opponent_key?: string | null;
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
     };
     url: '/players/{player_id}/analytics/overview';
 };
@@ -3284,6 +3297,12 @@ export type GetRallyStatsData = {
          * Count only matches against this opponent, keyed as `/opponents` returns.
          */
         opponent_key?: string | null;
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
     };
     url: '/players/{player_id}/analytics/rally';
 };
@@ -3343,6 +3362,12 @@ export type GetServeStatsData = {
          * Count only matches against this opponent, keyed as `/opponents` returns.
          */
         opponent_key?: string | null;
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
     };
     url: '/players/{player_id}/analytics/serve';
 };
@@ -3736,7 +3761,14 @@ export type CreatePlayerTransferCodeResponse = CreatePlayerTransferCodeResponses
 export type ListSquadMemberStatsData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
+    };
     url: '/squad/analytics/members';
 };
 
@@ -3745,6 +3777,10 @@ export type ListSquadMemberStatsErrors = {
      * Not signed in
      */
     401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
     /**
      * Too many requests
      */
@@ -3772,6 +3808,12 @@ export type GetSquadTrendData = {
          * Which roster-wide figure the series carries.
          */
         metric: SquadMetric;
+        /**
+         * Surface
+         *
+         * Count only matches played on this surface (#225).
+         */
+        surface?: Surface | null;
     };
     url: '/squad/analytics/trend';
 };

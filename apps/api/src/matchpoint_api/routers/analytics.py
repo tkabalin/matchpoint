@@ -25,6 +25,7 @@ from matchpoint_api.models import (
     ReturnOutcome,
     ServeOutcome,
     ShotType,
+    Surface,
     UnusualReason,
     Wing,
 )
@@ -127,6 +128,9 @@ OpponentFilter = Annotated[
         min_length=1,
         description="Count only matches against this opponent, keyed as `/opponents` returns.",
     ),
+]
+SurfaceFilter = Annotated[
+    Surface | None, Query(description="Count only matches played on this surface (#225).")
 ]
 
 # A key no match answers to is declared because the client can act on it: a picker
@@ -551,11 +555,13 @@ def _matches_by_opponent(db: Session, player_id: uuid.UUID) -> dict[str, list[Ro
 
     Free text is the whole identity (#172): opponents are rarely in the coach's
     roster, so the trimmed lowercase name is the matchup key, and a typo splitting
-    one opponent in two is the accepted cost.
+    one opponent in two is the accepted cost. `surface` rides along unfiltered so a
+    surface-narrowed opponent lookup (`_scoped_matches` below) has it to filter on
+    without a second query.
     """
     groups: dict[str, list[Row[Any]]] = {}
     for row in db.execute(
-        select(Match.id, Match.result, Match.played_on, Match.opponent_name)
+        select(Match.id, Match.result, Match.played_on, Match.opponent_name, Match.surface)
         .where(Match.player_id == player_id, Match.opponent_name.is_not(None))
         .order_by(Match.played_on.desc(), Match.created_at.desc())
     ):
@@ -579,15 +585,52 @@ def _opponent_matches(
     return matches
 
 
+def _surface_matches(db: Session, player_id: uuid.UUID, surface: Surface) -> list[Row[Any]]:
+    """The player's matches on one surface, named opponent or not (#225).
+
+    A separate query from `_matches_by_opponent` on purpose: that one only ever
+    selects matches carrying an opponent name, and reusing it for a surface-only
+    filter would silently drop every nameless match.
+    """
+    return list(
+        db.execute(
+            select(Match.id, Match.result, Match.played_on, Match.opponent_name)
+            .where(Match.player_id == player_id, Match.surface == surface)
+            .order_by(Match.played_on.desc(), Match.created_at.desc())
+        )
+    )
+
+
+def _scoped_matches(
+    db: Session, player_id: uuid.UUID, opponent_key: str | None, surface: Surface | None
+) -> list[Row[Any]] | None:
+    """The player's matches narrowed by whichever of the opponent/surface axes are set.
+
+    None only where neither axis is set, the unfiltered tabs' own sentinel for "every
+    match". The opponent key is resolved first, so an unknown one still raises
+    `OPPONENT_NOT_FOUND` before surface gets a say — a real opponent with no matches
+    on the requested surface is an empty payload, not a 404.
+    """
+    opponent_matches = _opponent_matches(db, player_id, opponent_key)
+    if opponent_matches is not None:
+        if surface is None:
+            return opponent_matches
+        return [row for row in opponent_matches if row.surface == surface]
+    if surface is not None:
+        return _surface_matches(db, player_id, surface)
+    return None
+
+
 def _player_scope(
     db: Session,
     player_id: uuid.UUID,
     opponent_key: str | None,
     set_number: int | None,
     phase: PointPhase,
+    surface: Surface | None = None,
 ) -> PointScope:
-    """The three axes the stats scope panel commits at once, as one scope (#244)."""
-    matches = _opponent_matches(db, player_id, opponent_key)
+    """The four axes the stats scope panel commits at once, as one scope (#244, #225)."""
+    matches = _scoped_matches(db, player_id, opponent_key, surface)
     return PointScope(
         match_ids=None if matches is None else [row.id for row in matches],
         set_number=set_number,
@@ -597,35 +640,49 @@ def _player_scope(
 
 @router.get("/opponents", response_model=list[OpponentSummary])
 def list_opponents(
-    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach, surface: SurfaceFilter = None
 ) -> list[OpponentSummary]:
     """Every opponent this player has met, most-met first, then by key.
 
     What the scope panel's picker offers, so each row's key is exactly what the tabs
     take back as `opponent_key`. Ordered on the key rather than the display name
-    because it is the one spelling of a matchup that cannot vary.
+    because it is the one spelling of a matchup that cannot vary. `surface`, if given,
+    narrows the count to that surface (#225), so the picker's own numbers describe
+    the scope a coach is about to apply rather than the whole career; an opponent with
+    no matches on that surface is dropped rather than shown at zero, since it is not a
+    real option to pick.
     """
     owned_player(db, player_id, coach.id)
-    summaries = [
+    summaries: list[OpponentSummary] = []
+    for key, matches in _matches_by_opponent(db, player_id).items():
+        on_surface = (
+            matches if surface is None else [row for row in matches if row.surface == surface]
+        )
+        if not on_surface:
+            continue
         # The group is newest first, so its first row carries the latest spelling.
-        OpponentSummary(key=key, name=matches[0].opponent_name, matches=len(matches))
-        for key, matches in _matches_by_opponent(db, player_id).items()
-    ]
+        summaries.append(
+            OpponentSummary(key=key, name=matches[0].opponent_name, matches=len(on_surface))
+        )
     return sorted(summaries, key=lambda summary: (-summary.matches, summary.key))
 
 
 @router.get("/overview", response_model=PlayerOverview, responses=OPPONENT_NOT_FOUND)
 def get_player_overview(
-    player_id: uuid.UUID, db: DbSession, coach: CurrentCoach, opponent_key: OpponentFilter = None
+    player_id: uuid.UUID,
+    db: DbSession,
+    coach: CurrentCoach,
+    opponent_key: OpponentFilter = None,
+    surface: SurfaceFilter = None,
 ) -> PlayerOverview:
     """The overview tab: form, the headline rates, and the win/loss record.
 
-    Takes the opponent axis and not the set or phase one (#227, #244): an opponent
-    narrows matches, which all seven fields are counted over one way or the other,
-    where a set or a phase could reach only the three counted over points.
+    Takes the opponent and surface axes and not the set or phase one (#227, #244,
+    #225): both narrow matches, which all seven fields are counted over one way or
+    the other, where a set or a phase could reach only the three counted over points.
     """
     owned_player(db, player_id, coach.id)
-    matches = _opponent_matches(db, player_id, opponent_key)
+    matches = _scoped_matches(db, player_id, opponent_key, surface)
     if matches is None:
         results = _results_newest_first(db, player_id)
         scope = PointScope()
@@ -957,10 +1014,13 @@ def get_serve_stats(
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
     opponent_key: OpponentFilter = None,
+    surface: SurfaceFilter = None,
 ) -> ServeStats:
     """The serve tab, both sides at once so toggling costs no second request."""
     owned_player(db, player_id, coach.id)
-    return _serve_tab(db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase))
+    return _serve_tab(
+        db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase, surface)
+    )
 
 
 @match_router.get("/serve", response_model=ServeStats)
@@ -1184,10 +1244,13 @@ def get_rally_stats(
     set_number: SetFilter = None,
     phase: PhaseFilter = PointPhase.FULL,
     opponent_key: OpponentFilter = None,
+    surface: SurfaceFilter = None,
 ) -> RallyStats:
     """The rally tab: how points end once the ball is in play."""
     owned_player(db, player_id, coach.id)
-    return _rally_tab(db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase))
+    return _rally_tab(
+        db, player_id, _player_scope(db, player_id, opponent_key, set_number, phase, surface)
+    )
 
 
 @match_router.get("/rally", response_model=RallyStats)
@@ -1281,19 +1344,34 @@ def _within(window: _DateWindow | None) -> list[Any]:
     return [Match.played_on >= first, Match.played_on <= last]
 
 
+def _on_surface(surface: Surface | None) -> list[Any]:
+    """The surface term, or nothing at all where a caller wants every surface (#225).
+
+    Same shape as `_within` above, and spliced in beside it: both are conditions
+    against the same `Match` join, so narrowing by date and by surface at once is
+    just both lists concatenated.
+    """
+    return [] if surface is None else [Match.surface == surface]
+
+
 def _roster_matches(
-    db: Session, player_ids: Sequence[uuid.UUID], window: _DateWindow | None = None
+    db: Session,
+    player_ids: Sequence[uuid.UUID],
+    window: _DateWindow | None = None,
+    surface: Surface | None = None,
 ) -> dict[uuid.UUID, list[Row[Any]]]:
     """Every match on the roster, newest first, grouped by player.
 
     One query for the whole roster rather than one per player, and every player gets
-    an entry so a roster row is never dropped for having no matches. `window` bounds
-    the read to a caller that draws one span rather than a whole career.
+    an entry so a roster row is never dropped for having no matches — including one
+    with no matches on a filtered `surface`, which must still return zeroed rather
+    than disappear from the roster. `window` bounds the read to a caller that draws
+    one span rather than a whole career.
     """
     grouped: dict[uuid.UUID, list[Row[Any]]] = {player_id: [] for player_id in player_ids}
     for row in db.execute(
         select(Match.player_id, Match.id, Match.played_on, Match.result)
-        .where(Match.player_id.in_(player_ids), *_within(window))
+        .where(Match.player_id.in_(player_ids), *_within(window), *_on_surface(surface))
         .order_by(Match.played_on.desc(), Match.created_at.desc())
     ):
         grouped[row.player_id].append(row)
@@ -1301,7 +1379,10 @@ def _roster_matches(
 
 
 def _tracked_counts_by_match(
-    db: Session, player_ids: Sequence[uuid.UUID], window: _DateWindow | None = None
+    db: Session,
+    player_ids: Sequence[uuid.UUID],
+    window: _DateWindow | None = None,
+    surface: Surface | None = None,
 ) -> dict[uuid.UUID, Row[Any]]:
     """The tracked stats' tallies for every match on the roster, one row per match.
 
@@ -1325,7 +1406,7 @@ def _tracked_counts_by_match(
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
-        .where(Match.player_id.in_(player_ids), *_within(window))
+        .where(Match.player_id.in_(player_ids), *_within(window), *_on_surface(surface))
         .group_by(Point.match_id)
     ).all()
     return {row.match_id: row for row in rows}
@@ -1423,7 +1504,9 @@ def _squad_member(
 
 
 @squad_router.get("/members", response_model=list[SquadMemberStats])
-def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMemberStats]:
+def list_squad_member_stats(
+    db: DbSession, coach: CurrentCoach, surface: SurfaceFilter = None
+) -> list[SquadMemberStats]:
     """Per-player squad figures, one row per roster player.
 
     Serves both screens that rank a squad: the home screen's snapshot (#204) and the
@@ -1440,6 +1523,10 @@ def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMem
 
     Both period rates pool the period's points rather than averaging its matches, so
     a four-point match weighs what four points are worth.
+
+    `surface`, if given, narrows every count above to matches on that surface (#225).
+    A player with none on the requested surface still returns a zeroed row rather
+    than dropping off the roster — the same rule the empty-roster row above follows.
     """
     roster = list(
         db.scalars(
@@ -1450,8 +1537,8 @@ def list_squad_member_stats(db: DbSession, coach: CurrentCoach) -> list[SquadMem
     )
     if not roster:
         return []
-    matches = _roster_matches(db, roster)
-    counts_by_match = _tracked_counts_by_match(db, roster)
+    matches = _roster_matches(db, roster, surface=surface)
+    counts_by_match = _tracked_counts_by_match(db, roster, surface=surface)
     return [_squad_member(player_id, matches[player_id], counts_by_match) for player_id in roster]
 
 
@@ -1490,18 +1577,24 @@ SquadMetricFilter = Annotated[
 ]
 
 
-def _week_tallies(db: Session, roster: Sequence[uuid.UUID], first_monday: date) -> list[_WeekTally]:
+def _week_tallies(
+    db: Session,
+    roster: Sequence[uuid.UUID],
+    first_monday: date,
+    surface: Surface | None = None,
+) -> list[_WeekTally]:
     """The window's weeks, oldest first, each holding its own matches' counts.
 
     Always the full six, so an empty roster and a week nobody played in answer the
-    same way: a week with nothing counted in it.
+    same way: a week with nothing counted in it. `surface`, if given, narrows every
+    week's pooled matches to that surface (#225).
     """
     weeks = [_WeekTally() for _ in range(SQUAD_TREND_WEEKS)]
     if not roster:
         return weeks
     window = (first_monday, first_monday + timedelta(weeks=SQUAD_TREND_WEEKS, days=-1))
-    counts_by_match = _tracked_counts_by_match(db, roster, window)
-    for row in chain.from_iterable(_roster_matches(db, roster, window).values()):
+    counts_by_match = _tracked_counts_by_match(db, roster, window, surface)
+    for row in chain.from_iterable(_roster_matches(db, roster, window, surface).values()):
         week = weeks[(row.played_on - first_monday).days // 7]
         if row.result is not None:
             if row.result == MatchResult.WIN:
@@ -1520,7 +1613,10 @@ def _week_tallies(db: Session, roster: Sequence[uuid.UUID], first_monday: date) 
 
 @squad_router.get("/trend", response_model=list[SquadTrendPoint])
 def get_squad_trend(
-    metric: SquadMetricFilter, db: DbSession, coach: CurrentCoach
+    metric: SquadMetricFilter,
+    db: DbSession,
+    coach: CurrentCoach,
+    surface: SurfaceFilter = None,
 ) -> list[SquadTrendPoint]:
     """One roster-wide figure a week, over the six weeks ending with this one.
 
@@ -1536,6 +1632,8 @@ def get_squad_trend(
     weigh a player's single match against another's four. A week whose matches cannot
     answer the metric, one with no recorded result, no unforced error or no serve
     among them, carries a null rather than a zero.
+
+    `surface`, if given, narrows every week's pooled matches to that surface (#225).
     """
     roster = list(db.scalars(select(Player.id).where(Player.coach_id == coach.id)))
     today = date.today()
@@ -1543,5 +1641,5 @@ def get_squad_trend(
     value = _SQUAD_METRIC_VALUE[metric]
     return [
         SquadTrendPoint(week=f"Wk {position}", value=value(week))
-        for position, week in enumerate(_week_tallies(db, roster, first_monday), start=1)
+        for position, week in enumerate(_week_tallies(db, roster, first_monday, surface), start=1)
     ]
