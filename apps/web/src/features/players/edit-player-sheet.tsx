@@ -12,15 +12,14 @@ import {
 } from "@matchpoint/api-client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 
+import { CopyCodeField } from "@/components/copy-code-field";
 import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerFormFields } from "@/components/player-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { getErrorStatus } from "@/lib/error-status";
@@ -47,34 +46,6 @@ type Step =
 // and the delete, so both paths land on one message rather than two.
 const TRANSFER_PENDING_MESSAGE =
   "This player has a transfer code waiting to be used. It has to be cancelled or used before you can delete them.";
-
-/** A read-only code plus a copy button — the only place in the app that needs
- * clipboard access, so it stays local rather than becoming a shared component. */
-function CopyCodeField({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <div className="flex items-center gap-2">
-      <Input readOnly value={code} aria-label="Transfer code" className="font-mono" />
-      <Button
-        type="button"
-        variant="outline"
-        size="icon"
-        aria-label={copied ? "Copied" : "Copy code"}
-        onClick={async () => {
-          await navigator.clipboard.writeText(code);
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }}
-      >
-        {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
-      </Button>
-      <span className="sr-only" role="status">
-        {copied ? "Copied to clipboard" : ""}
-      </span>
-    </div>
-  );
-}
 
 /**
  * Editing an existing player. Same field set and validation as `AddPlayerSheet`
@@ -431,7 +402,7 @@ export function EditPlayerSheet({
                 This is the only time it's shown — copy it now.
               </p>
 
-              {mintedCode && <CopyCodeField code={mintedCode} />}
+              {mintedCode && <CopyCodeField code={mintedCode} label="Transfer code" />}
 
               <Button
                 type="button"

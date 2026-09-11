@@ -1,8 +1,10 @@
+import type { PlayerCreatedRead } from "@matchpoint/api-client";
 import { createPlayer, uploadPlayerPhoto } from "@matchpoint/api-client";
 import { listPlayersQueryKey } from "@matchpoint/api-client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { CopyCodeField } from "@/components/copy-code-field";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
 import { PlayerFormFields } from "@/components/player-form";
@@ -13,6 +15,8 @@ import { downscaleImage } from "@/lib/downscale-image";
 import { parseErrorMessage } from "@/lib/parse-error";
 import { BLANK_PLAYER_FORM, type PlayerFormValues, validatePlayerForm } from "@/lib/player-form";
 
+type Step = "form" | "reveal-credentials";
+
 /**
  * Adding a player.
  *
@@ -20,6 +24,12 @@ import { BLANK_PLAYER_FORM, type PlayerFormValues, validatePlayerForm } from "@/
  * than courtside, so this is the one place a coach can be asked for the full record
  * — the speed constraint in the brief is about capturing points during a match, not
  * about this form.
+ *
+ * Creating a player mints a one-time username and password (#202) — the only way
+ * the coach learns them, since players have no email and no reset flow (#219). The
+ * sheet doesn't close on success the way it used to: it swaps to a reveal step
+ * showing both, following the transfer-code flow's own "shown once" precedent
+ * (`edit-player-sheet.tsx`), so the coach can copy them before the roster shows up.
  */
 export function AddPlayerSheet({
   open,
@@ -29,10 +39,17 @@ export function AddPlayerSheet({
   onOpenChange: (open: boolean) => void;
 }) {
   const queryClient = useQueryClient();
+  const [step, setStep] = useState<Step>("form");
   const [values, setValues] = useState<PlayerFormValues>(BLANK_PLAYER_FORM);
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickingPhoto, setPickingPhoto] = useState(false);
+  // Held only for the life of this sheet — cleared by `reset()` like every other
+  // field here, never written anywhere more durable than component state.
+  const [credentials, setCredentials] = useState<Pick<
+    PlayerCreatedRead,
+    "first_name" | "username" | "password"
+  > | null>(null);
   // The player has no id until createPlayer resolves, so a picked photo is held
   // here rather than uploaded — PhotoPickerSheet's own doc comment anticipates
   // exactly this case (#192). The preview is the picked File's own object URL,
@@ -50,9 +67,11 @@ export function AddPlayerSheet({
   }
 
   function reset() {
+    setStep("form");
     setValues(BLANK_PLAYER_FORM);
     setShowErrors(false);
     setError(null);
+    setCredentials(null);
     setPendingPhotoFile(null);
   }
 
@@ -89,10 +108,16 @@ export function AddPlayerSheet({
       }
       return data;
     },
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       await queryClient.invalidateQueries({ queryKey: listPlayersQueryKey() });
-      reset();
-      onOpenChange(false);
+      // Roster is already updated; only the reveal step still needs the sheet
+      // open, so the credentials survive the reset below.
+      setCredentials({
+        first_name: data.first_name,
+        username: data.username,
+        password: data.password,
+      });
+      setStep("reveal-credentials");
     },
     onError: (mutationError) => {
       setError(parseErrorMessage(mutationError, "Could not add that player."));
@@ -109,50 +134,81 @@ export function AddPlayerSheet({
         }}
       >
         <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
-          <SheetHeader className="p-0">
-            <SheetTitle>Add a player</SheetTitle>
-          </SheetHeader>
+          {step === "form" ? (
+            <>
+              <SheetHeader className="p-0">
+                <SheetTitle>Add a player</SheetTitle>
+              </SheetHeader>
 
-          <button
-            type="button"
-            onClick={() => setPickingPhoto(true)}
-            aria-label="Add a player photo"
-            className="self-center rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
-          >
-            <PhotoAvatar
-              id="new-player"
-              initials={`${values.firstName[0] ?? ""}${values.lastName[0] ?? ""}`.toUpperCase()}
-              photoUrl={pendingPhotoPreview}
-              shape="square"
-              size="lg"
-              editable
-            />
-          </button>
+              <button
+                type="button"
+                onClick={() => setPickingPhoto(true)}
+                aria-label="Add a player photo"
+                className="self-center rounded-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/30"
+              >
+                <PhotoAvatar
+                  id="new-player"
+                  initials={`${values.firstName[0] ?? ""}${values.lastName[0] ?? ""}`.toUpperCase()}
+                  photoUrl={pendingPhotoPreview}
+                  shape="square"
+                  size="lg"
+                  editable
+                />
+              </button>
 
-          <form
-            className="flex flex-col gap-4"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              setError(null);
-              // Errors stay hidden until the first submit, so the form doesn't scold
-              // the coach about fields they haven't reached yet.
-              setShowErrors(true);
-              if (isValid) mutate();
-            }}
-          >
-            <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
+              <form
+                className="flex flex-col gap-4"
+                noValidate
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setError(null);
+                  // Errors stay hidden until the first submit, so the form doesn't scold
+                  // the coach about fields they haven't reached yet.
+                  setShowErrors(true);
+                  if (isValid) mutate();
+                }}
+              >
+                <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
 
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+                {error && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
 
-            <Button type="submit" disabled={isPending} className="w-full">
-              {isPending ? "Adding…" : "Add player"}
-            </Button>
-          </form>
+                <Button type="submit" disabled={isPending} className="w-full">
+                  {isPending ? "Adding…" : "Add player"}
+                </Button>
+              </form>
+            </>
+          ) : (
+            credentials && (
+              <>
+                <SheetHeader className="p-0">
+                  <SheetTitle>{credentials.first_name}&apos;s sign-in details</SheetTitle>
+                </SheetHeader>
+
+                <p className="text-sm text-muted-foreground">
+                  This is the only time the password is shown — copy it now and hand both over to{" "}
+                  {credentials.first_name} before you close this.
+                </p>
+
+                <CopyCodeField code={credentials.username} label="Username" />
+                <CopyCodeField code={credentials.password} label="Password" />
+
+                <Button
+                  type="button"
+                  className="w-full"
+                  onClick={() => {
+                    reset();
+                    onOpenChange(false);
+                  }}
+                >
+                  Done
+                </Button>
+              </>
+            )
+          )}
         </SheetContent>
       </Sheet>
 

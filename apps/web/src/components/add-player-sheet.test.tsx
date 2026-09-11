@@ -53,13 +53,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("adds a player with no photo", async () => {
+// Creating a player mints a one-time username and password (#202); the coach has to
+// see and copy them, so the sheet now stays open on a reveal step instead of closing
+// immediately, and only "Done" on that step calls onOpenChange(false).
+function playerCreatedResponse(body: Record<string, unknown>) {
+  return Response.json(
+    { id: NEW_PLAYER_ID, username: "nksama001", password: "correct-horse-battery", ...body },
+    { status: 201 },
+  );
+}
+
+test("adds a player with no photo, then reveals credentials before closing", async () => {
   const created: unknown[] = [];
   stubFetch({
     "POST /api/players": async (input) => {
       const body = JSON.parse(await input.text()) as Record<string, unknown>;
       created.push(body);
-      return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
+      return playerCreatedResponse(body);
     },
   });
   const user = userEvent.setup({ delay: null });
@@ -68,9 +78,56 @@ test("adds a player with no photo", async () => {
   await fillRequiredFields(user);
   await user.click(screen.getByRole("button", { name: "Add player" }));
 
-  await vi.waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  expect(
+    await screen.findByRole("heading", { name: "Amahle's sign-in details" }),
+  ).toBeInTheDocument();
   expect(created).toHaveLength(1);
   expect(zCreatePlayerBody.safeParse(created[0]).success).toBe(true);
+  expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+  await user.click(screen.getByRole("button", { name: "Done" }));
+
+  expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+// #219: this is the only place the coach ever sees these values.
+test("reveals the generated username and password after creating a player", async () => {
+  stubFetch({
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      return playerCreatedResponse(body);
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  renderSheet();
+
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  expect(await screen.findByLabelText("Username")).toHaveValue("nksama001");
+  expect(screen.getByLabelText("Password")).toHaveValue("correct-horse-battery");
+});
+
+// #219: the password is not retrievable again once the coach dismisses the reveal.
+test("Done clears the credentials and returns to the form", async () => {
+  stubFetch({
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      return playerCreatedResponse(body);
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  renderSheet();
+
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+  await screen.findByRole("heading", { name: "Amahle's sign-in details" });
+
+  await user.click(screen.getByRole("button", { name: "Done" }));
+
+  expect(screen.getByRole("heading", { name: "Add a player" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
 });
 
 test("adds a player with a photo, uploaded after creation", async () => {
@@ -80,7 +137,7 @@ test("adds a player with a photo, uploaded after creation", async () => {
       const body = JSON.parse(await input.text()) as Record<string, unknown>;
       const parsed = zCreatePlayerBody.safeParse(body);
       expect(parsed.success).toBe(true);
-      return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
+      return playerCreatedResponse(body);
     },
     [`POST /api/players/${NEW_PLAYER_ID}/photo`]: (input) => {
       photoUploads.push({ playerId: NEW_PLAYER_ID, url: input.url });
@@ -102,10 +159,12 @@ test("adds a player with a photo, uploaded after creation", async () => {
   await vi.waitFor(() => expect(photoUploads).toHaveLength(1));
 });
 
-test("a photo-upload failure still creates the player and closes the sheet", async () => {
+test("a photo-upload failure still creates the player and reaches the reveal step", async () => {
   stubFetch({
-    "POST /api/players": async () =>
-      Response.json({ id: NEW_PLAYER_ID, photo_url: null }, { status: 201 }),
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      return playerCreatedResponse({ ...body, photo_url: null });
+    },
     [`POST /api/players/${NEW_PLAYER_ID}/photo`]: () => new Response(null, { status: 500 }),
   });
   const user = userEvent.setup({ delay: null });
@@ -120,8 +179,14 @@ test("a photo-upload failure still creates the player and closes the sheet", asy
   await fillRequiredFields(user);
   await user.click(screen.getByRole("button", { name: "Add player" }));
 
-  await vi.waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
+  expect(
+    await screen.findByRole("heading", { name: "Amahle's sign-in details" }),
+  ).toBeInTheDocument();
   expect(screen.queryByText(/Could not add that player/)).not.toBeInTheDocument();
+  expect(onOpenChange).not.toHaveBeenCalledWith(false);
+
+  await user.click(screen.getByRole("button", { name: "Done" }));
+  expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
 // Hand and notes are the two fields no other test fills, and notes carries a trim: an
@@ -132,7 +197,7 @@ test("hand and notes reach the request, and an untouched notes box sends null", 
     "POST /api/players": async (input) => {
       const body = JSON.parse(await input.text()) as Record<string, unknown>;
       created.push(body);
-      return Response.json({ id: NEW_PLAYER_ID, ...body }, { status: 201 });
+      return playerCreatedResponse(body);
     },
   });
   const user = userEvent.setup({ delay: null });
