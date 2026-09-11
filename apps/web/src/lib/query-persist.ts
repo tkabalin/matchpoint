@@ -10,8 +10,7 @@ import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persi
 import type { PersistQueryClientOptions } from "@tanstack/react-query-persist-client";
 import { createStore, del, get, set } from "idb-keyval";
 
-// Defined by Vite from apps/web/package.json; see the `define` block in vite.config.ts.
-declare const __APP_VERSION__: string;
+import { APP_VERSION } from "@/lib/app-version";
 
 /**
  * How old a restored snapshot may be, and equally the QueryClient's `gcTime` in
@@ -40,7 +39,7 @@ const persister = createAsyncStoragePersister({
 export const queryPersistOptions = {
   persister,
   maxAge: QUERY_CACHE_MAX_AGE_MS,
-  buster: __APP_VERSION__,
+  buster: APP_VERSION,
   // Query would otherwise dehydrate paused mutations into this snapshot as well, and
   // an offline write belongs in the outbox, which owns resuming it. Keeping them out
   // is what makes this database reads-only, and safe to clear at any time.

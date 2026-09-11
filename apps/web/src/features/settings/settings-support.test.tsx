@@ -11,6 +11,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 
+import { APP_VERSION } from "@/lib/app-version";
+
 import { SettingsSupport } from "./settings-support";
 
 async function renderPage() {
@@ -48,11 +50,19 @@ test("links back to settings", async () => {
   expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
 });
 
-test("all three rows are stubs, not interactive", async () => {
+test("help/feedback and privacy/terms are still stubs, not interactive", async () => {
   await renderPage();
 
   expect(screen.getByText("Help & feedback")).toBeInTheDocument();
   expect(screen.getByText("Privacy policy / Terms")).toBeInTheDocument();
+  expect(screen.getAllByText("soon")).toHaveLength(2);
+});
+
+// #195: real content behind the third row now — the build's own version,
+// not a stub.
+test("shows the real app version, not a stub", async () => {
+  await renderPage();
+
   expect(screen.getByText("App version")).toBeInTheDocument();
-  expect(screen.getAllByText("soon")).toHaveLength(3);
+  expect(screen.getByText(APP_VERSION)).toBeInTheDocument();
 });
