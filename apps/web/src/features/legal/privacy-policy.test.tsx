@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -27,7 +28,12 @@ test("renders a placeholder, not the final policy text", async () => {
     routeTree: rootRoute.addChildren([privacyRoute, signInRoute]),
     history: createMemoryHistory({ initialEntries: ["/privacy"] }),
   });
-  render(<RouterProvider router={router} />);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
 
   expect(await screen.findByRole("heading", { name: "Privacy Policy" })).toBeInTheDocument();
   expect(screen.getByText(/being finalised/)).toBeInTheDocument();

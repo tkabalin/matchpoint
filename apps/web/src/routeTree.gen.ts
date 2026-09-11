@@ -28,9 +28,9 @@ import { Route as AuthenticatedPlayersPlayerIdRouteImport } from "./routes/_auth
 import { Route as AuthenticatedSettingsIndexRouteImport } from "./routes/_authenticated.settings.index"
 import { Route as AuthenticatedSettingsAccountRouteImport } from "./routes/_authenticated.settings.account"
 import { Route as AuthenticatedSettingsAppRouteImport } from "./routes/_authenticated.settings.app"
+import { Route as AuthenticatedSettingsFaqRouteImport } from "./routes/_authenticated.settings.faq"
 import { Route as AuthenticatedSettingsMatchDefaultsRouteImport } from "./routes/_authenticated.settings.match-defaults"
 import { Route as AuthenticatedSettingsSupportRouteImport } from "./routes/_authenticated.settings.support"
-import { Route as AuthenticatedSettingsSupportFaqRouteImport } from "./routes/_authenticated.settings.support.faq"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -135,6 +135,12 @@ const AuthenticatedSettingsAppRoute =
     path: "/settings/app",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedSettingsFaqRoute =
+  AuthenticatedSettingsFaqRouteImport.update({
+    id: "/settings/faq",
+    path: "/settings/faq",
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedSettingsMatchDefaultsRoute =
   AuthenticatedSettingsMatchDefaultsRouteImport.update({
     id: "/settings/match-defaults",
@@ -146,12 +152,6 @@ const AuthenticatedSettingsSupportRoute =
     id: "/settings/support",
     path: "/settings/support",
     getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedSettingsSupportFaqRoute =
-  AuthenticatedSettingsSupportFaqRouteImport.update({
-    id: "/faq",
-    path: "/faq",
-    getParentRoute: () => AuthenticatedSettingsSupportRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -169,13 +169,13 @@ export interface FileRoutesByFullPath {
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/settings/app": typeof AuthenticatedSettingsAppRoute
+  "/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
-  "/settings/support": typeof AuthenticatedSettingsSupportRouteWithChildren
+  "/settings/support": typeof AuthenticatedSettingsSupportRoute
   "/matches/": typeof AuthenticatedMatchesIndexRoute
   "/new-match/": typeof AuthenticatedNewMatchIndexRoute
   "/players/": typeof AuthenticatedPlayersIndexRoute
   "/settings/": typeof AuthenticatedSettingsIndexRoute
-  "/settings/support/faq": typeof AuthenticatedSettingsSupportFaqRoute
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute
@@ -192,13 +192,13 @@ export interface FileRoutesByTo {
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/settings/app": typeof AuthenticatedSettingsAppRoute
+  "/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
-  "/settings/support": typeof AuthenticatedSettingsSupportRouteWithChildren
+  "/settings/support": typeof AuthenticatedSettingsSupportRoute
   "/matches": typeof AuthenticatedMatchesIndexRoute
   "/new-match": typeof AuthenticatedNewMatchIndexRoute
   "/players": typeof AuthenticatedPlayersIndexRoute
   "/settings": typeof AuthenticatedSettingsIndexRoute
-  "/settings/support/faq": typeof AuthenticatedSettingsSupportFaqRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -217,13 +217,13 @@ export interface FileRoutesById {
   "/_authenticated/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
   "/_authenticated/settings/account": typeof AuthenticatedSettingsAccountRoute
   "/_authenticated/settings/app": typeof AuthenticatedSettingsAppRoute
+  "/_authenticated/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/_authenticated/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
-  "/_authenticated/settings/support": typeof AuthenticatedSettingsSupportRouteWithChildren
+  "/_authenticated/settings/support": typeof AuthenticatedSettingsSupportRoute
   "/_authenticated/matches/": typeof AuthenticatedMatchesIndexRoute
   "/_authenticated/new-match/": typeof AuthenticatedNewMatchIndexRoute
   "/_authenticated/players/": typeof AuthenticatedPlayersIndexRoute
   "/_authenticated/settings/": typeof AuthenticatedSettingsIndexRoute
-  "/_authenticated/settings/support/faq": typeof AuthenticatedSettingsSupportFaqRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -242,13 +242,13 @@ export interface FileRouteTypes {
     | "/players/$playerId"
     | "/settings/account"
     | "/settings/app"
+    | "/settings/faq"
     | "/settings/match-defaults"
     | "/settings/support"
     | "/matches/"
     | "/new-match/"
     | "/players/"
     | "/settings/"
-    | "/settings/support/faq"
   fileRoutesByTo: FileRoutesByTo
   to:
     | "/"
@@ -265,13 +265,13 @@ export interface FileRouteTypes {
     | "/players/$playerId"
     | "/settings/account"
     | "/settings/app"
+    | "/settings/faq"
     | "/settings/match-defaults"
     | "/settings/support"
     | "/matches"
     | "/new-match"
     | "/players"
     | "/settings"
-    | "/settings/support/faq"
   id:
     | "__root__"
     | "/"
@@ -289,13 +289,13 @@ export interface FileRouteTypes {
     | "/_authenticated/players/$playerId"
     | "/_authenticated/settings/account"
     | "/_authenticated/settings/app"
+    | "/_authenticated/settings/faq"
     | "/_authenticated/settings/match-defaults"
     | "/_authenticated/settings/support"
     | "/_authenticated/matches/"
     | "/_authenticated/new-match/"
     | "/_authenticated/players/"
     | "/_authenticated/settings/"
-    | "/_authenticated/settings/support/faq"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -442,6 +442,13 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedSettingsAppRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    "/_authenticated/settings/faq": {
+      id: "/_authenticated/settings/faq"
+      path: "/settings/faq"
+      fullPath: "/settings/faq"
+      preLoaderRoute: typeof AuthenticatedSettingsFaqRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     "/_authenticated/settings/match-defaults": {
       id: "/_authenticated/settings/match-defaults"
       path: "/settings/match-defaults"
@@ -456,29 +463,8 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedSettingsSupportRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_authenticated/settings/support/faq": {
-      id: "/_authenticated/settings/support/faq"
-      path: "/faq"
-      fullPath: "/settings/support/faq"
-      preLoaderRoute: typeof AuthenticatedSettingsSupportFaqRouteImport
-      parentRoute: typeof AuthenticatedSettingsSupportRoute
-    }
   }
 }
-
-interface AuthenticatedSettingsSupportRouteChildren {
-  AuthenticatedSettingsSupportFaqRoute: typeof AuthenticatedSettingsSupportFaqRoute
-}
-
-const AuthenticatedSettingsSupportRouteChildren: AuthenticatedSettingsSupportRouteChildren =
-  {
-    AuthenticatedSettingsSupportFaqRoute: AuthenticatedSettingsSupportFaqRoute,
-  }
-
-const AuthenticatedSettingsSupportRouteWithChildren =
-  AuthenticatedSettingsSupportRoute._addFileChildren(
-    AuthenticatedSettingsSupportRouteChildren,
-  )
 
 interface AuthenticatedRouteChildren {
   AuthenticatedHomeRoute: typeof AuthenticatedHomeRoute
@@ -490,8 +476,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPlayersPlayerIdRoute: typeof AuthenticatedPlayersPlayerIdRoute
   AuthenticatedSettingsAccountRoute: typeof AuthenticatedSettingsAccountRoute
   AuthenticatedSettingsAppRoute: typeof AuthenticatedSettingsAppRoute
+  AuthenticatedSettingsFaqRoute: typeof AuthenticatedSettingsFaqRoute
   AuthenticatedSettingsMatchDefaultsRoute: typeof AuthenticatedSettingsMatchDefaultsRoute
-  AuthenticatedSettingsSupportRoute: typeof AuthenticatedSettingsSupportRouteWithChildren
+  AuthenticatedSettingsSupportRoute: typeof AuthenticatedSettingsSupportRoute
   AuthenticatedMatchesIndexRoute: typeof AuthenticatedMatchesIndexRoute
   AuthenticatedNewMatchIndexRoute: typeof AuthenticatedNewMatchIndexRoute
   AuthenticatedPlayersIndexRoute: typeof AuthenticatedPlayersIndexRoute
@@ -508,10 +495,10 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPlayersPlayerIdRoute: AuthenticatedPlayersPlayerIdRoute,
   AuthenticatedSettingsAccountRoute: AuthenticatedSettingsAccountRoute,
   AuthenticatedSettingsAppRoute: AuthenticatedSettingsAppRoute,
+  AuthenticatedSettingsFaqRoute: AuthenticatedSettingsFaqRoute,
   AuthenticatedSettingsMatchDefaultsRoute:
     AuthenticatedSettingsMatchDefaultsRoute,
-  AuthenticatedSettingsSupportRoute:
-    AuthenticatedSettingsSupportRouteWithChildren,
+  AuthenticatedSettingsSupportRoute: AuthenticatedSettingsSupportRoute,
   AuthenticatedMatchesIndexRoute: AuthenticatedMatchesIndexRoute,
   AuthenticatedNewMatchIndexRoute: AuthenticatedNewMatchIndexRoute,
   AuthenticatedPlayersIndexRoute: AuthenticatedPlayersIndexRoute,

@@ -25,7 +25,7 @@ async function renderPage() {
   });
   const faqRoute = createRoute({
     getParentRoute: () => rootRoute,
-    path: "/settings/support/faq",
+    path: "/settings/faq",
     component: () => <h1>FAQ</h1>,
   });
   const privacyRoute = createRoute({

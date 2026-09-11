@@ -247,3 +247,19 @@ test("/terms renders with no signed-in session", async () => {
 
   expect(await screen.findByRole("heading", { name: "Terms of Service" })).toBeInTheDocument();
 });
+
+// #193: the router plugin originally parented this as a child of
+// `/settings/support`, which renders no `<Outlet/>` — so the URL changed but
+// nothing new appeared. Every other test of this page built its own flat,
+// hand-written tree, which can't reproduce that: only the generated tree
+// (mounted here, the same way `/players/$playerId` above catches its own
+// parenting trap) can catch a route nested under the wrong parent.
+test("/settings/faq renders as its own page, not nested under Support", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+  });
+
+  await renderRouteTreeAt("/settings/faq");
+
+  expect(await screen.findByRole("heading", { name: "Help & feedback" })).toBeInTheDocument();
+});

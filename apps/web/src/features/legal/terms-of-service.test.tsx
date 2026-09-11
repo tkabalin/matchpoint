@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   RouterProvider,
@@ -27,7 +28,12 @@ test("renders a placeholder, not the final terms text", async () => {
     routeTree: rootRoute.addChildren([termsRoute, signInRoute]),
     history: createMemoryHistory({ initialEntries: ["/terms"] }),
   });
-  render(<RouterProvider router={router} />);
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
 
   expect(await screen.findByRole("heading", { name: "Terms of Service" })).toBeInTheDocument();
   expect(screen.getByText(/being finalised/)).toBeInTheDocument();

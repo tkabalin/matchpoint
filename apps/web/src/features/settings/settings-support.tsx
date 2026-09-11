@@ -30,7 +30,7 @@ export function SettingsSupport() {
       />
 
       <ItemGroup>
-        <Item variant="outline" render={<Link to="/settings/support/faq" />}>
+        <Item variant="outline" render={<Link to="/settings/faq" />}>
           <ItemContent>
             <ItemTitle>Help & feedback</ItemTitle>
           </ItemContent>
