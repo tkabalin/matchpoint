@@ -1,4 +1,4 @@
-import { deleteCurrentCoach } from "@matchpoint/api-client";
+import { deleteCurrentCoach, verifyCoachPassword } from "@matchpoint/api-client";
 import { listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -42,6 +42,7 @@ export function DeleteAccountSheet({
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [purgeFailed, setPurgeFailed] = useState(false);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const retryCountdown = useCountdown(retryAfterSeconds);
@@ -60,6 +61,36 @@ export function DeleteAccountSheet({
     setError(null);
     setRetryAfterSeconds(null);
     setPurgeFailed(false);
+  }
+
+  // #211: checks the password inline, before the coach reaches the point of
+  // no return, rather than letting a typo surface only on the final "Delete
+  // account" click. `DELETE /coaches/me` re-verifies on its own request
+  // regardless, so `handleDelete`'s own 403 handling stays as a backstop for
+  // a password changed in the gap between the two steps.
+  async function handleVerifyPassword() {
+    setVerifying(true);
+    setError(null);
+    setRetryAfterSeconds(null);
+    try {
+      const { error: verifyError, response } = await verifyCoachPassword({ body: { password } });
+      if (response?.status === 204) {
+        setStep("final-warn");
+        return;
+      }
+      if (response?.status === 403) {
+        setError(parseErrorMessage(verifyError, "Incorrect password."));
+        return;
+      }
+      if (response?.status === 429) {
+        setRetryAfterSeconds(getRetryAfterSeconds(response));
+        setError(parseErrorMessage(verifyError, "Too many attempts."));
+        return;
+      }
+      setError(parseErrorMessage(verifyError, "Could not verify your password."));
+    } finally {
+      setVerifying(false);
+    }
   }
 
   async function handleDelete() {
@@ -186,20 +217,20 @@ export function DeleteAccountSheet({
             <Button
               type="button"
               variant="destructive"
-              disabled={password === "" || waiting}
+              disabled={password === "" || waiting || verifying}
               className="w-full"
-              onClick={() => {
-                setError(null);
-                setStep("final-warn");
-              }}
+              onClick={handleVerifyPassword}
             >
-              Continue
+              {verifying ? "Checking…" : "Continue"}
             </Button>
             <Button
               type="button"
               variant="ghost"
               className="w-full"
-              onClick={() => setStep("warn-roster")}
+              onClick={() => {
+                setError(null);
+                setStep("warn-roster");
+              }}
             >
               Back
             </Button>

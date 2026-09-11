@@ -79,6 +79,13 @@ async function renderSheet({
   return queryClient;
 }
 
+/** Every caller needs the verify-password route stubbed to a 204, since
+ *  the password step's own Continue now calls it (#211) before reaching
+ *  the final warning. */
+const VERIFY_OK: Record<string, () => Response> = {
+  "POST /api/coaches/me/verify-password": () => new Response(null, { status: 204 }),
+};
+
 async function goToFinalWarn(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Continue" }));
   await screen.findByRole("heading", { name: "Confirm your password" });
@@ -113,6 +120,55 @@ test("Cancel on the first step closes the sheet", async () => {
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
+// #211: the password step now checks the password itself, before the coach
+// ever reaches the final warning.
+test("a wrong password on the password step shows the error there and never advances", async () => {
+  stubFetch({
+    "POST /api/coaches/me/verify-password": () =>
+      Response.json({ detail: "Incorrect password" }, { status: 403 }),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await screen.findByRole("heading", { name: "Confirm your password" });
+  await user.type(screen.getByLabelText("Password"), "wrong");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+
+  expect(await screen.findByText("Incorrect password")).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Delete your account?" })).not.toBeInTheDocument();
+});
+
+test("a 429 on the password step shows a retry countdown and disables Continue", async () => {
+  stubFetch({
+    "POST /api/coaches/me/verify-password": () =>
+      Response.json(
+        { detail: "Too many attempts." },
+        { status: 429, headers: { "Retry-After": "20" } },
+      ),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await screen.findByRole("heading", { name: "Confirm your password" });
+  await user.type(screen.getByLabelText("Password"), "hunter2");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+
+  expect(await screen.findByText(/Try again in 20s\./)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+});
+
+test("a correct password advances straight to the final warning", async () => {
+  const user = userEvent.setup({ delay: null });
+  stubFetch(VERIFY_OK);
+  await renderSheet();
+
+  await goToFinalWarn(user);
+
+  expect(screen.getByRole("heading", { name: "Delete your account?" })).toBeInTheDocument();
+});
+
 test("Back on the password step returns to the roster warning", async () => {
   const user = userEvent.setup({ delay: null });
   await renderSheet();
@@ -129,6 +185,7 @@ test("Back on the password step returns to the roster warning", async () => {
 test("the full happy path deletes with delete_players true, purges local data, and navigates home", async () => {
   const deletes: string[] = [];
   stubFetch({
+    ...VERIFY_OK,
     "DELETE /api/coaches/me": async (input) => {
       deletes.push(await input.text());
       return new Response(null, { status: 204 });
@@ -159,6 +216,7 @@ test("the full happy path deletes with delete_players true, purges local data, a
 
 test("a wrong password returns to the password step with the error shown there", async () => {
   stubFetch({
+    ...VERIFY_OK,
     "DELETE /api/coaches/me": () =>
       Response.json({ detail: "Incorrect password" }, { status: 403 }),
   });
@@ -174,6 +232,7 @@ test("a wrong password returns to the password step with the error shown there",
 
 test("an outstanding transfer code shows its own message on the final step", async () => {
   stubFetch({
+    ...VERIFY_OK,
     "DELETE /api/coaches/me": () =>
       Response.json(
         { detail: "Outstanding transfer codes must be cancelled or redeemed first" },
@@ -194,6 +253,7 @@ test("an outstanding transfer code shows its own message on the final step", asy
 
 test("a 429 shows a retry countdown and disables the delete button", async () => {
   stubFetch({
+    ...VERIFY_OK,
     "DELETE /api/coaches/me": () =>
       Response.json(
         { detail: "Too many attempts." },
@@ -211,7 +271,7 @@ test("a 429 shows a retry countdown and disables the delete button", async () =>
 });
 
 test("says so when the device could not be cleared, and Retry clears the message once storage recovers", async () => {
-  stubFetch({ "DELETE /api/coaches/me": () => new Response(null, { status: 204 }) });
+  stubFetch({ ...VERIFY_OK, "DELETE /api/coaches/me": () => new Response(null, { status: 204 }) });
   const removeItem = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
     throw new Error("storage blocked");
   });
