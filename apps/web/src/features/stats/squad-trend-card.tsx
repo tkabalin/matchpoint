@@ -1,4 +1,4 @@
-import type { SquadMetric } from "@matchpoint/api-client";
+import type { SquadMetric, Surface } from "@matchpoint/api-client";
 import { getSquadTrendOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp } from "lucide-react";
@@ -40,11 +40,18 @@ const API_METRIC: Record<SquadMetricKey, SquadMetric> = {
 export function SquadTrendCard({
   metric,
   onMetricChange,
+  surface,
 }: {
   metric: SquadMetricKey;
   onMetricChange: (metric: SquadMetricKey) => void;
+  /** Narrows the pooled weekly tallies to one surface via the real `surface`
+   *  axis (#225) — undefined means every surface, matching the shared filter
+   *  row above this card on the squad stats page. */
+  surface?: Surface;
 }) {
-  const { data: trend } = useQuery(getSquadTrendOptions({ query: { metric: API_METRIC[metric] } }));
+  const { data: trend } = useQuery(
+    getSquadTrendOptions({ query: { metric: API_METRIC[metric], surface } }),
+  );
   // Every point can legitimately be null at once — a roster with no resulted
   // matches in the window — which would otherwise draw a blank chart (axes,
   // no line, no dots) that reads as broken rather than as "not enough data".

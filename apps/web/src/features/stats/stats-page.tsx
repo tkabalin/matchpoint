@@ -1,3 +1,4 @@
+import type { Surface } from "@matchpoint/api-client";
 import {
   listPlayersOptions,
   listSquadMemberStatsOptions,
@@ -5,6 +6,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { ChipRow } from "@/components/chip-row";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
@@ -13,13 +15,31 @@ import { SquadHeadlineCard } from "./squad-headline-card";
 import { SquadLeaderboardCard } from "./squad-leaderboard-card";
 import { SquadTrendCard } from "./squad-trend-card";
 
+type SquadSurfaceFilter = "all" | Surface;
+
+// Deliberately not data-driven the way the player page's own surface chips are
+// (#225's product decision): this is one shared filter for the whole roster
+// rather than one player's own matches, and carpet is left out on purpose —
+// effectively extinct in tennis, and a squad-wide filter is a worse place than
+// a single player's page to first decide whether it's worth showing at all.
+const SURFACE_OPTIONS: { value: SquadSurfaceFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "hard", label: "Hard" },
+  { value: "clay", label: "Clay" },
+  { value: "grass", label: "Grass" },
+];
+
 /**
  * "How does my squad compare, and how are we trending as a group?" — the
  * coach-wide counterpart to the per-player Serve/Rally stats page.
  */
 export function StatsPage() {
   const { data: roster } = useQuery(listPlayersOptions());
-  const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
+  const [surface, setSurface] = useState<SquadSurfaceFilter>("all");
+  const surfaceQuery = surface === "all" ? undefined : surface;
+  const { data: squadStats } = useQuery(
+    listSquadMemberStatsOptions({ query: { surface: surfaceQuery } }),
+  );
   const [leaderboardMetric, setLeaderboardMetric] = useState<SquadMetricKey>("record");
   const [search, setSearch] = useState("");
   const [trendMetric, setTrendMetric] = useState<SquadMetricKey>("record");
@@ -53,6 +73,12 @@ export function StatsPage() {
   return (
     <AppPage>
       <PageHeader title="Squad stats" />
+      <ChipRow<SquadSurfaceFilter>
+        aria-label="Surface"
+        options={SURFACE_OPTIONS}
+        value={surface}
+        onChange={setSurface}
+      />
       <SquadHeadlineCard entries={entries} />
       <SquadLeaderboardCard
         entries={entries}
@@ -61,7 +87,7 @@ export function StatsPage() {
         search={search}
         onSearchChange={setSearch}
       />
-      <SquadTrendCard metric={trendMetric} onMetricChange={setTrendMetric} />
+      <SquadTrendCard metric={trendMetric} onMetricChange={setTrendMetric} surface={surfaceQuery} />
     </AppPage>
   );
 }

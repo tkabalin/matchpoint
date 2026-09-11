@@ -257,3 +257,53 @@ test("shows an empty state instead of a blank chart when every week is null", as
     await screen.findByText("Not enough recent matches to show a trend yet."),
   ).toBeInTheDocument();
 });
+
+// #225: one shared filter for the whole roster, deliberately not offering
+// Carpet — effectively extinct in tennis, unlike the player page's own
+// data-driven surface chips.
+test("the surface filter offers Hard/Clay/Grass but never Carpet", async () => {
+  stubFetch();
+  await renderPage();
+
+  const group = screen.getByRole("group", { name: "Surface" });
+  expect(within(group).getByRole("button", { name: "All" })).toBeInTheDocument();
+  expect(within(group).getByRole("button", { name: "Hard" })).toBeInTheDocument();
+  expect(within(group).getByRole("button", { name: "Clay" })).toBeInTheDocument();
+  expect(within(group).getByRole("button", { name: "Grass" })).toBeInTheDocument();
+  expect(within(group).queryByRole("button", { name: "Carpet" })).not.toBeInTheDocument();
+});
+
+test("picking a surface re-fetches both the members and the trend with it applied", async () => {
+  const user = userEvent.setup({ delay: null });
+  const requestedUrls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      requestedUrls.push(input.url);
+      const { pathname } = new URL(input.url);
+      if (pathname === "/api/players") return Promise.resolve(Response.json(players));
+      if (pathname === "/api/squad/analytics/members") {
+        return Promise.resolve(Response.json(squadStats));
+      }
+      if (pathname === "/api/squad/analytics/trend") return Promise.resolve(Response.json(trend));
+      throw new Error(`Unstubbed fetch: ${pathname}`);
+    }),
+  );
+  await renderPage();
+  requestedUrls.length = 0;
+
+  await user.click(screen.getByRole("button", { name: "Clay" }));
+
+  await vi.waitFor(() => {
+    expect(
+      requestedUrls.some(
+        (url) => url.includes("/squad/analytics/members") && url.includes("surface=clay"),
+      ),
+    ).toBe(true);
+  });
+  expect(
+    requestedUrls.some(
+      (url) => url.includes("/squad/analytics/trend") && url.includes("surface=clay"),
+    ),
+  ).toBe(true);
+});
