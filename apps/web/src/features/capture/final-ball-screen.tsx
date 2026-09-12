@@ -72,13 +72,10 @@ export function FinalBallScreen({
       (["DEEP", "SHORT"] as const).map((depth) => {
         const label = `${HALF_LABELS[half]} ${DEPTH_LABELS[depth]}`;
         return {
+          // No `label` painted on the zone itself — a coach knows the four quadrants by
+          // feel, so the text only added clutter — but the accessible name keeps the
+          // same "deuce/ad deep/short" text, for tests and screen readers alike.
           name: `${owner}: ${label.toLowerCase()}`,
-          label,
-          // The far deep labels sit low, clear of the name chip on that baseline; the
-          // near ones stay centred, since "top" pads by a share of the width and in
-          // landscape that pushes them into the chip instead of away from it.
-          labelPlacement:
-            depth === "DEEP" && end === "far" ? ("bottom" as const) : ("center" as const),
           box: { ...COLUMNS[column], ...BANDS[end][depth] },
           tone: "court" as const,
           onTap: () => {
