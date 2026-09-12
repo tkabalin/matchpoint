@@ -85,6 +85,7 @@ export function LiveMatch({
   playerName,
   defaultScoringSystem,
   defaultSurfaceType,
+  previousOpponents = [],
   onExit,
   onViewResults,
 }: {
@@ -95,6 +96,11 @@ export function LiveMatch({
   // screen owns what a coach who saved none gets.
   defaultScoringSystem?: ScoringSystem;
   defaultSurfaceType?: SurfaceType;
+  // Opponent names this player has faced before, for the setup screen's suggestions.
+  // Fetched and handed in the same way as everything else network-shaped (see the
+  // module doc comment) — empty when the caller has nothing cached, which the setup
+  // screen treats as "no suggestions" rather than an error.
+  previousOpponents?: string[];
   onExit: () => void;
   onViewResults: (matchId: string) => void;
 }) {
@@ -456,6 +462,7 @@ export function LiveMatch({
         initial={setupConfig}
         defaultScoringSystem={defaultScoringSystem}
         defaultSurfaceType={defaultSurfaceType}
+        previousOpponents={previousOpponents}
         onBack={onExit}
         onStart={startMatch}
       />

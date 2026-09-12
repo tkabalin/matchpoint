@@ -120,6 +120,25 @@ test("what setup was left holding wins over the saved defaults", () => {
   expect(screen.getByLabelText("Event")).toHaveValue("Regional Open");
 });
 
+test("offers previous opponents as suggestions on the Opponent field", () => {
+  renderSetup({ previousOpponents: ["Okoye", "Zulu"] });
+
+  const opponentInput = screen.getByLabelText("Opponent");
+  expect(opponentInput).toHaveAttribute("list", "previous-opponents");
+
+  const options = document.querySelectorAll("datalist#previous-opponents option");
+  expect(Array.from(options).map((option) => (option as HTMLOptionElement).value)).toEqual([
+    "Okoye",
+    "Zulu",
+  ]);
+});
+
+test("no previous opponents is an empty datalist, not a missing one", () => {
+  renderSetup();
+
+  expect(document.querySelector("datalist#previous-opponents")).toBeEmptyDOMElement();
+});
+
 test("back steps out of setup", async () => {
   const { onBack, user } = renderSetup();
 

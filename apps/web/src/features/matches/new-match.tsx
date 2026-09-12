@@ -1,4 +1,8 @@
-import { getCurrentCoachOptions, getPlayerOptions } from "@matchpoint/api-client/react-query";
+import {
+  getCurrentCoachOptions,
+  getPlayerOptions,
+  listOpponentsOptions,
+} from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 
@@ -33,6 +37,11 @@ export function NewMatch() {
   // screen's defaults, and blocking on /coaches/me is what stranded a coach who reached
   // the court offline with no cached copy of it.
   const { data: coach } = useQuery(getCurrentCoachOptions());
+  // Same "read where it arrives, never waited for" reasoning as coach above: the
+  // setup screen's suggestions are a nicety, not something worth a spinner over, and
+  // an empty array (no cached list, or genuinely no prior opponents) reads to it as
+  // "nothing to suggest" rather than an error.
+  const { data: opponents } = useQuery(listOpponentsOptions({ path: { player_id: playerId } }));
   // Whose device this is, off localStorage rather than the wire, and the same id the
   // sync layer drains the outbox under (flush-triggers.ts) — so a match queued here is
   // queued under the id that will send it.
@@ -79,6 +88,7 @@ export function NewMatch() {
         // members and have to stay that way for this to pass straight through.
         defaultScoringSystem={coach?.default_scoring_system ?? undefined}
         defaultSurfaceType={coach?.default_surface ?? undefined}
+        previousOpponents={(opponents ?? []).map((opponent) => opponent.name)}
         onExit={() => {
           void navigate({ to: "/home" });
         }}

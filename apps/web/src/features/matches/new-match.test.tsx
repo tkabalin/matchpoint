@@ -49,12 +49,14 @@ const coach: CoachRead = {
 function stubFetch(
   playerResponse: () => Response = () => Response.json(player),
   coachResponse: () => Promise<Response> = () => Promise.resolve(Response.json(coach)),
+  opponentsResponse: () => Promise<Response> = () => Promise.resolve(Response.json([])),
 ) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
       if (pathname === "/api/coaches/me") return coachResponse();
+      if (pathname.endsWith("/analytics/opponents")) return opponentsResponse();
       return Promise.resolve(playerResponse());
     }),
   );
@@ -140,6 +142,29 @@ test("says so instead of starting a match no drain can send", async () => {
 
   expect(await screen.findByText(/no coach recorded yet/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Start match" })).not.toBeInTheDocument();
+});
+
+// Offered as a native datalist rather than asserted by role, since that's how the
+// setup screen wires them up (see match-setup-screen.tsx).
+test("offers this player's previous opponents as suggestions", async () => {
+  stubFetch(undefined, undefined, () =>
+    Promise.resolve(Response.json([{ key: "okoye", name: "Okoye", matches: 3 }])),
+  );
+  renderNewMatch();
+
+  await screen.findByRole("heading", { name: "Match" });
+
+  expect(document.querySelector("datalist#previous-opponents option")).toHaveValue("Okoye");
+});
+
+// The court is where the connection isn't — the suggestions list has to be able to
+// come back empty (never fetched, or the request failed) without blocking setup.
+test("starts a match with no previous-opponent suggestions available", async () => {
+  stubFetch(undefined, undefined, () => Promise.reject(new Error("offline")));
+  renderNewMatch();
+
+  expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
+  expect(document.querySelector("datalist#previous-opponents")).toBeEmptyDOMElement();
 });
 
 // Reachable by typing a url, or from a stale link after the player was deleted.

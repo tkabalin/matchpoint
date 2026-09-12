@@ -1,10 +1,11 @@
 /**
  * The match setup screen — what a match needs before its first point.
  *
- * Everything here is a field on `Match`, with one exception: the time is shown for the
- * coach's confirmation only, since `playedOn` is a calendar date and stores no time of
- * day on purpose (see match.ts). Which player the match is for is settled before this
- * screen, so it names them rather than asking.
+ * Everything here is a field on `Match`, with two exceptions: the time is shown for
+ * the coach's confirmation only, since `playedOn` is a calendar date and stores no
+ * time of day on purpose (see match.ts); and `previousOpponents`, which only backs the
+ * Opponent field's suggestions and is never itself sent anywhere. Which player the
+ * match is for is settled before this screen, so it names them rather than asking.
  */
 
 import { ArrowLeft } from "lucide-react";
@@ -49,6 +50,7 @@ export function MatchSetupScreen({
   initial,
   defaultScoringSystem = "traditional",
   defaultSurfaceType = "unspecified",
+  previousOpponents = [],
   onBack,
   onStart,
 }: {
@@ -58,6 +60,11 @@ export function MatchSetupScreen({
   initial?: MatchSetupConfig | null;
   defaultScoringSystem?: ScoringSystem;
   defaultSurfaceType?: SurfaceType;
+  // Opponent names this player has faced before, most-met first. Handed in rather
+  // than fetched here — this slice never touches the network (see match-setup-screen's
+  // own module doc comment and .claude/rules/web-capture.md). Empty when there's
+  // nothing to suggest, offline or otherwise — the datalist below just has no options.
+  previousOpponents?: string[];
   onBack: () => void;
   onStart: (config: MatchSetupConfig) => void;
 }) {
@@ -100,11 +107,20 @@ export function MatchSetupScreen({
             id="opponent"
             value={opponentName}
             placeholder="Name"
+            list="previous-opponents"
             onChange={(event) => {
               setOpponentName(event.target.value);
             }}
             className="h-11 rounded-lg text-sm"
           />
+          {/* Native datalist, not a custom combobox: the browser handles the dropdown
+              and typing a name with no match still works — a first-time opponent isn't
+              blocked by not being in the list. */}
+          <datalist id="previous-opponents">
+            {previousOpponents.map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
         </Field>
 
         <Field>
