@@ -12,11 +12,16 @@ import { Logo } from "@/components/logo";
  */
 export function AuthenticatedLayout() {
   return (
-    <>
+    <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-40 flex justify-center border-b bg-background py-2">
         <Logo size="compact" />
       </header>
-      <Outlet />
-    </>
+      {/* One shared viewport-height column rather than the header's own space plus a
+          separate 100dvh block below it — capture's full-viewport screen relies on this
+          to get exactly what's left after the header, not the header's height on top. */}
+      <div className="min-h-0 flex-1">
+        <Outlet />
+      </div>
+    </div>
   );
 }

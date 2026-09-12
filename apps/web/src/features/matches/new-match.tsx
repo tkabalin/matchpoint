@@ -78,7 +78,7 @@ export function NewMatch() {
   }
 
   return (
-    <div className="mx-auto flex h-dvh w-full max-w-md flex-col px-5 pt-4 pb-8">
+    <div className="mx-auto flex h-full w-full max-w-md flex-col px-5 pt-4 pb-8">
       <LiveMatch
         coachId={coachId}
         trackedPlayerId={player.id}
