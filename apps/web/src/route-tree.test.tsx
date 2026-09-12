@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { outboxDb } from "@/features/outbox/db";
 import { append, readPending } from "@/features/outbox/outbox";
-import { purgeIfCoachChanged } from "@/lib/local-data";
+import { purgeIfCoachChanged, recordOwnerIfUnknown } from "@/lib/local-data";
 import { queryPersistOptions, removePersistedQueryCache } from "@/lib/query-persist";
 
 import { routeTree } from "./routeTree.gen";
@@ -231,6 +231,59 @@ test("a confirmed 401 keeps the points that never synced", async () => {
   // sign back in and the points they captured courtside are still there (#117).
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
   expect(await readPending(coach.id)).toHaveLength(1);
+});
+
+// #257: `/` used to render the sign-in form unconditionally, with no session check at
+// all — these are its inverse of the `_authenticated` guard tests above.
+test("/ redirects straight to /home with a live session, rather than showing the form", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json([player]),
+    "/api/squad/analytics/members": () => Response.json([]),
+  });
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Coach Danny" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
+});
+
+test("/ shows the sign-in form with no session", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("/ goes to /home for a recorded owner with no connection, not the form", async () => {
+  // The query cache's own persisted snapshot isn't available yet at this beforeLoad —
+  // PersistQueryClientProvider restores it into context.queryClient on mount, in
+  // RootLayout, which runs after this guard rather than before it (root-layout.tsx's
+  // own comment). getRecordedOwner() is what stands in for it here: set the moment any
+  // session check first succeeds on this device, offline-readable, and cleared only by
+  // an explicit sign-out.
+  recordOwnerIfUnknown(coach.id);
+  onlineManager.setOnline(false);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+  await renderRouteTreeAt("/");
+
+  // Redirected to /home on the strength of getRecordedOwner() alone — every query
+  // Home itself issues is failing offline too, so this only proves the redirect
+  // happened, not that Home's own data loaded (it doesn't need to, to prove the fix).
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+});
+
+test("/ shows the form, not /home, with no connection and no owner recorded", async () => {
+  onlineManager.setOnline(false);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
 // #194: this app's first public, non-auth routes besides the auth screens
