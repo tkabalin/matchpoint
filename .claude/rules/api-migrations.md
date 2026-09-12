@@ -24,11 +24,15 @@ paths:
 
 ## `downgrade()` Must Really Reverse
 
-- The round-trip test only fails on a downgrade that _raises_. One that is empty or incomplete still
-  leaves the earlier revisions to drop the tables, so the suite stays green while the revision
-  cannot actually be rolled back. Reviewing it is on you.
+- `tests/test_migrations.py` walks head to base a revision at a time and back up again, comparing
+  the schema each downgrade steps back to against the one the matching upgrade builds from the same
+  place. A downgrade that drops less than its upgrade added fails there, emptied bodies included.
+- What the comparison cannot see is **data**: a downgrade restoring a column but not its contents
+  passes, because it runs against an empty database. A revision whose upgrade is lossy says so in a
+  comment, and the tests further down the file arrange rows for the ones where the loss is the
+  point.
 
 ## Adding a Table
 
-- Add its name to `MIGRATED_TABLES` in `tests/test_migrations.py`. The round-trip test asserts only
-  over that set, so a table left out is a table the test silently says nothing about.
+- Add its name to `MIGRATED_TABLES` in `tests/test_migrations.py`. That set is what the endpoints of
+  the walk assert over, so a table left out is one nothing checks was built or dropped at all.
