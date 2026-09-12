@@ -259,7 +259,7 @@ test("OK returns to the form from the can't-delete-yet step", async () => {
 // already guards against for one named match, now needed for every match a deleted
 // player had.
 test("deleting a player clears its logged matches and queued outbox rows on this device", async () => {
-  recordOwnerIfUnknown(COACH_ID);
+  recordOwnerIfUnknown(COACH_ID, "coach");
   await saveMatch({
     matchId: MATCH_ID,
     coachId: COACH_ID,

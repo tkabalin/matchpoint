@@ -79,7 +79,7 @@ beforeEach(async () => {
   await outboxDb.events.clear();
   await outboxDb.matches.clear();
   localStorage.clear();
-  recordOwnerIfUnknown(COACH_ID);
+  recordOwnerIfUnknown(COACH_ID, "coach");
 });
 
 afterEach(() => {
