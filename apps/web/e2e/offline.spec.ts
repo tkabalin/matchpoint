@@ -160,7 +160,7 @@ async function tapOutMatch(page: Page, opponentName: string, taps: readonly Tap[
       await page.getByRole("button", { name: "Ace" }).click();
     } else {
       await page.getByRole("button", { name: "Didn't see" }).click();
-      await expect(page.getByRole("heading", { name: "Rally" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Final ball" })).toBeVisible();
       await page.getByRole("button", { name: "Didn't see" }).click();
       await page.getByRole("dialog").getByRole("button", { name: /^Win/ }).click();
     }

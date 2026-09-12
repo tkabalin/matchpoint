@@ -114,17 +114,22 @@ test("a point threads serve to final ball and lands on the scoreboard", async ()
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
 
+  // Finished on the opponent's half, so Rivera won it.
+  await user.click(screen.getByRole("button", { name: "Okoye: deuce deep" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally length" })).toBeVisible();
+  });
   await user.click(screen.getByRole("button", { name: "3-5" }));
-  await user.click(screen.getByRole("button", { name: "Win, forced error" }));
+
+  expect(screen.getByRole("heading", { name: "How it ended" })).toBeVisible();
+  expect(screen.getByText("Point to Rivera")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: /^Forced/ }));
 
   expect(screen.getByRole("heading", { name: "Final shot" })).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Forehand drive" }));
-
-  expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Deuce deep" }));
 
   // Back to a fresh serve, with the point on the board as 15-0.
   await waitFor(() => {
@@ -134,26 +139,36 @@ test("a point threads serve to final ball and lands on the scoreboard", async ()
   expect(within(score).getByText("15")).toBeVisible();
 });
 
-test("the rally screen's two questions can be answered in either order", async () => {
+test("a ball finishing on our half is a point lost", async () => {
   const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
+  await user.click(screen.getByRole("button", { name: "Rivera: ad short" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally length" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "1-2" }));
 
-  // Outcome tapped first this time — the screen stays put until the length follows.
-  await user.click(screen.getByRole("button", { name: "Win, forced error" }));
-  expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
-  expect(screen.getByRole("button", { name: "Win, forced error" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  expect(screen.getByText("Point to Okoye")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: /^Unforced/ }));
 
-  await user.click(screen.getByRole("button", { name: "3-5" }));
-
-  expect(screen.getByRole("heading", { name: "Final shot" })).toBeVisible();
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+  });
+  const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];
+  expect(point?.payload).toMatchObject({
+    won: false,
+    endReason: "MISTAKE",
+    ballIn: true,
+    ballLocation: { half: "AD", depth: "SHORT" },
+    rallyLengthBucket: "B1",
+  });
+  const score = screen.getByRole("table", { name: "Score" });
+  expect(within(score).getByText("15")).toBeVisible();
 });
 
 test("an unforced error skips the shot screen", async () => {
@@ -162,55 +177,49 @@ test("an unforced error skips the shot screen", async () => {
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "Okoye: deuce deep" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally length" })).toBeVisible();
   });
   await user.click(screen.getByRole("button", { name: "1-2" }));
-  await user.click(screen.getByRole("button", { name: "Loss, unforced error" }));
+  await user.click(screen.getByRole("button", { name: /^Unforced/ }));
 
-  expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
+  // Straight back to the next serve: no shot screen in between.
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+  });
+  const point = vi.mocked(append).mock.calls.find((call) => call[0].kind === "point")?.[0];
+  expect(point?.payload).toMatchObject({ won: true, endReason: "MISTAKE", wing: null });
 });
 
-// The rally length used to live in its own piece of state, parked until commit — a let
-// discarded the draft but not that state, so the abandoned rally's length silently
-// carried into the replayed point (#5).
-test("a let after picking a rally length doesn't carry it into the replayed point", async () => {
+test("a let from the final ball replays the point from the first serve", async () => {
   const { user } = await renderMatch();
   await startMatch(user);
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
-  await user.click(screen.getByRole("button", { name: "3-5" }));
 
   await user.click(screen.getByRole("button", { name: "Let" }));
   await waitFor(() => {
     expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
   });
-
-  await user.click(screen.getByRole("button", { name: "Deuce service box" }));
-  await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
-  });
-
-  expect(screen.getByRole("status")).toHaveTextContent("Pick the rally length and how it ended");
-  expect(screen.getByRole("button", { name: "3-5" })).toHaveAttribute("aria-pressed", "false");
-  expect(screen.getByRole("button", { name: "Win, forced error" })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  // Nothing scored, and the replayed point starts from nothing.
+  expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "point")).toBe(false);
 });
 
 test("a point the coach only half-saw is kept, not discarded", async () => {
   const { user } = await renderMatch();
   await startMatch(user);
 
-  // Missed the serve, watched the rally, missed how it ended.
+  // Missed the serve, then missed how it ended too.
   await user.click(screen.getByRole("button", { name: "Didn't see" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
-  await user.click(screen.getByRole("button", { name: "3-5" }));
   await user.click(screen.getByRole("button", { name: "Didn't see" }));
   await user.click(screen.getByRole("button", { name: /Win/ }));
 
@@ -219,7 +228,7 @@ test("a point the coach only half-saw is kept, not discarded", async () => {
     won: true,
     serves: [],
     endReason: null,
-    rallyLengthBucket: "B2",
+    rallyLengthBucket: null,
   });
   // And the score moved, which is the whole point of keeping it.
   const score = screen.getByRole("table", { name: "Score" });
@@ -232,16 +241,16 @@ test("a missed stroke still records where the ball landed", async () => {
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
+  });
+  await user.click(screen.getByRole("button", { name: "Okoye: deuce deep" }));
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Rally length" })).toBeVisible();
   });
   await user.click(screen.getByRole("button", { name: "3-5" }));
-  await user.click(screen.getByRole("button", { name: "Win, forced error" }));
+  await user.click(screen.getByRole("button", { name: /^Forced/ }));
   await user.click(screen.getByRole("button", { name: "Didn't see the shot" }));
 
-  expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
-  await user.click(screen.getByRole("button", { name: "Deuce deep" }));
-
-  // The court's own tap flash runs before the action fires.
   await waitFor(() => {
     expect(vi.mocked(append).mock.calls.some((call) => call[0].kind === "point")).toBe(true);
   });
@@ -298,7 +307,7 @@ test("back walks the point's screens, and stops at the serve", async () => {
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
 
   await user.click(screen.getByRole("button", { name: "Back" }));
@@ -315,7 +324,7 @@ test("once the match is queued, undoing back to the serve screen leaves rather t
 
   await user.click(screen.getByRole("button", { name: "Deuce service box" }));
   await waitFor(() => {
-    expect(screen.getByRole("heading", { name: "Rally" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Final ball" })).toBeVisible();
   });
 
   await user.click(screen.getByRole("button", { name: "Back" }));

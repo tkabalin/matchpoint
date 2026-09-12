@@ -2,7 +2,7 @@
  * "Who won the point?" — the one question a point can never go without.
  *
  * Asked wherever the coach stops short of a full capture: the header's skip records a
- * point winner-only, and the rally screen's "didn't see" records one whose ending went
+ * point winner-only, and the final ball screen's "didn't see" records one whose ending went
  * unwatched. Both need the same two taps and the same wording, which is why the sheet
  * is shared rather than written twice.
  */

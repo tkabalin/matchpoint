@@ -52,7 +52,7 @@ export function undoLast(events: readonly MatchEvent[]): {
 
 /**
  * Records a retirement at the match level — the in-progress point itself is
- * discarded identically to a let reset (capture-flow's own TAP_LET on RALLY already
+ * discarded identically to a let reset (capture-flow's own TAP_LET on BALL_LOCATION already
  * does that, nothing new needed there), so this covers only the fact that needs
  * recording on `Match`. `Match.outcomeOverride` already carries everything: `reason`
  * is `"retirement"`, and "who retired" is fully recoverable as the *other*

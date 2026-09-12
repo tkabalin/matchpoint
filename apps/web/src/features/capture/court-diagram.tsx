@@ -1,7 +1,7 @@
 /**
- * The court five of the capture screens tap on — serve, return, rally, final shot and
- * final ball differ only in which zones sit over the same diagram, so the diagram is
- * built once and parameterised by them rather than redrawn per screen.
+ * The court six of the capture screens tap on — serve, return, final ball, rally length,
+ * ending and final shot differ only in which zones sit over the same diagram, so the
+ * diagram is built once and parameterised by them rather than redrawn per screen.
  *
  * Line and zone percentages are copied verbatim from the capture flow design
  * handoff, which scaled them off a real doubles court.

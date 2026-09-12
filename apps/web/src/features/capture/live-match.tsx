@@ -11,8 +11,7 @@
  * ever invented to bridge the two. Editing is tail-only: append, or undo the newest
  * event, as often as needed.
  *
- * Three of the flow's steps have no screen. RALLY_LENGTH re-affirms the bucket the
- * rally screen already wrote onto the draft, READY commits, and ABORTED restarts the
+ * Two of the flow's steps have no screen: READY commits, and ABORTED restarts the
  * point. The rest is a switch over the step.
  *
  * Nothing here awaits: `outbox.append` is fired and left, per web-capture.md, and the
@@ -32,6 +31,7 @@ import { commitDraft, transition } from "./capture-flow";
 import type { CaptureAction, CaptureState } from "./capture-flow";
 import { ScoreCheckpoint } from "./checkpoint";
 import type { ScoreSnapshot } from "./checkpoint";
+import { EndingScreen } from "./ending-screen";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
 import { Match } from "./match";
@@ -42,7 +42,7 @@ import type { MatchSetupConfig } from "./match-setup-screen";
 import { isMatchOver, retireMatch, startNextPoint, undoLast } from "./match-flow";
 import { Point } from "./point";
 import type { Server } from "./point";
-import { RallyScreen } from "./rally-screen";
+import { RallyLengthScreen } from "./rally-length-screen";
 import { ResultScreen } from "./result-screen";
 import { ReturnScreen } from "./return-screen";
 import {
@@ -268,10 +268,6 @@ export function LiveMatch({
     let next = from;
     for (const action of actions) next = transition(next, action);
 
-    if (next.step.name === "RALLY_LENGTH") {
-      next = transition(next, { type: "TAP_RALLY_LENGTH", bucket: next.draft.rallyLengthBucket });
-    }
-
     if (next.step.name === "ABORTED") {
       // Only reachable now if something dispatches UNDO with nothing behind it: Back
       // stops offering it (see backAction). The draft is gone, so the point starts over.
@@ -339,13 +335,17 @@ export function LiveMatch({
 
   /**
    * Records the point winner-only, the header's skip. TAP_UNUSUAL is valid from a serve
-   * or a rally, so anything captured past that is stepped back off first rather than
-   * half-kept.
+   * or the final ball, so anything captured past that is stepped back off first rather
+   * than half-kept.
    */
   function skipPoint(won: boolean) {
     if (capture === null) return;
     let from = capture;
-    while (from.step.name !== "SERVE" && from.step.name !== "RALLY" && from.history.length > 0) {
+    while (
+      from.step.name !== "SERVE" &&
+      from.step.name !== "BALL_LOCATION" &&
+      from.history.length > 0
+    ) {
       from = transition(from, { type: "UNDO" });
     }
     advance(from, [
@@ -597,25 +597,26 @@ export function LiveMatch({
           <ReturnScreen step={step} onAction={dispatch} />
         ))}
 
-      {step.name === "RALLY" && (
-        <RallyScreen
+      {step.name === "BALL_LOCATION" && (
+        <FinalBallScreen
           trackedPlayerName={playerName}
           opponentName={opponentName}
-          rallyBucket={draft.rallyLengthBucket}
-          onRallyBucketChange={(bucket) => {
-            dispatch({ type: "TAP_RALLY_LENGTH", bucket });
-          }}
-          won={draft.won}
-          endReason={draft.endReason}
+          onAction={dispatch}
+        />
+      )}
+
+      {step.name === "RALLY_LENGTH" && <RallyLengthScreen onAction={dispatch} />}
+
+      {step.name === "ENDING" && (
+        <EndingScreen
+          won={draft.won ?? true}
+          trackedPlayerName={playerName}
+          opponentName={opponentName}
           onAction={dispatch}
         />
       )}
 
       {step.name === "SHOT_DETAIL" && <FinalShotScreen onAction={dispatch} />}
-
-      {step.name === "BALL_LOCATION" && (
-        <FinalBallScreen won={draft.won ?? true} onAction={dispatch} />
-      )}
 
       {(step.name === "UNUSUAL_OUTCOME" || step.name === "UNUSUAL_REASON") && (
         <UnusualPointSheet

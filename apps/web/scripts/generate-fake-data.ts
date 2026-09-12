@@ -571,11 +571,6 @@ function capturePoint(
     act({ type: "TAP_RETURN", outcome: "IN" });
   }
 
-  // The rally screen only advances once both its questions are answered, and the one
-  // way off it without judging the length is "didn't see" the ending — which is the
-  // ending the API cannot store, so the length is always judged here.
-  act({ type: "TAP_RALLY_LENGTH", bucket: rallyBucket() });
-
   if (chance(0.008)) {
     act({ type: "TAP_UNUSUAL" });
     act({ type: "TAP_UNUSUAL_OUTCOME", won });
@@ -588,10 +583,17 @@ function capturePoint(
     return finish(state, match, board, sequence, timestamp);
   }
 
+  // Always in: capture records where the last good ball finished on the loser's half,
+  // never where a miss went (see point.ts's own comment on ballIn). The one way off this
+  // screen without a location is "didn't see" the ending — which is the ending the API
+  // cannot store, so a location is always tapped here.
+  act({ type: "TAP_BALL_LOCATION", won, ballIn: true, location: courtZone() });
+  act({ type: "TAP_RALLY_LENGTH", bucket: rallyBucket() });
+
   // Longer rallies end in a mistake more often than a ball nobody could reach.
   const winnerAggression = won ? tracked.aggression : opponent.aggression;
   const endReason = chance(0.34 + winnerAggression * 0.3) ? "FORCED" : "MISTAKE";
-  act({ type: "TAP_RALLY_OUTCOME", won, endReason });
+  act({ type: "TAP_ENDING", endReason });
 
   if (endReason === "FORCED") {
     if (chance(attention.missShot)) {
@@ -602,28 +604,17 @@ function capturePoint(
     }
   }
 
-  // Always in: capture records where the last ball to land finished, never where a
-  // miss went (see point.ts's own comment on ballIn).
-  act({ type: "TAP_BALL_LOCATION", ballIn: true, location: courtZone() });
-
   return finish(state, match, board, sequence, timestamp);
 }
 
-/** Answers the rally-length step off the draft, then commits — live-match's `advance`. */
+/** Commits the finished draft — live-match's `advance`. */
 function finish(
-  state: CaptureState,
+  final: CaptureState,
   match: Match,
   board: Scoreboard,
   sequence: number,
   timestamp: number,
 ): Point {
-  let final = state;
-  if (final.step.name === "RALLY_LENGTH") {
-    final = transition(final, {
-      type: "TAP_RALLY_LENGTH",
-      bucket: final.draft.rallyLengthBucket,
-    });
-  }
   if (final.step.name !== "READY") {
     throw new Error(`point ${String(sequence)} ended on step ${final.step.name}, not READY`);
   }

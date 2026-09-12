@@ -3,7 +3,8 @@
  *
  * Their own module rather than court-diagram.tsx's: a file that exports a component
  * may export only components if fast refresh is to work, and these are shared by two
- * screens that draw over the court (see rally-screen.tsx and final-shot-screen.tsx).
+ * screens that draw over the court (rally-length-screen.tsx, ending-screen.tsx and
+ * final-shot-screen.tsx).
  */
 
 /**
@@ -26,3 +27,10 @@ export const COURT_COLUMNS = [2, 4];
 
 /** Row lines into COURT_REGION_GRID, top to bottom: backcourt, service box, service box, backcourt. */
 export const COURT_ROWS = [2, 4, 6, 8];
+
+/**
+ * Spans into COURT_REGION_GRID for a card covering a whole half: both columns across the
+ * centre service line, and backcourt, service line and box top to bottom.
+ */
+export const COURT_HALF_COLUMNS = "2 / 5";
+export const COURT_HALF_ROWS = { far: "2 / 5", near: "6 / 9" } as const;

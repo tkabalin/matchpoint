@@ -103,12 +103,12 @@ function freshDraft(
  */
 export type CaptureStep =
   | { name: "SERVE"; number: 1 | 2 }
-  | { name: "RALLY" }
+  | { name: "BALL_LOCATION" } // where the last good ball finished, which also says who won
   | { name: "UNUSUAL_OUTCOME" } // win/loss — mandatory, the score must stay correct
   | { name: "UNUSUAL_REASON" } // optional, may be skipped
-  | { name: "SHOT_DETAIL" }
-  | { name: "BALL_LOCATION" }
   | { name: "RALLY_LENGTH" }
+  | { name: "ENDING" } // forced or unforced
+  | { name: "SHOT_DETAIL" }
   | { name: "READY" } // draft complete — caller calls commitDraft
   | { name: "ABORTED" }; // discarded — caller starts a fresh point
 
@@ -156,22 +156,26 @@ export type CaptureAction =
   // endReason is required exactly when outcome is an error (the coach's forced/mistake
   // read on the return itself); omitted when the return stays in play.
   | { type: "TAP_RETURN"; outcome: ReturnOutcome; endReason?: "FORCED" | "MISTAKE" }
-  // Valid from a SERVE or RALLY step — see transition()'s own comment on what each
-  // origin resets.
+  // Valid from a SERVE or BALL_LOCATION step — see transition()'s own comment on what
+  // each origin resets.
   | { type: "TAP_LET" }
-  | { type: "TAP_RALLY_OUTCOME"; won: boolean; endReason: "FORCED" | "MISTAKE" }
-  // Valid from a SERVE or RALLY step — from a serve, no serve is recorded at all.
+  // Valid from a SERVE or BALL_LOCATION step — from a serve, no serve is recorded at all.
   | { type: "TAP_UNUSUAL" }
   // "I didn't see that." Valid on every step that asks for an observation, and the
   // one place the flow stops short without discarding the point: whatever the coach
   // did see is kept, and everything past it stays null. `won` is required exactly on
-  // RALLY, where the ending is what went unseen and the winner still has to be told.
+  // BALL_LOCATION, where the ending is what went unseen and the winner still has to
+  // be told.
   | { type: "TAP_DIDNT_SEE"; won?: boolean }
   | { type: "TAP_UNUSUAL_OUTCOME"; won: boolean }
   | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null; note: string | null }
+  // The last good ball finished on the loser's half, so the half the coach tapped is
+  // also who won. The screen resolves that (it knows which half is drawn where); this
+  // module only stores the answer.
+  | { type: "TAP_BALL_LOCATION"; won: boolean; ballIn: boolean; location: CourtZone | FailureMode }
+  | { type: "TAP_RALLY_LENGTH"; bucket: RallyBucket }
+  | { type: "TAP_ENDING"; endReason: "FORCED" | "MISTAKE" }
   | { type: "TAP_SHOT_DETAIL"; wing: Wing; shotType: ShotType }
-  | { type: "TAP_BALL_LOCATION"; ballIn: boolean; location: CourtZone | FailureMode }
-  | { type: "TAP_RALLY_LENGTH"; bucket: RallyBucket | null }
   // The header's note button — valid on every step, since a note is a supplementary
   // annotation, not part of the tennis flow it's layered over.
   | { type: "ADD_NOTE"; text: string }
@@ -192,14 +196,6 @@ function appendNote(existing: string | null, text: string): string | null {
   const trimmed = text.trim();
   if (trimmed.length === 0) return existing;
   return existing === null ? trimmed : `${existing}\n${trimmed}`;
-}
-
-// Where the RALLY step sends the draft once both taps are in — shared by the two
-// branches below since either one can be the tap that completes the pair. An unforced
-// error skips the shot: which stroke produced a miss tells a coach less than where it
-// missed, and asking costs a tap on the commonest ending.
-function rallyOutcomeNextStep(endReason: "FORCED" | "MISTAKE"): CaptureStep {
-  return endReason === "MISTAKE" ? { name: "BALL_LOCATION" } : { name: "SHOT_DETAIL" };
 }
 
 // The endings with no rally at all — the flow layer defaults rallyLengthBucket to the
@@ -265,7 +261,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       // on the second serve) survives untouched.
       return state;
     }
-    if (step.name === "RALLY") {
+    if (step.name === "BALL_LOCATION") {
       // Rally let: replay the whole point from first serve. Full reset, not a partial
       // one — matchId/sequence/server are the only three fields that never change
       // across a draft's life, so rebuilding from just those is exactly "start over."
@@ -281,21 +277,17 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     if (step.name === "SERVE") {
       // Nothing is recorded for the serve — an unwatched one is absent from `serves`,
       // not a fourth thing a serve can do — and the rally is still ahead.
-      return advance(state, { name: "RALLY" }, draft);
-    }
-    if (step.name === "RALLY") {
-      if (action.won === undefined) {
-        throw new Error("TAP_DIDNT_SEE requires won on the rally step");
-      }
-      // The ending is what went unseen, so endReason and everything below it stay
-      // null. The rally length keeps whatever was picked, including nothing.
-      return advance(state, { name: "READY" }, { ...draft, won: action.won, endReason: null });
-    }
-    if (step.name === "SHOT_DETAIL") {
       return advance(state, { name: "BALL_LOCATION" }, draft);
     }
     if (step.name === "BALL_LOCATION") {
-      return advance(state, { name: "RALLY_LENGTH" }, draft);
+      if (action.won === undefined) {
+        throw new Error("TAP_DIDNT_SEE requires won on the ball location step");
+      }
+      // The ending is what went unseen, so endReason and everything below it stay null.
+      return advance(state, { name: "READY" }, { ...draft, won: action.won, endReason: null });
+    }
+    if (step.name === "SHOT_DETAIL") {
+      return advance(state, { name: "READY" }, draft);
     }
     throw invalidAction(action, step);
   }
@@ -304,7 +296,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     // From a SERVE step nothing is committable yet (no attempt, or a lone fault still
     // awaiting its second), so the attempt in hand is simply not recorded: an unwatched
     // serve is one absent from `serves`, not a fourth thing a serve can do.
-    if (step.name !== "SERVE" && step.name !== "RALLY") {
+    if (step.name !== "SERVE" && step.name !== "BALL_LOCATION") {
       throw invalidAction(action, step);
     }
     return advance(state, { name: "UNUSUAL_OUTCOME" }, draft);
@@ -316,7 +308,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       if (action.type === "TAP_SERVE_IN") {
         if (draft.server !== "TRACKED") throw invalidAction(action, step);
         const nextDraft = withServe(draft, { number, outcome: "IN", location: null });
-        return advance(state, { name: "RALLY" }, nextDraft);
+        return advance(state, { name: "BALL_LOCATION" }, nextDraft);
       }
       if (action.type === "TAP_SERVE_ACE") {
         const nextDraft = withServe(draft, { number, outcome: "ACE", location: null });
@@ -350,7 +342,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
           if (action.endReason !== undefined) {
             throw new Error("TAP_RETURN must omit endReason when outcome is IN");
           }
-          return advance(state, { name: "RALLY" }, withServeIn);
+          return advance(state, { name: "BALL_LOCATION" }, withServeIn);
         }
         if (action.endReason === undefined) {
           throw new Error("TAP_RETURN requires endReason when the return errored");
@@ -369,27 +361,15 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
       throw invalidAction(action, step);
     }
 
-    case "RALLY": {
-      // Two questions, answered in either order: each tap writes into the draft in
-      // place, and only the tap that completes the pair advances the screen — so
-      // "outcome then length" and "length then outcome" both land on the same next
-      // step. Sticky either way, same as before: writing without advancing means
-      // nothing is pushed onto history, so a let or an undo-to-ABORTED wipes whichever
-      // half was picked along with the rest of the draft instead of it outliving the
-      // point it was picked for.
-      if (action.type === "TAP_RALLY_LENGTH") {
-        const nextDraft: PointDraft = { ...draft, rallyLengthBucket: action.bucket };
-        if (draft.endReason === "FORCED" || draft.endReason === "MISTAKE") {
-          return advance(state, rallyOutcomeNextStep(draft.endReason), nextDraft);
-        }
-        return { ...state, draft: nextDraft };
-      }
-      if (action.type === "TAP_RALLY_OUTCOME") {
-        const nextDraft: PointDraft = { ...draft, won: action.won, endReason: action.endReason };
-        if (draft.rallyLengthBucket !== null) {
-          return advance(state, rallyOutcomeNextStep(action.endReason), nextDraft);
-        }
-        return { ...state, draft: nextDraft };
+    case "BALL_LOCATION": {
+      if (action.type === "TAP_BALL_LOCATION") {
+        const nextDraft: PointDraft = {
+          ...draft,
+          won: action.won,
+          ballIn: action.ballIn,
+          ballLocation: action.location,
+        };
+        return advance(state, { name: "RALLY_LENGTH" }, nextDraft);
       }
       throw invalidAction(action, step);
     }
@@ -409,30 +389,10 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
           unusualReason: action.reason,
           unusualNote: action.note,
         };
-        // Deliberately NOT auto-filled, unlike ACE/DOUBLE_FAULT: a mid-rally hindrance
-        // had a real length, a point penalty had none, and this flow can't tell which
-        // — defaulting either way would corrupt short-rally win-percentage stats.
-        return advance(state, { name: "RALLY_LENGTH" }, nextDraft);
-      }
-      throw invalidAction(action, step);
-    }
-
-    case "SHOT_DETAIL": {
-      if (action.type === "TAP_SHOT_DETAIL") {
-        const nextDraft: PointDraft = { ...draft, wing: action.wing, shotType: action.shotType };
-        return advance(state, { name: "BALL_LOCATION" }, nextDraft);
-      }
-      throw invalidAction(action, step);
-    }
-
-    case "BALL_LOCATION": {
-      if (action.type === "TAP_BALL_LOCATION") {
-        const nextDraft: PointDraft = {
-          ...draft,
-          ballIn: action.ballIn,
-          ballLocation: action.location,
-        };
-        return advance(state, { name: "RALLY_LENGTH" }, nextDraft);
+        // rallyLengthBucket is left null, neither asked nor defaulted like ACE/
+        // DOUBLE_FAULT: a mid-rally hindrance had a real length, a point penalty had
+        // none, and a default either way would corrupt short-rally win-percentage stats.
+        return advance(state, { name: "READY" }, nextDraft);
       }
       throw invalidAction(action, step);
     }
@@ -440,6 +400,26 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
     case "RALLY_LENGTH": {
       if (action.type === "TAP_RALLY_LENGTH") {
         const nextDraft: PointDraft = { ...draft, rallyLengthBucket: action.bucket };
+        return advance(state, { name: "ENDING" }, nextDraft);
+      }
+      throw invalidAction(action, step);
+    }
+
+    case "ENDING": {
+      if (action.type === "TAP_ENDING") {
+        const nextDraft: PointDraft = { ...draft, endReason: action.endReason };
+        // An unforced error skips the shot: which stroke produced a miss tells a coach
+        // less than where it missed, and asking costs a tap on the commonest ending.
+        const nextStep: CaptureStep =
+          action.endReason === "MISTAKE" ? { name: "READY" } : { name: "SHOT_DETAIL" };
+        return advance(state, nextStep, nextDraft);
+      }
+      throw invalidAction(action, step);
+    }
+
+    case "SHOT_DETAIL": {
+      if (action.type === "TAP_SHOT_DETAIL") {
+        const nextDraft: PointDraft = { ...draft, wing: action.wing, shotType: action.shotType };
         return advance(state, { name: "READY" }, nextDraft);
       }
       throw invalidAction(action, step);
