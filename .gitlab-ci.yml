@@ -233,7 +233,10 @@ api-test:
     # binary and doesn't, so this stays out of .api-base and off python-lint.
     - apt-get update -qq && apt-get install -y -qq libatomic1 > /dev/null
     - uv run pyright
-    - uv run pytest --cov --junitxml=junit.xml
+    # --cov-fail-under is the gate; the regex below only feeds the badge, and a badge
+    # is free to drop to 98% without anything noticing. Kept on the invocation rather
+    # than in pyproject.toml so a local `pytest --cov` of one file still runs.
+    - uv run pytest --cov --cov-fail-under=100 --junitxml=junit.xml
   # Matches the TOTAL line of pytest-cov's terminal report.
   coverage: '/TOTAL.*? (\d+(?:\.\d+)?)%/'
   artifacts:
