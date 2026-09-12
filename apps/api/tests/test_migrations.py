@@ -12,6 +12,7 @@ the coverage figure.
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from alembic import command
@@ -53,6 +54,44 @@ def _table_names(url: str) -> set[str]:
         engine.dispose()
 
 
+def _current_revision(engine: Engine) -> str | None:
+    """The revision the database is stamped at, or None at base."""
+    with engine.connect() as connection:
+        return MigrationContext.configure(connection).get_current_revision()
+
+
+def _schema_snapshot(engine: Engine) -> dict[str, Any]:
+    """Everything the migrations build, in a form two of these can be compared by.
+
+    Tables and their columns alone would miss most of what a revision does — a CHECK
+    holding an enum's members, a unique constraint, an index — so each of those is
+    reflected too, and ordered, since neither PostgreSQL nor the dialect promises to
+    return them the same way twice. `alembic_version` is excluded: it holds the
+    position, not the schema.
+    """
+    inspector = inspect(engine)
+    return {
+        name: {
+            # Keyed by column name, and the type rendered: reflection hands back a
+            # fresh type object each time, which compares by identity, and PostgreSQL
+            # can only append a column it is asked to re-add, so a column a downgrade
+            # restores is in a different ordinal position than the one that built it.
+            # Neither is the schema; what the column is, is.
+            "columns": {
+                column["name"]: {**column, "type": str(column["type"])}
+                for column in inspector.get_columns(name)
+            },
+            "primary_key": inspector.get_pk_constraint(name),
+            "foreign_keys": sorted(inspector.get_foreign_keys(name), key=repr),
+            "indexes": sorted(inspector.get_indexes(name), key=repr),
+            "unique_constraints": sorted(inspector.get_unique_constraints(name), key=repr),
+            "check_constraints": sorted(inspector.get_check_constraints(name), key=repr),
+        }
+        for name in inspector.get_table_names()
+        if name != "alembic_version"
+    }
+
+
 @pytest.fixture
 def round_trip_url(_test_engine: Engine) -> Iterator[str]:
     """An empty database to migrate up and down.
@@ -75,23 +114,44 @@ def round_trip_url(_test_engine: Engine) -> Iterator[str]:
         admin_engine.dispose()
 
 
-def test_migrations_upgrade_downgrade_and_upgrade_again(round_trip_url: str) -> None:
-    """A downgrade that cannot run is a migration that cannot be rolled back."""
+def test_every_downgrade_leaves_the_schema_the_upgrade_found(round_trip_url: str) -> None:
+    """A downgrade has to undo its own revision, not merely run without raising.
+
+    Walking head to base and back gets that far and no further: whatever the last
+    revision drops takes the whole schema with it, so a downgrade body emptied of the
+    `drop_column`, `drop_constraint` or `drop_index` that belongs in it is invisible
+    either way round. What catches one is comparing the two directions revision by
+    revision — the schema a downgrade steps back to against the one the matching
+    upgrade built from the same place — which is what this does.
+    """
     config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
     # migrations/env.py reads the URL from the settings singleton, so pointing it
     # at the round-trip database is what keeps this off matchpoint_test.
     original_url = settings.database_url
     settings.database_url = round_trip_url
+    engine = create_engine(round_trip_url)
     try:
         command.upgrade(config, "head")
         assert _table_names(round_trip_url).issuperset(MIGRATED_TABLES)
 
-        command.downgrade(config, "base")
+        stepping_down = {_current_revision(engine): _schema_snapshot(engine)}
+        while _current_revision(engine) is not None:
+            command.downgrade(config, "-1")
+            stepping_down[_current_revision(engine)] = _schema_snapshot(engine)
         assert _table_names(round_trip_url).isdisjoint(MIGRATED_TABLES)
 
-        command.upgrade(config, "head")
+        # One step at a time back up, each landing compared against the snapshot the
+        # walk down left at the same revision. Head is in there too, so the last
+        # comparison is also the round trip the whole walk makes.
+        for _ in range(len(stepping_down) - 1):
+            command.upgrade(config, "+1")
+            revision = _current_revision(engine)
+            assert _schema_snapshot(engine) == stepping_down[revision], (
+                f"revision {revision} is not the schema the revision above it downgrades to"
+            )
         assert _table_names(round_trip_url).issuperset(MIGRATED_TABLES)
     finally:
+        engine.dispose()
         settings.database_url = original_url
 
 
