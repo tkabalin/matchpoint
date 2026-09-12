@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import { BottomNav } from "@/components/bottom-nav";
 import { InProgressBanner } from "@/components/in-progress-banner";
+import { COACH_TABS } from "@/components/nav-tabs";
+import type { NavTab } from "@/components/nav-tabs";
 import { cn } from "@/lib/utils";
 
 /**
@@ -11,16 +13,21 @@ import { cn } from "@/lib/utils";
  * here rather than being remembered at each page. `InProgressBanner` lives here
  * too, not at each call site — a coach mid-match can be on any authenticated
  * screen, not just home and matches, so the way back has to follow them
- * everywhere rather than being remembered per page.
+ * everywhere rather than being remembered per page. Harmless on a player's own
+ * screens too: it reads this device's recorded owner, and a player never holds a
+ * capture claim, so it has nothing to show there either way.
  */
 export function AppPage({
   children,
   nav = true,
+  tabs = COACH_TABS,
   className,
 }: {
   children: ReactNode;
   /** False for screens reached as a flow rather than a nav destination. */
   nav?: boolean;
+  /** The coach's four tabs by default; a player's own screens pass `PLAYER_TABS`. */
+  tabs?: NavTab[];
   className?: string;
 }) {
   return (
@@ -35,7 +42,7 @@ export function AppPage({
         <InProgressBanner />
         {children}
       </div>
-      {nav && <BottomNav />}
+      {nav && <BottomNav tabs={tabs} />}
     </>
   );
 }

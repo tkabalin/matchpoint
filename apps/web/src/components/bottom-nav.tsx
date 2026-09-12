@@ -1,18 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { ChartColumn, House, Users, Volleyball } from "lucide-react";
-import type { ComponentType } from "react";
 
-const TABS: { to: string; label: string; icon: ComponentType<{ className?: string }> }[] = [
-  { to: "/home", label: "Home", icon: House },
-  { to: "/players", label: "Players", icon: Users },
-  { to: "/matches", label: "Matches", icon: Volleyball },
-  { to: "/stats", label: "Stats", icon: ChartColumn },
-];
+import { COACH_TABS } from "@/components/nav-tabs";
+import type { NavTab } from "@/components/nav-tabs";
 
-export function BottomNav() {
+export function BottomNav({ tabs = COACH_TABS }: { tabs?: NavTab[] }) {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex justify-around border-t bg-background pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {TABS.map((tab) => (
+      {tabs.map((tab) => (
         <Link
           key={tab.to}
           to={tab.to}

@@ -302,7 +302,7 @@ export function MatchList({
   );
 }
 
-function MatchRow({
+export function MatchRow({
   match,
   player,
   onEdit,
@@ -310,8 +310,11 @@ function MatchRow({
 }: {
   match: MatchRead;
   player: Pick<PlayerRead, "first_name" | "last_name"> | undefined;
-  onEdit: (match: MatchRead) => void;
-  onDelete: (match: MatchRead) => void;
+  // Both absent is the player's own matches list (#203): a player can't edit or
+  // delete a match, so the whole actions column disappears rather than rendering
+  // disabled buttons nobody can use.
+  onEdit?: (match: MatchRead) => void;
+  onDelete?: (match: MatchRead) => void;
 }) {
   const opponent = match.opponent_name ?? "Unknown opponent";
   const detail = [formatPlayedOn(match.played_on), match.surface && SURFACE_LABEL[match.surface]]
@@ -367,28 +370,34 @@ function MatchRow({
           Offered on a completed match too: finishing one freezes only its result and
           scoring system (#228), and the sheet locks that one field itself rather than
           the row hiding the whole control. */}
-      <div className="flex flex-col gap-1">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-primary"
-          aria-label={`Edit details for the match vs ${opponent}`}
-          onClick={() => onEdit(match)}
-        >
-          <Pencil />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          className="text-destructive"
-          aria-label={`Delete the match vs ${opponent}`}
-          onClick={() => onDelete(match)}
-        >
-          <Trash2 />
-        </Button>
-      </div>
+      {(onEdit ?? onDelete) && (
+        <div className="flex flex-col gap-1">
+          {onEdit && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-primary"
+              aria-label={`Edit details for the match vs ${opponent}`}
+              onClick={() => onEdit(match)}
+            >
+              <Pencil />
+            </Button>
+          )}
+          {onDelete && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="text-destructive"
+              aria-label={`Delete the match vs ${opponent}`}
+              onClick={() => onDelete(match)}
+            >
+              <Trash2 />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

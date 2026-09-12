@@ -1,4 +1,4 @@
-import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
+import type { CoachRead, PlayerRead, PlayerSelfRead } from "@matchpoint/api-client";
 import { getCurrentCoachOptions, listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { QueryClient, dehydrate, onlineManager } from "@tanstack/react-query";
 import { RouterProvider, createMemoryHistory, createRouter } from "@tanstack/react-router";
@@ -7,7 +7,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { outboxDb } from "@/features/outbox/db";
 import { append, readPending } from "@/features/outbox/outbox";
-import { purgeIfCoachChanged, recordOwnerIfUnknown } from "@/lib/local-data";
+import { purgeIfOwnerChanged, recordOwnerIfUnknown } from "@/lib/local-data";
 import { queryPersistOptions, removePersistedQueryCache } from "@/lib/query-persist";
 
 import { routeTree } from "./routeTree.gen";
@@ -42,6 +42,19 @@ const coach: CoachRead = {
   photo_url: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
+};
+
+const playerSelf: PlayerSelfRead = {
+  id: player.id,
+  first_name: player.first_name,
+  last_name: player.last_name,
+  username: player.username,
+  date_of_birth: null,
+  dominant_hand: null,
+  gender: null,
+  photo_url: null,
+  created_at: player.created_at,
+  updated_at: player.updated_at,
 };
 
 function stubFetch(routes: Record<string, () => Response>) {
@@ -204,7 +217,7 @@ test("a confirmed session claims a device nothing has claimed yet", async () => 
     kind: "point",
     payload: { rallyLength: 4 },
   });
-  await purgeIfCoachChanged(coach.id, new QueryClient());
+  await purgeIfOwnerChanged(coach.id, new QueryClient(), "coach");
 
   // A session older than the ownership record leaves nothing claiming the device, and
   // its own coach then reads as a stranger the next time they sign in (#117).
@@ -233,9 +246,57 @@ test("a confirmed 401 keeps the points that never synced", async () => {
   expect(await readPending(coach.id)).toHaveLength(1);
 });
 
+// #203: a player session under `_player`, mirroring the `_authenticated` guard
+// tests above — a player typing a coach-only URL never reaches it in the first
+// place, but `/me` itself needs the same confirmed-401/non-401/ownership behavior.
+test("/me renders the player's own view", async () => {
+  stubFetch({
+    "/api/auth/player/me": () => Response.json(playerSelf),
+    [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
+    [`/api/players/${player.id}/analytics/overview`]: () =>
+      Response.json({ record: { wins: 0, losses: 0 }, form: null, days_since_last_match: null }),
+    "/api/matches": () => Response.json([]),
+    [`/api/players/${player.id}/analytics/serve`]: () =>
+      Response.json({
+        serving: {
+          breakdown: [],
+          hero: null,
+          metrics: [],
+          outcome: { first_serve: null, second_serve: null },
+          fault_mode: { first_serve: null, second_serve: null },
+          return_outcome: { first_serve: [], second_serve: [] },
+          trend: [],
+        },
+        returning: {
+          breakdown: [],
+          hero: null,
+          metrics: [],
+          outcome: { first_serve: null, second_serve: null },
+          fault_mode: { first_serve: null, second_serve: null },
+          return_outcome: { first_serve: [], second_serve: [] },
+          trend: [],
+        },
+      }),
+  });
+
+  await renderRouteTreeAt("/me");
+
+  expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
+});
+
+test("redirects a player session to sign-in on a confirmed 401", async () => {
+  stubFetch({
+    "/api/auth/player/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  await renderRouteTreeAt("/me");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
 // #257: `/` used to render the sign-in form unconditionally, with no session check at
-// all — these are its inverse of the `_authenticated` guard tests above.
-test("/ redirects straight to /home with a live session, rather than showing the form", async () => {
+// all — these are its inverse of the `_authenticated`/`_player` guard tests above.
+test("/ redirects straight to /home with a live coach session, rather than showing the form", async () => {
   stubFetch({
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json([player]),
@@ -248,9 +309,49 @@ test("/ redirects straight to /home with a live session, rather than showing the
   expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
 });
 
-test("/ shows the sign-in form with no session", async () => {
+test("/ redirects straight to /me with a live player session, rather than showing the form", async () => {
+  stubFetch({
+    // A player session 401s against the coach-only check first — the same
+    // "not this kind of principal" answer a real player session gets.
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+    "/api/auth/player/me": () => Response.json(playerSelf),
+    [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
+    [`/api/players/${player.id}/analytics/overview`]: () =>
+      Response.json({ record: { wins: 0, losses: 0 }, form: null, days_since_last_match: null }),
+    "/api/matches": () => Response.json([]),
+    [`/api/players/${player.id}/analytics/serve`]: () =>
+      Response.json({
+        serving: {
+          breakdown: [],
+          hero: null,
+          metrics: [],
+          outcome: { first_serve: null, second_serve: null },
+          fault_mode: { first_serve: null, second_serve: null },
+          return_outcome: { first_serve: [], second_serve: [] },
+          trend: [],
+        },
+        returning: {
+          breakdown: [],
+          hero: null,
+          metrics: [],
+          outcome: { first_serve: null, second_serve: null },
+          fault_mode: { first_serve: null, second_serve: null },
+          return_outcome: { first_serve: [], second_serve: [] },
+          trend: [],
+        },
+      }),
+  });
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Amahle Nkosi" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
+});
+
+test("/ shows the sign-in form with no session at all", async () => {
   stubFetch({
     "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+    "/api/auth/player/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
   });
 
   await renderRouteTreeAt("/");
@@ -258,45 +359,63 @@ test("/ shows the sign-in form with no session", async () => {
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
-test("/ goes to /home for a recorded owner with no connection, not the form", async () => {
+// Regression: a *confirmed* 401 (from both checks) used to fall into the same
+// offline fallback as a genuine network failure, so a coach or player whose
+// session was revoked elsewhere — which never clears the recorded owner — got
+// redirected straight back into the app. That guard's own confirmed 401 then
+// cleared the cache and redirected back to /, landing in this same catch with
+// the marker still set: an infinite loop, never once showing the form.
+test("/ shows the form on a confirmed 401 from both checks, even with an owner recorded from before", async () => {
+  recordOwnerIfUnknown(coach.id, "coach");
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+    "/api/auth/player/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
+test("/ goes to /home for a recorded coach with no connection, not the form", async () => {
   // The query cache's own persisted snapshot isn't available yet at this beforeLoad —
   // PersistQueryClientProvider restores it into context.queryClient on mount, in
   // RootLayout, which runs after this guard rather than before it (root-layout.tsx's
-  // own comment). getRecordedOwner() is what stands in for it here: set the moment any
-  // session check first succeeds on this device, offline-readable, and cleared only by
-  // an explicit sign-out.
-  recordOwnerIfUnknown(coach.id);
+  // own comment). getRecordedOwnerKind() is what stands in for it here: set the
+  // moment any session check first succeeds on this device, offline-readable, and
+  // cleared only by an explicit sign-out.
+  recordOwnerIfUnknown(coach.id, "coach");
   onlineManager.setOnline(false);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
   await renderRouteTreeAt("/");
 
-  // Redirected to /home on the strength of getRecordedOwner() alone — every query
-  // Home itself issues is failing offline too, so this only proves the redirect
-  // happened, not that Home's own data loaded (it doesn't need to, to prove the fix).
+  // Redirected to /home on the strength of getRecordedOwnerKind() alone — every
+  // query Home itself issues is failing offline too, so this only proves the
+  // redirect happened, not that Home's own data loaded.
   expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
 });
 
-test("/ shows the form, not /home, with no connection and no owner recorded", async () => {
+test("/ goes to /me for a recorded player with no connection, not the form", async () => {
+  recordOwnerIfUnknown(player.id, "player");
   onlineManager.setOnline(false);
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
   await renderRouteTreeAt("/");
 
-  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+  // Redirected to /me on the strength of getRecordedOwnerKind() alone — the
+  // player's own getCurrentPlayerOptions() query fails offline too, so
+  // PlayerSelfView sits on its own loading skeleton. That's the proof the
+  // redirect landed on /me rather than /home, without needing its data to load.
+  await vi.waitFor(() => {
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeInTheDocument();
+  });
+  expect(screen.queryByRole("heading", { name: "Sign In" })).not.toBeInTheDocument();
 });
 
-// Regression: a *confirmed* 401 used to fall into the same offline fallback as a
-// network failure, so a coach whose session was revoked elsewhere (server-side,
-// not through this app's own sign-out) — which never clears the recorded owner —
-// got redirected straight back to /home. That guard's own confirmed 401 then
-// cleared the cache and redirected back to /, landing in this same catch with the
-// marker still set: an infinite loop between / and /home, never showing the form.
-test("/ shows the form on a confirmed 401, even with an owner recorded from before", async () => {
-  recordOwnerIfUnknown(coach.id);
-  stubFetch({
-    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
-  });
+test("/ shows the form, not the app, with no connection and no owner recorded", async () => {
+  onlineManager.setOnline(false);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
   await renderRouteTreeAt("/");
 

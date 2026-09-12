@@ -22,7 +22,9 @@ import { purgeLocalData } from "@/lib/local-data";
  * single-tap access, the most common account action) and again inside Account &
  * Security (grouped with the riskier session actions), per the wireframe (#178).
  * Two real call sites for the exact same confirm behaviour, so it's extracted
- * once rather than duplicated at each.
+ * once rather than duplicated at each. A player's own Settings screen (#203) is a
+ * third: `logoutFn` and `description` are what let it reuse this rather than
+ * cloning the dialog for `playerLogout`.
  *
  * Takes a render-prop `trigger` (matching `Item`'s own `render` idiom elsewhere in
  * this codebase) so each call site keeps its own visual treatment — bold and
@@ -33,14 +35,22 @@ import { purgeLocalData } from "@/lib/local-data";
  * confirming it navigates straight to sign-in with no second "you've been signed
  * out" dialog to dismiss afterwards.
  */
-export function SignOutAction({ trigger }: { trigger: (openConfirm: () => void) => ReactNode }) {
+export function SignOutAction({
+  trigger,
+  logoutFn = logout,
+  description = "You'll need to sign in again to access your players and matches.",
+}: {
+  trigger: (openConfirm: () => void) => ReactNode;
+  logoutFn?: () => Promise<unknown>;
+  description?: ReactNode;
+}) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleConfirmSignOut() {
     // Logout can't fail (always 204, cookie-present or not) — nothing to branch on.
-    await logout();
+    await logoutFn();
     try {
       // Otherwise the next coach to sign in on this device would see the previous
       // coach's roster served straight from cache. Signing out is also the one moment
@@ -63,9 +73,7 @@ export function SignOutAction({ trigger }: { trigger: (openConfirm: () => void) 
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You'll need to sign in again to access your players and matches.
-            </AlertDialogDescription>
+            <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

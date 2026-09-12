@@ -1,6 +1,6 @@
 import { getMatchOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { Link, getRouteApi } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronDown,
@@ -27,8 +27,6 @@ import { cn } from "@/lib/utils";
 
 import { formatPlayedOn } from "./match-format";
 
-const routeApi = getRouteApi("/_authenticated/matches/$matchId");
-
 type Tab = "serve" | "rally";
 
 /**
@@ -38,9 +36,19 @@ type Tab = "serve" | "rally";
  * of the player's whole history. No opponent/scope picker here — a match
  * already has exactly one opponent — but Set/Phase still narrows within
  * this match's own sets.
+ *
+ * `matchId` and `backTo` are props rather than read off a hardcoded
+ * `getRouteApi` id, because this mounts under two different routes now —
+ * `/matches/$matchId` for a coach, `/me/matches/$matchId` for a player (#203)
+ * — and each route file supplies its own correctly-bound params.
  */
-export function MatchStatsPage() {
-  const { matchId } = routeApi.useParams();
+export function MatchStatsPage({
+  matchId,
+  backTo = "/matches",
+}: {
+  matchId: string;
+  backTo?: string;
+}) {
   const [tab, setTab] = useState<Tab>("serve");
   const [set, setSet] = useState<SetFilter>("all");
   const [phase, setPhase] = useState<PhaseFilter>("full");
@@ -80,7 +88,7 @@ export function MatchStatsPage() {
         subtitle={detail}
         back={
           <Link
-            to="/matches"
+            to={backTo}
             aria-label="Back to matches"
             className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
           >

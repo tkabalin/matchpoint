@@ -1,4 +1,4 @@
-import { login, logout } from "@matchpoint/api-client";
+import { login, logout, playerLogin, playerLogout } from "@matchpoint/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { purgeIfCoachChanged } from "@/lib/local-data";
+import { purgeIfOwnerChanged } from "@/lib/local-data";
+import type { OwnerKind } from "@/lib/local-data";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import { useCountdown } from "@/lib/use-countdown";
 
@@ -19,62 +20,107 @@ import { AuthShell } from "./auth-shell";
 export function SignIn() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [retryAfterSeconds, setRetryAfterSeconds] = useState<number | null>(null);
   const retryCountdown = useCountdown(retryAfterSeconds);
   const waiting = retryCountdown !== null && retryCountdown > 0;
 
-  const canSubmit = email !== "" && password !== "" && !waiting;
+  const canSubmit = identifier !== "" && password !== "" && !waiting;
   const errorText = error && waiting ? `${error} Try again in ${retryCountdown}s.` : error;
+
+  /**
+   * The device-ownership handoff both sign-ins share: purge if this id isn't who the
+   * device already belonged to, then land on the principal's own home. Awaited before
+   * the navigation, so a device that was someone else's is wiped before the first
+   * protected screen can render anything of theirs (#117). `kind` is recorded
+   * alongside the id so `/`'s own guard can guess the right destination offline,
+   * before either `_authenticated.tsx` or `_player.tsx` has a chance to confirm
+   * anything over the network.
+   */
+  async function finishSignIn(principalId: string, kind: OwnerKind, target: "/home" | "/me") {
+    try {
+      await purgeIfOwnerChanged(principalId, queryClient, kind);
+    } catch {
+      // Failing closed. Navigating on a device that still holds the previous
+      // owner's data is the one outcome worse than refusing to navigate at all.
+      setError(
+        "We couldn't clear this device before signing you in. Close any other MatchPoint tabs and try again.",
+      );
+      return;
+    }
+    await navigate({ to: target });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setRetryAfterSeconds(null);
 
-    const { data: coach, error: loginError, response } = await login({ body: { email, password } });
+    // Routes by what was typed, not a "coach or player" choice up front: a coach's
+    // identifier is always an email, a player's is always a server-generated username
+    // with no "@" in it, so the two can never collide. This is the shape the backend
+    // itself expects (#203) — POST /auth/login for one, POST /auth/player/login for
+    // the other.
+    if (identifier.includes("@")) {
+      const {
+        data: coach,
+        error: loginError,
+        response,
+      } = await login({
+        body: { email: identifier, password },
+      });
 
-    if (response?.status === 200) {
-      // A 200 nothing could be parsed out of leaves a session no one can attribute, so
-      // the purge has nothing to key on. End it: otherwise a reload of a protected
-      // route walks in on the previous coach's restored cache, the leak #117 closes.
-      if (!coach) {
-        await logout();
-        setError("We signed you in but couldn't tell who you are. Please try again.");
+      if (response?.status === 200) {
+        // A 200 nothing could be parsed out of leaves a session no one can attribute,
+        // so the purge has nothing to key on. End it: otherwise a reload of a
+        // protected route walks in on the previous owner's restored cache (#117).
+        if (!coach) {
+          await logout();
+          setError("We signed you in but couldn't tell who you are. Please try again.");
+          return;
+        }
+        await finishSignIn(coach.id, "coach", "/home");
         return;
       }
 
-      // Awaited before the navigation, so a device that was another coach's is wiped
-      // before the first protected screen can render anything of theirs (#117). The
-      // login response is the earliest the app learns who just signed in.
-      try {
-        await purgeIfCoachChanged(coach.id, queryClient);
-      } catch {
-        // Failing closed. Navigating on a device that still holds the previous coach's
-        // data is the one outcome worse than refusing to navigate at all.
-        setError(
-          "We couldn't clear this device before signing you in. Close any other MatchPoint tabs and try again.",
-        );
-        return;
-      }
-
-      await navigate({ to: "/home" });
+      if (response?.status === 429) setRetryAfterSeconds(getRetryAfterSeconds(response));
+      // The backend deliberately returns the same message whether the email or the
+      // password was wrong — shown verbatim, never re-worded per field. This
+      // fallback only fires when that detail isn't present (e.g. a network failure).
+      setError(
+        parseErrorMessage(
+          loginError,
+          "We couldn't sign you in. Check your email and password and try again.",
+        ),
+      );
       return;
     }
 
-    if (response?.status === 429) {
-      setRetryAfterSeconds(getRetryAfterSeconds(response));
+    const {
+      data: player,
+      error: loginError,
+      response,
+    } = await playerLogin({
+      body: { username: identifier, password },
+    });
+
+    if (response?.status === 200) {
+      if (!player) {
+        await playerLogout();
+        setError("We signed you in but couldn't tell who you are. Please try again.");
+        return;
+      }
+      await finishSignIn(player.id, "player", "/me");
+      return;
     }
 
-    // The backend deliberately returns the same message whether the email or the
-    // password was wrong — shown verbatim, never re-worded per field. This fallback
-    // only fires when that detail isn't present (e.g. a network failure).
+    if (response?.status === 429) setRetryAfterSeconds(getRetryAfterSeconds(response));
     setError(
       parseErrorMessage(
         loginError,
-        "We couldn't sign you in. Check your email and password and try again.",
+        "We couldn't sign you in. Check your username and password and try again.",
       ),
     );
   }
@@ -90,13 +136,13 @@ export function SignIn() {
         <form onSubmit={handleSubmit}>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <FieldLabel htmlFor="identifier">Email or username</FieldLabel>
               <Input
-                id="email"
-                type="email"
+                id="identifier"
+                type="text"
                 autoComplete="username"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                value={identifier}
+                onChange={(event) => setIdentifier(event.target.value)}
               />
             </Field>
             <Field>

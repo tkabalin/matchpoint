@@ -12,7 +12,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { MatchStatsPage } from "./match-stats-page";
+import { CoachMatchStatsPage } from "./coach-match-stats-page";
 
 const match: MatchRead = {
   id: "3f1c2b4e-0000-4000-8000-000000000002",
@@ -99,9 +99,10 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
   );
 }
 
-// Nested under a pathless `_authenticated` layout, matching the real route tree —
-// MatchStatsPage resolves its params via `getRouteApi("/_authenticated/matches/$matchId")`,
-// which needs an active match at that exact route id.
+// Nested under a pathless `_authenticated` layout, matching the real route tree, and
+// mounting the real `CoachMatchStatsPage` wrapper the actual route file
+// (`_authenticated.matches.$matchId.tsx`) uses — not a re-declared stand-in — so this
+// test exercises the same route-id-bound param resolution production does.
 function buildRouter(matchId: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({
@@ -117,7 +118,7 @@ function buildRouter(matchId: string) {
   const matchStatsRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
     path: "/matches/$matchId",
-    component: MatchStatsPage,
+    component: CoachMatchStatsPage,
   });
   const routeTree = rootRoute.addChildren([
     authenticatedRoute.addChildren([matchesRoute, matchStatsRoute]),

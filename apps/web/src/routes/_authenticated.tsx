@@ -26,7 +26,7 @@ export const Route = createFileRoute("/_authenticated")({
       // Sessions outlive releases, so a coach signed in before #117 shipped has no
       // ownership record and their own next sign-in would read as a stranger's, taking
       // their unsynced points with it. Claims the device only when nothing claims it.
-      recordOwnerIfUnknown(coach.id);
+      recordOwnerIfUnknown(coach.id, "coach");
     } catch (error) {
       // Only a confirmed 401 ends the visit — a network blip or a transient 500
       // renders through instead of signing someone out for an unrelated failure.

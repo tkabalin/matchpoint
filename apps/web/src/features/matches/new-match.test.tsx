@@ -63,7 +63,7 @@ function stubFetch(
 // The owner record stands in for a sign-in having happened on this device, which is
 // where capture gets the coach it queues under.
 function renderNewMatch({ owner = coach.id }: { owner?: string | null } = {}) {
-  if (owner !== null) recordOwnerIfUnknown(owner);
+  if (owner !== null) recordOwnerIfUnknown(owner, "coach");
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({

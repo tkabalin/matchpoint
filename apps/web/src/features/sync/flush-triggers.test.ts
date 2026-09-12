@@ -84,7 +84,7 @@ afterEach(() => {
 
 describe("registerFlushTriggers", () => {
   test("drains at launch, for the recorded owner as this device", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
 
     await debounceElapses();
@@ -106,7 +106,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("drains when connectivity returns", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
     await debounceElapses();
     vi.clearAllMocks();
@@ -118,7 +118,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("drains when the app becomes visible, not when it hides", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
     await debounceElapses();
     vi.clearAllMocks();
@@ -133,7 +133,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("a queue write while online nudges a drain", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
     await debounceElapses();
     vi.clearAllMocks();
@@ -145,7 +145,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("a queue write while offline waits for the online event", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     setOnLine(false);
     register();
     await debounceElapses();
@@ -164,7 +164,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("a burst of triggers coalesces into one drain", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
 
     window.dispatchEvent(new Event("online"));
@@ -176,7 +176,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("re-arms after a drain that found the lock held", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     vi.mocked(drainOutbox).mockResolvedValueOnce({
       acknowledged: 0,
       discarded: 0,
@@ -199,7 +199,7 @@ describe("registerFlushTriggers", () => {
   });
 
   test("unregistering removes every trigger, the pending debounce included", async () => {
-    recordOwnerIfUnknown(COACH_ID);
+    recordOwnerIfUnknown(COACH_ID, "coach");
     register();
 
     cleanups.splice(0)[0]!();

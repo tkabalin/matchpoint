@@ -7,7 +7,8 @@ import { append, readPending } from "@/features/outbox/outbox";
 import { getLastViewedPlayerId, setLastViewedPlayerId } from "./last-viewed-player";
 import {
   clearCachedReads,
-  purgeIfCoachChanged,
+  getRecordedOwnerKind,
+  purgeIfOwnerChanged,
   purgeLocalData,
   recordOwnerIfUnknown,
 } from "./local-data";
@@ -15,6 +16,7 @@ import { queryPersistOptions, removePersistedQueryCache } from "./query-persist"
 
 const COACH_ID = "c0ac0000-0000-4000-8000-000000000001";
 const OTHER_COACH_ID = "c0ac0000-0000-4000-8000-000000000002";
+const PLAYER_ID = "31aye000-0000-4000-8000-000000000001";
 
 /** A queued point of this coach's, of the kind only a drain may take off the device. */
 async function queuePoint() {
@@ -93,19 +95,19 @@ test("leaves the outbox usable once it has been purged", async () => {
 });
 
 test("purges when the coach signing in is not the one the device's data belongs to", async () => {
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
   await queuePoint();
 
-  await purgeIfCoachChanged(OTHER_COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(OTHER_COACH_ID, new QueryClient(), "coach");
 
   expect(await readPending(COACH_ID)).toHaveLength(0);
 });
 
 test("keeps the queue when the same coach signs in again", async () => {
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
   await queuePoint();
 
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
 
   // A session revoked server-side leaves the ownership record in place, so this is
   // the path a coach takes back to the points they captured before it died.
@@ -113,11 +115,11 @@ test("keeps the queue when the same coach signs in again", async () => {
 });
 
 test("a cleared read cache still knows whose device this is", async () => {
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
   await queuePoint();
 
   await clearCachedReads(new QueryClient());
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
 
   // The ownership record has to outlive a revoked session, or the coach signing back
   // in reads as a stranger and the points they captured courtside go with the purge.
@@ -139,16 +141,16 @@ test("purging forgets the player the device was last showing", async () => {
 test("purges a device that cannot say whose data it holds", async () => {
   await queuePoint();
 
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
 
   expect(await readPending(COACH_ID)).toHaveLength(0);
 });
 
 test("a confirmed session claims a device nothing else has claimed", async () => {
-  recordOwnerIfUnknown(COACH_ID);
+  recordOwnerIfUnknown(COACH_ID, "coach");
   await queuePoint();
 
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
 
   // Otherwise a session older than the ownership record costs its own coach the
   // points they captured, the first time they sign in again.
@@ -156,13 +158,47 @@ test("a confirmed session claims a device nothing else has claimed", async () =>
 });
 
 test("a confirmed session never re-claims a device that has an owner", async () => {
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
   await queuePoint();
 
   // The guard can be handed a coach it read from the cache, so it is in no position
   // to say a switch happened. Only a sign-in moves the record.
-  recordOwnerIfUnknown(OTHER_COACH_ID);
-  await purgeIfCoachChanged(COACH_ID, new QueryClient());
+  recordOwnerIfUnknown(OTHER_COACH_ID, "coach");
+  await purgeIfOwnerChanged(COACH_ID, new QueryClient(), "coach");
 
   expect(await readPending(COACH_ID)).toHaveLength(1);
+});
+
+// #257/#203: `/`'s own guard needs to know which kind of principal a recorded owner
+// is, to guess between /home and /me offline — see index.tsx's own comment.
+test("no owner kind is recorded until one signs in or a guard confirms one", () => {
+  expect(getRecordedOwnerKind()).toBeNull();
+});
+
+test("records the owner's kind alongside its id on sign-in", async () => {
+  await purgeIfOwnerChanged(PLAYER_ID, new QueryClient(), "player");
+
+  expect(getRecordedOwnerKind()).toBe("player");
+});
+
+test("records the owner's kind on a route guard's first confirmed session, same as the id", () => {
+  recordOwnerIfUnknown(PLAYER_ID, "player");
+
+  expect(getRecordedOwnerKind()).toBe("player");
+});
+
+test("never overwrites a recorded kind any more than it overwrites the id", () => {
+  recordOwnerIfUnknown(COACH_ID, "coach");
+
+  recordOwnerIfUnknown(PLAYER_ID, "player");
+
+  expect(getRecordedOwnerKind()).toBe("coach");
+});
+
+test("purging forgets the owner's kind along with everything else", async () => {
+  await purgeIfOwnerChanged(PLAYER_ID, new QueryClient(), "player");
+
+  await purgeLocalData(new QueryClient());
+
+  expect(getRecordedOwnerKind()).toBeNull();
 });
