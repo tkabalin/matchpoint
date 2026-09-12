@@ -189,6 +189,11 @@ async function renderHome() {
     path: "/matches",
     component: () => <h1>Matches</h1>,
   });
+  const newMatchRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/new-match",
+    component: () => <h1>New Match</h1>,
+  });
   const statsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/stats",
@@ -205,6 +210,7 @@ async function renderHome() {
     settingsRoute,
     playersRoute,
     matchesRoute,
+    newMatchRoute,
     statsRoute,
     playerProfileRoute,
   ]);
@@ -554,6 +560,22 @@ test("tapping a squad-snapshot row goes straight to that player's stats page", a
   await user.click(await snapshot.findByRole("link", { name: /Amahle Nkosi/ }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+});
+
+// Same floating action as the matches page (primary-match-action.tsx's own
+// "offers starting a match" test) — home gets the identical control, not a
+// second implementation of it.
+test("offers starting a match from the home screen too", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup({ delay: null });
+  await renderHome();
+
+  const startMatch = screen.getByRole("link", { name: "Start a match" });
+  expect(startMatch).toHaveAttribute("href", "/new-match");
+
+  await user.click(startMatch);
+
+  expect(await screen.findByRole("heading", { name: "New Match" })).toBeInTheDocument();
 });
 
 test("renders the bottom nav with Home active", async () => {

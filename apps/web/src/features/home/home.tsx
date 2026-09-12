@@ -32,6 +32,7 @@ import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerActionSheet } from "@/components/player-action-sheet";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { PrimaryMatchAction } from "@/components/primary-match-action";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -275,6 +276,7 @@ export function Home() {
       />
 
       <AddPlayerSheet open={adding} onOpenChange={setAdding} />
+      <PrimaryMatchAction />
     </AppPage>
   );
 }
