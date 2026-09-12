@@ -1,11 +1,9 @@
 import type { Surface } from "@matchpoint/api-client";
 
 /**
- * Provisional shapes for analytics the API doesn't serve yet.
- *
- * Everything here is modelled as the generated DTO would be — numbers and units,
- * not display strings — so that when the endpoints land, only the hook bodies in
- * `analytics-options.ts` change and no component has to be touched.
+ * UI-side shapes for the analytics screens: filter/scope state with no server
+ * counterpart, and derived shapes (leaderboard rows, headline aggregates) built
+ * from real payloads rather than sent over the wire as-is.
  *
  * These live in `lib/` rather than a feature slice because home, players and
  * matches all read them, and `.claude/rules/web.md` puts anything shared between
@@ -62,15 +60,6 @@ export interface StatsFilters {
   set: SetFilter;
   phase: PhaseFilter;
   surface: SurfaceFilter;
-}
-
-export interface InProgressMatch {
-  matchId: string;
-  playerId: string;
-  playerName: string;
-  opponentName: string;
-  score: string;
-  elapsed: string;
 }
 
 export type AttentionTier = "hard-flag" | "decline";

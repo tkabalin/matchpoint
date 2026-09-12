@@ -1,6 +1,5 @@
 import { expect, test } from "vitest";
 
-import { squadStatsFor, squadTrendFor } from "./fixtures";
 import {
   buildHistogram,
   buildLeaderboard,
@@ -131,17 +130,4 @@ test("buildHistogram doesn't divide by zero when every value is equal", () => {
 
 test("buildHistogram returns no buckets for an empty ranked set", () => {
   expect(buildHistogram([], "record")).toEqual([]);
-});
-
-test("squadStatsFor and squadTrendFor are deterministic, not random", () => {
-  expect(squadStatsFor("p1", 0)).toEqual(squadStatsFor("p1", 0));
-  expect(squadStatsFor("p1", 0).playerId).toBe("p1");
-  expect(squadTrendFor("record")).toEqual(squadTrendFor("record"));
-});
-
-test("squadStatsFor round-robins fixture templates by roster index", () => {
-  const first = squadStatsFor("a", 0);
-  const wrapped = squadStatsFor("a", 6); // same template as index 0, since there are 6 templates
-
-  expect(wrapped).toEqual(first);
 });

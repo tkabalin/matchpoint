@@ -84,10 +84,10 @@ export function CourtHeatmap({
   const byZone = new Map(zones.map((zone) => [zone.zone, zone.count]));
   const count = (zone: string) => byZone.get(zone) ?? 0;
   // Scale over the zones this diagram actually draws, not over everything handed
-  // in. A zone counted but never rendered still deflates every percentage here and
-  // stops them summing to 100, silently. That is currently true of the API's two
-  // `mid` zones, which capture can no longer produce (they are always 0, so the
-  // arithmetic survives by luck) and which #248 removes from the contract.
+  // in. A zone counted but never rendered would silently deflate every percentage
+  // here and stop them summing to 100 — the API's contract is exactly these seven
+  // zones (#248), so this guards against a future zone this diagram hasn't been
+  // taught to draw yet, not a current mismatch.
   const drawn = DRAWN_ZONES.map(count);
   const max = Math.max(1, ...drawn);
   const total = drawn.reduce((sum, value) => sum + value, 0) || 1;

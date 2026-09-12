@@ -1,25 +1,20 @@
-import { QueryClient, QueryClientProvider, queryOptions } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { ServeTab } from "./serve-tab";
 
-// A fixture can never reject, so the error branch needs its own file where
-// `getServeStatsOptions` is mocked to — module mocks are file-scoped, and
-// every other serve-tab test needs the real, always-resolving fixture.
-vi.mock("@/lib/analytics/analytics-options", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/analytics/analytics-options")>();
-  return {
-    ...actual,
-    getServeStatsOptions: () =>
-      queryOptions({
-        queryKey: ["serve-stats-error-test"],
-        queryFn: () => Promise.reject(new Error("network down")),
-      }),
-  };
+// A real failure needs its own file where the endpoint actually rejects — every
+// other serve-tab test stubs a successful response, and stubGlobal is file-scoped.
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 test("shows a load-failure message instead of an indefinite skeleton", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "boom" }), { status: 500 })),
+  );
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
