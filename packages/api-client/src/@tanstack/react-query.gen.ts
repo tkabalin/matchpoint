@@ -489,11 +489,13 @@ export const listInProgressMatchesQueryKey = (options?: Options<ListInProgressMa
  *
  * Every match of this coach's that capture is under way on, freshest claim first.
  *
- * Coach-scoped though the claim names a device: the resume banner is chrome on every
- * screen, so a coach who left capture running on their phone needs the tablet to say
- * so, which is exactly the answer a device filter would blank. A list rather than one
- * match because two devices can hold two matches at once, and the banner takes the
- * first.
+ * The web client's own resume banner is device-local by design, not a caller here: the
+ * points behind a match live in the capturing device's IndexedDB, so a Resume button on
+ * a second device could not replay them even knowing the match exists. What this route
+ * answers instead is what the server itself can see of capture in flight, and the claim
+ * behind it is what guards a delete from a second device (`capture_holder`, below) — a
+ * coach-scoped read, though the claim itself names a device, for whichever caller does
+ * want the cross-device picture this device-local banner deliberately isn't.
  */
 export const listInProgressMatchesOptions = (options?: Options<ListInProgressMatchesData>) => queryOptions<ListInProgressMatchesResponse, ListInProgressMatchesError, ListInProgressMatchesResponse, ReturnType<typeof listInProgressMatchesQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

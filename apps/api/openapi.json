@@ -4494,7 +4494,7 @@
     },
     "/matches/in-progress": {
       "get": {
-        "description": "Every match of this coach's that capture is under way on, freshest claim first.\n\nCoach-scoped though the claim names a device: the resume banner is chrome on every\nscreen, so a coach who left capture running on their phone needs the tablet to say\nso, which is exactly the answer a device filter would blank. A list rather than one\nmatch because two devices can hold two matches at once, and the banner takes the\nfirst.",
+        "description": "Every match of this coach's that capture is under way on, freshest claim first.\n\nThe web client's own resume banner is device-local by design, not a caller here: the\npoints behind a match live in the capturing device's IndexedDB, so a Resume button on\na second device could not replay them even knowing the match exists. What this route\nanswers instead is what the server itself can see of capture in flight, and the claim\nbehind it is what guards a delete from a second device (`capture_holder`, below) \u2014 a\ncoach-scoped read, though the claim itself names a device, for whichever caller does\nwant the cross-device picture this device-local banner deliberately isn't.",
         "operationId": "list_in_progress_matches",
         "responses": {
           "200": {

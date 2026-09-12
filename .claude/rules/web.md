@@ -40,9 +40,12 @@ paths:
   design: capture appends to the local queue, sync drains it, and the two may not import each other
   (see `web-capture.md`). `features/matches/` also imports it — deleting a match has to clear that
   match's own queued rows (`removeByMatch`), or a later drain re-posts them and puts the match back
-  (#214). It stays a slice rather than moving to `src/lib/` because it owns a database schema and
-  its own durability rules, not a helper. This is not a precedent — anything else two slices share
-  still goes in `src/components/` or `src/lib/`.
+  (#214). `features/players/` imports it for the same reason one level up: deleting a player erases
+  their matches server-side too, so `edit-player-sheet.tsx`'s delete has to clear every one of that
+  player's own logged matches and queued rows, or a still-open one pins the in-progress banner on a
+  player id nothing can resolve again. It stays a slice rather than moving to `src/lib/` because it
+  owns a database schema and its own durability rules, not a helper. This is not a precedent —
+  anything else two slices share still goes in `src/components/` or `src/lib/`.
 - **`features/capture/` is imported by whoever launches or reads a match.** `features/sync/` imports
   its `Match` and `Point` to build payloads, and `features/matches/new-match.tsx` imports
   `LiveMatch` because capture cannot fetch the player and coach it needs itself — the API client is

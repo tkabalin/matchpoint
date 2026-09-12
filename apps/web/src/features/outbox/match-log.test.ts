@@ -9,6 +9,7 @@ import {
   readLog,
   readMatch,
   removeEvent,
+  removeForPlayer,
   removeMatch,
   saveMatch,
   watchInProgress,
@@ -148,6 +149,30 @@ describe("matches", () => {
     expect(await readMatch(MATCH_ID)).toBeUndefined();
     expect(await readLog(MATCH_ID)).toEqual([]);
     expect(await readLog("match-2")).toHaveLength(1);
+  });
+
+  test("removeForPlayer takes every one of that player's matches, finished or not, with their events", async () => {
+    await saveMatch(matchOf());
+    await saveMatch(matchOf({ matchId: "match-2", finished: true }));
+    await saveMatch(matchOf({ matchId: "match-3", trackedPlayerId: "player-2" }));
+    await appendEvent(eventOf(0));
+    await appendEvent(eventOf(0, { id: "other", matchId: "match-2" }));
+    await appendEvent(eventOf(0, { id: "third", matchId: "match-3" }));
+
+    const removed = await removeForPlayer(COACH_ID, PLAYER_ID);
+
+    expect(removed.sort()).toEqual([MATCH_ID, "match-2"].sort());
+    expect(await readMatch(MATCH_ID)).toBeUndefined();
+    expect(await readMatch("match-2")).toBeUndefined();
+    expect(await readLog(MATCH_ID)).toEqual([]);
+    expect(await readLog("match-2")).toEqual([]);
+    // A different player's own match is untouched.
+    expect(await readMatch("match-3")).toBeDefined();
+    expect(await readLog("match-3")).toHaveLength(1);
+  });
+
+  test("removeForPlayer answers an empty list where the player has nothing logged", async () => {
+    expect(await removeForPlayer(COACH_ID, PLAYER_ID)).toEqual([]);
   });
 });
 

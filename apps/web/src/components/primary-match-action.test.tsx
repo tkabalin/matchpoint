@@ -1,4 +1,3 @@
-import type { CoachRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -15,6 +14,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { Match } from "@/features/capture/match";
 import { outboxDb } from "@/features/outbox/db";
 import { saveMatch } from "@/features/outbox/match-log";
+import { recordOwnerIfUnknown } from "@/lib/local-data";
 
 import { PrimaryMatchAction } from "./primary-match-action";
 
@@ -22,28 +22,6 @@ const COACH_ID = "3f1c2b4e-0000-4000-8000-0000000000c1";
 const PLAYER_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
 const MATCH_ID = "3f1c2b4e-0000-4000-8000-0000000000m1";
-
-const coach: CoachRead = {
-  id: COACH_ID,
-  email: "coach@example.com",
-  display_name: "Danny",
-  default_surface: null,
-  default_scoring_system: null,
-  photo_url: null,
-  created_at: "2026-08-11T09:00:00Z",
-  updated_at: "2026-08-11T09:00:00Z",
-};
-
-function stubFetch() {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((input: Request) => {
-      const { pathname } = new URL(input.url);
-      if (pathname === "/api/coaches/me") return Promise.resolve(Response.json(coach));
-      throw new Error(`Unstubbed fetch: ${pathname}`);
-    }),
-  );
-}
 
 async function logAMatchInProgress() {
   await saveMatch({
@@ -100,6 +78,8 @@ async function renderAction() {
 beforeEach(async () => {
   await outboxDb.events.clear();
   await outboxDb.matches.clear();
+  localStorage.clear();
+  recordOwnerIfUnknown(COACH_ID);
 });
 
 afterEach(() => {
@@ -107,14 +87,12 @@ afterEach(() => {
 });
 
 test("offers to start a match with nothing in progress", async () => {
-  stubFetch();
   await renderAction();
 
   expect(await screen.findByRole("link", { name: "Start a match" })).toBeInTheDocument();
 });
 
 test("offers to resume, and resumes into the right player, once a match is under way", async () => {
-  stubFetch();
   await logAMatchInProgress();
   await renderAction();
 
@@ -122,4 +100,14 @@ test("offers to resume, and resumes into the right player, once a match is under
   await user.click(await screen.findByRole("link", { name: "Resume match in progress" }));
 
   expect(await screen.findByRole("heading", { name: "Resume capture" })).toBeInTheDocument();
+});
+
+// #251 review: this used to read the coach id off a `/coaches/me` query, dark for
+// exactly the coach at the court with no connection this control exists for.
+test("offers to resume with no network reachable at all", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("should never be called — offline")));
+  await logAMatchInProgress();
+  await renderAction();
+
+  expect(await screen.findByRole("link", { name: "Resume match in progress" })).toBeInTheDocument();
 });

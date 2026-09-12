@@ -1,4 +1,4 @@
-import type { CoachRead, PlayerRead } from "@matchpoint/api-client";
+import type { PlayerRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -16,6 +16,7 @@ import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
 import { outboxDb } from "@/features/outbox/db";
 import { appendEvent, saveMatch } from "@/features/outbox/match-log";
+import { recordOwnerIfUnknown } from "@/lib/local-data";
 
 import { InProgressBanner } from "./in-progress-banner";
 
@@ -23,17 +24,6 @@ const COACH_ID = "3f1c2b4e-0000-4000-8000-0000000000c1";
 const PLAYER_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 const OPPONENT_ID = "3f1c2b4e-0000-4000-8000-000000000002";
 const MATCH_ID = "3f1c2b4e-0000-4000-8000-0000000000m1";
-
-const coach: CoachRead = {
-  id: COACH_ID,
-  email: "coach@example.com",
-  display_name: "Danny",
-  default_surface: null,
-  default_scoring_system: null,
-  photo_url: null,
-  created_at: "2026-08-11T09:00:00Z",
-  updated_at: "2026-08-11T09:00:00Z",
-};
 
 const player: PlayerRead = {
   id: PLAYER_ID,
@@ -64,7 +54,6 @@ function stubFetch(routes: Record<string, () => Response>) {
 
 function stubAuthenticated() {
   return stubFetch({
-    "/api/coaches/me": () => Response.json(coach),
     [`/api/players/${PLAYER_ID}`]: () => Response.json(player),
   });
 }
@@ -163,6 +152,8 @@ async function renderBanner() {
 beforeEach(async () => {
   await outboxDb.events.clear();
   await outboxDb.matches.clear();
+  localStorage.clear();
+  recordOwnerIfUnknown(COACH_ID);
 });
 
 afterEach(() => {
@@ -170,12 +161,12 @@ afterEach(() => {
 });
 
 test("renders nothing with no match logged", async () => {
-  const fetchMock = stubAuthenticated();
+  stubAuthenticated();
   await renderBanner();
 
-  // Nothing to find a heading or link on: wait for the coach query the banner
-  // itself depends on to resolve, then confirm it still hasn't drawn anything.
-  await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  // Nothing to find a link on, but something has to be waited for or this
+  // assertion runs before the outbox's own liveQuery has had a turn to answer.
+  await vi.waitFor(() => expect(outboxDb.matches.count()).resolves.toBe(0));
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });
 
@@ -196,11 +187,22 @@ test("shows the player's name, a live score and links to resume capture", async 
 
 test("falls back to a generic title when the player can't be read", async () => {
   stubFetch({
-    "/api/coaches/me": () => Response.json(coach),
     [`/api/players/${PLAYER_ID}`]: () => new Response(null, { status: 404 }),
   });
   await logAMatchInProgress();
   await renderBanner();
 
   expect(await screen.findByText("Match in progress")).toBeInTheDocument();
+});
+
+// #251 review: the banner used to read the coach id off a `/coaches/me` query, which
+// the _authenticated route guard renders through when unreachable — exactly the
+// coach at the court with no connection, the one the banner exists for.
+test("shows a match in progress with no network reachable at all", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("should never be called — offline")));
+  await logAMatchInProgress(Date.now() - 60_000);
+  await renderBanner();
+
+  expect(await screen.findByText("Match in progress")).toBeInTheDocument();
+  expect(screen.getByText(/0-0, 15-0/)).toBeInTheDocument();
 });

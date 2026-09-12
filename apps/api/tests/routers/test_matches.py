@@ -2093,6 +2093,40 @@ def test_a_flush_that_claims_a_match_puts_it_in_progress(
     assert [row["id"] for row in response.json()] == [str(match.id)]
 
 
+def test_a_claim_taken_by_a_flush_still_blocks_another_devices_delete(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The claim ingest takes here is the same one delete_match reads: before this, a
+    flush never claimed anything, so a second device's delete always went through. Now
+    that a flush is how most claims start (nothing else calls claim_capture), the
+    refusal below has to be reachable this way too, not just via _claimed_match."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    capturing_device = uuid.uuid4()
+
+    assert _ingest(client, match, [point_payload()], capturing_device).status_code == 200
+
+    response = client.delete(f"/matches/{match.id}", params={"device_id": str(uuid.uuid4())})
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": MATCH_IS_BEING_CAPTURED}
+
+
+def test_releasing_a_flush_claim_clears_the_way_for_another_devices_delete(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The release-and-delete recovery `delete-match-sheet.tsx` already has for this
+    refusal was dead code until ingest could ever produce a claim to release."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    capturing_device = uuid.uuid4()
+    assert _ingest(client, match, [point_payload()], capturing_device).status_code == 200
+
+    assert client.delete(f"/matches/{match.id}").status_code == 409
+    assert client.post(f"/matches/{match.id}/capture/release").status_code == 204
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+
+
 def test_ingest_into_another_coachs_match_is_404(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:

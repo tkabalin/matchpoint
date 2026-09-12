@@ -1,10 +1,9 @@
-import { getCurrentCoachOptions } from "@matchpoint/api-client/react-query";
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Play, Plus } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { useInProgressSummary } from "@/features/capture/resume";
+import { getRecordedOwner } from "@/lib/local-data";
 import { cn } from "@/lib/utils";
 
 /**
@@ -18,8 +17,7 @@ import { cn } from "@/lib/utils";
  * component's own comment for why.
  */
 export function PrimaryMatchAction({ className }: { className?: string }) {
-  const { data: coach } = useQuery(getCurrentCoachOptions());
-  const summary = useInProgressSummary(coach?.id ?? "");
+  const summary = useInProgressSummary(getRecordedOwner());
 
   const position =
     // Tracks the page column's right edge rather than the viewport's, so it stays

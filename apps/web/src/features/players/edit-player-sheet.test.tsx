@@ -11,9 +11,17 @@ import {
 } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
+import { outboxDb } from "@/features/outbox/db";
+import { saveMatch } from "@/features/outbox/match-log";
+import { append, readByMatch } from "@/features/outbox/outbox";
+import { recordOwnerIfUnknown } from "@/lib/local-data";
 
 import { EditPlayerSheet } from "./edit-player-sheet";
+
+const COACH_ID = "3f1c2b4e-0000-4000-8000-0000000000c1";
+const MATCH_ID = "3f1c2b4e-0000-4000-8000-0000000000m1";
 
 // Same reasoning as profile.test.tsx: jsdom has no canvas/createImageBitmap, and
 // downscaling itself is covered by downscale-image.test.ts.
@@ -104,6 +112,13 @@ async function renderWithOwnedQuery(seed: PlayerRead = player) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   await renderInRouter(<PlayerProfileHarness playerId={seed.id} />, queryClient);
 }
+
+beforeEach(async () => {
+  await outboxDb.matches.clear();
+  await outboxDb.events.clear();
+  await outboxDb.entries.clear();
+  localStorage.clear();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -235,6 +250,36 @@ test("OK returns to the form from the can't-delete-yet step", async () => {
   await user.click(screen.getByRole("button", { name: "OK" }));
 
   expect(await screen.findByLabelText("First name")).toHaveValue("Amahle");
+});
+
+// #251 review, finding 3: the server deletes this player's matches with them (#243).
+// Left behind on this device, an unfinished one would pin the in-progress banner on a
+// player id NewMatch can never resolve again, and a queued row for it would repost
+// the match on the next drain (#214) — the same failure delete-match-sheet.tsx
+// already guards against for one named match, now needed for every match a deleted
+// player had.
+test("deleting a player clears its logged matches and queued outbox rows on this device", async () => {
+  recordOwnerIfUnknown(COACH_ID);
+  await saveMatch({
+    matchId: MATCH_ID,
+    coachId: COACH_ID,
+    trackedPlayerId: player.id,
+    nextSequence: 1,
+    finished: false,
+    updatedAt: Date.now(),
+    payload: { matchId: MATCH_ID },
+  });
+  await append({ id: MATCH_ID, coachId: COACH_ID, matchId: MATCH_ID, kind: "match", payload: {} });
+  stubFetch({ [`DELETE /api/players/${player.id}`]: () => new Response(null, { status: 204 }) });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+  await user.click(screen.getByRole("button", { name: "Delete player" }));
+
+  await screen.findByRole("heading", { name: "Players" });
+  expect(await outboxDb.matches.get(MATCH_ID)).toBeUndefined();
+  expect(await readByMatch(MATCH_ID)).toEqual([]);
 });
 
 test("Cancel backs out of the transfer explanation without minting a code", async () => {

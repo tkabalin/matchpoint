@@ -23,7 +23,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { removeForPlayer } from "@/features/outbox/match-log";
+import { removeByMatch } from "@/features/outbox/outbox";
 import { getErrorStatus } from "@/lib/error-status";
+import { getRecordedOwner } from "@/lib/local-data";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 import {
   buildPlayerUpdateBody,
@@ -147,6 +150,16 @@ export function EditPlayerSheet({
     mutationFn: async () => {
       const { error: deleteError } = await deletePlayer({ path: { player_id: player.id } });
       if (deleteError) throw deleteError;
+      // The server erases this player's matches with them (#243). Left behind here,
+      // an unfinished one pins the in-progress banner on a player id `NewMatch` can
+      // never resolve again, and a queued row for it would repost the match on the
+      // next drain (#214) — the same two-step `delete-match-sheet.tsx` already does,
+      // just scoped to every match this player had rather than one named by id.
+      const coachId = getRecordedOwner();
+      if (coachId !== null) {
+        const matchIds = await removeForPlayer(coachId, player.id);
+        await Promise.all(matchIds.map((matchId) => removeByMatch(matchId)));
+      }
     },
     onSuccess: async () => {
       // The player is gone, so invalidating getPlayer would just refetch a 404 —

@@ -91,3 +91,23 @@ export async function removeMatch(matchId: string): Promise<void> {
     await outboxDb.events.where({ matchId }).delete();
   });
 }
+
+/**
+ * Forgets every match logged for one player of this coach's, finished or not, and
+ * answers which match ids it removed. Deleting a player deletes their matches
+ * server-side too (#243); left behind here, a still-open one pins the in-progress
+ * banner on an id `NewMatch` can never resolve again (the player is gone), and a
+ * finished one would just sit as dead rows. The caller still owes `removeByMatch` on
+ * each returned id (`features/outbox/outbox.ts`) — the same two-step `delete-match-
+ * sheet.tsx` already does for #214, so a queued row can't survive to repost the match.
+ */
+export async function removeForPlayer(coachId: string, trackedPlayerId: string): Promise<string[]> {
+  return outboxDb.transaction("rw", outboxDb.matches, outboxDb.events, async () => {
+    const rows = await outboxDb.matches.where({ coachId, trackedPlayerId }).toArray();
+    const matchIds = rows.map((row) => row.matchId);
+    if (matchIds.length === 0) return matchIds;
+    await outboxDb.matches.bulkDelete(matchIds);
+    await outboxDb.events.where("matchId").anyOf(matchIds).delete();
+    return matchIds;
+  });
+}

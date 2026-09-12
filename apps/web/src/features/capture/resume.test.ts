@@ -1,7 +1,8 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { outboxDb } from "@/features/outbox/db";
+import * as matchLog from "@/features/outbox/match-log";
 import { appendEvent, saveMatch } from "@/features/outbox/match-log";
 
 import { Match } from "./match";
@@ -127,7 +128,7 @@ describe("useInProgressSummary", () => {
 
     const { result } = renderHook(() => useInProgressSummary(COACH_ID));
 
-    await waitFor(() => expect(result.current?.matchId).toBe(MATCH_ID));
+    await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current?.trackedPlayerId).toBe(PLAYER_ID);
     expect(result.current?.scoreLine).toBe("0-0, 15-0");
     expect(result.current?.updatedAt).toBe(1_700_000_000_000);
@@ -181,9 +182,57 @@ describe("useInProgressSummary", () => {
     expect(result.current).toBeNull();
   });
 
-  test("an empty coachId (coach not loaded yet) subscribes to nothing and stays null", () => {
-    const { result } = renderHook(() => useInProgressSummary(""));
+  test("a null coachId (no owner recorded on this device yet) subscribes to nothing and stays null", () => {
+    const { result } = renderHook(() => useInProgressSummary(null));
 
     expect(result.current).toBeNull();
+  });
+
+  // #251 review, finding 5: purgeLocalData clears the query cache before the outbox,
+  // so a stale summary must not survive a rerender that finds the coach id gone —
+  // signing out and stateRef alike, this is the guard.
+  test("clears to null as soon as coachId goes from a coach to null", async () => {
+    await logAMatchInProgress();
+    const { result, rerender } = renderHook(({ coachId }) => useInProgressSummary(coachId), {
+      initialProps: { coachId: COACH_ID as string | null },
+    });
+    await waitFor(() => expect(result.current).not.toBeNull());
+
+    rerender({ coachId: null });
+
+    expect(result.current).toBeNull();
+  });
+
+  // #251 review, finding 4: every liveQuery emission folds independently and
+  // asynchronously, so an older emission's fold can resolve after a newer one's —
+  // without the sequence guard this would flip back to the first point's score.
+  test("a slower fold for an older emission never overwrites a newer one", async () => {
+    await logAMatchInProgress();
+    const originalReadLog = matchLog.readLog;
+    let calls = 0;
+    const readLogSpy = vi.spyOn(matchLog, "readLog").mockImplementation(async (matchId) => {
+      calls += 1;
+      // Only the first call (the initial emission's fold) is slowed down, so the
+      // second emission's fold — triggered by appendEvent below — resolves first.
+      if (calls === 1) await new Promise((resolve) => setTimeout(resolve, 20));
+      return originalReadLog(matchId);
+    });
+
+    const { result } = renderHook(() => useInProgressSummary(COACH_ID));
+    await appendEvent({
+      id: "point-1",
+      matchId: MATCH_ID,
+      coachId: COACH_ID,
+      sequence: 1,
+      kind: "point",
+      payload: pointAt(1, true).toJSON(),
+    });
+
+    await waitFor(() => expect(result.current?.scoreLine).toBe("0-0, 30-0"));
+    // Give the slow first fold a chance to land, if it were going to.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(result.current?.scoreLine).toBe("0-0, 30-0");
+
+    readLogSpy.mockRestore();
   });
 });

@@ -260,11 +260,13 @@ def capture_holder(match: Match) -> uuid.UUID | None:
 def list_in_progress_matches(db: DbSession, coach: CurrentCoach) -> list[MatchInProgressRead]:
     """Every match of this coach's that capture is under way on, freshest claim first.
 
-    Coach-scoped though the claim names a device: the resume banner is chrome on every
-    screen, so a coach who left capture running on their phone needs the tablet to say
-    so, which is exactly the answer a device filter would blank. A list rather than one
-    match because two devices can hold two matches at once, and the banner takes the
-    first.
+    The web client's own resume banner is device-local by design, not a caller here: the
+    points behind a match live in the capturing device's IndexedDB, so a Resume button on
+    a second device could not replay them even knowing the match exists. What this route
+    answers instead is what the server itself can see of capture in flight, and the claim
+    behind it is what guards a delete from a second device (`capture_holder`, below) — a
+    coach-scoped read, though the claim itself names a device, for whichever caller does
+    want the cross-device picture this device-local banner deliberately isn't.
     """
     # capture_holder's test for a live claim, in SQL: a lapsed claim is a device that
     # went quiet, which the banner must not offer to resume. A null deadline fails the
@@ -424,8 +426,10 @@ def ingest_points(
     # same way claim_capture does, and renews its own claim the same way. A live claim
     # held by another device is left standing: two-device collision protection is the
     # POINT_SEQUENCE_TAKEN unique violation below, not the claim, so a flush is still
-    # ingested either way. This is what makes /matches/in-progress ever non-empty: until
-    # now nothing but the never-called claim_capture route set a claim at all.
+    # ingested either way. Until now nothing but the never-called claim_capture route
+    # ever set a claim at all, which left two things dead: list_in_progress_matches
+    # above, and delete_match's cross-device refusal below (capture_holder was always
+    # None for a match nobody had explicitly claimed). This is what wakes both.
     holder = capture_holder(match)
     if holder is None or holder == data.device_id:
         match.capture_claim_device_id = data.device_id
