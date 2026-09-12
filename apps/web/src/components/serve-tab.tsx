@@ -15,7 +15,7 @@ import {
   ChevronRight,
   Shield,
   Target,
-  Zap,
+  Spade,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -239,7 +239,7 @@ function ServeSideCard({
           Fault
         </span>
         <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Zap className="size-6" style={{ color: PATTERN_VAR.violet }} aria-hidden="true" />
+          <Spade className="size-6" style={{ color: PATTERN_VAR.violet }} aria-hidden="true" />
           Ace
         </span>
       </div>

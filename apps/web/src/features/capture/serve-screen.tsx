@@ -7,7 +7,7 @@
  * comment on ServeAttempt.location). The opponent's serve is the return screen's job.
  */
 
-import { RotateCcw, Zap } from "lucide-react";
+import { RotateCcw, Spade } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -173,7 +173,7 @@ export function ServeScreen({
           }}
           className="gap-1.5 border-court/30 bg-court/10 px-2 text-sm font-semibold text-court hover:bg-court/20"
         >
-          <Zap className="size-5" />
+          <Spade className="size-5" />
           Ace
         </Button>
         <Button

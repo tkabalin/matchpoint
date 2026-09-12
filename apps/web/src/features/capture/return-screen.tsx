@@ -8,7 +8,7 @@
  * can't carry — hence the follow-up.
  */
 
-import { BicepsFlexed, CircleX, RotateCcw, Zap } from "lucide-react";
+import { BicepsFlexed, CircleX, RotateCcw, Spade } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -133,7 +133,7 @@ export function ReturnScreen({
           }}
           className="gap-1.5 border-court/30 bg-court/10 px-2 text-sm font-semibold text-court hover:bg-court/20"
         >
-          <Zap className="size-5" />
+          <Spade className="size-5" />
           Ace
         </Button>
         <Button
