@@ -9,9 +9,14 @@
  * meaning once, not once per card in it, and a label on the pitch reads as part of the
  * court the way the zone labels on the final ball screen do, rather than as page chrome
  * above it. `subCells` only divides the region left after that strip is carved off the
- * top, so the button grid can't overlap it. Whose shot it was is never tapped — a Point
- * derives that from `won` (see lastShotPlayer).
+ * top, so the button grid can't overlap it. Each shot's icon is the same one the Rally
+ * tab's shot-type breakdown uses (see `.claude/rules/web-icons.md`), so a coach who
+ * knows one screen recognises the shape on the other. Whose shot it was is never
+ * tapped — a Point derives that from `won` (see lastShotPlayer).
  */
+
+import { ChevronDown, ChevronUp, Rainbow, TrendingUp } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -22,12 +27,18 @@ import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent
-// from the model (see point.ts), so four rows covers every stored type.
-const SHOTS: { shotType: ShotType; label: string }[] = [
-  { shotType: "DRIVE", label: "Drive" },
-  { shotType: "VOLLEY", label: "Volley" },
-  { shotType: "DROPSHOT", label: "Drop shot" },
-  { shotType: "LOB", label: "Lob" },
+// from the model (see point.ts), so four rows covers every stored type. Icons match the
+// Rally tab's own shot-type breakdown (`.claude/rules/web-icons.md`) rather than being
+// picked fresh for this screen.
+const SHOTS: {
+  shotType: ShotType;
+  label: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+}[] = [
+  { shotType: "DRIVE", label: "Drive", Icon: TrendingUp },
+  { shotType: "VOLLEY", label: "Volley", Icon: ChevronUp },
+  { shotType: "DROPSHOT", label: "Drop shot", Icon: ChevronDown },
+  { shotType: "LOB", label: "Lob", Icon: Rainbow },
 ];
 
 // Columns. Backhand on the left, matching the handoff.
@@ -101,8 +112,9 @@ export function FinalShotScreen({
                     shotType: shot.shotType,
                   });
                 }}
-                className="h-full w-full rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+                className="h-full w-full gap-1.5 rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
               >
+                <shot.Icon className="size-4 shrink-0" aria-hidden="true" />
                 {shot.label}
               </Button>
             </ZoomedCard>
