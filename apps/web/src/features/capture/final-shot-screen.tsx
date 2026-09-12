@@ -1,21 +1,19 @@
 /**
  * The final shot screen — which stroke ended the point.
  *
- * Reached only on a FORCED ending now that an unforced error skips it: eight cards,
- * one per wing and shot type, which is exactly what TAP_SHOT_DETAIL asks for. Whose
- * shot it was is never tapped — a Point derives that from `won` (see lastShotPlayer).
+ * Reached only on a FORCED ending now that an unforced error skips it: eight cards, one
+ * per wing and shot type, laid inside the region the final ball zoomed into (reached
+ * last in the flow, so no entrance animation of its own — see rally-length-screen.tsx).
+ * Whose shot it was is never tapped — a Point derives that from `won` (see
+ * lastShotPlayer).
  */
 
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
+import type { CourtRegion } from "./court-diagram";
 import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
-import {
-  COURT_COLUMNS,
-  COURT_REGION_COLUMNS,
-  COURT_REGION_GRID,
-  COURT_ROWS,
-} from "./court-regions";
+import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent
@@ -33,7 +31,22 @@ const WINGS: { wing: Wing; label: string }[] = [
   { wing: "FOREHAND", label: "Forehand" },
 ];
 
-export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction) => void }) {
+export function FinalShotScreen({
+  zoomTo,
+  onAction,
+}: {
+  /** The region the final ball landed in — see court-geometry.ts's own comment. */
+  zoomTo: CourtRegion;
+  onAction: (action: CaptureAction) => void;
+}) {
+  // subCells(zoomTo, 4, 2) always returns exactly 8 regions, one per wing/shot pair below.
+  const cells = subCells(zoomTo, 4, 2);
+  // A card's text would come out `scale` times too big once the court's own zoom
+  // transform enlarges it along with everything else — see court-diagram.tsx's own
+  // comment on zoomScale.
+  const scale = zoomScale(zoomTo);
+  const kickerSize = 10 / scale;
+  const labelSize = 14 / scale;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -41,50 +54,43 @@ export function FinalShotScreen({ onAction }: { onAction: (action: CaptureAction
         <p className="mt-1.5 text-sm text-muted-foreground">Pick the shot that ended the point</p>
       </div>
 
-      <CourtDiagram className="min-h-0 flex-1">
-        {/* One card per court region: a row per shot type, a column per wing. */}
-        <div className="absolute inset-0 grid" style={COURT_REGION_GRID}>
-          {SHOTS.flatMap((shot, shotIndex) =>
-            WINGS.map((wing, wingIndex) => (
-              <Button
-                key={`${wing.wing}-${shot.shotType}`}
-                variant="ghost"
-                aria-label={`${wing.label} ${shot.label.toLowerCase()}`}
-                onClick={() => {
-                  onAction({
-                    type: "TAP_SHOT_DETAIL",
-                    wing: wing.wing,
-                    shotType: shot.shotType,
-                  });
-                }}
-                style={{ gridColumn: COURT_COLUMNS[wingIndex], gridRow: COURT_ROWS[shotIndex] }}
-                // A region is narrow in landscape, where the court is height-bound, so
-                // the label wraps rather than running past the card it sits in.
-                className="m-[3px] h-auto rounded-lg border-white/70 bg-white/90 px-1 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
-              >
-                {shot.label}
-              </Button>
-            )),
-          )}
-        </div>
-
-        {/* On the net line, as drawn — but above the mesh, which hides them in the
-            prototype's own screenshot. Without these the two columns are unlabelled, and
-            each sits over the column it names so it lines up with those cards. */}
-        <div
-          className="pointer-events-none absolute inset-x-0 top-1/2 z-30 grid -translate-y-1/2 items-center"
-          style={{ gridTemplateColumns: COURT_REGION_COLUMNS }}
-        >
-          {WINGS.map((wing, wingIndex) => (
-            <span
-              key={wing.wing}
-              style={{ gridColumn: COURT_COLUMNS[wingIndex] }}
-              className="flex h-8 items-center justify-center rounded-md bg-white/95 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]"
+      <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
+        {SHOTS.flatMap((shot, shotIndex) =>
+          WINGS.map((wing, wingIndex) => (
+            <Button
+              key={`${wing.wing}-${shot.shotType}`}
+              variant="ghost"
+              aria-label={`${wing.label} ${shot.label.toLowerCase()}`}
+              onClick={() => {
+                onAction({
+                  type: "TAP_SHOT_DETAIL",
+                  wing: wing.wing,
+                  shotType: shot.shotType,
+                });
+              }}
+              style={{
+                ...toCourtBox(cells[shotIndex * 2 + wingIndex]!),
+                gap: `${String(2 / scale)}px`,
+              }}
+              className="absolute m-[3px] flex-col rounded-lg border-white/70 bg-white/90 text-center whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
             >
-              {wing.label}
-            </span>
-          ))}
-        </div>
+              {/* Only the top row spells out the wing — a coach reads it once and the
+                  column keeps its meaning down the rest of that side, the same way the
+                  final ball screen's baseline chips only need to appear once a half. */}
+              {shotIndex === 0 && (
+                <span
+                  style={{ fontSize: `${String(kickerSize)}px` }}
+                  className="font-semibold tracking-[0.08em] text-chart-5 uppercase"
+                >
+                  {wing.label}
+                </span>
+              )}
+              <span style={{ fontSize: `${String(labelSize)}px` }} className="font-semibold">
+                {shot.label}
+              </span>
+            </Button>
+          )),
+        )}
       </CourtDiagram>
 
       <div className={COURT_ACTIONS}>

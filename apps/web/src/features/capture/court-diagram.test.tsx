@@ -74,3 +74,24 @@ test("chips the net band only when labelled", () => {
   rerender(<CourtDiagram netLabel="Rally length" />);
   expect(screen.getByText("Rally length")).toBeVisible();
 });
+
+test("carries no transform when zoomTo is absent, and clears one when it goes away", () => {
+  const { rerender } = render(<CourtDiagram zoomTo={{ left: 0, top: 0, width: 50, height: 50 }} />);
+  expect(screen.getByTestId("court-surface")).toHaveStyle({
+    transform: "translate(0%, 0%) scale(2)",
+  });
+
+  rerender(<CourtDiagram />);
+  expect(screen.getByTestId("court-surface").style.transform).toBe("");
+});
+
+test("zooms into a region off-centre, uniformly scaled and centred on it", () => {
+  // A region in the bottom-right quarter of the court: covering it needs 4x (the
+  // limiting axis, both are 25% wide here), and both left and top translate so the
+  // region's own centre (87.5%, 87.5%) lands back on the viewport's centre.
+  render(<CourtDiagram zoomTo={{ left: 75, top: 75, width: 25, height: 25 }} />);
+
+  expect(screen.getByTestId("court-surface")).toHaveStyle({
+    transform: "translate(-300%, -300%) scale(4)",
+  });
+});

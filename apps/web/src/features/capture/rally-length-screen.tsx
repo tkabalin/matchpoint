@@ -1,15 +1,25 @@
 /**
  * The rally length screen — how many shots the point ran to.
  *
- * Four cards, one per stored bucket, laid on the court's own regions; the first tap
- * moves on. Asked straight after the final ball, while the count is still fresh.
+ * Four cards, one per stored bucket, laid inside the region the final ball just zoomed
+ * into; the first tap moves on. Asked straight after the final ball, while the count is
+ * still fresh.
+ *
+ * The screen that plays the zoom-in: it mounts showing the full court (matching how the
+ * final ball screen looked a moment ago), then an effect flips to the real target region
+ * so court-diagram.tsx's own transition animates the camera move once. Ending and final
+ * shot, reached only after this has already happened, take the target directly instead —
+ * see court-diagram.tsx's own comment on `zoomTo`.
  */
+
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
+import type { CourtRegion } from "./court-diagram";
 import { CourtDiagram } from "./court-diagram";
-import { COURT_COLUMNS, COURT_HALF_ROWS, COURT_REGION_GRID } from "./court-regions";
+import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { RallyBucket } from "./point";
 
 // The four stored buckets, in the coach's own vocabulary. B1 is also what the flow
@@ -21,7 +31,36 @@ const BUCKET_LABELS: { bucket: RallyBucket; label: string }[] = [
   { bucket: "B4", label: "11+" },
 ];
 
-export function RallyLengthScreen({ onAction }: { onAction: (action: CaptureAction) => void }) {
+export function RallyLengthScreen({
+  zoomTo,
+  onAction,
+}: {
+  /** The region the final ball just landed in — see court-geometry.ts's own comment. */
+  zoomTo: CourtRegion;
+  onAction: (action: CaptureAction) => void;
+}) {
+  // Starts full-court (matching the frame this screen replaces) and zooms in a beat
+  // after mounting, rather than snapping straight to `zoomTo` — see this file's doc
+  // comment above. Deferred to the next animation frame, not set synchronously in the
+  // effect body, so the browser has actually painted the unzoomed frame first — without
+  // that, the transition has nothing to animate from.
+  const [cameraTarget, setCameraTarget] = useState<CourtRegion | null>(null);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      setCameraTarget(zoomTo);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [zoomTo]);
+
+  // subCells(zoomTo, 2, 2) always returns exactly 4 regions, one per bucket below.
+  const cells = subCells(zoomTo, 2, 2);
+  // A `text-xl` label rendered at 1x would come out `scale` times too big once the
+  // court's own zoom transform enlarges it along with everything else — see
+  // court-diagram.tsx's own comment on zoomScale.
+  const labelSize = 20 / zoomScale(zoomTo);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -29,29 +68,22 @@ export function RallyLengthScreen({ onAction }: { onAction: (action: CaptureActi
         <p className="mt-1.5 text-sm text-muted-foreground">How many shots were played</p>
       </div>
 
-      <CourtDiagram netLabel="Shots" className="min-h-0 flex-1">
-        {/* One card per quarter of the court, backcourt and service box together: the
-            two short buckets beyond the net, the two long ones this side of it. */}
-        <div className="absolute inset-0 grid" style={COURT_REGION_GRID}>
-          {BUCKET_LABELS.map(({ bucket, label }, index) => (
-            <Button
-              key={bucket}
-              variant="ghost"
-              onClick={() => {
-                onAction({ type: "TAP_RALLY_LENGTH", bucket });
-              }}
-              style={{
-                gridColumn: COURT_COLUMNS[index % 2],
-                gridRow: index < 2 ? COURT_HALF_ROWS.far : COURT_HALF_ROWS.near,
-              }}
-              // Opaque, unlike the shot screen's cards: a card spanning the court's lines
-              // would show them through a translucent white.
-              className="m-[3px] h-auto rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] px-1 text-xl font-semibold text-foreground tabular-nums shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+      <CourtDiagram zoomTo={cameraTarget} className="min-h-0 flex-1">
+        {BUCKET_LABELS.map(({ bucket, label }, index) => (
+          <Button
+            key={bucket}
+            variant="ghost"
+            onClick={() => {
+              onAction({ type: "TAP_RALLY_LENGTH", bucket });
+            }}
+            style={{ ...toCourtBox(cells[index]!), fontSize: `${String(labelSize)}px` }}
+            // Opaque, unlike the shot screen's cards: a card spanning the court's lines
+            // would show them through a translucent white.
+            className="absolute m-[3px] rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] font-semibold text-foreground tabular-nums shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+          >
+            {label}
+          </Button>
+        ))}
       </CourtDiagram>
     </div>
   );

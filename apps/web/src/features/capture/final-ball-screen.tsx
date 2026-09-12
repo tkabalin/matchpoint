@@ -20,35 +20,16 @@ import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
 import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { finalBallZoneRegion, toCourtBox } from "./court-geometry";
 import type { CourtDepth, CourtSide } from "./point";
 import { WinnerSheet } from "./winner-sheet";
-
-// Percentages follow court-diagram.tsx's own lines rather than the handoff, which drew
-// two halves and no zones: baselines at 6.2% and 93.8%, service lines at 25.93% and
-// 71.76%, the centre service line at 48.48%, net at 50%. Zones run line to line, so a
-// tap near a line still lands somewhere.
-const COLUMNS: { left: string; width: string }[] = [
-  { left: "15.76%", width: "32.72%" },
-  { left: "48.48%", width: "35.76%" },
-];
-
-const BANDS: Record<"far" | "near", Record<CourtDepth, { top: string; height: string }>> = {
-  far: {
-    DEEP: { top: "6.2%", height: "19.73%" },
-    SHORT: { top: "25.93%", height: "24.07%" },
-  },
-  near: {
-    SHORT: { top: "50%", height: "21.76%" },
-    DEEP: { top: "71.76%", height: "22.04%" },
-  },
-};
 
 // Deuce is to the right of the player standing on that half, so the far half reads
 // deuce/ad left to right (as the serve screen's boxes do) and the near half ad/deuce (as
 // the analytics heatmap draws our player's own court).
-const HALVES: { end: "far" | "near"; won: boolean; sides: [CourtSide, CourtSide] }[] = [
-  { end: "far", won: true, sides: ["DEUCE", "AD"] },
-  { end: "near", won: false, sides: ["AD", "DEUCE"] },
+const HALVES: { won: boolean; sides: [CourtSide, CourtSide] }[] = [
+  { won: true, sides: ["DEUCE", "AD"] },
+  { won: false, sides: ["AD", "DEUCE"] },
 ];
 
 const DEPTH_LABELS: Record<CourtDepth, string> = { SHORT: "short", DEEP: "deep" };
@@ -66,9 +47,9 @@ export function FinalBallScreen({
   const [askingWinner, setAskingWinner] = useState(false);
   const [pending, setPending] = useState(false);
 
-  const zones = HALVES.flatMap(({ end, won, sides }) => {
+  const zones = HALVES.flatMap(({ won, sides }) => {
     const owner = won ? opponentName : trackedPlayerName;
-    return sides.flatMap((half, column) =>
+    return sides.flatMap((half) =>
       (["DEEP", "SHORT"] as const).map((depth) => {
         const label = `${HALF_LABELS[half]} ${DEPTH_LABELS[depth]}`;
         return {
@@ -76,7 +57,7 @@ export function FinalBallScreen({
           // feel, so the text only added clutter — but the accessible name keeps the
           // same "deuce/ad deep/short" text, for tests and screen readers alike.
           name: `${owner}: ${label.toLowerCase()}`,
-          box: { ...COLUMNS[column], ...BANDS[end][depth] },
+          box: toCourtBox(finalBallZoneRegion(won, { half, depth })),
           tone: "court" as const,
           onTap: () => {
             onAction({ type: "TAP_BALL_LOCATION", won, ballIn: true, location: { half, depth } });
@@ -98,12 +79,12 @@ export function FinalBallScreen({
       <CourtDiagram zones={zones} onPendingChange={setPending} className="min-h-0 flex-1">
         {/* Whose half is whose, chipped on each baseline so the coach never has to
             remember the convention mid-match. Same chip as the shot screen's wing labels. */}
-        {HALVES.map(({ end, won }) => (
+        {HALVES.map(({ won }) => (
           <span
-            key={end}
+            key={won ? "far" : "near"}
             className={cn(
               "pointer-events-none absolute left-1/2 z-30 flex h-5 -translate-x-1/2 items-center rounded-md bg-white/95 px-3 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]",
-              end === "far" ? "top-[1.5%]" : "bottom-[1.5%]",
+              won ? "top-[1.5%]" : "bottom-[1.5%]",
             )}
           >
             {won ? opponentName : trackedPlayerName}

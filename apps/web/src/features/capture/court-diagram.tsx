@@ -11,10 +11,19 @@ import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { zoomScale } from "./court-geometry";
+
 // A zone flashes before the flow advances, so the coach sees which zone registered
 // without looking up from the match. Local only — a timer, never a promise, per
 // .claude/rules/web-capture.md.
 const FLASH_MS = 420;
+
+// The camera move into `zoomTo`, once the final ball names which region the rest of the
+// point's questions live in. Slower than the tap flash above: a flash says "this tap
+// registered", the zoom says "we're now working in this part of the court", and the two
+// need to read as different kinds of motion.
+const ZOOM_MS = 480;
+const ZOOM_EASE = "cubic-bezier(0.4, 0, 0.2, 1)"; // --ease-standard, see court-diagram's own uses below
 
 /** Percentage geometry, positioned against the court layer. */
 export interface CourtBox {
@@ -24,6 +33,31 @@ export interface CourtBox {
   bottom?: string;
   width?: string;
   height?: string;
+}
+
+/**
+ * A rectangle in the court's own 0-100 percentage space, as numbers rather than the CSS
+ * strings `CourtBox` uses — the shape `zoomTo` and `court-geometry.ts`'s helpers work in,
+ * since it's what a "zoom into this box" calculation needs to do arithmetic on.
+ */
+export interface CourtRegion {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** The transform that makes `region` fill the diagram at `zoomScale(region)`. */
+function zoomTransform(region: CourtRegion): string {
+  const scale = zoomScale(region);
+  const cx = (region.left + region.width / 2) / 100;
+  const cy = (region.top + region.height / 2) / 100;
+  // transform-origin stays at the box's own top-left (0 0); translate is a percentage
+  // of that same box, which is what lets this be pure arithmetic on 0-1 fractions
+  // rather than needing the box's rendered pixel size.
+  const tx = (0.5 - cx * scale) * 100;
+  const ty = (0.5 - cy * scale) * 100;
+  return `translate(${String(tx)}%, ${String(ty)}%) scale(${String(scale)})`;
 }
 
 /**
@@ -98,16 +132,26 @@ const NET_MESH = [
  * the net is itself a tap target, "Rally length" where the band divides two choices);
  * `children` float over everything, for the cards the rally and shot screens lay on the
  * court.
+ *
+ * `zoomTo`, when given, scales and pans the whole diagram — lines, zones and children
+ * alike — so that region fills the frame instead of the full court, animated via CSS
+ * transition rather than replayed by hand. A screen that wants the animation to play on
+ * its own arrival (rather than snapping straight to the zoomed frame on mount, which is
+ * what a screen reached *after* the zoom has already happened wants) starts its own
+ * local `zoomTo` state at `null` and flips it to the target region in an effect — see
+ * rally-length-screen.tsx, the one screen in the flow that does this.
  */
 export function CourtDiagram({
   zones,
   netLabel,
+  zoomTo,
   className,
   children,
   onPendingChange,
 }: {
   zones?: CourtTapZone[];
   netLabel?: string;
+  zoomTo?: CourtRegion | null;
   className?: string;
   children?: React.ReactNode;
   // Fires while a zone tap's flash is pending, so a screen with its own buttons
@@ -142,12 +186,28 @@ export function CourtDiagram({
     // Sized against both axes at once so the court keeps its real proportions: whichever
     // binds decides, the other is left as margin. Sizing off height alone cropped the
     // alleys, and the `min-width` guarding that then stretched the court instead.
+    // `overflow-hidden` here (not just on the court layer below) is what crops a
+    // zoomed-in court to this box rather than spilling past it.
     <div
-      className={cn("flex min-h-0 items-center justify-center [container-type:size]", className)}
+      className={cn(
+        "flex min-h-0 items-center justify-center overflow-hidden [container-type:size]",
+        className,
+      )}
     >
       {/* The surface color follows the match's court type, set as --court-surface on a
-          screen root; --color-court is the hard/unspecified default. */}
-      <div className="relative aspect-[165/216] w-[min(100cqw,calc(100cqh*165/216))] overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))]">
+          screen root; --color-court is the hard/unspecified default. The zoom transform
+          lives here, on the layer everything else (lines, zones, children) sits inside,
+          so all of it scales and pans together. */}
+      <div
+        data-testid="court-surface"
+        className="relative aspect-[165/216] w-[min(100cqw,calc(100cqh*165/216))] overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))] transition-transform"
+        style={{
+          transform: zoomTo ? zoomTransform(zoomTo) : undefined,
+          transformOrigin: "0 0",
+          transitionDuration: `${String(ZOOM_MS)}ms`,
+          transitionTimingFunction: ZOOM_EASE,
+        }}
+      >
         {COURT_LINES.map((line, index) => (
           <div key={index} className="absolute bg-white" style={line} />
         ))}

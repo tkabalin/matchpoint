@@ -31,6 +31,7 @@ import { commitDraft, transition } from "./capture-flow";
 import type { CaptureAction, CaptureState } from "./capture-flow";
 import { ScoreCheckpoint } from "./checkpoint";
 import type { ScoreSnapshot } from "./checkpoint";
+import { finalBallZoneRegion } from "./court-geometry";
 import { EndingScreen } from "./ending-screen";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
@@ -544,6 +545,15 @@ export function LiveMatch({
 
   const { step, draft } = capture;
 
+  // Rally length, ending and final shot all zoom into the region the final ball landed
+  // in — set whenever that step commits a CourtZone, and guaranteed non-null by the
+  // flow itself once any of those three steps is reached (see capture-flow.ts's
+  // BALL_LOCATION case), so the `!` below is asserting an invariant, not guessing one.
+  const zoomTo =
+    draft.ballLocation !== null && typeof draft.ballLocation === "object"
+      ? finalBallZoneRegion(draft.won ?? true, draft.ballLocation)
+      : null;
+
   /**
    * Back goes one screen at a time within the point, and stops at the serve or return
    * screen. Before the match is queued (see queueMatch) it steps out to setup; after,
@@ -605,18 +615,19 @@ export function LiveMatch({
         />
       )}
 
-      {step.name === "RALLY_LENGTH" && <RallyLengthScreen onAction={dispatch} />}
+      {step.name === "RALLY_LENGTH" && <RallyLengthScreen zoomTo={zoomTo!} onAction={dispatch} />}
 
       {step.name === "ENDING" && (
         <EndingScreen
           won={draft.won ?? true}
+          zoomTo={zoomTo!}
           trackedPlayerName={playerName}
           opponentName={opponentName}
           onAction={dispatch}
         />
       )}
 
-      {step.name === "SHOT_DETAIL" && <FinalShotScreen onAction={dispatch} />}
+      {step.name === "SHOT_DETAIL" && <FinalShotScreen zoomTo={zoomTo!} onAction={dispatch} />}
 
       {(step.name === "UNUSUAL_OUTCOME" || step.name === "UNUSUAL_REASON") && (
         <UnusualPointSheet
