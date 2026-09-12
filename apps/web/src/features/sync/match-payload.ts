@@ -31,7 +31,6 @@ export function toMatchCreate(match: Match): MatchCreate {
     // stops compiling; one added only on the API side is nothing this file can see.
     scoring_system: match.scoringSystem,
     opponent_name: match.opponentName,
-    // No source to map from yet — Match has no event field.
-    event: null,
+    event: match.event,
   };
 }

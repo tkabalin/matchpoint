@@ -57,6 +57,24 @@ describe("toMatchCreate", () => {
     expect(toMatchCreate(match()).opponent_name).toBeNull();
   });
 
+  test("sends the event through unchanged", () => {
+    const played = createMatch(
+      PLAYED_ON,
+      TRACKED_ID,
+      ROSTERED_OPPONENT,
+      TRACKED_ID,
+      "traditional",
+      "hard",
+      null,
+      "Regional Open",
+    );
+    expect(toMatchCreate(played).event).toBe("Regional Open");
+  });
+
+  test("maps no event to null", () => {
+    expect(toMatchCreate(match()).event).toBeNull();
+  });
+
   // Every member, not a sample: the pass-through holds only while the two enums agree
   // member for member, and zMatchCreate carries the API's list straight from the spec,
   // so a member the backend never added fails here instead of on sync.

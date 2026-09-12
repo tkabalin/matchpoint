@@ -84,6 +84,27 @@ describe("createMatch", () => {
     });
   });
 
+  describe("event", () => {
+    test("defaults to null when not given", () => {
+      const match = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
+      expect(match.event).toBeNull();
+    });
+
+    test("is passed through unchanged when given", () => {
+      const match = createMatch(
+        PLAYED_ON,
+        TRACKED_ID,
+        ROSTERED_OPPONENT,
+        TRACKED_ID,
+        "traditional",
+        "unspecified",
+        null,
+        "Regional Open",
+      );
+      expect(match.event).toBe("Regional Open");
+    });
+  });
+
   describe("un-rostered opponent", () => {
     test("given an opponentId, opponentName is null — the name lives on that Player row", () => {
       const match = createMatch(PLAYED_ON, TRACKED_ID, ROSTERED_OPPONENT, TRACKED_ID);
@@ -121,6 +142,24 @@ describe("Match.create opponentName validation", () => {
         surfaceType: "hard",
       }),
     ).toThrow(/opponentName/);
+  });
+});
+
+describe("Match.create event validation", () => {
+  test("rejects an empty event", () => {
+    expect(() =>
+      Match.create({
+        matchId: "match-1",
+        playedOn: PLAYED_ON,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        opponentName: null,
+        event: "",
+        scoringSystem: "traditional",
+        firstServer: TRACKED_ID,
+        surfaceType: "hard",
+      }),
+    ).toThrow(/event/);
   });
 });
 

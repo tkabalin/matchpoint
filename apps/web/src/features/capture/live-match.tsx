@@ -322,6 +322,7 @@ export function LiveMatch({
       trackedPlayerId,
       opponentId,
       opponentName: config.opponentName,
+      event: config.event,
       scoringSystem: config.scoringSystem,
       firstServer: config.playerServesFirst ? trackedPlayerId : opponentId,
       surfaceType: config.surfaceType,

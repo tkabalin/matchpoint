@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MATCH_EVENT_MAX } from "@/lib/match-form";
 import { SCORING_SYSTEM_LABEL, SURFACE_LABEL } from "@/lib/tennis-labels";
 
 import { SCORING_SYSTEMS, SURFACE_TYPES } from "./match";
@@ -34,6 +35,9 @@ const SURFACE_LABELS: Record<SurfaceType, string> = {
 
 export interface MatchSetupConfig {
   opponentName: string;
+  // The tournament or league this match belongs to. Optional — most matches are
+  // practice or informal, so this is never a gate on starting (see `ready` below).
+  event: string | null;
   scoringSystem: ScoringSystem;
   surfaceType: SurfaceType;
   // Not an id: this screen never sees one. The caller turns it into Match.firstServer.
@@ -58,6 +62,7 @@ export function MatchSetupScreen({
   onStart: (config: MatchSetupConfig) => void;
 }) {
   const [opponentName, setOpponentName] = useState(initial?.opponentName ?? "");
+  const [event, setEvent] = useState(initial?.event ?? "");
   const [scoringSystem, setScoringSystem] = useState<ScoringSystem>(
     initial?.scoringSystem ?? defaultScoringSystem,
   );
@@ -97,6 +102,21 @@ export function MatchSetupScreen({
             placeholder="Name"
             onChange={(event) => {
               setOpponentName(event.target.value);
+            }}
+            className="h-11 rounded-lg text-sm"
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="event" className="text-sm text-muted-foreground">
+            Event
+          </FieldLabel>
+          <Input
+            id="event"
+            value={event}
+            maxLength={MATCH_EVENT_MAX}
+            onChange={(e) => {
+              setEvent(e.target.value);
             }}
             className="h-11 rounded-lg text-sm"
           />
@@ -180,6 +200,7 @@ export function MatchSetupScreen({
         onClick={() => {
           onStart({
             opponentName: opponentName.trim(),
+            event: event.trim().length > 0 ? event.trim() : null,
             scoringSystem,
             surfaceType,
             playerServesFirst,

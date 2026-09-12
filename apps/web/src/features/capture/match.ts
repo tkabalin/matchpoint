@@ -86,6 +86,10 @@ export class Match {
   // that Player row. Set when opponentId is a stand-in id instead, matching
   // the backend's free-text opponent_name (see the class doc comment above).
   readonly opponentName: string | null;
+  // The tournament or league the match belongs to, free text — null when the coach
+  // didn't set one. Mirrors the backend's `event` column (see match.py) exactly, so
+  // no translation happens at the sync boundary (match-payload.ts).
+  readonly event: string | null;
   readonly scoringSystem: ScoringSystem;
   // Must equal trackedPlayerId or opponentId — checked in Match.create. Kept
   // as an id, not a TRACKED/OPPONENT-style role label like Point.server
@@ -110,6 +114,7 @@ export class Match {
     trackedPlayerId: string;
     opponentId: string;
     opponentName: string | null;
+    event: string | null;
     scoringSystem: ScoringSystem;
     firstServer: string;
     surfaceType: SurfaceType;
@@ -120,6 +125,7 @@ export class Match {
     this.trackedPlayerId = fields.trackedPlayerId;
     this.opponentId = fields.opponentId;
     this.opponentName = fields.opponentName;
+    this.event = fields.event;
     this.scoringSystem = fields.scoringSystem;
     this.firstServer = fields.firstServer;
     this.surfaceType = fields.surfaceType;
@@ -168,6 +174,16 @@ export class Match {
     ) {
       throw new Error("opponentName must be a non-empty string, or null");
     }
+    // Undefined (an older queued payload, or a caller that never mentions it) reads
+    // back the same as null — no event set — rather than throwing on its absence.
+    if (
+      data.event !== undefined &&
+      data.event !== null &&
+      (typeof data.event !== "string" || data.event.length === 0)
+    ) {
+      throw new Error("event must be a non-empty string, or null");
+    }
+    const event = (data.event as string | null | undefined) ?? null;
     // Mirrors the Alembic migration that backfills the retired womens_grand_slam to
     // traditional, so a match an earlier build queued or logged still reads back
     // instead of parking. Removable once no such payload can still be on a device.
@@ -214,6 +230,7 @@ export class Match {
       trackedPlayerId: data.trackedPlayerId,
       opponentId: data.opponentId,
       opponentName: data.opponentName as string | null,
+      event,
       scoringSystem: scoringSystem as ScoringSystem,
       firstServer: data.firstServer as string,
       surfaceType: data.surfaceType as SurfaceType,
@@ -232,6 +249,7 @@ export class Match {
       trackedPlayerId: this.trackedPlayerId,
       opponentId: this.opponentId,
       opponentName: this.opponentName,
+      event: this.event,
       scoringSystem: this.scoringSystem,
       firstServer: this.firstServer,
       surfaceType: this.surfaceType,
@@ -266,6 +284,9 @@ export class Match {
  * in a retirement, walkover, or default — same reasoning as the backend's
  * own `result` field being settable on create (see
  * apps/api/src/matchpoint_api/models/match.py).
+ *
+ * `event` defaults to null and is appended last, after the already-optional
+ * `outcomeOverride`, so existing positional callers are unaffected by its addition.
  */
 export function createMatch(
   playedOn: string,
@@ -275,6 +296,7 @@ export function createMatch(
   scoringSystem: ScoringSystem = "traditional",
   surfaceType: SurfaceType = "unspecified",
   outcomeOverride: MatchOutcomeOverride | null = null,
+  event: string | null = null,
 ): Match {
   const opponentId = "opponentId" in opponent ? opponent.opponentId : crypto.randomUUID();
   const opponentName = "opponentId" in opponent ? null : opponent.opponentName;
@@ -285,6 +307,7 @@ export function createMatch(
     trackedPlayerId,
     opponentId,
     opponentName,
+    event,
     scoringSystem,
     firstServer,
     surfaceType,

@@ -39,10 +39,30 @@ test("starting hands back everything the match needs", async () => {
 
   expect(onStart).toHaveBeenCalledWith({
     opponentName: "Okoye",
+    event: null,
     scoringSystem: "traditional",
     surfaceType: "unspecified",
     playerServesFirst: true,
   });
+});
+
+test("an event name is passed through, trimmed", async () => {
+  const { onStart, user } = renderSetup();
+
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.type(screen.getByLabelText("Event"), "  Regional Open  ");
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ event: "Regional Open" }));
+});
+
+test("an event left blank is null, not an empty string — it never blocks starting", async () => {
+  const { onStart, user } = renderSetup();
+
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ event: null }));
 });
 
 test("the opponent can serve first", async () => {
@@ -88,6 +108,7 @@ test("what setup was left holding wins over the saved defaults", () => {
     defaultSurfaceType: "clay",
     initial: {
       opponentName: "Okoye",
+      event: "Regional Open",
       scoringSystem: "pro_set",
       surfaceType: "grass",
       playerServesFirst: true,
@@ -96,6 +117,7 @@ test("what setup was left holding wins over the saved defaults", () => {
 
   expect(screen.getByLabelText("Scoring system")).toHaveTextContent("Pro Set");
   expect(screen.getByLabelText("Court type")).toHaveTextContent("Grass");
+  expect(screen.getByLabelText("Event")).toHaveValue("Regional Open");
 });
 
 test("back steps out of setup", async () => {
