@@ -8,12 +8,13 @@
  * can't carry — hence the follow-up.
  */
 
-import { CircleX, RotateCcw, TriangleAlert, Wind, Zap } from "lucide-react";
+import { BicepsFlexed, CircleX, RotateCcw, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { UnforcedIcon } from "@/components/unforced-icon";
 
 import type { CaptureAction, CaptureStep } from "./capture-flow";
 import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
@@ -194,7 +195,7 @@ export function ReturnScreen({
               className="h-[76px] flex-col gap-1"
             >
               <span className="flex items-center gap-1.5 text-base font-semibold text-outcome-forced">
-                <Wind className="size-4" />
+                <BicepsFlexed className="size-4" />
                 Forced
               </span>
               <span className="text-xs text-muted-foreground">The serve was too good</span>
@@ -207,7 +208,7 @@ export function ReturnScreen({
               className="h-[76px] flex-col gap-1"
             >
               <span className="flex items-center gap-1.5 text-base font-semibold text-outcome-unforced">
-                <TriangleAlert className="size-4" />
+                <UnforcedIcon className="size-4" />
                 Unforced
               </span>
               <span className="text-xs text-muted-foreground">A returnable ball missed</span>

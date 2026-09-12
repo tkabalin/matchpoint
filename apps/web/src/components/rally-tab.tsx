@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowBigLeftDash,
   ArrowBigRightDash,
+  BicepsFlexed,
   CircleCheck,
   CircleX,
   ChevronDown,
@@ -16,9 +17,8 @@ import {
   Sparkle,
   Swords,
   TrendingUp,
-  TriangleAlert,
-  Wind,
 } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
@@ -32,6 +32,7 @@ import { StatHero } from "@/components/stat-hero";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UnforcedIcon } from "@/components/unforced-icon";
 import { toSetNumber } from "@/lib/analytics/filter-options";
 import type { PhaseFilter, SetFilter, SurfaceFilter } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
@@ -42,11 +43,12 @@ import { CourtHeatmap } from "./court-heatmap";
 
 type WonSide = "you" | "opponents";
 
-// Distinct from every other icon on this screen — "Forced" used to share Target
-// with the Serve tab's "Your serve" hero, which read as the same thing twice.
-const STYLE_ICON: Record<PointEnderStyle["kind"], typeof Wind> = {
-  forced: Wind,
-  unforced: TriangleAlert,
+// Forced is Lucide's own BicepsFlexed; unforced is unforced-icon.tsx's own banana peel
+// (app wide, see .claude/rules/web-icons.md) — not a Lucide icon, so the record's value
+// type is the shape both it and the other two satisfy, rather than a Lucide-specific one.
+const STYLE_ICON: Record<PointEnderStyle["kind"], ComponentType<SVGProps<SVGSVGElement>>> = {
+  forced: BicepsFlexed,
+  unforced: UnforcedIcon,
   unusual: Sparkle,
 };
 

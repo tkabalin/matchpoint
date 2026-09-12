@@ -7,18 +7,43 @@
  * clean winner as well as a forced error — the line is reachability (see point.ts). The
  * subtitle names the winner so a half tapped by mistake is caught here, one undo away,
  * rather than after the point has scored.
+ *
+ * Each card leads with the same forced/unforced symbol the Rally tab and the return
+ * screen's own forced/unforced sheet use (a flexed arm, a banana peel — see
+ * unforced-icon.tsx's own comment on why they're two different sources), so the two
+ * ideas look the same everywhere they appear.
  */
 
+import { BicepsFlexed } from "lucide-react";
+import type { ComponentType, SVGProps } from "react";
+
 import { Button } from "@/components/ui/button";
+import { UnforcedIcon } from "@/components/unforced-icon";
+import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
 import { CourtDiagram, ZoomedCard } from "./court-diagram";
 import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 
-const ENDINGS: { endReason: "FORCED" | "MISTAKE"; label: string }[] = [
-  { endReason: "FORCED", label: "Forced" },
-  { endReason: "MISTAKE", label: "Unforced" },
+const ENDINGS: {
+  endReason: "FORCED" | "MISTAKE";
+  label: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  colorClass: string;
+}[] = [
+  {
+    endReason: "FORCED",
+    label: "Forced",
+    Icon: BicepsFlexed,
+    colorClass: "text-outcome-forced",
+  },
+  {
+    endReason: "MISTAKE",
+    label: "Unforced",
+    Icon: UnforcedIcon,
+    colorClass: "text-outcome-unforced",
+  },
 ];
 
 export function EndingScreen({
@@ -48,7 +73,7 @@ export function EndingScreen({
       </div>
 
       <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
-        {ENDINGS.map(({ endReason, label }, index) => (
+        {ENDINGS.map(({ endReason, label, Icon, colorClass }, index) => (
           <ZoomedCard
             key={endReason}
             box={toCourtBox(cells[index]!)}
@@ -62,10 +87,13 @@ export function EndingScreen({
               }}
               // Opaque, unlike the shot screen's cards: a card spanning the court's
               // lines would show them through a translucent white.
-              className="h-full w-full flex-col gap-1 rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] px-1 whitespace-normal shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+              className="h-full w-full flex-col gap-1 rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] p-2 whitespace-normal shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
             >
-              <span className="text-xl font-semibold text-foreground">{label}</span>
-              <span className="text-center text-xs font-medium text-muted-foreground">
+              {/* size-auto opts out of Button's own `svg:not([class*='size-'])` rule
+                  (see basket-icon.tsx's own note on this), so flex-1 can size it. */}
+              <Icon className={cn("size-auto min-h-0 w-full flex-1", colorClass)} />
+              <span className={cn("flex-none text-xl font-semibold", colorClass)}>{label}</span>
+              <span className="flex-none text-center text-xs font-medium text-muted-foreground">
                 {endReason === "FORCED"
                   ? `Winner, or ${loser} couldn't reach it`
                   : `${loser}'s mistake`}
