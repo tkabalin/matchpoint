@@ -3,7 +3,9 @@
  *
  * Four cards, one per stored bucket, laid inside the region the final ball just zoomed
  * into; the first tap moves on. Asked straight after the final ball, while the count is
- * still fresh.
+ * still fresh. Each card is the same basket-of-balls picture at a different fill level
+ * (see basket-icon.tsx) rather than plain text, with the stored range as a caption —
+ * the four cards read as one object getting fuller, not four unrelated buttons.
  *
  * The screen that plays the zoom-in: it mounts showing the full court (matching how the
  * final ball screen looked a moment ago), then an effect flips to the real target region
@@ -16,6 +18,7 @@ import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
+import { BasketIcon } from "./basket-icon";
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
 import { CourtDiagram, ZoomedCard } from "./court-diagram";
@@ -80,9 +83,15 @@ export function RallyLengthScreen({
               }}
               // Opaque, unlike the shot screen's cards: a card spanning the court's
               // lines would show them through a translucent white.
-              className="h-full w-full rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] text-xl font-semibold text-foreground tabular-nums shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+              className="h-full w-full flex-col gap-0 rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] p-2 text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
             >
-              {label}
+              {/* flex-1 rather than a fixed size, so the basket fills whatever room
+                  the card actually has instead of guessing one number for every
+                  aspect ratio the card can end up at. size-auto only exists to satisfy
+                  Button's own `svg:not([class*='size-'])` rule, which would otherwise
+                  force this down to a 16px icon the same way its Lucide icons are. */}
+              <BasketIcon bucket={bucket} className="size-auto min-h-0 w-full flex-1" />
+              <span className="flex-none text-sm font-semibold tabular-nums">{label}</span>
             </Button>
           </ZoomedCard>
         ))}
