@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { CourtDiagram } from "./court-diagram";
+import { CourtDiagram, ZoomedCard } from "./court-diagram";
 import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { RallyBucket } from "./point";
 
@@ -56,10 +56,7 @@ export function RallyLengthScreen({
 
   // subCells(zoomTo, 2, 2) always returns exactly 4 regions, one per bucket below.
   const cells = subCells(zoomTo, 2, 2);
-  // A `text-xl` label rendered at 1x would come out `scale` times too big once the
-  // court's own zoom transform enlarges it along with everything else — see
-  // court-diagram.tsx's own comment on zoomScale.
-  const labelSize = 20 / zoomScale(zoomTo);
+  const scale = zoomScale(zoomTo);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -70,19 +67,24 @@ export function RallyLengthScreen({
 
       <CourtDiagram zoomTo={cameraTarget} className="min-h-0 flex-1">
         {BUCKET_LABELS.map(({ bucket, label }, index) => (
-          <Button
+          <ZoomedCard
             key={bucket}
-            variant="ghost"
-            onClick={() => {
-              onAction({ type: "TAP_RALLY_LENGTH", bucket });
-            }}
-            style={{ ...toCourtBox(cells[index]!), fontSize: `${String(labelSize)}px` }}
-            // Opaque, unlike the shot screen's cards: a card spanning the court's lines
-            // would show them through a translucent white.
-            className="absolute m-[3px] rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] font-semibold text-foreground tabular-nums shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+            box={toCourtBox(cells[index]!)}
+            scale={scale}
+            gapClassName="p-[3px]"
           >
-            {label}
-          </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                onAction({ type: "TAP_RALLY_LENGTH", bucket });
+              }}
+              // Opaque, unlike the shot screen's cards: a card spanning the court's
+              // lines would show them through a translucent white.
+              className="h-full w-full rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] text-xl font-semibold text-foreground tabular-nums shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+            >
+              {label}
+            </Button>
+          </ZoomedCard>
         ))}
       </CourtDiagram>
     </div>

@@ -31,7 +31,7 @@ import { commitDraft, transition } from "./capture-flow";
 import type { CaptureAction, CaptureState } from "./capture-flow";
 import { ScoreCheckpoint } from "./checkpoint";
 import type { ScoreSnapshot } from "./checkpoint";
-import { finalBallZoneRegion } from "./court-geometry";
+import { finalBallZoneRegion, interiorSquare } from "./court-geometry";
 import { EndingScreen } from "./ending-screen";
 import { FinalBallScreen } from "./final-ball-screen";
 import { FinalShotScreen } from "./final-shot-screen";
@@ -551,7 +551,7 @@ export function LiveMatch({
   // BALL_LOCATION case), so the `!` below is asserting an invariant, not guessing one.
   const zoomTo =
     draft.ballLocation !== null && typeof draft.ballLocation === "object"
-      ? finalBallZoneRegion(draft.won ?? true, draft.ballLocation)
+      ? interiorSquare(finalBallZoneRegion(draft.won ?? true, draft.ballLocation))
       : null;
 
   /**

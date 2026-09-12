@@ -52,6 +52,39 @@ export function finalBallZoneRegion(won: boolean, zone: CourtZone): CourtRegion 
   return { ...COLUMN_BOXES[column]!, ...DEPTH_BANDS[end][zone.depth] };
 }
 
+// How far inside a final-ball zone's own edges the square below stays — the zone's
+// boundary lines (baseline, service line, alley, centre line) sit exactly on those
+// edges, so without this margin the zoomed-in view would still show them. Sized for the
+// net specifically, not the thinner percentage-based lines: court-diagram.tsx draws it
+// at a fixed 26px regardless of the court's own rendered size, so on a short court (a
+// landscape phone, header and actions band eating most of the height) a small
+// percentage margin can still be thinner than the net's own reach. 7 comfortably clears
+// it even there; the six zones with no line that close just zoom in a little further
+// than the minimum they needed, which court-diagram.tsx's ZoomedCard renders correctly
+// at any scale.
+const LINE_MARGIN = 7;
+
+/**
+ * The largest square centred on `region`'s own centre and kept `margin` clear of its
+ * edges — the actual zoom target and card canvas for rally length, ending and final
+ * shot, in place of the final-ball zone's own real box. A final-ball zone is a lot
+ * wider than it is tall, so zooming its exact bounds (as this used to) always left
+ * slack on one axis — see zoomScale's own comment — and, more visibly, put the zone's
+ * boundary lines inside the frame, since those lines sit exactly on the zone's edges. A
+ * square, by contrast, always matches court-diagram.tsx's own frame aspect exactly (a
+ * consequence of a percentage box's real aspect scaling by the *court's* own 165:216
+ * ratio, which cancels out precisely when width% equals height% — see this file's own
+ * test), so contain-fit fills the frame completely, and staying inside the margin keeps
+ * every edge on plain court colour. The trade-off is a smaller canvas than the full
+ * zone; the payoff is that all of it is buttons rather than some of it being lines.
+ */
+export function interiorSquare(region: CourtRegion, margin = LINE_MARGIN): CourtRegion {
+  const size = Math.min(region.width, region.height) - margin * 2;
+  const centerX = region.left + region.width / 2;
+  const centerY = region.top + region.height / 2;
+  return { left: centerX - size / 2, top: centerY - size / 2, width: size, height: size };
+}
+
 /**
  * How much bigger `region` gets made to fill the diagram when it's court-diagram.tsx's
  * `zoomTo` — the factor a caller laying content inside that same region (rally-length-

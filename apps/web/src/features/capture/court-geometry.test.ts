@@ -1,6 +1,12 @@
 import { expect, test } from "vitest";
 
-import { finalBallZoneRegion, subCells, toCourtBox, zoomScale } from "./court-geometry";
+import {
+  finalBallZoneRegion,
+  interiorSquare,
+  subCells,
+  toCourtBox,
+  zoomScale,
+} from "./court-geometry";
 
 test("zoomScale picks the smaller of the two axes' own fill scales, never cropping either", () => {
   // A 50%-wide, 25%-tall region: width only needs 2x to fill, height would take 4x —
@@ -60,3 +66,25 @@ test.each([
     expect(finalBallZoneRegion(won, zone)).toEqual(expected);
   },
 );
+
+test("interiorSquare shrinks to the smaller axis, minus the margin on each side, centred", () => {
+  // Landscape region: height (20) is the smaller axis, so the square's side is 20 minus
+  // 2 x the margin, centred on the same point (left 15 + 20/2 = 25, top 30 + 20/2 = 40).
+  expect(interiorSquare({ left: 15, top: 30, width: 40, height: 20 }, 2)).toEqual({
+    left: 27,
+    top: 32,
+    width: 16,
+    height: 16,
+  });
+});
+
+test("interiorSquare always matches the court's own 165:216 aspect, in real units", () => {
+  const square = interiorSquare({ left: 15.76, top: 6.2, width: 32.72, height: 19.73 });
+
+  // Equal percentages of two differently-sized axes (165 wide, 216 tall) only produce
+  // the same real aspect ratio, 165:216, when the axes themselves are scaled by those
+  // same two numbers — which is exactly what happens once width% equals height%.
+  const realWidth = (square.width / 100) * 165;
+  const realHeight = (square.height / 100) * 216;
+  expect(realWidth / realHeight).toBeCloseTo(165 / 216);
+});

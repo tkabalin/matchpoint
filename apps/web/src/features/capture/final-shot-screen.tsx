@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, ZoomedCard } from "./court-diagram";
 import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { ShotType, Wing } from "./point";
 
@@ -41,12 +41,7 @@ export function FinalShotScreen({
 }) {
   // subCells(zoomTo, 4, 2) always returns exactly 8 regions, one per wing/shot pair below.
   const cells = subCells(zoomTo, 4, 2);
-  // A card's text would come out `scale` times too big once the court's own zoom
-  // transform enlarges it along with everything else — see court-diagram.tsx's own
-  // comment on zoomScale.
   const scale = zoomScale(zoomTo);
-  const kickerSize = 10 / scale;
-  const labelSize = 14 / scale;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -57,38 +52,37 @@ export function FinalShotScreen({
       <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
         {SHOTS.flatMap((shot, shotIndex) =>
           WINGS.map((wing, wingIndex) => (
-            <Button
+            <ZoomedCard
               key={`${wing.wing}-${shot.shotType}`}
-              variant="ghost"
-              aria-label={`${wing.label} ${shot.label.toLowerCase()}`}
-              onClick={() => {
-                onAction({
-                  type: "TAP_SHOT_DETAIL",
-                  wing: wing.wing,
-                  shotType: shot.shotType,
-                });
-              }}
-              style={{
-                ...toCourtBox(cells[shotIndex * 2 + wingIndex]!),
-                gap: `${String(2 / scale)}px`,
-              }}
-              className="absolute m-[3px] flex-col rounded-lg border-white/70 bg-white/90 text-center whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+              box={toCourtBox(cells[shotIndex * 2 + wingIndex]!)}
+              scale={scale}
+              gapClassName="p-[3px]"
             >
-              {/* Only the top row spells out the wing — a coach reads it once and the
-                  column keeps its meaning down the rest of that side, the same way the
-                  final ball screen's baseline chips only need to appear once a half. */}
-              {shotIndex === 0 && (
-                <span
-                  style={{ fontSize: `${String(kickerSize)}px` }}
-                  className="font-semibold tracking-[0.08em] text-chart-5 uppercase"
-                >
-                  {wing.label}
+              <Button
+                variant="ghost"
+                aria-label={`${wing.label} ${shot.label.toLowerCase()}`}
+                onClick={() => {
+                  onAction({
+                    type: "TAP_SHOT_DETAIL",
+                    wing: wing.wing,
+                    shotType: shot.shotType,
+                  });
+                }}
+                className="h-full w-full flex-col gap-0.5 rounded-lg border-white/70 bg-white/90 text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+              >
+                {/* Only the top row spells out the wing — a coach reads it once and the
+                    column keeps its meaning down the rest of that side, the same way the
+                    final ball screen's baseline chips only need to appear once a half. */}
+                {shotIndex === 0 && (
+                  <span className="text-[10px] font-semibold tracking-[0.08em] text-chart-5 uppercase">
+                    {wing.label}
+                  </span>
+                )}
+                <span className="text-center text-sm font-semibold whitespace-normal">
+                  {shot.label}
                 </span>
-              )}
-              <span style={{ fontSize: `${String(labelSize)}px` }} className="font-semibold">
-                {shot.label}
-              </span>
-            </Button>
+              </Button>
+            </ZoomedCard>
           )),
         )}
       </CourtDiagram>

@@ -127,6 +127,60 @@ const NET_MESH = [
 ].join(",");
 
 /**
+ * Anchors one card at `box` (a cell from `subCells`, in the diagram's own tiny,
+ * pre-zoom percentage space) without the card's *own* rendering happening at that tiny
+ * size — a card positioned and sized directly by `box` still sits in the *same*
+ * transformed layer as the court lines, so `transform: scale()` enlarges its text,
+ * border-radius and shadow exactly as it enlarges everything else, at whatever
+ * fractional pixel size `box` resolves to. Dividing each of those properties down to
+ * compensate was tried first and rejected on two counts: at the fractional sizes a real
+ * zoom factor produces, text lays out and kerns inconsistently (magnified back up into
+ * visibly uneven letter-spacing), and a border-radius that's a normal fraction of a
+ * *normal*-sized card becomes most of a *few-pixel-tall* one, degenerating toward a
+ * capsule. Rendering the card at `scale`-times-over-size and shrinking the whole,
+ * already-laid-out result back down instead leaves nothing to re-lay-out at a bad
+ * size — only the finished paint shrinks, which a browser does exactly.
+ */
+export function ZoomedCard({
+  box,
+  scale,
+  gapClassName,
+  children,
+}: {
+  box: CourtBox;
+  /** The diagram's own zoomScale(zoomTo) — the enlargement this card must undo. */
+  scale: number;
+  // Padding on the scaled wrapper, in ordinary units (e.g. "p-[3px]") — the gap between
+  // adjacent cards. A margin on the card itself would eat into the `h-full w-full` it's
+  // given below; padding here reads as the same visual gap without that fight.
+  gapClassName?: string;
+  // The card itself — a Button given `h-full w-full` so it fills the scaled wrapper
+  // below, carrying its own visual classes (rounded-lg, shadow, colour) unchanged from
+  // how they'd be authored for a normal-sized button, since that's the size it renders
+  // at before the wrapper's own transform shrinks the whole thing back down.
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={box} className="absolute flex items-center justify-center">
+      <div
+        // shrink-0: `box` is the anchor's own (tiny, pre-zoom) size, so a flex row's
+        // default flex-shrink would squeeze this oversized child back down along the
+        // main (width) axis alone, distorting it — the cross (height) axis has no such
+        // shrink behaviour, so the two ended up scaled by different amounts without this.
+        className={cn("shrink-0", gapClassName)}
+        style={{
+          width: `${String(scale * 100)}%`,
+          height: `${String(scale * 100)}%`,
+          transform: `scale(${String(1 / scale)})`,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
  * `zones` are stacked in the order given, so a caller listing a wide gutter after the
  * service box it borders wins the overlap. `netLabel` chips the net band ("Net" while
  * the net is itself a tap target, "Rally length" where the band divides two choices);
@@ -139,7 +193,9 @@ const NET_MESH = [
  * its own arrival (rather than snapping straight to the zoomed frame on mount, which is
  * what a screen reached *after* the zoom has already happened wants) starts its own
  * local `zoomTo` state at `null` and flips it to the target region in an effect — see
- * rally-length-screen.tsx, the one screen in the flow that does this.
+ * rally-length-screen.tsx, the one screen in the flow that does this. A card laid over
+ * a zoomed diagram should sit inside `ZoomedCard` above, or it renders at the tiny
+ * pre-zoom size `subCells` gives it, text and border-radius included.
  */
 export function CourtDiagram({
   zones,
