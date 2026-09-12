@@ -286,6 +286,23 @@ test("/ shows the form, not /home, with no connection and no owner recorded", as
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
+// Regression: a *confirmed* 401 used to fall into the same offline fallback as a
+// network failure, so a coach whose session was revoked elsewhere (server-side,
+// not through this app's own sign-out) — which never clears the recorded owner —
+// got redirected straight back to /home. That guard's own confirmed 401 then
+// cleared the cache and redirected back to /, landing in this same catch with the
+// marker still set: an infinite loop between / and /home, never showing the form.
+test("/ shows the form on a confirmed 401, even with an owner recorded from before", async () => {
+  recordOwnerIfUnknown(coach.id);
+  stubFetch({
+    "/api/coaches/me": () => Response.json({ detail: "Not signed in" }, { status: 401 }),
+  });
+
+  await renderRouteTreeAt("/");
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
+});
+
 // #194: this app's first public, non-auth routes besides the auth screens
 // themselves — no request of any kind, so unlike every test above, neither
 // needs `stubFetch` nor sits under the `_authenticated` guard.
