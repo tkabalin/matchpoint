@@ -1315,6 +1315,23 @@ def _series_ratio(forced: int, unforced: int) -> float | None:
     return round(forced / unforced, 2)
 
 
+def _baseline_ratio(forced: int, unforced: int) -> float | None:
+    """`_series_ratio`, held at the ceiling a lopsided match otherwise runs past.
+
+    A ratio's top end is unbounded wherever its denominator is small, so a match of
+    18 forced : 2 unforced clears `MIN_POINTS_FOR_TRACKED_STAT` on twenty rally
+    endings and still lands at 9.0. One of those sets the spread for the ten matches
+    behind it, and the client divides by that spread: a genuine slump afterwards then
+    reads as ordinary noise and never gets flagged. Held at the ceiling rather than
+    dropped, because that match is the player's best and not an absent one, and a
+    floor on the denominator would keep only their untidiest matches (#239).
+    """
+    value = _series_ratio(forced, unforced)
+    # The same ceiling the dashboard's own bars stop at: past it, a ratio is already
+    # as good as this screen draws, so the series loses nothing by agreeing.
+    return None if value is None else min(value, RATIO_CAP)
+
+
 @dataclass(frozen=True)
 class _TrackedStatSpec:
     """One tracked stat: its label, its value over one match, and that value's sample.
@@ -1339,7 +1356,7 @@ _TRACKED_STATS = (
         TrackedStatKey.FORCED_TO_UNFORCED,
         FORCED_UNFORCED_LABEL,
         MetricUnit.RATIO,
-        lambda counts: _series_ratio(counts.forced_won, counts.mistake_lost),
+        lambda counts: _baseline_ratio(counts.forced_won, counts.mistake_lost),
         lambda counts: counts.forced_won + counts.mistake_lost,
     ),
     _TrackedStatSpec(

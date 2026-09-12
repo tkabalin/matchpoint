@@ -2587,6 +2587,51 @@ def test_squad_members_omit_a_stat_left_with_one_countable_match(
     assert row["forced_to_unforced_ratio"] == 1.83
 
 
+def test_squad_members_hold_a_lopsided_match_at_the_ratios_ceiling(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A tiny denominator is the point floor's blind spot, and the cap is what covers it.
+
+    18 forced : 2 unforced is twenty rally endings, so it clears the floor, and it is
+    still 9.0. Left there it would put the baseline at a mean of 3.38 and a deviation
+    of 3.25, against which the slump that follows scores -0.89 — inside the client's
+    threshold of 1.5, so a real decline goes unflagged. Held at 3.0 the baseline is
+    1.88 and 0.65, and the same slump scores -2.12.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    tallies = [(15, 10), (15, 10), (15, 10), (18, 2), (5, 10)]
+    for day, (forced, mistake) in enumerate(tallies, start=1):
+        _captured_match(
+            db_session, player.id, date(THIS_YEAR, 7, day), forced=forced, mistake=mistake
+        )
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 0.5
+    assert stats["forced_to_unforced"]["rolling_mean"] == 1.88
+    assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.65
+    # The cap is the series' own rule, not the counts': the period ratio still sums
+    # every ending, so the lopsided match is weighed there at what it really was.
+    assert _squad(client)[0]["forced_to_unforced_ratio"] == 1.62
+
+
+def test_squad_members_report_a_capped_match_as_the_current_value_too(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The cap governs the whole series, the newest value included (#239).
+
+    A ratio capped in the baseline but not as `current` would compare two different
+    measurements, and the newest match is the one most likely to be the lopsided one.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=15, mistake=10)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=18, mistake=2)
+
+    stats = {stat["key"]: stat for stat in _squad(client)[0]["tracked_stats"]}
+
+    assert stats["forced_to_unforced"]["current"] == 3.0
+
+
 # --- squad leaderboard figures on the same rows (#237) ---
 
 
@@ -2797,6 +2842,22 @@ def test_squad_trend_has_no_stand_in_for_a_missing_denominator(
     _captured_match(db_session, player.id, _in_week(2), forced=3)
 
     assert _values(client, "forced_to_unforced") == [None] * 6
+
+
+def test_squad_trend_draws_a_lopsided_week_where_it_really_landed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The chart plots the ratio, so nothing caps it — only a baseline series is (#239).
+
+    A tracked stat holds a lopsided match at 3.0 because one of them would otherwise
+    set the spread a z-score divides by. A trend point is the measurement itself, and
+    flattening a genuinely clean week to the ceiling would be drawing a figure nobody
+    played.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, _in_week(3), forced=18, mistake=2)
+
+    assert _values(client, "forced_to_unforced") == [None, None, None, 9.0, None, None]
 
 
 def test_squad_trend_first_serve_pools_the_weeks_serves(
