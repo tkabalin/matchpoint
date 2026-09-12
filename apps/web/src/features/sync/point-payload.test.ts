@@ -1,7 +1,7 @@
 import { zPointCreate } from "@matchpoint/api-client/zod";
 import { describe, expect, test } from "vitest";
 
-import { NOTE_MAX_LENGTH, Point } from "@/features/capture/point";
+import { Point } from "@/features/capture/point";
 
 import { toPointCreate } from "./point-payload";
 
@@ -242,30 +242,15 @@ describe("toPointCreate", () => {
     });
   });
 
-  // The API has one note column for the capture model's two.
-  test("folds an unusual point's own note under the general one", () => {
+  // The wire's one note column is the coach's general note. unusualNote is the
+  // capture model's separate unusual-point note, which no surface writes (#209).
+  test("sends the general note and ignores an unusual point's own", () => {
     const unusual = { endReason: "UNUSUAL", unusualReason: "OTHER", ...NO_CONTACT };
     expect(toPointCreate(point()).note).toBeNull();
     expect(toPointCreate(point({ note: "Tight." })).note).toBe("Tight.");
-    expect(toPointCreate(point({ ...unusual, unusualNote: "Rain delay." })).note).toBe(
-      "Rain delay.",
-    );
+    expect(toPointCreate(point({ ...unusual, unusualNote: "Rain delay." })).note).toBeNull();
     expect(
       toPointCreate(point({ ...unusual, note: "Tight.", unusualNote: "Rain delay." })).note,
-    ).toBe("Tight.\nRain delay.");
-  });
-
-  test("keeps a folded note inside the bound the API enforces", () => {
-    const body = toPointCreate(
-      point({
-        endReason: "UNUSUAL",
-        unusualReason: "OTHER",
-        note: "x".repeat(NOTE_MAX_LENGTH),
-        unusualNote: "y".repeat(10),
-        ...NO_CONTACT,
-      }),
-    );
-    expect(body.note).toHaveLength(NOTE_MAX_LENGTH);
-    expect(() => zPointCreate.parse(body)).not.toThrow();
+    ).toBe("Tight.");
   });
 });

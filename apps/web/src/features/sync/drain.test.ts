@@ -113,12 +113,7 @@ function checkpointEntry(tag: string, matchId: string, sequence: number): Outbox
 
 /** A point carrying the longest note the API takes, for the byte-bound test. */
 function notedPointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
-  return pointEntry(tag, matchId, sequence, {
-    serves: [{ number: 1, outcome: "IN", location: null }],
-    endReason: "UNUSUAL",
-    unusualReason: "OTHER",
-    unusualNote: "x".repeat(2_000),
-  });
+  return pointEntry(tag, matchId, sequence, { note: "x".repeat(2_000) });
 }
 
 async function queue(...entries: OutboxEntry[]): Promise<void> {

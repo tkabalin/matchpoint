@@ -13,7 +13,7 @@
 
 import type { PointCreate } from "@matchpoint/api-client";
 
-import { NOTE_MAX_LENGTH, type Point, type ServeAttempt } from "@/features/capture/point";
+import type { Point, ServeAttempt } from "@/features/capture/point";
 
 function lower<T extends string>(value: T): Lowercase<T> {
   return value.toLowerCase() as Lowercase<T>;
@@ -40,17 +40,6 @@ function serveColumns(attempt: ServeAttempt | undefined, point: Point) {
   return { outcome: lower(attempt.outcome), box: lower(point.courtSide), faultMode: null };
 }
 
-/**
- * The API has one note column and the capture model two, so an unusual point's own
- * note rides below the general one. Bounded again because the join can exceed what
- * each half was bounded to alone, and a 422 would park the whole batch.
- */
-function noteColumn(point: Point): string | null {
-  const parts = [point.note, point.unusualNote].filter((part) => part !== null);
-  if (parts.length === 0) return null;
-  return parts.join("\n").slice(0, NOTE_MAX_LENGTH);
-}
-
 export function toPointCreate(point: Point): PointCreate {
   const first = serveColumns(point.serves[0], point);
   const second = serveColumns(point.serves[1], point);
@@ -74,7 +63,7 @@ export function toPointCreate(point: Point): PointCreate {
     return_outcome: lowerOrNull(point.returnOutcome),
     end_reason: lowerOrNull(point.endReason),
     unusual_reason: lowerOrNull(point.unusualReason),
-    note: noteColumn(point),
+    note: point.note,
     wing: lowerOrNull(point.wing),
     shot_type: lowerOrNull(point.shotType),
     ball_in: point.ballIn,
