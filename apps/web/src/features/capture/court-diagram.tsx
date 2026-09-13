@@ -21,8 +21,10 @@ const FLASH_MS = 420;
 // The camera move into `zoomTo`, once the final ball names which region the rest of the
 // point's questions live in. Slower than the tap flash above: a flash says "this tap
 // registered", the zoom says "we're now working in this part of the court", and the two
-// need to read as different kinds of motion.
-const ZOOM_MS = 480;
+// need to read as different kinds of motion. Exported so a screen animating its own exit
+// (final-shot-screen.tsx's zoom back out) can time a delayed dispatch to match, rather
+// than a second, hand-copied number drifting from this one.
+export const ZOOM_MS = 480;
 const ZOOM_EASE = "cubic-bezier(0.4, 0, 0.2, 1)"; // --ease-standard, see court-diagram's own uses below
 
 /** Percentage geometry, positioned against the court layer. */

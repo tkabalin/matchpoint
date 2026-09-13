@@ -14,6 +14,12 @@
  * (see `.claude/rules/web-icons.md`), so a coach who knows one screen recognises the
  * shape on the other. Whose shot it was is never tapped — a Point derives that from
  * `won` (see lastShotPlayer).
+ *
+ * Whichever way the coach exits (a shot, or "Didn't see the shot"), the actual dispatch
+ * — which is what advances the match to the next point's serve or return screen — waits
+ * out one more zoom (see `exit` below): the reverse of the camera move that brought the
+ * coach in here, so the screen doesn't just cut from a tight crop straight to the whole
+ * court.
  */
 
 import {
@@ -25,12 +31,13 @@ import {
   TrendingUp,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { COURT_ACTIONS, CourtDiagram, ZoomedCard } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, ZoomedCard, ZOOM_MS } from "./court-diagram";
 import { subCells, toCourtBox, zoomScale } from "./court-geometry";
 import type { ShotType, Wing } from "./point";
 
@@ -73,6 +80,25 @@ export function FinalShotScreen({
   zoomTo: CourtRegion;
   onAction: (action: CaptureAction) => void;
 }) {
+  // Set once, by whichever exit fires first — onAction itself waits for the zoom this
+  // triggers (CourtDiagram animates its own transform whenever zoomTo changes) rather
+  // than firing immediately, and the guard against a second tap during that wait is the
+  // same "already have one queued" check, not a separate pending flag.
+  const [exiting, setExiting] = useState<CaptureAction | null>(null);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (exitTimer.current !== null) clearTimeout(exitTimer.current);
+    };
+  }, []);
+  function exit(action: CaptureAction) {
+    if (exiting !== null) return;
+    setExiting(action);
+    exitTimer.current = setTimeout(() => {
+      onAction(action);
+    }, ZOOM_MS);
+  }
+
   const scale = zoomScale(zoomTo);
   const headerRegion: CourtRegion = {
     ...zoomTo,
@@ -93,7 +119,7 @@ export function FinalShotScreen({
         <p className="mt-1.5 text-sm text-muted-foreground">Pick the shot that ended the point</p>
       </div>
 
-      <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
+      <CourtDiagram zoomTo={exiting !== null ? null : zoomTo} className="min-h-0 flex-1">
         <ZoomedCard box={toCourtBox(headerRegion)} scale={scale}>
           {/* gap-2 keeps the two labels from running into one word ("BACKHANDFOREHAND")
               when the region is squeezed narrow (a short viewport in landscape);
@@ -133,12 +159,9 @@ export function FinalShotScreen({
               <Button
                 variant="ghost"
                 aria-label={`${wing.label} ${shot.label.toLowerCase()}`}
+                disabled={exiting !== null}
                 onClick={() => {
-                  onAction({
-                    type: "TAP_SHOT_DETAIL",
-                    wing: wing.wing,
-                    shotType: shot.shotType,
-                  });
+                  exit({ type: "TAP_SHOT_DETAIL", wing: wing.wing, shotType: shot.shotType });
                 }}
                 // overflow-hidden: eight cards this small (a short viewport in
                 // landscape leaves each one only a few px tall) can end up smaller than
@@ -157,8 +180,9 @@ export function FinalShotScreen({
       <div className={COURT_ACTIONS}>
         <Button
           variant="ghost"
+          disabled={exiting !== null}
           onClick={() => {
-            onAction({ type: "TAP_DIDNT_SEE" });
+            exit({ type: "TAP_DIDNT_SEE" });
           }}
           className="text-base font-semibold text-muted-foreground"
         >
