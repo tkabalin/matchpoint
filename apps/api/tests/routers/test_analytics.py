@@ -1055,10 +1055,10 @@ def test_rally_length_buckets_are_reported_whole(
 
     # All four bars, the empty ones included: the gaps are the shape a coach reads.
     assert body["rally_length"] == [
-        {"label": "1–3 shots", "count": 2},
-        {"label": "4–6 shots", "count": 0},
-        {"label": "7–9 shots", "count": 1},
-        {"label": "10+ shots", "count": 0},
+        {"label": "1-2 shots", "count": 2},
+        {"label": "3-5 shots", "count": 0},
+        {"label": "6-10 shots", "count": 1},
+        {"label": "11+ shots", "count": 0},
     ]
 
 

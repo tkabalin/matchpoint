@@ -37,7 +37,7 @@ const RALLY_STATS: RallyStats = {
   won_by_shot: [],
   outcome_mix: [],
   shot_frequency: { you: [], opponents: [] },
-  rally_length: [{ label: "1–3 shots", count: 7 }],
+  rally_length: [{ label: "1-2 shots", count: 7 }],
   average_rally_length: { won: 2, lost: 2 },
   styles: {
     you: [

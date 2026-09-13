@@ -24,9 +24,9 @@ const RALLY_STATS: RallyStats = {
   lost_by_shot: [],
   outcome_mix: [],
   rally_length: [
-    { label: "1–3 shots", count: 4 },
-    { label: "4–6 shots", count: 3 },
-    { label: "7–9 shots", count: 2 },
+    { label: "1-2 shots", count: 4 },
+    { label: "3-5 shots", count: 3 },
+    { label: "6-10 shots", count: 2 },
   ],
   average_rally_length: { won: 2.6, lost: 6.5 },
   shot_frequency: {

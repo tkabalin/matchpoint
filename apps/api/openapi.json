@@ -2488,7 +2488,7 @@
         "type": "object"
       },
       "RallyBucket": {
-        "description": "A coarse rally-length bucket.",
+        "description": "A coarse rally-length bucket, b1 through b4.\n\nThe capture screen the coach taps (`rally-length-screen.tsx`) is what defines these\nranges; anywhere else a range is displayed or averaged should match it rather than\nsettle on its own bounds.",
         "enum": [
           "b1",
           "b2",

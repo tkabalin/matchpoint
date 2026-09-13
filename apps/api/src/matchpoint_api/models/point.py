@@ -100,7 +100,12 @@ class CourtDepth(enum.StrEnum):
 # Null on the column means genuinely unknown, never a stand-in for a rally too short to
 # bucket.
 class RallyBucket(enum.StrEnum):
-    """A coarse rally-length bucket."""
+    """A coarse rally-length bucket, b1 through b4.
+
+    The capture screen the coach taps (`rally-length-screen.tsx`) is what defines these
+    ranges; anywhere else a range is displayed or averaged should match it rather than
+    settle on its own bounds.
+    """
 
     B1 = "b1"
     B2 = "b2"

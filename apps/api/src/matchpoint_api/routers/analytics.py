@@ -220,20 +220,19 @@ _RETURN_OUTCOME_LABEL = {
     ReturnOutcome.WIDE: "Wide",
 }
 
-# The shot range each stored bucket stands for. Capture stores b1..b4 and nothing
-# about their bounds (#175), so the ranges are settled here, matching the ones the
-# rally tab's histogram is already captioned with.
+# The shot range each stored bucket stands for, straight from the capture screen the
+# coach actually tapped (`rally-length-screen.tsx`, #265): that screen is authoritative,
+# so a range recorded anywhere else must match it rather than invent its own.
 _RALLY_LENGTH_LABEL = {
-    RallyBucket.B1: "1–3 shots",
-    RallyBucket.B2: "4–6 shots",
-    RallyBucket.B3: "7–9 shots",
-    RallyBucket.B4: "10+ shots",
+    RallyBucket.B1: "1-2 shots",
+    RallyBucket.B2: "3-5 shots",
+    RallyBucket.B3: "6-10 shots",
+    RallyBucket.B4: "11+ shots",
 }
 
 # The shot count each bucket stands in for when points have to be averaged: the midpoint
 # of the range capture offers the coach (`rally-length-screen.tsx`), the open top one
-# read as 11 to 15, the same five shots wide as the one below. The labels above name
-# different ranges and never matched that screen.
+# read as 11 to 15, the same five shots wide as the one below.
 _RALLY_LENGTH_MIDPOINT = {
     RallyBucket.B1: 1.5,
     RallyBucket.B2: 4.0,

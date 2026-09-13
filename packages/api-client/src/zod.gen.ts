@@ -523,7 +523,11 @@ export const zPointPhase = z.enum([
 /**
  * RallyBucket
  *
- * A coarse rally-length bucket.
+ * A coarse rally-length bucket, b1 through b4.
+ *
+ * The capture screen the coach taps (`rally-length-screen.tsx`) is what defines these
+ * ranges; anywhere else a range is displayed or averaged should match it rather than
+ * settle on its own bounds.
  */
 export const zRallyBucket = z.enum([
     'b1',

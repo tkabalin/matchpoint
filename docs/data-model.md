@@ -156,7 +156,7 @@ erDiagram
         varchar(5) ball_half "nullable: deuce, ad; set together with ball_depth"
         varchar(5) ball_depth "nullable: short, deep"
         varchar(4) ball_out_mode "nullable: net, long, wide"
-        varchar(2) rally_length_bucket "nullable: b1, b2, b3, b4; null means genuinely unknown"
+        varchar(2) rally_length_bucket "nullable: b1=1-2, b2=3-5, b3=6-10, b4=11+ shots, per the capture screen; null means genuinely unknown"
         int set_number "1-based"
         int game_number "1-based within its set"
         boolean in_tiebreak
