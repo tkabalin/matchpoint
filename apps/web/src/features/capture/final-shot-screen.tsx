@@ -123,7 +123,12 @@ export function FinalShotScreen({
               key={`${wing.wing}-${shot.shotType}`}
               box={toCourtBox(cells[shotIndex * 2 + wingIndex]!)}
               scale={scale}
-              gapClassName="p-[3px]"
+              // 8px, not the 3px other zoomed screens use: eight cards packed this
+              // tight compound two nested transforms (this card's own unscale, the
+              // court's own zoom), and 3px wasn't enough margin for the sub-pixel
+              // rounding that stacks up from that — adjacent cards' *painted* edges
+              // overlapped by a hair even though their own boxes, unrounded, didn't.
+              gapClassName="p-[8px]"
             >
               <Button
                 variant="ghost"
