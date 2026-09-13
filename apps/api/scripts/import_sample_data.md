@@ -104,7 +104,7 @@ blank, whatever the point's other fields look like.
 | `wing`                                  | `forehand` \| `backhand`                                                            |
 | `shot_type`                             | `drive` \| `volley` \| `dropshot` \| `lob`                                          |
 | `ball_depth`                            | `short` \| `deep`                                                                   |
-| `rally_length_bucket`                   | `b1` \| `b2` \| `b3` \| `b4`                                                        |
+| `rally_length_bucket`                   | `b1` (1-2 shots) \| `b2` (3-5) \| `b3` (6-10) \| `b4` (11+), per the capture screen  |
 
 ### Which fields go together
 
