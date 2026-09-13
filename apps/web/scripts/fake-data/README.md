@@ -22,7 +22,7 @@ set. An empty observation field almost always means the field does not apply to 
 that the coach missed something: `wing` and `shot_type` are blank on every unforced error (the
 flow doesn't ask which stroke produced a miss), on aces, double faults and unusual points, and
 on a missed return, which `return_outcome` already places. The one genuine gap is a forced
-ending whose shot went unrecorded: 705 points, 7% of the 10,401 with no `wing`.
+ending whose shot went unrecorded: 693 points, 7% of the 10,177 with no `wing`.
 
 Everything else capture may leave unseen — the serve, the ending, the final ball — is a column
 `PointCreate` takes non-null, and a game skipped behind a score checkpoint is a game with no

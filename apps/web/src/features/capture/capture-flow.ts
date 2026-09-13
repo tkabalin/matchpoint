@@ -342,7 +342,9 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
           if (action.endReason !== undefined) {
             throw new Error("TAP_RETURN must omit endReason when outcome is IN");
           }
-          return advance(state, { name: "BALL_LOCATION" }, withServeIn);
+          // A return that stays in play is still a recorded outcome, not the absence
+          // of one — analytics counts return_outcome IS NOT NULL as "returns faced".
+          return advance(state, { name: "BALL_LOCATION" }, { ...withServeIn, returnOutcome: "IN" });
         }
         if (action.endReason === undefined) {
           throw new Error("TAP_RETURN requires endReason when the return errored");

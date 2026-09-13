@@ -133,7 +133,7 @@ describe("serve — opponent", () => {
     const state = transition(startOpponent(), { type: "TAP_RETURN", outcome: "IN" });
     expect(state.step).toEqual({ name: "BALL_LOCATION" });
     expect(state.draft.serves).toEqual([{ number: 1, outcome: "IN", location: null }]);
-    expect(state.draft.returnOutcome).toBeNull();
+    expect(state.draft.returnOutcome).toBe("IN");
   });
 
   test("return error → READY, the no-rally shortcut — returnOutcome already says where it went", () => {
