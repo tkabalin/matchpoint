@@ -1,3 +1,5 @@
+import type { LucideIcon } from "lucide-react";
+
 import { PATTERN_CLASS, PATTERN_TEXT_CLASS, type PatternName } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +46,7 @@ export function OutcomeLegend({
   items,
   className,
 }: {
-  items: { pattern: PatternName; label: string }[];
+  items: { pattern: PatternName; label: string; icon?: LucideIcon }[];
   className?: string;
 }) {
   return (
@@ -58,6 +60,7 @@ export function OutcomeLegend({
               PATTERN_CLASS[item.pattern],
             )}
           />
+          {item.icon && <item.icon className="size-3.5 shrink-0" aria-hidden="true" />}
           {item.label}
         </li>
       ))}

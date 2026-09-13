@@ -1,4 +1,4 @@
-import { Flag, Swords, Trophy } from "lucide-react";
+import { CircleCheck, Swords, Trophy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { StatCard } from "@/components/stat-card";
@@ -51,8 +51,13 @@ export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
           }
           label="Forced : Unforced"
         />
+        {/* CircleCheck, not Flag — Flag/FlagOff is reserved for the Serve tab's
+            1st/2nd serve toggle pair; standing alone with no FlagOff beside it,
+            Flag means nothing here. CircleCheck reuses the Won/in/success
+            concept, since "in" is literally what this figure measures
+            (.claude/rules/web-icons.md). */}
         <HeadlineStat
-          icon={Flag}
+          icon={CircleCheck}
           value={
             headline.firstServeInPercent === null
               ? "—"

@@ -23,14 +23,14 @@
   /* The categorical palette from .claude/rules/web-color.md, named by role rather
      than by hue so the rule's restrictions are visible at the call site: the three
      outcome-* colors are reserved for point outcomes and hero score bands, and only
-     the cat-* set is free for general categorical use. Yellow needs no dark-mode
-     variant (14.2:1 against the dark background already) and stays hardcoded here;
-     indigo and violet route through :root/.dark tokens below, same pattern as
-     --primary, since indigo's light-mode hex fails contrast in dark mode outright. */
+     the cat-* set is free for general categorical use. All three cat-* colors route
+     through :root/.dark tokens below, same pattern as --primary — yellow included,
+     since #EDDD6E measures only ~1.4:1 against this mode's white --card, nowhere
+     near the 3:1 a graphical object needs (checked in dark mode only, previously;
+     that check was one-sided). See the :root/.dark blocks for each mode's pair. */
   --color-outcome-win: #1fbf8c;
   --color-outcome-forced: #e69f00;
   --color-outcome-unforced: #9c3d0a;
-  --color-cat-yellow: #eddd6e;
 
   /* The flash that confirms a captured point. One keyframe covering in, hold and out
      rather than an enter/exit pair: score-flash.tsx unmounts on its own timer, so
@@ -60,6 +60,7 @@
 }
 
 @theme inline {
+  --color-cat-yellow: var(--cat-yellow);
   --color-cat-indigo: var(--cat-indigo);
   --color-cat-violet: var(--cat-violet);
   --color-recording: var(--recording);
@@ -117,6 +118,13 @@
      shadcn default was a nearby but different blue (lighter, hue-shifted). */
   --primary: oklch(0.455 0.106 241.939);
   --primary-foreground: oklch(0.984 0.019 200.873);
+  /* #EDDD6E (the hex every other mode-agnostic reference to "categorical yellow"
+     used to mean) measures ~1.4:1 against this mode's white --card — a real
+     failure, not a stylistic quibble, and well short of the 3:1 a graphical
+     object needs. #8B6F00 measures 4.80:1: darker, still clearly yellow/gold
+     rather than drifting to brown or olive. See the .dark block below, where the
+     original #EDDD6E is fine as-is (14.2:1) and stays. */
+  --cat-yellow: #8b6f00;
   /* Same hex as before this pass — no dark-mode failure in light mode, so light
      mode's own value is unchanged. See the .dark block for the dark-mode pair. */
   --cat-indigo: #2e1a47;
@@ -175,6 +183,10 @@
      Violet's own #D9569E already measures 5.42:1 here and needs no change — a
      violet chart line reading as hard to see is a thin-stroke problem, addressed
      by the halo technique on the Line/dot marks themselves, not a wrong hex. */
+  /* #EDDD6E, unchanged from before this pass — already measures 14.2:1 against
+     this mode's ~#090b0c background, comfortably clear of the 3:1 floor. Only
+     light mode's --card (white) was the problem; see the :root block above. */
+  --cat-yellow: #eddd6e;
   --cat-indigo: #9b7fc4;
   --cat-violet: #d9569e;
   /* #6C4FD1 measures only 2.97:1 against this mode's ~#090b0c background, under the

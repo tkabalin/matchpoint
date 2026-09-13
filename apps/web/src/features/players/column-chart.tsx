@@ -6,6 +6,12 @@ import { cn } from "@/lib/utils";
 // A visible sliver rather than nothing: a real zero and "no bar drew" must not
 // look the same, or a coach reads a zero as missing data.
 const MIN_FILL_HEIGHT = 4;
+// Fixed, not `w-full`: a chart with fewer columns (one per side, say) would
+// otherwise stretch its one bar to fill the whole column width, reading as a
+// completely different, much heavier chart than a chart with more columns
+// sharing the same row — bars must read as the same kind of mark everywhere,
+// never thick, whatever the current column count happens to be.
+const BAR_WIDTH = 28;
 
 export interface ColumnChartColumn {
   /** Height is this value's share of `ceiling` — every column in one chart
@@ -76,21 +82,22 @@ export function ColumnChart({
               >
                 {column.value === null ? (
                   <div
-                    className="h-2 w-full rounded-sm border border-dashed border-muted-foreground"
+                    className="h-2 rounded-sm border border-dashed border-muted-foreground"
+                    style={{ width: BAR_WIDTH }}
                     aria-hidden="true"
                   />
                 ) : (
                   <div
-                    className={cn("w-full rounded-t-sm", PATTERN_CLASS[column.pattern])}
-                    style={{ height: heightPx }}
+                    className={cn("rounded-t-sm", PATTERN_CLASS[column.pattern])}
+                    style={{ height: heightPx, width: BAR_WIDTH }}
                   />
                 )}
               </div>
               <span className="text-base font-bold tabular-nums">
                 {column.value === null ? "—" : `${column.value}${unit}`}
               </span>
-              <span className="flex items-center gap-1 text-center text-xs text-muted-foreground">
-                {column.Icon && <column.Icon className="size-4 shrink-0" aria-hidden="true" />}
+              <span className="flex items-center gap-1.5 text-center text-sm font-semibold text-foreground">
+                {column.Icon && <column.Icon className="size-5 shrink-0" aria-hidden="true" />}
                 {column.caption}
               </span>
             </div>

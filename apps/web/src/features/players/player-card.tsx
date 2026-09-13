@@ -1,28 +1,29 @@
-import type { BreakdownRow, PlayerRead, ShotShare, SquadMemberStats } from "@matchpoint/api-client";
+import type { BreakdownRow, PlayerRead, SquadMemberStats } from "@matchpoint/api-client";
 import { getRallyStatsOptions, getServeStatsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
-  ChevronDown,
-  ChevronUp,
+  ChartColumn,
   CircleCheck,
   CircleX,
-  Flag,
-  Rainbow,
+  type LucideIcon,
+  Play,
   Ruler,
   Shield,
   Swords,
-  TrendingUp,
+  Zap,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
-import { BreakdownBars } from "@/components/breakdown-bars";
-import { OutcomeLegend, OutcomeStack } from "@/components/outcome-swatch";
+import { OutcomeStack } from "@/components/outcome-swatch";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { ShotRadar } from "@/components/shot-radar";
 import { ResultDots } from "@/components/result-dots";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { attentionFor } from "@/lib/analytics/attention";
+import { PATTERN_CLASS } from "@/lib/palette";
 import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -56,18 +57,6 @@ function useInView<T extends HTMLElement>() {
 // from the same baseline and their value/caption rows land at the same height.
 const RALLY_BAR_HEIGHT = 96;
 
-const SHOT_ICON: Record<string, typeof TrendingUp> = {
-  Drive: TrendingUp,
-  Volley: ChevronUp,
-  "Drop shot": ChevronDown,
-  Lob: Rainbow,
-};
-
-function favourite(shares: ShotShare[]): ShotShare | null {
-  if (shares.length === 0) return null;
-  return shares.reduce((best, share) => (share.share > best.share ? share : best));
-}
-
 /**
  * A returns-into-play percentage from raw counts: `returning.breakdown` pools
  * both serve numbers already (unlike `return_outcome`, which stays split by
@@ -78,6 +67,35 @@ function returnInPercent(breakdown: BreakdownRow[]): number | null {
   const total = breakdown.reduce((sum, row) => sum + row.value, 0);
   if (total === 0) return null;
   return Math.round((100 * returnedIn) / total);
+}
+
+/** One stat, icon + bold label + bold value, with its own fill bar underneath
+ *  (a single percentage bar, or a two-way `OutcomeStack` split). Every stat on
+ *  this card reads at the same size and weight — a coach glancing at it
+ *  courtside shouldn't have to find the small print. */
+function StatRow({
+  icon: Icon,
+  label,
+  value,
+  children,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Icon className="size-6 shrink-0 text-foreground" aria-hidden="true" />
+      <div className="flex-1">
+        <div className="flex justify-between text-sm font-bold text-foreground">
+          <span>{label}</span>
+          <span className="tabular-nums">{value}</span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function PlayerCard({
@@ -101,18 +119,10 @@ export function PlayerCard({
     enabled: inView && hasLoggedMatches,
   });
 
-  const servedInRow: BreakdownRow | null = serveStats?.serving.outcome.first_serve
-    ? {
-        label: "Serves into play",
-        value:
-          serveStats.serving.outcome.first_serve.landed +
-          serveStats.serving.outcome.first_serve.ace,
-        max: 100,
-      }
+  const servedInPercent = serveStats?.serving.outcome.first_serve
+    ? serveStats.serving.outcome.first_serve.landed + serveStats.serving.outcome.first_serve.ace
     : null;
-  const returnPercent = serveStats ? returnInPercent(serveStats.returning.breakdown) : null;
-  const returnedInRow: BreakdownRow | null =
-    returnPercent === null ? null : { label: "Returns into play", value: returnPercent, max: 100 };
+  const returnedInPercent = serveStats ? returnInPercent(serveStats.returning.breakdown) : null;
 
   // Raw counts, not the ratio: professional stats report forced/unforced as two
   // numbers side by side, and it's the only way to tell "12 forcing shots, no
@@ -129,9 +139,18 @@ export function PlayerCard({
       )
     : 1;
 
-  const youFavourite = rallyStats ? favourite(rallyStats.shot_frequency.you) : null;
-  const againstFavourite = rallyStats ? favourite(rallyStats.shot_frequency.opponents) : null;
-  const showShotChart = youFavourite !== null || againstFavourite !== null;
+  // Drive excluded here, not just visually de-emphasised: it dominates nearly
+  // every player's mix, and a radar plotting it alongside the other three
+  // squashes them toward the centre regardless of the scale chosen. The stat
+  // line names the runner-up explicitly, since the radar itself no longer can.
+  const nonDriveShotFrequency = (rallyStats?.shot_frequency.you ?? []).filter(
+    (point) => point.shot !== "Drive",
+  );
+  const hasShotFrequency = nonDriveShotFrequency.length > 0;
+  const topNonDriveShot =
+    nonDriveShotFrequency.length > 0
+      ? nonDriveShotFrequency.reduce((best, point) => (point.share > best.share ? point : best))
+      : null;
 
   return (
     <Card ref={ref} className="overflow-hidden py-0">
@@ -143,7 +162,7 @@ export function PlayerCard({
       <div role="group" aria-label={`${playerName}'s card`} className="flex items-center gap-3 p-4">
         <PlayerAvatar player={player} size="md" />
         <div className="flex-1">
-          <p className="flex items-center gap-2 font-bold">
+          <p className="flex items-center gap-2 text-lg font-bold">
             {playerName}
             {/* #185 owns cancelling a transfer code, from the player's profile. */}
             {player.has_transfer_code && <Badge variant="secondary">Transfer pending</Badge>}
@@ -156,108 +175,119 @@ export function PlayerCard({
         <CardContent className="flex flex-col gap-3 pb-4">
           <ResultDots results={member.last5_results} />
 
-          <div className="flex flex-col gap-2.5 border-t pt-3">
-            <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-              All matches
-            </p>
+          <div className="flex flex-col gap-2.5 border-t-2 border-muted-foreground/40 pt-3">
+            <p className="text-sm font-bold tracking-wide text-foreground uppercase">All matches</p>
 
-            {servedInRow && (
-              <BreakdownBars rows={[servedInRow]} pattern="indigo" icon={() => Flag} unit="%" />
+            {servedInPercent !== null && (
+              <StatRow icon={CircleCheck} label="1st serve % in" value={`${servedInPercent}%`}>
+                <div className="mt-1 h-2 overflow-hidden rounded-sm bg-muted">
+                  <div
+                    className={cn("h-full", PATTERN_CLASS.indigo)}
+                    style={{ width: `${servedInPercent}%` }}
+                  />
+                </div>
+              </StatRow>
             )}
-            {returnedInRow && (
-              <BreakdownBars rows={[returnedInRow]} pattern="indigo" icon={() => Shield} unit="%" />
+            {returnedInPercent !== null && (
+              <StatRow
+                icon={Shield}
+                label="Return of serve in play"
+                value={`${returnedInPercent}%`}
+              >
+                <div className="mt-1 h-2 overflow-hidden rounded-sm bg-muted">
+                  <div
+                    className={cn("h-full", PATTERN_CLASS.indigo)}
+                    style={{ width: `${returnedInPercent}%` }}
+                  />
+                </div>
+              </StatRow>
             )}
 
             {hasForcedUnforced && (
-              <div className="flex items-center gap-2.5">
-                <Swords className="size-6 shrink-0 text-foreground" aria-hidden="true" />
-                <div className="flex-1">
-                  <div className="flex justify-between text-xs">
-                    <span>Forced : Unforced</span>
-                    <span className="tabular-nums">
-                      {forcedCount} | {unforcedCount}
-                    </span>
-                  </div>
-                  <OutcomeStack
-                    className="mt-1"
-                    segments={[
-                      { pattern: "forced", weight: forcedCount!, label: "Forced" },
-                      { pattern: "unforced", weight: unforcedCount!, label: "Unforced" },
-                    ]}
-                  />
-                </div>
-              </div>
+              <StatRow
+                icon={Swords}
+                label="Your forced : unforced"
+                value={`${forcedCount} | ${unforcedCount}`}
+              >
+                <OutcomeStack
+                  className="mt-1"
+                  segments={[
+                    { pattern: "forced", weight: forcedCount!, label: "Forced" },
+                    { pattern: "unforced", weight: unforcedCount!, label: "Unforced" },
+                  ]}
+                />
+              </StatRow>
             )}
           </div>
 
-          {(rallyStats?.average_rally_length || showShotChart) && (
-            <div className="flex gap-3 border-t pt-3">
+          {(rallyStats?.average_rally_length || hasShotFrequency) && (
+            <div className="flex gap-3 border-t-2 border-muted-foreground/40 pt-3">
               {rallyStats?.average_rally_length && (
-                <div className="flex flex-1 flex-col gap-1.5">
-                  <div className="flex items-center gap-1.5">
+                <div className="flex w-40 shrink-0 flex-col gap-1.5">
+                  <div className="flex h-7 items-center gap-1.5">
                     <Ruler className="size-5 shrink-0 text-foreground" aria-hidden="true" />
                     <p className="text-base font-bold text-foreground">Rally length</p>
                   </div>
-                  <ColumnChart
-                    ceiling={rallyCeiling}
-                    unit=""
-                    barZoneHeight={RALLY_BAR_HEIGHT}
-                    columns={[
-                      {
-                        value: rallyStats.average_rally_length.won,
-                        caption: "Won",
-                        Icon: CircleCheck,
-                        pattern: "win",
-                      },
-                      {
-                        value: rallyStats.average_rally_length.lost,
-                        caption: "Lost",
-                        Icon: CircleX,
-                        pattern: "unforced",
-                      },
-                    ]}
-                  />
-                </div>
-              )}
-
-              {showShotChart && (
-                <div className="flex flex-1 flex-col gap-1.5">
-                  {/* Heading and key share one row — the same height as rally
-                      length's icon+heading row — so both charts' bars start at
-                      the same line rather than the key adding a row of its own
-                      above them. Key above the bars, not below: the two
-                      columns' colour is read the instant the chart is seen.
-                      Just the favourite per side — the profile's own shot
-                      radar (rally-tab.tsx) has the full breakdown; this is a
-                      summary, not a duplicate of it. */}
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-base font-bold text-foreground">Winning shots</p>
-                    <OutcomeLegend
-                      items={[
-                        { pattern: "yellow", label: "Yours" },
-                        { pattern: "violet", label: "Opponent's" },
+                  {/* The heading stays pinned at the top, level with Winning
+                      shots' own heading — it's the chart that moves, centring
+                      in whatever space is left once the taller radar sets the
+                      row's height, not the heading chasing it down. */}
+                  <div className="flex flex-1 items-center">
+                    <ColumnChart
+                      ceiling={rallyCeiling}
+                      unit=""
+                      barZoneHeight={RALLY_BAR_HEIGHT}
+                      columns={[
+                        {
+                          value: rallyStats.average_rally_length.won,
+                          caption: "Won",
+                          Icon: CircleCheck,
+                          pattern: "win",
+                        },
+                        {
+                          value: rallyStats.average_rally_length.lost,
+                          caption: "Lost",
+                          Icon: CircleX,
+                          pattern: "unforced",
+                        },
                       ]}
                     />
                   </div>
-                  <ColumnChart
-                    ceiling={100}
-                    unit="%"
-                    barZoneHeight={RALLY_BAR_HEIGHT}
-                    columns={[
+                </div>
+              )}
+
+              {hasShotFrequency && (
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <div className="flex h-7 items-center gap-1.5">
+                    <Zap className="size-5 shrink-0 text-foreground" aria-hidden="true" />
+                    <p className="text-base font-bold text-foreground">Winning shots</p>
+                  </div>
+                  {/* Drive dominates nearly every player's mix (regularly 60%+ of
+                      winners), which squashed the other three axes toward the
+                      radar's centre where their real differences from each other
+                      stopped being visible. Dropping it from the plot — rather
+                      than capping the scale, which still fought the same fixed
+                      chart geometry — gives Volley/Drop shot/Lob the whole radius
+                      to spread across, and the stat line below states plainly
+                      what the radar can no longer show on its own. One series
+                      only ("yours"), the same single-neutral-colour convention
+                      rally-tab.tsx uses for its own single-player view. */}
+                  <ShotRadar
+                    className="mx-auto aspect-square w-full max-w-56"
+                    series={[
                       {
-                        value: youFavourite ? Math.round(youFavourite.share * 100) : null,
-                        caption: youFavourite?.shot ?? "",
-                        Icon: youFavourite ? SHOT_ICON[youFavourite.shot] : undefined,
-                        pattern: "yellow",
-                      },
-                      {
-                        value: againstFavourite ? Math.round(againstFavourite.share * 100) : null,
-                        caption: againstFavourite?.shot ?? "",
-                        Icon: againstFavourite ? SHOT_ICON[againstFavourite.shot] : undefined,
-                        pattern: "violet",
+                        name: "Share of point-enders",
+                        color: "var(--color-chart-3)",
+                        points: nonDriveShotFrequency,
                       },
                     ]}
                   />
+                  {topNonDriveShot && (
+                    <p className="text-center text-sm font-bold text-foreground">
+                      Best beyond Drive: {topNonDriveShot.shot} (
+                      {Math.round(topNonDriveShot.share * 100)}%)
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -272,6 +302,7 @@ export function PlayerCard({
           onClick={() => setLastViewedPlayerId(player.id)}
           className={cn(buttonVariants({ variant: "outline" }), "flex-1 rounded-none border-0")}
         >
+          <ChartColumn />
           View stats
         </Link>
         <Link
@@ -279,6 +310,7 @@ export function PlayerCard({
           params={{ playerId: player.id }}
           className={cn(buttonVariants(), "flex-1 rounded-none border-0 border-l")}
         >
+          <Play />
           Start match
         </Link>
       </div>

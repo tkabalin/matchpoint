@@ -23,7 +23,7 @@ const AXIS_ICON: Record<string, LucideIcon> = {
   Lob: Rainbow,
 };
 
-const ICON_SIZE = 18;
+const ICON_SIZE = 24;
 
 interface AxisTickProps {
   x?: number;
@@ -47,11 +47,20 @@ function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
   const length = Math.hypot(dx, dy) || 1;
   const unitX = dx / length;
   const unitY = dy / length;
-  const textAnchor = dx > 6 ? "start" : dx < -6 ? "end" : "middle";
-  const iconX = x + unitX * 14;
-  const iconY = y + unitY * 14;
-  const labelX = x + unitX * 30;
-  const labelY = y + unitY * 30;
+  // Always centred, never start/end-anchored: an edge-anchored label grows
+  // entirely in one direction from its point, and a long one ("Drop shot", the
+  // longest axis label this chart draws) reliably overflowed the container the
+  // moment it landed on a lower-left/lower-right axis rather than top/bottom.
+  // Centring halves the worst-case one-directional reach.
+  const textAnchor = "middle";
+  const iconX = x + unitX * 16;
+  const iconY = y + unitY * 16;
+  // Only axes pointing downward get pushed further out — Volley (pointing up)
+  // already had clean separation from its icon; the extra room was only ever
+  // needed for Lob/Drop shot, where the label sat close enough to overlap.
+  const labelOffset = unitY > 0 ? 42 : 30;
+  const labelX = x + unitX * labelOffset;
+  const labelY = y + unitY * labelOffset;
 
   return (
     <g>
@@ -69,8 +78,9 @@ function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
         y={labelY}
         textAnchor={textAnchor}
         dominantBaseline="middle"
-        fontSize={9}
-        fill="var(--color-muted-foreground)"
+        fontSize={11}
+        fontWeight={600}
+        fill="var(--color-foreground)"
       >
         {label}
       </text>
@@ -107,10 +117,24 @@ export function ShotRadar({
   if (!first) return null;
 
   // Recharts wants one row per axis with a key per series.
+  // Scaled to each series' own largest axis, not to a fixed 0-100 range: no
+  // domain is set on the radius axis, so Recharts otherwise auto-picks a
+  // "nice" ceiling that can sit far above the actual data (e.g. 100, when the
+  // largest share here is 20) — the whole shape then renders as a small blip
+  // near the centre regardless of how the three remaining axes compare to
+  // each other, which is exactly the legibility this chart exists to give.
+  // Rescaling so the biggest share reaches SHAPE_FILL_TARGET means the shape
+  // always uses the space it's given. Per series, not globally: an H2H overlay
+  // (this component's other sanctioned use, `.claude/rules/web-color.md`)
+  // needs each player's own shape sized to their own numbers, not squashed by
+  // whichever of the two happens to have the bigger single axis.
+  const SHAPE_FILL_TARGET = 92;
   const data = first.points.map((point, index) => {
     const row: Record<string, string | number> = { shot: point.shot };
     for (const entry of series) {
-      row[seriesKey(entry.name)] = (entry.points[index]?.share ?? 0) * 100;
+      const maxShare = Math.max(...entry.points.map((p) => p.share), 0.0001);
+      const share = entry.points[index]?.share ?? 0;
+      row[seriesKey(entry.name)] = (share / maxShare) * SHAPE_FILL_TARGET;
     }
     return row;
   });
@@ -124,7 +148,7 @@ export function ShotRadar({
       <RadarChart
         data={data}
         outerRadius="52%"
-        margin={{ top: 20, bottom: 20, left: 36, right: 36 }}
+        margin={{ top: 24, bottom: 30, left: 50, right: 50 }}
       >
         <PolarGrid />
         <PolarAngleAxis dataKey="shot" tick={<AxisTick />} />

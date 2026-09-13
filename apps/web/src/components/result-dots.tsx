@@ -27,7 +27,7 @@ export function ResultDots({
   return (
     <div className={cn("flex items-center gap-2", className)}>
       <History className="size-5 shrink-0 text-primary" aria-hidden="true" />
-      <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+      <span className="text-sm font-bold text-foreground">{label}</span>
       <div className="flex gap-1">
         {results.map((result, index) => (
           <span

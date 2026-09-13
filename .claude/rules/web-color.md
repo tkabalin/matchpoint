@@ -51,9 +51,26 @@ categories, series, or values need distinct colors — charts, tags, legends, st
 background — a real WCAG failure (a graphical object needs at least 3:1), not just a dim shade.
 `#9B7FC4` measures 5.85:1 there, lighter while staying clearly indigo/purple rather than drifting
 toward violet's rose/pink. Same semantic role, two tokens, same reasoning as nav blue above — use
-`#9B7FC4` for indigo whenever dark mode is active, `#2E1A47` in light mode. The other six colors in
-this table need no dark-mode variant: yellow measures 14.2:1 and violet measures 5.42:1 against the
-same dark background, both already comfortably clear.
+`#9B7FC4` for indigo whenever dark mode is active, `#2E1A47` in light mode. Violet needs no
+dark-mode variant either: `#D9569E` measures 5.42:1 against the same dark background, already
+comfortably clear.
+
+**Yellow's light-mode variant: `#8B6F00`.** `#EDDD6E` measures roughly 1.4:1 against this app's
+light-mode `--card` (white) — a real failure, the same category as indigo's above, just the opposite
+mode: an earlier pass checked yellow only against the _dark_ background (14.2:1, fine) and never
+checked it against light, which is what actually shipped the bug. `#8B6F00` measures 4.80:1 against
+white: darker, still clearly yellow/gold rather than drifting to brown or olive. Use `#8B6F00` for
+yellow whenever light mode is active (including "no explicit choice", since that resolves to light),
+`#EDDD6E` in dark mode. **Never use the light-mode-unsafe `#EDDD6E` value directly in a component**
+— go through the `--color-cat-yellow` token, which already resolves to the correct one per mode.
+
+**Burnt vermillion and rose violet must never appear together in the same view.** Both are warm,
+mid-saturation tones (vermillion an orange-red, violet a rose-pink), and side by side — especially
+as small swatches, icons, or thin marks rather than large patterned fills — they read as confusably
+similar, particularly for a colorblind viewer relying on warmth/saturation over exact hue.
+Vermillion is outcome-exclusive already (see below), so this mostly means: don't reach for violet on
+a screen that also shows an unforced-error color anywhere in view. Prefer yellow or indigo alongside
+an outcome-colored element instead.
 
 ### Pattern rule
 
