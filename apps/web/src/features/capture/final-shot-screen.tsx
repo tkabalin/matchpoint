@@ -9,13 +9,21 @@
  * meaning once, not once per card in it, and a label on the pitch reads as part of the
  * court the way the zone labels on the final ball screen do, rather than as page chrome
  * above it. `subCells` only divides the region left after that strip is carved off the
- * top, so the button grid can't overlap it. Each shot's icon is the same one the Rally
- * tab's shot-type breakdown uses (see `.claude/rules/web-icons.md`), so a coach who
- * knows one screen recognises the shape on the other. Whose shot it was is never
- * tapped — a Point derives that from `won` (see lastShotPlayer).
+ * top, so the button grid can't overlap it. Each shot's icon, and each wing's own
+ * caption icon, are the same ones the Rally tab's shot-type and wing breakdowns use
+ * (see `.claude/rules/web-icons.md`), so a coach who knows one screen recognises the
+ * shape on the other. Whose shot it was is never tapped — a Point derives that from
+ * `won` (see lastShotPlayer).
  */
 
-import { ChevronDown, ChevronUp, Rainbow, TrendingUp } from "lucide-react";
+import {
+  ArrowBigLeftDash,
+  ArrowBigRightDash,
+  ChevronDown,
+  ChevronUp,
+  Rainbow,
+  TrendingUp,
+} from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -41,10 +49,15 @@ const SHOTS: {
   { shotType: "LOB", label: "Lob", Icon: Rainbow },
 ];
 
-// Columns. Backhand on the left, matching the handoff.
-const WINGS: { wing: Wing; label: string }[] = [
-  { wing: "BACKHAND", label: "Backhand" },
-  { wing: "FOREHAND", label: "Forehand" },
+// Columns. Backhand on the left, matching the handoff. Icons are the Rally tab's own
+// wing icons (`.claude/rules/web-icons.md`), not picked fresh for this screen.
+const WINGS: {
+  wing: Wing;
+  label: string;
+  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+}[] = [
+  { wing: "BACKHAND", label: "Backhand", Icon: ArrowBigLeftDash },
+  { wing: "FOREHAND", label: "Forehand", Icon: ArrowBigRightDash },
 ];
 
 // How much of the zoomed region's own height the wing-heading strip takes off the top,
@@ -83,17 +96,23 @@ export function FinalShotScreen({
       <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
         <ZoomedCard box={toCourtBox(headerRegion)} scale={scale}>
           {/* gap-2 keeps the two labels from running into one word ("BACKHANDFOREHAND")
-              when the region is squeezed narrow (a short viewport in landscape); size
-              and weight bumped from the original text-xs for the prominence a column
-              heading over eight buttons warrants. */}
+              when the region is squeezed narrow (a short viewport in landscape);
+              overflow-hidden + truncate on the label is the same guard rather than
+              letting a long word push the icon out or spill into the other column. */}
           <div className="flex h-full w-full items-center gap-2">
             {WINGS.map((wing) => (
-              <span
+              <div
                 key={wing.wing}
-                className="flex-1 truncate text-center text-sm font-bold tracking-[0.06em] text-white uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]"
+                className="flex flex-1 items-center justify-center gap-1 overflow-hidden"
               >
-                {wing.label}
-              </span>
+                <wing.Icon
+                  className="size-4 shrink-0 text-white [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.35))]"
+                  aria-hidden="true"
+                />
+                <span className="truncate text-center text-base font-bold tracking-[0.04em] text-white uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]">
+                  {wing.label}
+                </span>
+              </div>
             ))}
           </div>
         </ZoomedCard>
