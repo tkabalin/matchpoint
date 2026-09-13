@@ -48,6 +48,7 @@ from matchpoint_api.schemas.analytics import (
     PointEnderStyleDetail,
     PointEnderStyles,
     PointPhase,
+    RallyLengthAverages,
     RallyLengthBucket,
     RallyStats,
     ReturnOutcomeSplit,
@@ -227,6 +228,17 @@ _RALLY_LENGTH_LABEL = {
     RallyBucket.B2: "4–6 shots",
     RallyBucket.B3: "7–9 shots",
     RallyBucket.B4: "10+ shots",
+}
+
+# The shot count each bucket stands in for when points have to be averaged: the midpoint
+# of the range capture offers the coach (`rally-length-screen.tsx`), the open top one
+# read as 11 to 15, the same five shots wide as the one below. The labels above name
+# different ranges and never matched that screen.
+_RALLY_LENGTH_MIDPOINT = {
+    RallyBucket.B1: 1.5,
+    RallyBucket.B2: 4.0,
+    RallyBucket.B3: 8.0,
+    RallyBucket.B4: 13.0,
 }
 
 
@@ -427,6 +439,12 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(Point.is_break_point).label("bp_points"),
             *(
                 _count(Point.rally_length_bucket == bucket).label(f"rally_{bucket.value}")
+                for bucket in RallyBucket
+            ),
+            *(
+                _count(Point.rally_length_bucket == bucket, Point.won).label(
+                    f"rally_{bucket.value}_won"
+                )
                 for bucket in RallyBucket
             ),
             func.count(distinct(tuple_(Point.match_id, Point.set_number))).label("sets_played"),
@@ -1235,6 +1253,31 @@ def _rally_length(counts: Row[Any]) -> list[RallyLengthBucket]:
     return [RallyLengthBucket(label=label, count=count) for label, count in counted]
 
 
+def _mean_shots(weighted: list[tuple[float, int]]) -> float | None:
+    """A midpoint-weighted mean rally length, or None where nothing was bucketed."""
+    points = sum(count for _, count in weighted)
+    if points == 0:
+        return None
+    return round(sum(midpoint * count for midpoint, count in weighted) / points, 1)
+
+
+def _rally_length_averages(counts: Row[Any]) -> RallyLengthAverages:
+    """How long the points a player won ran, against the ones they lost (#261).
+
+    Each side averages its own bucketed points alone, so one can stand while the
+    other is still null.
+    """
+    won: list[tuple[float, int]] = []
+    lost: list[tuple[float, int]] = []
+    for bucket in RallyBucket:
+        midpoint = _RALLY_LENGTH_MIDPOINT[bucket]
+        bucketed = getattr(counts, f"rally_{bucket.value}")
+        bucketed_won = getattr(counts, f"rally_{bucket.value}_won")
+        won.append((midpoint, bucketed_won))
+        lost.append((midpoint, bucketed - bucketed_won))
+    return RallyLengthAverages(won=_mean_shots(won), lost=_mean_shots(lost))
+
+
 def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallyStats:
     """The rally tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
@@ -1258,6 +1301,7 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
         ),
         shot_frequency=shot_frequency,
         rally_length=_rally_length(counts),
+        average_rally_length=_rally_length_averages(counts),
     )
 
 

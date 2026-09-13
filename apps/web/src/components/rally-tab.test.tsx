@@ -28,6 +28,7 @@ const RALLY_STATS: RallyStats = {
     { label: "4–6 shots", count: 3 },
     { label: "7–9 shots", count: 2 },
   ],
+  average_rally_length: { won: 2.6, lost: 6.5 },
   shot_frequency: {
     you: [
       { shot: "Drive", share: 0.5 },

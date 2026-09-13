@@ -2498,6 +2498,39 @@
         "title": "RallyBucket",
         "type": "string"
       },
+      "RallyLengthAverages": {
+        "description": "Mean rally length in shots, for points won and for points lost (#261).\n\nApproximate by construction: capture stores a coarse bucket rather than a shot count\n(#175), so every point counts as its bucket's midpoint, and an ending that never\nbecame a rally carries the shortest bucket here as it does in the histogram.",
+        "properties": {
+          "lost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lost"
+          },
+          "won": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Won"
+          }
+        },
+        "required": [
+          "won",
+          "lost"
+        ],
+        "title": "RallyLengthAverages",
+        "type": "object"
+      },
       "RallyLengthBucket": {
         "description": "How many points ran to roughly this many shots before ending.\n\nNot scoped to who won them: the read this exists for, serve and return pressure\nagainst fitness, cuts across that.",
         "properties": {
@@ -2520,6 +2553,9 @@
       "RallyStats": {
         "description": "The rally tab: how points end once the ball is in play.\n\nThe stored shot is the last successful one, so `won_by_shot` describes the\nplayer's own point-winning shots and `lost_by_shot` the opponent's shots the\nplayer lost points on, never the player's own misses (#175).",
         "properties": {
+          "average_rally_length": {
+            "$ref": "#/components/schemas/RallyLengthAverages"
+          },
           "errors_overall": {
             "anyOf": [
               {
@@ -2604,7 +2640,8 @@
           "errors_under_pressure",
           "errors_overall",
           "shot_frequency",
-          "rally_length"
+          "rally_length",
+          "average_rally_length"
         ],
         "title": "RallyStats",
         "type": "object"

@@ -313,6 +313,18 @@ class RallyLengthBucket(BaseModel):
     count: int
 
 
+class RallyLengthAverages(BaseModel):
+    """Mean rally length in shots, for points won and for points lost (#261).
+
+    Approximate by construction: capture stores a coarse bucket rather than a shot count
+    (#175), so every point counts as its bucket's midpoint, and an ending that never
+    became a rally carries the shortest bucket here as it does in the histogram.
+    """
+
+    won: float | None
+    lost: float | None
+
+
 class RallyStats(BaseModel):
     """The rally tab: how points end once the ball is in play.
 
@@ -335,6 +347,9 @@ class RallyStats(BaseModel):
     shot_frequency: ShotFrequencySides
     # The four buckets whole, or empty while no point carries one.
     rally_length: list[RallyLengthBucket]
+    # The same buckets read as one number per outcome, each side null until a point
+    # it covers carries a bucket.
+    average_rally_length: RallyLengthAverages
 
 
 class TrackedStatKey(enum.StrEnum):

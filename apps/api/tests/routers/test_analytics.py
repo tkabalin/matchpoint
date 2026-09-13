@@ -942,6 +942,7 @@ def test_rally_is_empty_before_any_points(
         "errors_overall": None,
         "shot_frequency": {"you": [], "opponents": []},
         "rally_length": [],
+        "average_rally_length": {"won": None, "lost": None},
     }
 
 
@@ -1059,6 +1060,54 @@ def test_rally_length_buckets_are_reported_whole(
         {"label": "7–9 shots", "count": 1},
         {"label": "10+ shots", "count": 0},
     ]
+
+
+def test_rally_length_averages_split_won_from_lost(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two shortest-bucket wins and a long one, against a mid and a long loss.
+
+    Each side also gets a point nobody recorded a rally length for, which belongs to
+    neither mean.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    bucketed = [
+        (RallyBucket.B1, True),
+        (RallyBucket.B1, True),
+        (RallyBucket.B4, True),
+        (RallyBucket.B3, False),
+        (RallyBucket.B4, False),
+    ]
+    for sequence, (bucket, won) in enumerate(bucketed):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            won=won,
+            rally_length_bucket=bucket,
+        )
+    make_point(db_session, match_id=match.id, sequence=5)
+    make_point(db_session, match_id=match.id, sequence=6, won=False)
+
+    body = _get(client, player.id, "rally")
+
+    # Midpoints 1.5, 1.5 and 13 won against 8 and 13 lost.
+    assert body["average_rally_length"] == {"won": 5.3, "lost": 10.5}
+
+
+def test_rally_length_average_is_null_for_a_side_that_bucketed_nothing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One bucketed win, and a loss whose rally length was never recorded."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    make_point(db_session, match_id=match.id, sequence=0, rally_length_bucket=RallyBucket.B2)
+    make_point(db_session, match_id=match.id, sequence=1, won=False)
+
+    body = _get(client, player.id, "rally")
+
+    assert body["average_rally_length"] == {"won": 4.0, "lost": None}
 
 
 def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coach) -> None:

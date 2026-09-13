@@ -1252,6 +1252,26 @@ export type PointRead = {
 export type RallyBucket = 'b1' | 'b2' | 'b3' | 'b4';
 
 /**
+ * RallyLengthAverages
+ *
+ * Mean rally length in shots, for points won and for points lost (#261).
+ *
+ * Approximate by construction: capture stores a coarse bucket rather than a shot count
+ * (#175), so every point counts as its bucket's midpoint, and an ending that never
+ * became a rally carries the shortest bucket here as it does in the histogram.
+ */
+export type RallyLengthAverages = {
+    /**
+     * Lost
+     */
+    lost: number | null;
+    /**
+     * Won
+     */
+    won: number | null;
+};
+
+/**
  * RallyLengthBucket
  *
  * How many points ran to roughly this many shots before ending.
@@ -1280,6 +1300,7 @@ export type RallyLengthBucket = {
  * player lost points on, never the player's own misses (#175).
  */
 export type RallyStats = {
+    average_rally_length: RallyLengthAverages;
     errors_overall: Metric | null;
     errors_under_pressure: Metric | null;
     hero: Metric | null;

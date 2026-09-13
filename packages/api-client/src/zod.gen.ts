@@ -533,6 +533,20 @@ export const zRallyBucket = z.enum([
 ]);
 
 /**
+ * RallyLengthAverages
+ *
+ * Mean rally length in shots, for points won and for points lost (#261).
+ *
+ * Approximate by construction: capture stores a coarse bucket rather than a shot count
+ * (#175), so every point counts as its bucket's midpoint, and an ending that never
+ * became a rally carries the shortest bucket here as it does in the histogram.
+ */
+export const zRallyLengthAverages = z.object({
+    lost: z.number().nullable(),
+    won: z.number().nullable()
+});
+
+/**
  * RallyLengthBucket
  *
  * How many points ran to roughly this many shots before ending.
@@ -1097,6 +1111,7 @@ export const zPointEnderStyles = z.object({
  * player lost points on, never the player's own misses (#175).
  */
 export const zRallyStats = z.object({
+    average_rally_length: zRallyLengthAverages,
     errors_overall: zMetric.nullable(),
     errors_under_pressure: zMetric.nullable(),
     hero: zMetric.nullable(),
