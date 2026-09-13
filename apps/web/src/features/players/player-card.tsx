@@ -179,7 +179,11 @@ export function PlayerCard({
             <p className="text-sm font-bold tracking-wide text-foreground uppercase">All matches</p>
 
             {servedInPercent !== null && (
-              <StatRow icon={CircleCheck} label="1st serve % in" value={`${servedInPercent}%`}>
+              <StatRow
+                icon={CircleCheck}
+                label="1st serves landing in play"
+                value={`${servedInPercent}%`}
+              >
                 <div className="mt-1 h-2 overflow-hidden rounded-sm bg-muted">
                   <div
                     className={cn("h-full", PATTERN_CLASS.indigo)}

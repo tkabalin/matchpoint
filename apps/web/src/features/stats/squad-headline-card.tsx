@@ -63,7 +63,7 @@ export function SquadHeadlineCard({ entries }: { entries: SquadStatsEntry[] }) {
               ? "—"
               : `${Math.round(headline.firstServeInPercent)}%`
           }
-          label="1st serve in %"
+          label="1st serves landing in play"
         />
       </div>
     </StatCard>

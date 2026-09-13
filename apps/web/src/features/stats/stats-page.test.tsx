@@ -165,7 +165,7 @@ test("shows the squad headline with an icon per stat, and the period's match cou
   // "Record" also names the leaderboard's default metric selection, so this
   // checks the labels that only appear on the headline card.
   expect(screen.getByText("Forced : Unforced")).toBeInTheDocument();
-  expect(screen.getByText("1st serve in %")).toBeInTheDocument();
+  expect(screen.getByText("1st serves landing in play")).toBeInTheDocument();
   // Sum of the four members' wins/losses (8+5+1+1 / 2+5+8+0).
   expect(screen.getByText("15W – 15L")).toBeInTheDocument();
   // 10 + 10 + 9 + 1.
