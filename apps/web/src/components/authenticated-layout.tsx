@@ -12,14 +12,17 @@ import { Logo } from "@/components/logo";
  */
 export function AuthenticatedLayout() {
   return (
-    <div className="flex min-h-dvh flex-col">
+    // Grid + `h-dvh`, not flex + `min-h-dvh`: capture's court diagram sizes itself off a
+    // `container-type: size` box several flex layers down, and that container query
+    // went stale (0×0) when every layer above it was only flex-grown rather than
+    // resting on a genuinely definite ancestor size. A `1fr` grid row against an
+    // explicit `h-dvh` is definite from this one hop; a page taller than one viewport
+    // still grows past it and scrolls, via `min-h-0` on the row rather than clipping.
+    <div className="grid h-dvh grid-rows-[auto_1fr]">
       <header className="sticky top-0 z-40 flex justify-center border-b bg-background py-2">
         <Logo size="compact" />
       </header>
-      {/* One shared viewport-height column rather than the header's own space plus a
-          separate 100dvh block below it — capture's full-viewport screen relies on this
-          to get exactly what's left after the header, not the header's height on top. */}
-      <div className="min-h-0 flex-1">
+      <div className="min-h-0">
         <Outlet />
       </div>
     </div>
