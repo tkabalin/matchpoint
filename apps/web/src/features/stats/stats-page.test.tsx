@@ -35,9 +35,9 @@ function player(id: string, firstName: string, lastName: string): PlayerRead {
 function member(overrides: Partial<SquadMemberStats> & { player_id: string }): SquadMemberStats {
   return {
     matches_logged_this_period: 10,
-    last5: ["win", "win", "loss", "win", "win"],
-    forced_to_unforced_ratio: 1,
-    first_serve_in_percent: 60,
+    last5_results: ["win", "win", "loss", "win", "win"],
+    period_forced_to_unforced_ratio: 1,
+    period_first_serve_in_percent: 60,
     period_record: { wins: 0, losses: 0 },
     current_streak: null,
     days_since_last_match: 1,
@@ -68,19 +68,19 @@ const squadStats: SquadMemberStats[] = [
   member({
     player_id: "p0",
     period_record: { wins: 8, losses: 2 },
-    forced_to_unforced_ratio: 1.6,
+    period_forced_to_unforced_ratio: 1.6,
     matches_logged_this_period: 10,
   }),
   member({
     player_id: "p1",
     period_record: { wins: 5, losses: 5 },
-    forced_to_unforced_ratio: 0.7,
+    period_forced_to_unforced_ratio: 0.7,
     matches_logged_this_period: 10,
   }),
   member({
     player_id: "p2",
     period_record: { wins: 1, losses: 8 },
-    forced_to_unforced_ratio: 0.9,
+    period_forced_to_unforced_ratio: 0.9,
     matches_logged_this_period: 9,
   }),
   member({

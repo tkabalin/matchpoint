@@ -389,10 +389,10 @@ class LastFiveStats(BaseModel):
 
     Its own window, deliberately not the calendar year the fields beside it use: a
     roster card reads as current form, where the leaderboard and the attention
-    snapshot read as a season. Nor is it `last5`'s window, which is the five most
-    recent matches carrying a result. These are point figures, so a match enters this
-    one once it holds points, whether or not anyone has recorded who won it, and is
-    passed over while it holds none. The two fields can cover different matches.
+    snapshot read as a season. Nor is it `last5_results`'s window, which is the five
+    most recent matches carrying a result. These are point figures, so a match enters
+    this one once it holds points, whether or not anyone has recorded who won it, and
+    is passed over while it holds none. The two fields can cover different matches.
     """
 
     # Pooled over the window's points rather than averaged over its matches, so a
@@ -417,9 +417,11 @@ class SquadMemberStats(BaseModel):
 
     Inputs and never a verdict: which of these amounts to needing attention (#204),
     or to first place on the Squad stats leaderboard (#237), is the client's rule, so
-    the thresholds live there and the windows live here. Three of them: the period
-    fields below are the calendar year, `last5` is the five most recent results, and
-    `last5_stats` is the roster card's five-match form window (#260).
+    the thresholds live there and the windows live here. Three of them, each named in
+    the field carrying it since `last5_stats` repeats two of these figures over a
+    window of its own (#263): the `period_` fields are the calendar year,
+    `last5_results` is the five most recent results, and `last5_stats` is the roster
+    card's five-match form window (#260).
     """
 
     player_id: uuid.UUID
@@ -429,12 +431,12 @@ class SquadMemberStats(BaseModel):
     # rather than a stand-in, unlike the two rates below.
     period_record: WinLossRecord
     # The most recent results, oldest first, at most five, as PlayerOverview's are.
-    last5: list[MatchResult]
+    last5_results: list[MatchResult]
     # Over this period's matches; null until a rally has ended either way.
-    forced_to_unforced_ratio: float | None
+    period_forced_to_unforced_ratio: float | None
     # Over this period's points; null until a first serve of the player's was watched,
     # so a player who served all period with nobody watching still has no rate.
-    first_serve_in_percent: float | None
+    period_first_serve_in_percent: float | None
     # Null until one match carries a result, there being no run to measure.
     current_streak: CurrentStreak | None
     # Counted over every match, resulted or not: staleness is about data entry.

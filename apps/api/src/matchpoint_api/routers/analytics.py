@@ -1613,14 +1613,14 @@ def _squad_member(
         period_record=WinLossRecord(
             wins=_wins(period_resulted), losses=len(period_resulted) - _wins(period_resulted)
         ),
-        last5=[row.result for row in reversed(resulted[:5])],
+        last5_results=[row.result for row in reversed(resulted[:5])],
         # Summed over the period's matches rather than averaged over their ratios, so
         # a match of four points weighs what four points are worth.
-        forced_to_unforced_ratio=_ratio_value(
+        period_forced_to_unforced_ratio=_ratio_value(
             sum(counts.forced_won for counts in period_counts),
             sum(counts.mistake_lost for counts in period_counts),
         ),
-        first_serve_in_percent=_percent_value_or_none(
+        period_first_serve_in_percent=_percent_value_or_none(
             sum(counts.first_in for counts in period_counts),
             sum(counts.serves_seen for counts in period_counts),
         ),
@@ -1652,20 +1652,19 @@ def list_squad_member_stats(
     these numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
     `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
     measured over. The period is the calendar year, as the overview tab's season
-    record is, and scopes `matches_logged_this_period`, `period_record`, the
-    forced : unforced ratio and the first-serve percentage; the streak, the last five
-    results and the days since the last match are counted over every match, so a run
-    that started in December is still a run in January. A tracked stat's `current` is
-    its value over the latest match that can answer it, against a baseline of the ten
-    matches before that one.
+    record is, and scopes `matches_logged_this_period` and the three fields the
+    `period_` prefix names; the streak, the last five results and the days since the
+    last match are counted over every match, so a run that started in December is
+    still a run in January. A tracked stat's `current` is its value over the latest
+    match that can answer it, against a baseline of the ten matches before that one.
 
     Both period rates pool the period's points rather than averaging its matches, so
     a four-point match weighs what four points are worth.
 
     `last5_stats` has a window of its own: the player's five most recent matches that
     hold points, resulted or not, which is what a roster card means by current form.
-    That is not `last5`'s five, which are the five most recent matches carrying a
-    result, so the two fields can cover different matches. It carries its own
+    That is not `last5_results`'s five, which are the five most recent matches
+    carrying a result, so the two fields can cover different matches. It carries its own
     first-serve and forced : unforced figures rather than re-scoping the period's,
     because the two screens above read those as a season (#260).
 

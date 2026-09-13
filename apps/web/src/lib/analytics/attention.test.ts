@@ -7,9 +7,9 @@ function member(overrides: Partial<SquadMemberStats> = {}): SquadMemberStats {
   return {
     player_id: "player-1",
     matches_logged_this_period: 6,
-    last5: ["win", "win", "loss", "win", "win"],
-    forced_to_unforced_ratio: 1.5,
-    first_serve_in_percent: 64,
+    last5_results: ["win", "win", "loss", "win", "win"],
+    period_forced_to_unforced_ratio: 1.5,
+    period_first_serve_in_percent: 64,
     period_record: { wins: 4, losses: 2 },
     current_streak: { outcome: "win", length: 1 },
     days_since_last_match: 2,
@@ -302,15 +302,15 @@ test("rankForm ranks by this period's win rate, not the forced:unforced ratio", 
   const top = member({
     player_id: "top",
     period_record: { wins: 5, losses: 0 },
-    forced_to_unforced_ratio: 0.5,
-    last5: ["win", "win", "win"],
+    period_forced_to_unforced_ratio: 0.5,
+    last5_results: ["win", "win", "win"],
   });
   const middle = member({ player_id: "middle", period_record: { wins: 3, losses: 3 } });
   const bottom = member({
     player_id: "bottom",
     period_record: { wins: 0, losses: 5 },
-    forced_to_unforced_ratio: 2.4,
-    last5: ["loss", "loss"],
+    period_forced_to_unforced_ratio: 2.4,
+    last5_results: ["loss", "loss"],
   });
 
   const { best, worst } = rankForm([middle, top, bottom]);
@@ -320,7 +320,7 @@ test("rankForm ranks by this period's win rate, not the forced:unforced ratio", 
 });
 
 test("rankForm passes through a null forced:unforced ratio rather than crashing", () => {
-  const player = member({ forced_to_unforced_ratio: null });
+  const player = member({ period_forced_to_unforced_ratio: null });
 
   const { best } = rankForm([player]);
 

@@ -140,8 +140,8 @@ function winRate(record: { wins: number; losses: number }): number {
 function toFormRankEntry(member: SquadMemberStats): FormRankEntry {
   return {
     playerId: member.player_id,
-    last5Record: recordFrom(member.last5),
-    forcedToUnforcedRatio: member.forced_to_unforced_ratio,
+    last5Record: recordFrom(member.last5_results),
+    forcedToUnforcedRatio: member.period_forced_to_unforced_ratio,
   };
 }
 

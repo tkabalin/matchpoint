@@ -73,9 +73,9 @@ function squadMember(
 ): SquadMemberStats {
   return {
     matches_logged_this_period: 5,
-    last5: ["win", "win", "win", "loss", "win"],
-    forced_to_unforced_ratio: 1.5,
-    first_serve_in_percent: 60,
+    last5_results: ["win", "win", "win", "loss", "win"],
+    period_forced_to_unforced_ratio: 1.5,
+    period_first_serve_in_percent: 60,
     period_record: { wins: 4, losses: 1 },
     current_streak: { outcome: "win", length: 1 },
     days_since_last_match: 1,
@@ -96,12 +96,12 @@ function squadMember(
 const bestFormMember = squadMember({
   player_id: players[0]!.id,
   period_record: { wins: 9, losses: 1 },
-  last5: ["win", "win", "win", "win", "win"],
+  last5_results: ["win", "win", "win", "win", "win"],
 });
 const worstFormMember = squadMember({
   player_id: players[1]!.id,
   period_record: { wins: 1, losses: 9 },
-  last5: ["loss", "loss", "loss", "loss", "win"],
+  last5_results: ["loss", "loss", "loss", "loss", "win"],
 });
 const flaggedMember = squadMember({
   player_id: flaggedPlayer.id,

@@ -171,9 +171,9 @@ test("shows a real attention flag instead of the form figure when one fires", as
   const flagged: SquadMemberStats = {
     player_id: player.id,
     matches_logged_this_period: 5,
-    last5: ["loss", "loss", "loss", "win", "win"],
-    forced_to_unforced_ratio: 1,
-    first_serve_in_percent: 60,
+    last5_results: ["loss", "loss", "loss", "win", "win"],
+    period_forced_to_unforced_ratio: 1,
+    period_first_serve_in_percent: 60,
     period_record: { wins: 1, losses: 4 },
     current_streak: { outcome: "loss", length: 3 },
     days_since_last_match: 1,

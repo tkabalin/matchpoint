@@ -78,7 +78,7 @@ export interface AttentionResult {
 /** One end of the squad's best/worst form ranking. */
 export interface FormRankEntry {
   playerId: string;
-  /** "W–L" over the player's own `last5`. */
+  /** "W–L" over the player's own `last5_results`. */
   last5Record: string;
   /** Null wherever the API's own ratio is — a player with no forced or
    *  unforced points at all this period, not an absent player. */
@@ -93,7 +93,8 @@ export interface SquadStatsEntry {
   wins: number;
   losses: number;
   /** Same field, same "capture can't distinguish a winner from a forced
-   *  error" caveat as the real API's `forced_to_unforced_ratio` (#175/#206).
+   *  error" caveat as the real API's `period_forced_to_unforced_ratio`
+   *  (#175/#206).
    *  Null wherever the API's own ratio is. */
   forcedToUnforcedRatio: number | null;
   /** Share of first-serve attempts landing in, 0–100. Null wherever the

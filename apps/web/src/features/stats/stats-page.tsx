@@ -64,8 +64,8 @@ export function StatsPage() {
       name: `${player.first_name} ${player.last_name}`,
       wins: member?.period_record.wins ?? 0,
       losses: member?.period_record.losses ?? 0,
-      forcedToUnforcedRatio: member?.forced_to_unforced_ratio ?? null,
-      firstServeInPercent: member?.first_serve_in_percent ?? null,
+      forcedToUnforcedRatio: member?.period_forced_to_unforced_ratio ?? null,
+      firstServeInPercent: member?.period_first_serve_in_percent ?? null,
       matchesLoggedThisPeriod: member?.matches_logged_this_period ?? 0,
     };
   });

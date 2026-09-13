@@ -685,7 +685,7 @@ def test_an_unwatched_serve_stays_out_of_every_serve_rate(
         "secondary_value": None,
         "max": 3,
     }
-    assert _squad(client)[0]["first_serve_in_percent"] == 100
+    assert _squad(client)[0]["period_first_serve_in_percent"] == 100
 
 
 def test_a_player_whose_serves_all_went_unwatched_keeps_the_breakdown_and_no_rate(
@@ -723,7 +723,7 @@ def test_a_player_whose_serves_all_went_unwatched_keeps_the_breakdown_and_no_rat
         "secondary_value": None,
         "max": 1,
     }
-    assert _squad(client)[0]["first_serve_in_percent"] is None
+    assert _squad(client)[0]["period_first_serve_in_percent"] is None
 
 
 def test_an_unwatched_second_serve_is_no_miss_in_the_trend(
@@ -2283,9 +2283,9 @@ def test_squad_members_covers_a_player_with_no_matches(
             # A record counts matches, so nothing played really is nil all, where
             # the two rates beside it are absent rather than zero.
             "period_record": {"wins": 0, "losses": 0},
-            "last5": [],
-            "forced_to_unforced_ratio": None,
-            "first_serve_in_percent": None,
+            "last5_results": [],
+            "period_forced_to_unforced_ratio": None,
+            "period_first_serve_in_percent": None,
             "current_streak": None,
             "days_since_last_match": None,
             "tracked_stats": [],
@@ -2338,8 +2338,8 @@ def test_squad_members_counts_the_period_and_the_streak(
     row = _squad(client)[0]
 
     assert row["matches_logged_this_period"] == 2
-    assert row["forced_to_unforced_ratio"] == 2.0
-    assert row["last5"] == ["loss", "win"]
+    assert row["period_forced_to_unforced_ratio"] == 2.0
+    assert row["last5_results"] == ["loss", "win"]
     assert row["current_streak"] == {"outcome": "win", "length": 1}
     assert row["days_since_last_match"] == (date.today() - date(THIS_YEAR, 7, 2)).days
 
@@ -2360,7 +2360,7 @@ def test_squad_members_streak_runs_while_the_result_repeats(
     row = _squad(client)[0]
 
     assert row["current_streak"] == {"outcome": "loss", "length": 3}
-    assert row["last5"] == ["win", "loss", "loss", "loss"]
+    assert row["last5_results"] == ["win", "loss", "loss", "loss"]
 
 
 def test_squad_members_days_since_the_last_match(
@@ -2423,7 +2423,7 @@ def test_squad_members_tracked_stats_measure_their_own_baseline(
         },
     ]
     # Summed over the period rather than averaged over the four ratios (1.62).
-    assert row["forced_to_unforced_ratio"] == 1.4
+    assert row["period_forced_to_unforced_ratio"] == 1.4
 
 
 def test_squad_members_skip_a_match_a_stat_cannot_answer(
@@ -2474,7 +2474,7 @@ def test_squad_members_omit_a_stat_without_a_baseline(
     row = _squad(client)[0]
 
     assert row["tracked_stats"] == []
-    assert row["forced_to_unforced_ratio"] == 2.0
+    assert row["period_forced_to_unforced_ratio"] == 2.0
     assert row["current_streak"] == {"outcome": "win", "length": 1}
 
 
@@ -2514,7 +2514,7 @@ def test_squad_members_ratio_stands_in_for_a_missing_denominator(
     player = make_player(db_session, coach_id=coach.id)
     _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=3)
 
-    assert _squad(client)[0]["forced_to_unforced_ratio"] == 3.0
+    assert _squad(client)[0]["period_forced_to_unforced_ratio"] == 3.0
 
 
 def test_squad_members_baseline_skips_a_match_with_no_unforced_errors(
@@ -2540,7 +2540,7 @@ def test_squad_members_baseline_skips_a_match_with_no_unforced_errors(
     assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.5
     # The period figure still sums the counts, where a zero denominator is the
     # whole period's rather than one match's.
-    assert _squad(client)[0]["forced_to_unforced_ratio"] == 1.6
+    assert _squad(client)[0]["period_forced_to_unforced_ratio"] == 1.6
 
 
 def test_squad_members_baseline_skips_a_match_of_too_few_points(
@@ -2658,7 +2658,7 @@ def test_squad_members_omit_a_stat_left_with_one_countable_match(
     assert row["tracked_stats"] == []
     # The period ratio sums the counts, so the small match is still counted there,
     # weighed at the two points it is worth.
-    assert row["forced_to_unforced_ratio"] == 1.83
+    assert row["period_forced_to_unforced_ratio"] == 1.83
 
 
 def test_squad_members_hold_a_lopsided_match_at_the_ratios_ceiling(
@@ -2686,7 +2686,7 @@ def test_squad_members_hold_a_lopsided_match_at_the_ratios_ceiling(
     assert stats["forced_to_unforced"]["rolling_std_dev"] == 0.65
     # The cap is the series' own rule, not the counts': the period ratio still sums
     # every ending, so the lopsided match is weighed there at what it really was.
-    assert _squad(client)[0]["forced_to_unforced_ratio"] == 1.62
+    assert _squad(client)[0]["period_forced_to_unforced_ratio"] == 1.62
 
 
 def test_squad_members_report_a_capped_match_as_the_current_value_too(
@@ -2730,7 +2730,7 @@ def test_squad_members_period_record_and_serve_stop_at_the_year(
     row = _squad(client)[0]
 
     assert row["period_record"] == {"wins": 1, "losses": 1}
-    assert row["first_serve_in_percent"] == 60
+    assert row["period_first_serve_in_percent"] == 60
 
 
 def test_squad_members_period_record_ignores_a_match_without_a_result(
@@ -2756,8 +2756,8 @@ def test_squad_members_serve_percentage_is_absent_without_a_serve(
 
     row = _squad(client)[0]
 
-    assert row["forced_to_unforced_ratio"] == 2.0
-    assert row["first_serve_in_percent"] is None
+    assert row["period_forced_to_unforced_ratio"] == 2.0
+    assert row["period_first_serve_in_percent"] is None
 
 
 # --- roster card figures over the last five matches (#260) ---
@@ -2796,14 +2796,14 @@ def test_squad_members_last_five_stops_at_the_fifth_newest_match(
         "points_lost": 15,
     }
     assert row["matches_logged_this_period"] == 6
-    assert row["forced_to_unforced_ratio"] == 0.33
-    assert row["first_serve_in_percent"] == 50
+    assert row["period_forced_to_unforced_ratio"] == 0.33
+    assert row["period_first_serve_in_percent"] == 50
 
 
 def test_squad_members_last_five_counts_matches_and_not_results(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The window is the last five matches, where `last5` is the last five results.
+    """The window is the last five matches, where `last5_results` is the last five results.
 
     Six captured matches, the newest still unresulted. The results list ends at the
     five resulted ones, so it keeps 1 July; the card's window keeps the unresulted
@@ -2819,7 +2819,7 @@ def test_squad_members_last_five_counts_matches_and_not_results(
 
     row = _squad(client)[0]
 
-    assert row["last5"] == ["win", "loss", "loss", "loss", "loss"]
+    assert row["last5_results"] == ["win", "loss", "loss", "loss", "loss"]
     assert row["last5_stats"]["points_won"] == 1
     assert row["last5_stats"]["forced_to_unforced_ratio"] == 0.25
 
