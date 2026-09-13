@@ -111,24 +111,27 @@ blank, whatever the point's other fields look like.
 The trickiest part of a hand-written row. `PointCreate` enforces these as a group —
 get any one wrong and the whole row is rejected:
 
-- **Second serve.** `serve2_outcome` is set exactly when `serve1_outcome` is `fault`
-  — never on an ace or an in-first-serve, always on a faulted one.
+- **Second serve.** `serve2_outcome` is set only when `serve1_outcome` is `fault`
+  (never on an ace or an in-first-serve), and even then it's optional: a faulted first
+  serve whose second attempt went unwatched records no `serve2_outcome` either.
 - **Serve placement**, checked once per attempt (`serve1_*`, then `serve2_*` if it
   exists):
   - Server was `opponent`, or there was no such attempt: `*_box` and `*_fault_mode`
-    both blank — an opponent's placement is out of scope.
+    both blank, an opponent's placement is out of scope.
   - Outcome is `fault`: `*_fault_mode` set, `*_box` blank.
   - Outcome is `in` or `ace`: `*_box` set, `*_fault_mode` blank.
 - **Double fault.** Both serves faulted exactly when `end_reason` is `double_fault`.
-- **Return outcome.** Set only when `server` is `opponent` — it describes the tracked
+- **Return outcome.** Set only when `server` is `opponent` (it describes the tracked
   player's return of the opponent's serve, so it's never set on a point the tracked
-  player served.
+  player served), and only when `serve1_outcome` is also set: a return can't be
+  recorded off a serve nobody watched.
 - **Unusual reason.** Set only when `end_reason` is `unusual`.
 - **Last shot / final ball** (`wing`, `shot_type`, `ball_in`, `ball_half`,
   `ball_depth`, `ball_out_mode`), as one group:
-  - No last shot to record — `end_reason` is `ace`, `double_fault`, or `unusual`, or
-    `return_outcome` is a miss (`net`/`long`/`wide`): all six blank.
-  - Otherwise: `wing` and `shot_type` are set together or both blank; `ball_in` is
-    required; if `ball_in` is true, `ball_half` and `ball_depth` are required and
-    `ball_out_mode` is blank; if false, `ball_out_mode` is required and `ball_half`/
-    `ball_depth` are blank.
+  - No last shot to record when `end_reason` is blank, `ace`, `double_fault`, or
+    `unusual`, or `return_outcome` is a miss (`net`/`long`/`wide`): all six blank.
+  - Otherwise: `wing` and `shot_type` are set together or both blank. `ball_in` may
+    also be blank, the same unwatched-final-ball case as the second serve above, with
+    `ball_half`, `ball_depth` and `ball_out_mode` all blank alongside it. If `ball_in`
+    is true, `ball_half` and `ball_depth` are required and `ball_out_mode` is blank; if
+    false, `ball_out_mode` is required and `ball_half`/`ball_depth` are blank.
