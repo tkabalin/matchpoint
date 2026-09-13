@@ -82,11 +82,15 @@ export function FinalShotScreen({
 
       <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
         <ZoomedCard box={toCourtBox(headerRegion)} scale={scale}>
-          <div className="flex h-full w-full items-center">
+          {/* gap-2 keeps the two labels from running into one word ("BACKHANDFOREHAND")
+              when the region is squeezed narrow (a short viewport in landscape); size
+              and weight bumped from the original text-xs for the prominence a column
+              heading over eight buttons warrants. */}
+          <div className="flex h-full w-full items-center gap-2">
             {WINGS.map((wing) => (
               <span
                 key={wing.wing}
-                className="flex-1 text-center text-xs font-semibold tracking-[0.08em] text-white/95 uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.25)]"
+                className="flex-1 truncate text-center text-sm font-bold tracking-[0.06em] text-white uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.35)]"
               >
                 {wing.label}
               </span>
@@ -112,9 +116,13 @@ export function FinalShotScreen({
                     shotType: shot.shotType,
                   });
                 }}
-                className="h-full w-full gap-1.5 rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+                // overflow-hidden: eight cards this small (a short viewport in
+                // landscape leaves each one only a few px tall) can end up smaller than
+                // the icon-plus-label's own natural size — without this the label spills
+                // past the card's own edge into the next one instead of just clipping.
+                className="h-full w-full gap-1 overflow-hidden rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
               >
-                <shot.Icon className="size-4 shrink-0" aria-hidden="true" />
+                <shot.Icon className="size-3.5 shrink-0" aria-hidden="true" />
                 {shot.label}
               </Button>
             </ZoomedCard>
