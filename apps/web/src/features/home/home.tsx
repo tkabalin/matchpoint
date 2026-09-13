@@ -30,7 +30,6 @@ import { AddPhotoNudge } from "@/components/add-photo-nudge";
 import { AddPlayerSheet } from "@/components/add-player-sheet";
 import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
-import { PlayerActionSheet } from "@/components/player-action-sheet";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PrimaryMatchAction } from "@/components/primary-match-action";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -64,7 +63,6 @@ export function Home() {
   const { data: players } = useQuery(listPlayersOptions());
   const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<PlayerRead | null>(null);
   const [adding, setAdding] = useState(false);
 
   const lastViewedPlayerId = getLastViewedPlayerId();
@@ -156,7 +154,13 @@ export function Home() {
             <Item
               key={player.id}
               variant="outline"
-              render={<button type="button" onClick={() => setSelected(player)} />}
+              render={
+                <Link
+                  to="/players/$playerId"
+                  params={{ playerId: player.id }}
+                  onClick={() => setLastViewedPlayerId(player.id)}
+                />
+              }
               className="w-full text-left"
             >
               <ItemMedia>
@@ -237,7 +241,7 @@ export function Home() {
       {lastViewedPlayer && (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-bold">Continue with</h2>
-          <ContinueWithCard player={lastViewedPlayer} onSelect={setSelected} />
+          <ContinueWithCard player={lastViewedPlayer} />
         </section>
       )}
 
@@ -254,7 +258,7 @@ export function Home() {
             slicing off the top of each avatar's swatch-halo ring. */}
         <div className="-mx-4 flex gap-4 overflow-x-auto px-4 py-1">
           {roster.map((player) => (
-            <RosterTile key={player.id} player={player} onSelect={setSelected} />
+            <RosterTile key={player.id} player={player} />
           ))}
           <button
             type="button"
@@ -268,12 +272,6 @@ export function Home() {
           </button>
         </div>
       </section>
-
-      <PlayerActionSheet
-        player={selected}
-        open={selected !== null}
-        onOpenChange={(open) => !open && setSelected(null)}
-      />
 
       <AddPlayerSheet open={adding} onOpenChange={setAdding} />
       <PrimaryMatchAction />
@@ -448,13 +446,7 @@ function recordFrom(results: readonly ("win" | "loss")[]): string {
   return formatRecord(wins, results.length - wins);
 }
 
-function ContinueWithCard({
-  player,
-  onSelect,
-}: {
-  player: PlayerRead;
-  onSelect: (player: PlayerRead) => void;
-}) {
+function ContinueWithCard({ player }: { player: PlayerRead }) {
   const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
   const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: player.id } }));
 
@@ -465,10 +457,19 @@ function ContinueWithCard({
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
-        {/* Opens the same View player / Start match sheet every other player
-            row on this screen does — "View full stats" below stays the direct
-            shortcut for someone who already knows that's what they want. */}
-        <Item className="p-0" render={<button type="button" onClick={() => onSelect(player)} />}>
+        {/* Same destination as "View full stats" below — a coach already
+            reading this card by name has already decided to look, so the
+            whole header goes there directly rather than through a picker. */}
+        <Item
+          className="p-0"
+          render={
+            <Link
+              to="/players/$playerId"
+              params={{ playerId: player.id }}
+              onClick={() => setLastViewedPlayerId(player.id)}
+            />
+          }
+        >
           <ItemMedia>
             <PlayerAvatar player={player} />
           </ItemMedia>
@@ -537,13 +538,7 @@ function ContinueWithCard({
   );
 }
 
-function RosterTile({
-  player,
-  onSelect,
-}: {
-  player: PlayerRead;
-  onSelect: (player: PlayerRead) => void;
-}) {
+function RosterTile({ player }: { player: PlayerRead }) {
   // The underline is a score band on form, which is what the palette rule reserves
   // these three colours for — a player with no form yet gets a neutral bar, not
   // the worst band: `0` would misreport "struggling" for "no data yet".
@@ -559,14 +554,15 @@ function RosterTile({
           : "pattern-unforced";
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(player)}
+    <Link
+      to="/players/$playerId"
+      params={{ playerId: player.id }}
+      onClick={() => setLastViewedPlayerId(player.id)}
       className="flex shrink-0 flex-col items-center gap-1"
     >
       <PlayerAvatar player={player} size="xl" />
       <span className={cn("h-0.5 w-16 rounded-sm", tone)} aria-hidden="true" />
       <span className="text-xs">{player.first_name}</span>
-    </button>
+    </Link>
   );
 }

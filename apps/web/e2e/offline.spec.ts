@@ -329,12 +329,16 @@ test.describe("with the service worker", () => {
     // because the save is throttled and a navigation drops the pending one: the
     // next boot then restores a snapshot the screen it came from is missing from.
     await page.goto("/players");
-    // Role-scoped to the roster row (a button), not a bare text match: this same
-    // match is genuinely still in progress (tapOutMatch never finishes it), so the
-    // in-progress banner now legitimately shows this player's name too, on every
-    // authenticated screen including this one (#251) — a plain getByText would
-    // match both and fail strict mode.
-    await expect(page.getByRole("button", { name: `Offline Cached ${stamp}` })).toBeVisible();
+    // Scoped to the roster card's own header link, not a bare text match: this
+    // same match is genuinely still in progress (tapOutMatch never finishes it),
+    // so the in-progress banner now legitimately shows this player's name too, on
+    // every authenticated screen including this one (#251) — a plain getByText
+    // would match both and fail strict mode. The card's header carries its own
+    // "View ... profile" accessible name (player-card.tsx) precisely so it reads
+    // differently from the banner's bare-name link.
+    await expect(
+      page.getByRole("link", { name: `View Offline Cached ${stamp}'s profile` }),
+    ).toBeVisible();
     await expect
       .poll(() => persistedCacheHolds(page, `Cached ${stamp}`), { timeout: 20_000 })
       .toBe(true);
@@ -348,8 +352,10 @@ test.describe("with the service worker", () => {
     await page.reload();
     await expect(page.getByText(`vs ${marker}`)).toBeVisible();
     await page.goto("/players");
-    // Same role-scoping reason as the first assertion above.
-    await expect(page.getByRole("button", { name: `Offline Cached ${stamp}` })).toBeVisible();
+    // Same scoping reason as the first assertion above.
+    await expect(
+      page.getByRole("link", { name: `View Offline Cached ${stamp}'s profile` }),
+    ).toBeVisible();
   });
 });
 

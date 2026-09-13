@@ -1,4 +1,4 @@
-import type { PlayerRead, SquadMemberStats } from "@matchpoint/api-client";
+import type { PlayerRead, RallyStats, ServeStats, SquadMemberStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -11,6 +11,8 @@ import {
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
+
+import { getLastViewedPlayerId } from "@/lib/last-viewed-player";
 
 import { PlayerList } from "./player-list";
 
@@ -32,6 +34,33 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
+const EMPTY_SERVE_SIDE = {
+  breakdown: [],
+  fault_mode: { first_serve: null, second_serve: null },
+  hero: null,
+  metrics: [],
+  outcome: { first_serve: null, second_serve: null },
+  return_outcome: { first_serve: [], second_serve: [] },
+  trend: [],
+};
+
+const emptyServeStats: ServeStats = { serving: EMPTY_SERVE_SIDE, returning: EMPTY_SERVE_SIDE };
+
+const emptyRallyStats: RallyStats = {
+  average_rally_length: { won: null, lost: null },
+  errors_overall: null,
+  errors_under_pressure: null,
+  hero: null,
+  lost: 0,
+  lost_by_shot: [],
+  outcome_mix: [],
+  rally_length: [],
+  shot_frequency: { you: [], opponents: [] },
+  styles: { you: [], opponents: [] },
+  won: 0,
+  won_by_shot: [],
+};
+
 /** Stubs the transport rather than the generated client: the client is what's under test.
  *
  * Takes a factory, not a Response: a body can be read only once, so a single instance
@@ -45,23 +74,47 @@ function stubFetch(response: () => Response) {
   );
 }
 
+/** Routes by pathname, for a test that needs the roster, the squad-stats endpoint
+ *  and a card's own per-player analytics calls to each answer something different. */
+function stubFetchByPath(handlers: Record<string, () => Response>) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((input: Request) => {
+      const { pathname } = new URL(input.url);
+      const handler = Object.entries(handlers).find(([path]) => pathname.includes(path))?.[1];
+      if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
+      return Promise.resolve(handler());
+    }),
+  );
+}
+
 /** Renders PlayerList inside a real (in-memory) router — its 401 branch links back
- * to sign-in, so router context is needed regardless of what the roster renders. */
-async function renderPlayerList({ search = "", onSelect = vi.fn() } = {}) {
+ * to sign-in, and each card links to the profile and to new-match. */
+async function renderPlayerList({ search = "" } = {}) {
   // retry off so the error path resolves in one attempt instead of on Query's backoff.
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const playersRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/players",
-    component: () => <PlayerList search={search} onSelect={onSelect} />,
+    component: () => <PlayerList search={search} />,
   });
   const signInRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/",
     component: () => <h1>Sign in</h1>,
   });
-  const routeTree = rootRoute.addChildren([playersRoute, signInRoute]);
+  const profileRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/players/$playerId",
+    component: () => <h1>Player Profile</h1>,
+  });
+  const newMatchRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/new-match/$playerId",
+    component: () => <h1>New Match</h1>,
+  });
+  const routeTree = rootRoute.addChildren([playersRoute, signInRoute, profileRoute, newMatchRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/players"] }),
@@ -71,7 +124,6 @@ async function renderPlayerList({ search = "", onSelect = vi.fn() } = {}) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  return { onSelect };
 }
 
 afterEach(() => {
@@ -98,13 +150,13 @@ test("flags a player whose transfer code is still out", async () => {
   expect(await screen.findByText("Transfer pending")).toBeInTheDocument();
 });
 
-test("the pending-transfer flag is part of the row, not a control of its own", async () => {
+test("the pending-transfer flag sits beside the name, not as a control of its own", async () => {
   stubFetch(() => Response.json([{ ...player, has_transfer_code: true }]));
 
   await renderPlayerList();
 
   await screen.findByText("Transfer pending");
-  expect(screen.getAllByRole("button")).toHaveLength(1);
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
 test("requests the roster from the API's own origin", async () => {
@@ -151,23 +203,93 @@ test("prompts to sign in again on a 401, instead of the generic error", async ()
   expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/");
 });
 
-// Tapping a row raises the action sheet rather than navigating: choosing between
-// "view" and "start match" is the point. The sheet itself is covered in
-// players-page.test.tsx, where it's actually rendered.
-test("tapping a player hands it to the caller instead of navigating", async () => {
+// Each card carries its own two actions rather than raising a picker sheet —
+// #262's whole point. Both are real links, not a button that opens something else.
+test("each card offers a link to view stats and a separate link to start a match", async () => {
+  stubFetch(() => Response.json([player]));
+
+  await renderPlayerList();
+
+  await screen.findByText("Amahle Nkosi");
+  expect(screen.getByRole("link", { name: "View stats" })).toHaveAttribute(
+    "href",
+    `/players/${player.id}`,
+  );
+  expect(screen.getByRole("link", { name: "Start match" })).toHaveAttribute(
+    "href",
+    `/new-match/${player.id}`,
+  );
+});
+
+test("tapping the header navigates to the player's profile and records last-viewed", async () => {
   stubFetch(() => Response.json([player]));
   const user = userEvent.setup({ delay: null });
-  const { onSelect } = await renderPlayerList();
+  await renderPlayerList();
 
-  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
+  await user.click(await screen.findByRole("link", { name: /Amahle Nkosi/ }));
 
-  expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: player.id }));
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+  expect(getLastViewedPlayerId()).toBe(player.id);
+});
+
+test("tapping start match reaches new-match without touching the profile route", async () => {
+  stubFetch(() => Response.json([player]));
+  const user = userEvent.setup({ delay: null });
+  await renderPlayerList();
+
+  await user.click(await screen.findByRole("link", { name: "Start match" }));
+
+  expect(await screen.findByRole("heading", { name: "New Match" })).toBeInTheDocument();
+});
+
+// A player with nothing logged yet shows only the attention flag — no metrics
+// section, and no per-player analytics requests fired for it.
+test("a player with no logged matches shows no metrics section", async () => {
+  const neverPlayed: SquadMemberStats = {
+    player_id: player.id,
+    matches_logged_this_period: 0,
+    last5_results: [],
+    period_forced_to_unforced_ratio: null,
+    period_forced_errors_induced: 0,
+    period_unforced_errors: 0,
+    period_forced_errors_suffered: 0,
+    period_points_won: 0,
+    period_points_lost: 0,
+    period_first_serve_in_percent: null,
+    period_record: { wins: 0, losses: 0 },
+    current_streak: null,
+    days_since_last_match: null,
+    last5_stats: {
+      first_serve_in_percent: null,
+      return_in_percent: null,
+      forced_to_unforced_ratio: null,
+      forced_errors_induced: 0,
+      unforced_errors: 0,
+      forced_errors_suffered: 0,
+      points_won: 0,
+      points_lost: 0,
+    },
+    tracked_stats: [],
+  };
+  stubFetchByPath({
+    "/api/players": () => Response.json([player]),
+    "/api/squad/analytics/members": () => Response.json([neverPlayed]),
+  });
+
+  await renderPlayerList();
+
+  await screen.findByText("Amahle Nkosi");
+  expect(screen.getByText("No matches logged yet")).toBeInTheDocument();
+  expect(screen.queryByText("All matches")).not.toBeInTheDocument();
+  expect(
+    vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/analytics/serve")),
+  ).toBe(false);
 });
 
 // A real attention flag (not the always-empty fixture this row used to read)
 // replaces the row's plain form figure — same reasoning as home.tsx's own
 // attention card, sourced from the same `/squad/analytics/members` payload.
-test("shows a real attention flag instead of the form figure when one fires", async () => {
+test("shows a real attention flag, and renders the metrics section once matches exist", async () => {
   const flagged: SquadMemberStats = {
     player_id: player.id,
     matches_logged_this_period: 5,
@@ -194,19 +316,15 @@ test("shows a real attention flag instead of the form figure when one fires", as
     },
     tracked_stats: [],
   };
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((input: Request) => {
-      const { pathname } = new URL(input.url);
-      if (pathname === "/api/players") return Promise.resolve(Response.json([player]));
-      if (pathname === "/api/squad/analytics/members") {
-        return Promise.resolve(Response.json([flagged]));
-      }
-      throw new Error(`Unstubbed fetch: ${pathname}`);
-    }),
-  );
+  stubFetchByPath({
+    "/api/players": () => Response.json([player]),
+    "/api/squad/analytics/members": () => Response.json([flagged]),
+    "/analytics/serve": () => Response.json(emptyServeStats),
+    "/analytics/rally": () => Response.json(emptyRallyStats),
+  });
 
   await renderPlayerList();
 
   expect(await screen.findByText("3-match losing streak")).toBeInTheDocument();
+  expect(await screen.findByText("All matches")).toBeInTheDocument();
 });

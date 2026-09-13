@@ -44,6 +44,28 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver ??= ResizeObserverStub;
 
+// jsdom has no layout, so it has no notion of what's actually on screen either —
+// there is no IntersectionObserver. `player-card.tsx` uses one to defer its two
+// per-player analytics requests until a card is scrolled into view; without this
+// stub every card would sit permanently "not yet visible" and its own tests would
+// never see the data those requests bring in. Reports every observed target as
+// immediately intersecting, so tests exercise the loaded state rather than the
+// deferred one — a card scrolled off-screen in a real browser is exactly a card a
+// test never needs to distinguish from a visible one.
+class IntersectionObserverStub {
+  constructor(private readonly callback: IntersectionObserverCallback) {}
+  observe(target: Element) {
+    this.callback(
+      [{ target, isIntersecting: true } as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver,
+    );
+  }
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.IntersectionObserver ??=
+  IntersectionObserverStub as unknown as typeof IntersectionObserver;
+
 // Same gap, different API: input-otp also polls document.elementFromPoint on an
 // internal timer to track focus, which jsdom doesn't implement either. Without this
 // it doesn't fail a test directly — the timer fires after the test that rendered

@@ -108,14 +108,14 @@ test("renders the page heading and the roster", async () => {
   expect(await screen.findByText("No players yet")).toBeInTheDocument();
 });
 
-test("tapping a player offers viewing them or starting a match", async () => {
+// Each card offers its own View stats / Start match links directly — #262's
+// whole point is retiring the picker sheet this used to open.
+test("each player's card offers a link to view stats and a separate link to start a match", async () => {
   stubFetch(() => Response.json([player]));
-  const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
-  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
-
-  expect(await screen.findByRole("link", { name: "View player" })).toHaveAttribute(
+  await screen.findByText("Amahle Nkosi");
+  expect(screen.getByRole("link", { name: "View stats" })).toHaveAttribute(
     "href",
     `/players/${player.id}`,
   );
@@ -125,13 +125,12 @@ test("tapping a player offers viewing them or starting a match", async () => {
   );
 });
 
-test("choosing View player opens the profile and records them as last-viewed", async () => {
+test("choosing View stats opens the profile and records them as last-viewed", async () => {
   stubFetch(() => Response.json([player]));
   const user = userEvent.setup({ delay: null });
   await renderPlayersPage();
 
-  await user.click(await screen.findByRole("button", { name: /Amahle Nkosi/ }));
-  await user.click(await screen.findByRole("link", { name: "View player" }));
+  await user.click(await screen.findByRole("link", { name: "View stats" }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
   expect(getLastViewedPlayerId()).toBe(player.id);

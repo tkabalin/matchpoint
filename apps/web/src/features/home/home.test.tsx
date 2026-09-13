@@ -392,26 +392,32 @@ test("renders a bubble with initials for each player", async () => {
   expect(screen.getByText("Sipho")).toBeInTheDocument();
 });
 
-test("clicking a player bubble offers viewing them or starting a match", async () => {
+// The roster bubble is a direct link now, not a picker sheet — #262 retired the
+// intermediate step for every player row on the app, this one included. Scoped
+// to "My players" specifically: the squad snapshot's own Best/Worst form rows
+// are also links to the same profile and can name the same player.
+test("a player bubble links straight to their profile", async () => {
   stubAuthenticatedHome();
-  const user = userEvent.setup({ delay: null });
   await renderHome();
-  await screen.findByText("AN");
+  const heading = await screen.findByRole("heading", { name: "My players" });
+  const section = within(heading.closest("section")!);
+  await section.findByText("AN");
 
-  await user.click(screen.getByRole("button", { name: "Amahle" }));
-
-  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Start match" })).toBeInTheDocument();
+  expect(section.getByRole("link", { name: /Amahle/ })).toHaveAttribute(
+    "href",
+    `/players/${players[0]!.id}`,
+  );
 });
 
-test("choosing View player opens the profile and records them as last-viewed", async () => {
+test("tapping a player bubble opens the profile and records them as last-viewed", async () => {
   stubAuthenticatedHome();
   const user = userEvent.setup({ delay: null });
   await renderHome();
-  await screen.findByText("AN");
+  const heading = await screen.findByRole("heading", { name: "My players" });
+  const section = within(heading.closest("section")!);
+  await section.findByText("AN");
 
-  await user.click(screen.getByRole("button", { name: "Amahle" }));
-  await user.click(await screen.findByRole("link", { name: "View player" }));
+  await user.click(section.getByRole("link", { name: /Amahle/ }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
   expect(getLastViewedPlayerId()).toBe(players[0]!.id);
@@ -471,7 +477,9 @@ test("'View full stats' opens the last-viewed player's profile", async () => {
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
-test("tapping the continue-with player row opens the view/start-match sheet, not straight to stats", async () => {
+// The row itself now goes straight to the same place "View full stats" does —
+// #262 retired the picker sheet this used to raise.
+test("tapping the continue-with player row opens their profile directly", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
   const user = userEvent.setup({ delay: null });
@@ -479,10 +487,9 @@ test("tapping the continue-with player row opens the view/start-match sheet, not
   const heading = await screen.findByRole("heading", { name: "Continue with" });
   const section = within(heading.closest("section")!);
 
-  await user.click(section.getByRole("button", { name: /Amahle Nkosi/ }));
+  await user.click(section.getByRole("link", { name: /Amahle Nkosi/ }));
 
-  expect(await screen.findByRole("link", { name: "View player" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Start match" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
 test("shows the squad's player count", async () => {
