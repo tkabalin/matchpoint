@@ -4,7 +4,7 @@ import {
   listOpponentsOptions,
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { getRouteApi, useNavigate } from "@tanstack/react-router";
+import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 
 import { PlayerLoadError } from "@/components/player-load-error";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -28,6 +28,7 @@ const routeApi = getRouteApi("/_authenticated/new-match/$playerId");
 export function NewMatch() {
   const { playerId } = routeApi.useParams();
   const navigate = useNavigate();
+  const router = useRouter();
   const {
     data: player,
     isError,
@@ -90,7 +91,16 @@ export function NewMatch() {
         defaultSurfaceType={coach?.default_surface ?? undefined}
         previousOpponents={(opponents ?? []).map((opponent) => opponent.name)}
         onExit={() => {
-          void navigate({ to: "/home" });
+          // Reachable from Home and from the Players tab's own card now, so a
+          // fixed destination would send half of those visits somewhere they
+          // didn't come from — same reasoning as `player-profile.tsx`'s back
+          // button. Pops real browser history, falling back to Home only for
+          // a direct/deep link with nothing to pop.
+          if (router.history.canGoBack()) {
+            router.history.back();
+          } else {
+            void navigate({ to: "/home" });
+          }
         }}
         onViewResults={(matchId) => {
           void navigate({ to: "/matches/$matchId", params: { matchId } });

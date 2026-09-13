@@ -126,7 +126,10 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
   );
 }
 
-async function renderPlayerProfile(playerId = player.id) {
+async function renderPlayerProfile(
+  playerId = player.id,
+  initialEntries = [`/players/${playerId}`],
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   // Nested under a pathless `_authenticated` layout, matching the real route tree —
@@ -170,7 +173,7 @@ async function renderPlayerProfile(playerId = player.id) {
   ]);
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/players/${playerId}`] }),
+    history: createMemoryHistory({ initialEntries }),
   });
   render(
     <QueryClientProvider client={queryClient}>
@@ -255,7 +258,24 @@ test("announces a load failure as an alert, for every branch", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Player not found");
 });
 
-test("links back to home", async () => {
+// Reachable from more than one place now (Home, and the Players tab's own
+// card), so Back pops real browser history rather than assuming Home —
+// same reasoning as `legal-page.tsx`'s own back button.
+test("back returns to wherever the coach actually came from", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderPlayerProfile(player.id, ["/players", `/players/${player.id}`]);
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(await screen.findByRole("heading", { name: "Players" })).toBeInTheDocument();
+});
+
+test("back falls back to home for a direct link with no history to pop", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
@@ -264,7 +284,7 @@ test("links back to home", async () => {
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
-  await user.click(screen.getByRole("link", { name: "Back to home" }));
+  await user.click(screen.getByRole("button", { name: "Back" }));
 
   expect(await screen.findByRole("heading", { name: "Welcome to Home" })).toBeInTheDocument();
 });

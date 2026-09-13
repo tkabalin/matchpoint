@@ -110,10 +110,12 @@ export function PlayerCard({
   const returnedInRow: BreakdownRow | null =
     returnPercent === null ? null : { label: "Returns into play", value: returnPercent, max: 100 };
 
-  const forcedUnforcedWeights = rallyStats?.outcome_mix.find((row) => row.label === "You");
-  const heroValue = rallyStats?.hero
-    ? (rallyStats.hero.display ?? rallyStats.hero.value.toFixed(2))
-    : null;
+  // Raw counts, not the ratio: professional stats report forced/unforced as two
+  // numbers side by side, and it's the only way to tell "12 forcing shots, no
+  // mistakes" from "12 forcing shots, 1 mistake" apart (d6434da's own reasoning).
+  const forcedCount = rallyStats?.styles.you.find((style) => style.kind === "forced")?.count;
+  const unforcedCount = rallyStats?.styles.you.find((style) => style.kind === "unforced")?.count;
+  const hasForcedUnforced = forcedCount !== undefined && unforcedCount !== undefined;
 
   const rallyCeiling = rallyStats
     ? Math.max(
@@ -170,23 +172,21 @@ export function PlayerCard({
               <BreakdownBars rows={[returnedInRow]} pattern="indigo" icon={() => Shield} unit="%" />
             )}
 
-            {heroValue && forcedUnforcedWeights && (
+            {hasForcedUnforced && (
               <div className="flex items-center gap-2.5">
                 <Swords className="size-6 shrink-0 text-foreground" aria-hidden="true" />
                 <div className="flex-1">
                   <div className="flex justify-between text-xs">
                     <span>Forced : Unforced</span>
-                    <span className="tabular-nums">{heroValue}</span>
+                    <span className="tabular-nums">
+                      {forcedCount} | {unforcedCount}
+                    </span>
                   </div>
                   <OutcomeStack
                     className="mt-1"
                     segments={[
-                      { pattern: "forced", weight: forcedUnforcedWeights.forced, label: "Forced" },
-                      {
-                        pattern: "unforced",
-                        weight: forcedUnforcedWeights.unforced,
-                        label: "Unforced",
-                      },
+                      { pattern: "forced", weight: forcedCount!, label: "Forced" },
+                      { pattern: "unforced", weight: unforcedCount!, label: "Unforced" },
                     ]}
                   />
                 </div>
@@ -203,7 +203,6 @@ export function PlayerCard({
                     <p className="text-xs font-semibold text-muted-foreground">Rally length</p>
                   </div>
                   <ColumnChart
-                    title=""
                     ceiling={rallyCeiling}
                     unit=""
                     columns={[
@@ -223,39 +222,58 @@ export function PlayerCard({
               )}
 
               {showShotChart && (
-                <div className="flex flex-1 flex-col gap-1">
+                <div className="flex flex-1 flex-col gap-1.5">
                   <p className="text-xs font-semibold text-muted-foreground">Winning shots</p>
-                  <ColumnChart
-                    title=""
-                    ceiling={1}
-                    unit="%"
-                    columns={[
-                      {
-                        value: youShots ? Math.round(youShots[0].share * 100) : null,
-                        caption: youShots?.[0].shot ?? "",
-                        Icon: youShots ? SHOT_ICON[youShots[0].shot] : undefined,
-                        pattern: "yellow",
-                      },
-                      {
-                        value: youShots ? Math.round(youShots[1].share * 100) : null,
-                        caption: youShots?.[1].shot ?? "",
-                        Icon: youShots ? SHOT_ICON[youShots[1].shot] : undefined,
-                        pattern: "yellow",
-                      },
-                      {
-                        value: againstShots ? Math.round(againstShots[0].share * 100) : null,
-                        caption: againstShots?.[0].shot ?? "",
-                        Icon: againstShots ? SHOT_ICON[againstShots[0].shot] : undefined,
-                        pattern: "violet",
-                      },
-                      {
-                        value: againstShots ? Math.round(againstShots[1].share * 100) : null,
-                        caption: againstShots?.[1].shot ?? "",
-                        Icon: againstShots ? SHOT_ICON[againstShots[1].shot] : undefined,
-                        pattern: "violet",
-                      },
-                    ]}
-                  />
+                  {/* Coloured by rank, not by side: a favourite shot is yellow whether
+                      it's yours or the opponent's, and a least-favourite is violet the
+                      same way — so the two favourites read as a pair at a glance, and
+                      the two least-favourites read as the other pair. "You"/"Against"
+                      labels are what tell whose column is whose, since colour no
+                      longer does that job. */}
+                  <div className="flex gap-3">
+                    <div className="flex flex-1 flex-col gap-1">
+                      <p className="text-center text-[0.625rem] text-muted-foreground">You</p>
+                      <ColumnChart
+                        ceiling={100}
+                        unit="%"
+                        columns={[
+                          {
+                            value: youShots ? Math.round(youShots[0].share * 100) : null,
+                            caption: youShots?.[0].shot ?? "",
+                            Icon: youShots ? SHOT_ICON[youShots[0].shot] : undefined,
+                            pattern: "yellow",
+                          },
+                          {
+                            value: youShots ? Math.round(youShots[1].share * 100) : null,
+                            caption: youShots?.[1].shot ?? "",
+                            Icon: youShots ? SHOT_ICON[youShots[1].shot] : undefined,
+                            pattern: "violet",
+                          },
+                        ]}
+                      />
+                    </div>
+                    <div className="flex flex-1 flex-col gap-1">
+                      <p className="text-center text-[0.625rem] text-muted-foreground">Against</p>
+                      <ColumnChart
+                        ceiling={100}
+                        unit="%"
+                        columns={[
+                          {
+                            value: againstShots ? Math.round(againstShots[0].share * 100) : null,
+                            caption: againstShots?.[0].shot ?? "",
+                            Icon: againstShots ? SHOT_ICON[againstShots[0].shot] : undefined,
+                            pattern: "yellow",
+                          },
+                          {
+                            value: againstShots ? Math.round(againstShots[1].share * 100) : null,
+                            caption: againstShots?.[1].shot ?? "",
+                            Icon: againstShots ? SHOT_ICON[againstShots[1].shot] : undefined,
+                            pattern: "violet",
+                          },
+                        ]}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
