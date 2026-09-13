@@ -177,6 +177,13 @@ test("shows a real attention flag instead of the form figure when one fires", as
     period_record: { wins: 1, losses: 4 },
     current_streak: { outcome: "loss", length: 3 },
     days_since_last_match: 1,
+    last5_stats: {
+      first_serve_in_percent: 60,
+      return_in_percent: 70,
+      forced_to_unforced_ratio: 1,
+      points_won: 40,
+      points_lost: 35,
+    },
     tracked_stats: [],
   };
   vi.stubGlobal(

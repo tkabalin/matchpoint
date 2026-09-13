@@ -369,12 +369,42 @@ class CurrentStreak(BaseModel):
     length: int
 
 
+class LastFiveStats(BaseModel):
+    """A player's card figures over their five most recent matches holding points (#260).
+
+    Its own window, deliberately not the calendar year the fields beside it use: a
+    roster card reads as current form, where the leaderboard and the attention
+    snapshot read as a season. Nor is it `last5`'s window, which is the five most
+    recent matches carrying a result. These are point figures, so a match enters this
+    one once it holds points, whether or not anyone has recorded who won it, and is
+    passed over while it holds none. The two fields can cover different matches.
+    """
+
+    # Pooled over the window's points rather than averaged over its matches, so a
+    # four-point match weighs what four points are worth. Null where the window holds
+    # no point that could answer the figure at all.
+    first_serve_in_percent: float | None
+    # The share of the player's recorded returns that landed in. A return is stored
+    # only on a point the opponent served, so a window of the player's own service
+    # games has none.
+    return_in_percent: float | None
+    # With no unforced errors counted at all the forced count stands in for the ratio,
+    # the convention the period field beside it follows. Null with neither counted.
+    forced_to_unforced_ratio: float | None
+    # Every point of the window, aces and double faults included, as `RallyStats`
+    # counts the same pair. Counts, so zero here is the truth rather than a stand-in.
+    points_won: int
+    points_lost: int
+
+
 class SquadMemberStats(BaseModel):
-    """One roster player's raw figures, for both screens that rank a whole squad.
+    """One roster player's raw figures, for every screen that reads a whole squad.
 
     Inputs and never a verdict: which of these amounts to needing attention (#204),
     or to first place on the Squad stats leaderboard (#237), is the client's rule, so
-    the thresholds live there and the windows live here.
+    the thresholds live there and the windows live here. Three of them: the period
+    fields below are the calendar year, `last5` is the five most recent results, and
+    `last5_stats` is the roster card's five-match form window (#260).
     """
 
     player_id: uuid.UUID
@@ -396,6 +426,9 @@ class SquadMemberStats(BaseModel):
     days_since_last_match: int | None
     # Only the stats this player has the matches to have a baseline for.
     tracked_stats: list[TrackedStat]
+    # The roster card's own figures, over the last five matches holding points rather
+    # than the period (#260). Always present: an empty window answers zeroes and nulls.
+    last5_stats: LastFiveStats
 
 
 class SquadMetric(enum.StrEnum):

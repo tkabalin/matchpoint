@@ -164,6 +164,26 @@ export const zGender = z.enum([
 ]);
 
 /**
+ * LastFiveStats
+ *
+ * A player's card figures over their five most recent matches holding points (#260).
+ *
+ * Its own window, deliberately not the calendar year the fields beside it use: a
+ * roster card reads as current form, where the leaderboard and the attention
+ * snapshot read as a season. Nor is it `last5`'s window, which is the five most
+ * recent matches carrying a result. These are point figures, so a match enters this
+ * one once it holds points, whether or not anyone has recorded who won it, and is
+ * passed over while it holds none. The two fields can cover different matches.
+ */
+export const zLastFiveStats = z.object({
+    first_serve_in_percent: z.number().nullable(),
+    forced_to_unforced_ratio: z.number().nullable(),
+    points_lost: z.int(),
+    points_won: z.int(),
+    return_in_percent: z.number().nullable()
+});
+
+/**
  * LoginRequest
  */
 export const zLoginRequest = z.object({
@@ -887,11 +907,13 @@ export const zPlayerOverview = z.object({
 /**
  * SquadMemberStats
  *
- * One roster player's raw figures, for both screens that rank a whole squad.
+ * One roster player's raw figures, for every screen that reads a whole squad.
  *
  * Inputs and never a verdict: which of these amounts to needing attention (#204),
  * or to first place on the Squad stats leaderboard (#237), is the client's rule, so
- * the thresholds live there and the windows live here.
+ * the thresholds live there and the windows live here. Three of them: the period
+ * fields below are the calendar year, `last5` is the five most recent results, and
+ * `last5_stats` is the roster card's five-match form window (#260).
  */
 export const zSquadMemberStats = z.object({
     current_streak: zCurrentStreak.nullable(),
@@ -899,6 +921,7 @@ export const zSquadMemberStats = z.object({
     first_serve_in_percent: z.number().nullable(),
     forced_to_unforced_ratio: z.number().nullable(),
     last5: z.array(zMatchResult),
+    last5_stats: zLastFiveStats,
     matches_logged_this_period: z.int(),
     period_record: zWinLossRecord,
     player_id: z.uuid(),

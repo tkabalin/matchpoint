@@ -13,6 +13,13 @@ function member(overrides: Partial<SquadMemberStats> = {}): SquadMemberStats {
     period_record: { wins: 4, losses: 2 },
     current_streak: { outcome: "win", length: 1 },
     days_since_last_match: 2,
+    last5_stats: {
+      first_serve_in_percent: 64,
+      return_in_percent: 70,
+      forced_to_unforced_ratio: 1.5,
+      points_won: 40,
+      points_lost: 35,
+    },
     tracked_stats: [
       {
         key: "first_serve_in",

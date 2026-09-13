@@ -79,6 +79,13 @@ function squadMember(
     period_record: { wins: 4, losses: 1 },
     current_streak: { outcome: "win", length: 1 },
     days_since_last_match: 1,
+    last5_stats: {
+      first_serve_in_percent: 60,
+      return_in_percent: 70,
+      forced_to_unforced_ratio: 1.5,
+      points_won: 40,
+      points_lost: 35,
+    },
     tracked_stats: [],
     ...overrides,
   };

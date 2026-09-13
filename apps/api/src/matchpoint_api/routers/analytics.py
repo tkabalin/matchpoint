@@ -37,6 +37,7 @@ from matchpoint_api.schemas.analytics import (
     CurrentStreak,
     FaultModeShares,
     FaultModeSplit,
+    LastFiveStats,
     Metric,
     MetricUnit,
     OpponentSummary,
@@ -1425,12 +1426,14 @@ def _tracked_counts_by_match(
     window: _DateWindow | None = None,
     surface: Surface | None = None,
 ) -> dict[uuid.UUID, Row[Any]]:
-    """The tracked stats' tallies for every match on the roster, one row per match.
+    """Every per-match tally the squad figures sum, for every match on the roster.
 
-    Grouped by match and not by player because each stat's baseline is a series of
-    per-match values; the period's own ratio is summed back off these rows.
+    Grouped by match and not by player because a tracked stat's baseline is a series
+    of per-match values and the last-five window is a slice of one; a period's own
+    figure is summed back off these rows.
     """
     tracked = Point.server == MatchSide.TRACKED
+    returned = and_(Point.server == MatchSide.OPPONENT, Point.return_outcome.is_not(None))
     rows = db.execute(
         select(
             Point.match_id,
@@ -1449,6 +1452,14 @@ def _tracked_counts_by_match(
             func.count()
             .filter(and_(tracked, Point.serve1_outcome != ServeOutcome.FAULT))
             .label("first_in"),
+            # A return is recorded only on a point the opponent served, so an
+            # unrecorded one pads no denominator here either.
+            func.count().filter(returned).label("returns_seen"),
+            func.count()
+            .filter(and_(returned, Point.return_outcome == ReturnOutcome.IN))
+            .label("returns_in"),
+            func.count().filter(Point.won).label("points_won"),
+            func.count().filter(~Point.won).label("points_lost"),
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
@@ -1507,6 +1518,41 @@ def _tracked_stat(
     )
 
 
+def _last_five(
+    matches_newest_first: Sequence[Row[Any]],
+    counts_by_match: dict[uuid.UUID, Row[Any]],
+) -> LastFiveStats:
+    """The roster card's four figures over the five newest matches holding points (#260).
+
+    Resulted or not, a match holding points long before anyone records who won it, but
+    a match holding none is passed over rather than spending a slot: a match row exists
+    from setup while its points are still in the capture client's outbox, so the card
+    would otherwise thin out every time a coach schedules a fixture. `_tracked_stat`
+    above skips a match it cannot answer from on the same terms. Each rate pools the
+    window's points as the period's own rates do, and is null with nothing to take it
+    from.
+    """
+    window = [counts_by_match[row.id] for row in matches_newest_first if row.id in counts_by_match][
+        :5
+    ]
+    return LastFiveStats(
+        first_serve_in_percent=_percent_value_or_none(
+            sum(counts.first_in for counts in window),
+            sum(counts.serves_seen for counts in window),
+        ),
+        return_in_percent=_percent_value_or_none(
+            sum(counts.returns_in for counts in window),
+            sum(counts.returns_seen for counts in window),
+        ),
+        forced_to_unforced_ratio=_ratio_value(
+            sum(counts.forced_won for counts in window),
+            sum(counts.mistake_lost for counts in window),
+        ),
+        points_won=sum(counts.points_won for counts in window),
+        points_lost=sum(counts.points_lost for counts in window),
+    )
+
+
 def _squad_member(
     player_id: uuid.UUID,
     matches_newest_first: Sequence[Row[Any]],
@@ -1546,6 +1592,7 @@ def _squad_member(
             )
             if stat is not None
         ],
+        last5_stats=_last_five(matches_newest_first, counts_by_match),
     )
 
 
@@ -1555,9 +1602,10 @@ def list_squad_member_stats(
 ) -> list[SquadMemberStats]:
     """Per-player squad figures, one row per roster player.
 
-    Serves both screens that rank a squad: the home screen's snapshot (#204) and the
-    Squad stats leaderboard and headline (#237). The thresholds that turn these
-    numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
+    Serves every screen that reads a whole roster: the home screen's snapshot (#204),
+    the Squad stats leaderboard and headline (#237), and the Players tab's per-player
+    card (#260), so one request paints a list of any length. The thresholds that turn
+    these numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
     `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
     measured over. The period is the calendar year, as the overview tab's season
     record is, and scopes `matches_logged_this_period`, `period_record`, the
@@ -1569,6 +1617,13 @@ def list_squad_member_stats(
 
     Both period rates pool the period's points rather than averaging its matches, so
     a four-point match weighs what four points are worth.
+
+    `last5_stats` has a window of its own: the player's five most recent matches that
+    hold points, resulted or not, which is what a roster card means by current form.
+    That is not `last5`'s five, which are the five most recent matches carrying a
+    result, so the two fields can cover different matches. It carries its own
+    first-serve and forced : unforced figures rather than re-scoping the period's,
+    because the two screens above read those as a season (#260).
 
     `surface`, if given, narrows every count above to matches on that surface (#225).
     A player with none on the requested surface still returns a zeroed row rather

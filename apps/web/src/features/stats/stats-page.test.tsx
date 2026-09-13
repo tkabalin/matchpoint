@@ -41,6 +41,13 @@ function member(overrides: Partial<SquadMemberStats> & { player_id: string }): S
     period_record: { wins: 0, losses: 0 },
     current_streak: null,
     days_since_last_match: 1,
+    last5_stats: {
+      first_serve_in_percent: 60,
+      return_in_percent: 70,
+      forced_to_unforced_ratio: 1,
+      points_won: 40,
+      points_lost: 35,
+    },
     tracked_stats: [],
     ...overrides,
   };

@@ -454,6 +454,61 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "LastFiveStats": {
+        "description": "A player's card figures over their five most recent matches holding points (#260).\n\nIts own window, deliberately not the calendar year the fields beside it use: a\nroster card reads as current form, where the leaderboard and the attention\nsnapshot read as a season. Nor is it `last5`'s window, which is the five most\nrecent matches carrying a result. These are point figures, so a match enters this\none once it holds points, whether or not anyone has recorded who won it, and is\npassed over while it holds none. The two fields can cover different matches.",
+        "properties": {
+          "first_serve_in_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Serve In Percent"
+          },
+          "forced_to_unforced_ratio": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forced To Unforced Ratio"
+          },
+          "points_lost": {
+            "title": "Points Lost",
+            "type": "integer"
+          },
+          "points_won": {
+            "title": "Points Won",
+            "type": "integer"
+          },
+          "return_in_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return In Percent"
+          }
+        },
+        "required": [
+          "first_serve_in_percent",
+          "return_in_percent",
+          "forced_to_unforced_ratio",
+          "points_won",
+          "points_lost"
+        ],
+        "title": "LastFiveStats",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2871,7 +2926,7 @@
         "type": "string"
       },
       "SquadMemberStats": {
-        "description": "One roster player's raw figures, for both screens that rank a whole squad.\n\nInputs and never a verdict: which of these amounts to needing attention (#204),\nor to first place on the Squad stats leaderboard (#237), is the client's rule, so\nthe thresholds live there and the windows live here.",
+        "description": "One roster player's raw figures, for every screen that reads a whole squad.\n\nInputs and never a verdict: which of these amounts to needing attention (#204),\nor to first place on the Squad stats leaderboard (#237), is the client's rule, so\nthe thresholds live there and the windows live here. Three of them: the period\nfields below are the calendar year, `last5` is the five most recent results, and\n`last5_stats` is the roster card's five-match form window (#260).",
         "properties": {
           "current_streak": {
             "anyOf": [
@@ -2923,6 +2978,9 @@
             "title": "Last5",
             "type": "array"
           },
+          "last5_stats": {
+            "$ref": "#/components/schemas/LastFiveStats"
+          },
           "matches_logged_this_period": {
             "title": "Matches Logged This Period",
             "type": "integer"
@@ -2952,7 +3010,8 @@
           "first_serve_in_percent",
           "current_streak",
           "days_since_last_match",
-          "tracked_stats"
+          "tracked_stats",
+          "last5_stats"
         ],
         "title": "SquadMemberStats",
         "type": "object"
@@ -6753,7 +6812,7 @@
     },
     "/squad/analytics/members": {
       "get": {
-        "description": "Per-player squad figures, one row per roster player.\n\nServes both screens that rank a squad: the home screen's snapshot (#204) and the\nSquad stats leaderboard and headline (#237). The thresholds that turn these\nnumbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,\n`lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period`, `period_record`, the\nforced : unforced ratio and the first-serve percentage; the streak, the last five\nresults and the days since the last match are counted over every match, so a run\nthat started in December is still a run in January. A tracked stat's `current` is\nits value over the latest match that can answer it, against a baseline of the ten\nmatches before that one.\n\nBoth period rates pool the period's points rather than averaging its matches, so\na four-point match weighs what four points are worth.\n\n`surface`, if given, narrows every count above to matches on that surface (#225).\nA player with none on the requested surface still returns a zeroed row rather\nthan dropping off the roster \u2014 the same rule the empty-roster row above follows.",
+        "description": "Per-player squad figures, one row per roster player.\n\nServes every screen that reads a whole roster: the home screen's snapshot (#204),\nthe Squad stats leaderboard and headline (#237), and the Players tab's per-player\ncard (#260), so one request paints a list of any length. The thresholds that turn\nthese numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,\n`lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are\nmeasured over. The period is the calendar year, as the overview tab's season\nrecord is, and scopes `matches_logged_this_period`, `period_record`, the\nforced : unforced ratio and the first-serve percentage; the streak, the last five\nresults and the days since the last match are counted over every match, so a run\nthat started in December is still a run in January. A tracked stat's `current` is\nits value over the latest match that can answer it, against a baseline of the ten\nmatches before that one.\n\nBoth period rates pool the period's points rather than averaging its matches, so\na four-point match weighs what four points are worth.\n\n`last5_stats` has a window of its own: the player's five most recent matches that\nhold points, resulted or not, which is what a roster card means by current form.\nThat is not `last5`'s five, which are the five most recent matches carrying a\nresult, so the two fields can cover different matches. It carries its own\nfirst-serve and forced : unforced figures rather than re-scoping the period's,\nbecause the two screens above read those as a season (#260).\n\n`surface`, if given, narrows every count above to matches on that surface (#225).\nA player with none on the requested surface still returns a zeroed row rather\nthan dropping off the roster \u2014 the same rule the empty-roster row above follows.",
         "operationId": "list_squad_member_stats",
         "parameters": [
           {

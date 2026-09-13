@@ -2156,13 +2156,16 @@ def _captured_match(
     mistake: int = 0,
     first_in: int = 0,
     faults: int = 0,
+    returns_missed: int = 0,
     result: MatchResult | None = None,
 ) -> None:
-    """One match holding exactly the point tallies the two tracked stats read.
+    """One match holding exactly the point tallies the squad figures read.
 
     Rally endings are logged on the opponent's serve and serve attempts as aces or
     double faults, so the forced : unforced ratio and the first-serve percentage can
-    be arranged independently of each other.
+    be arranged independently of each other. `returns_missed` is the exception and
+    cannot be: a netted return is the player's own unforced error, so it lands in the
+    mistake tally too.
     """
     match = make_match(db_session, player_id=player_id, played_on=played_on, result=result)
     sequence = 0
@@ -2176,6 +2179,20 @@ def _captured_match(
             return_outcome=ReturnOutcome.IN,
             won=won,
             end_reason=reason,
+        )
+        sequence += 1
+    for _ in range(returns_missed):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            server=MatchSide.OPPONENT,
+            serve1_box=None,
+            return_outcome=ReturnOutcome.NET,
+            won=False,
+            end_reason=EndReason.MISTAKE,
+            wing=None,
+            shot_type=None,
         )
         sequence += 1
     for landed in [True] * first_in + [False] * faults:
@@ -2223,6 +2240,14 @@ def test_squad_members_covers_a_player_with_no_matches(
             "current_streak": None,
             "days_since_last_match": None,
             "tracked_stats": [],
+            "last5_stats": {
+                "first_serve_in_percent": None,
+                "return_in_percent": None,
+                "forced_to_unforced_ratio": None,
+                # Counts, so an empty window is nil all rather than absent.
+                "points_won": 0,
+                "points_lost": 0,
+            },
         }
     ]
 
@@ -2684,6 +2709,135 @@ def test_squad_members_serve_percentage_is_absent_without_a_serve(
 
     assert row["forced_to_unforced_ratio"] == 2.0
     assert row["first_serve_in_percent"] is None
+
+
+# --- roster card figures over the last five matches (#260) ---
+
+
+def test_squad_members_last_five_stops_at_the_fifth_newest_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Six matches this year: the card reads five of them and the period reads all six.
+
+    The five newest are identical, so every card figure is that match five times over.
+    The sixth, oldest, is a bad one, and it moves the period ratio to 0.33 and the
+    period serve percentage to 50 while leaving the card's 1.0 and 75 alone.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), mistake=20, faults=10)
+    for day in range(2, 7):
+        _captured_match(
+            db_session,
+            player.id,
+            date(THIS_YEAR, 7, day),
+            forced=2,
+            mistake=1,
+            first_in=3,
+            faults=1,
+            returns_missed=1,
+        )
+
+    row = _squad(client)[0]
+
+    assert row["last5_stats"] == {
+        "first_serve_in_percent": 75,
+        "return_in_percent": 75,
+        "forced_to_unforced_ratio": 1.0,
+        "points_won": 25,
+        "points_lost": 15,
+    }
+    assert row["matches_logged_this_period"] == 6
+    assert row["forced_to_unforced_ratio"] == 0.33
+    assert row["first_serve_in_percent"] == 50
+
+
+def test_squad_members_last_five_counts_matches_and_not_results(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The window is the last five matches, where `last5` is the last five results.
+
+    Six captured matches, the newest still unresulted. The results list ends at the
+    five resulted ones, so it keeps 1 July; the card's window keeps the unresulted
+    match instead and drops 1 July with its four forced wins.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=4, result=MatchResult.WIN)
+    for day in range(2, 6):
+        _captured_match(
+            db_session, player.id, date(THIS_YEAR, 7, day), mistake=1, result=MatchResult.LOSS
+        )
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 6), forced=1)
+
+    row = _squad(client)[0]
+
+    assert row["last5"] == ["win", "loss", "loss", "loss", "loss"]
+    assert row["last5_stats"]["points_won"] == 1
+    assert row["last5_stats"]["forced_to_unforced_ratio"] == 0.25
+
+
+def test_squad_members_last_five_passes_over_a_match_holding_no_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two matches set up and never captured, in front of two that were.
+
+    A match row exists from setup while its points are still in the capture client's
+    outbox, so a slot spent on one would thin the card out for scheduling a fixture.
+    The window reaches past both and answers off the two captured matches behind them.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), forced=2, mistake=1)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 2), forced=2, mistake=1)
+    make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 3))
+    make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 4))
+
+    row = _squad(client)[0]
+
+    assert row["last5_stats"]["forced_to_unforced_ratio"] == 2.0
+    assert row["last5_stats"]["points_won"] == 4
+    assert row["matches_logged_this_period"] == 4
+
+
+def test_squad_members_last_five_return_rate_counts_recorded_returns_only(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Three returns in and one netted, beside two serve points that record none.
+
+    The return rate is 3 of 4 rather than 3 of 6: a point the player served has no
+    return of theirs to record, so it pads no denominator. The netted return is also
+    the unforced error the ratio's denominator is, and one of the two lost points.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session, player.id, date(THIS_YEAR, 7, 1), forced=3, returns_missed=1, first_in=2
+    )
+
+    assert _squad(client)[0]["last5_stats"] == {
+        "first_serve_in_percent": 100,
+        "return_in_percent": 75,
+        "forced_to_unforced_ratio": 3.0,
+        "points_won": 5,
+        "points_lost": 1,
+    }
+
+
+def test_squad_members_last_five_rates_are_absent_without_their_own_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Serve points only, so the two figures counted off rallies have nothing to say.
+
+    Absent rather than zero, for the reason every rate on this row is: a coach who
+    captured no rally has no return record, not a bad one.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(db_session, player.id, date(THIS_YEAR, 7, 1), first_in=3, faults=1)
+
+    assert _squad(client)[0]["last5_stats"] == {
+        "first_serve_in_percent": 75,
+        "return_in_percent": None,
+        "forced_to_unforced_ratio": None,
+        "points_won": 3,
+        "points_lost": 1,
+    }
 
 
 # --- squad trend (#237) ---

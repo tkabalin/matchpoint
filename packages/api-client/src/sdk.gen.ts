@@ -595,9 +595,10 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  *
  * Per-player squad figures, one row per roster player.
  *
- * Serves both screens that rank a squad: the home screen's snapshot (#204) and the
- * Squad stats leaderboard and headline (#237). The thresholds that turn these
- * numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
+ * Serves every screen that reads a whole roster: the home screen's snapshot (#204),
+ * the Squad stats leaderboard and headline (#237), and the Players tab's per-player
+ * card (#260), so one request paints a list of any length. The thresholds that turn
+ * these numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
  * `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
  * measured over. The period is the calendar year, as the overview tab's season
  * record is, and scopes `matches_logged_this_period`, `period_record`, the
@@ -609,6 +610,13 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  *
  * Both period rates pool the period's points rather than averaging its matches, so
  * a four-point match weighs what four points are worth.
+ *
+ * `last5_stats` has a window of its own: the player's five most recent matches that
+ * hold points, resulted or not, which is what a roster card means by current form.
+ * That is not `last5`'s five, which are the five most recent matches carrying a
+ * result, so the two fields can cover different matches. It carries its own
+ * first-serve and forced : unforced figures rather than re-scoping the period's,
+ * because the two screens above read those as a season (#260).
  *
  * `surface`, if given, narrows every count above to matches on that surface (#225).
  * A player with none on the requested surface still returns a zeroed row rather
