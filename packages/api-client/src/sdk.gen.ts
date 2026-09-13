@@ -601,8 +601,8 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  * these numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
  * `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
  * measured over. The period is the calendar year, as the overview tab's season
- * record is, and scopes `matches_logged_this_period` and the three fields the
- * `period_` prefix names; the streak, the last five results and the days since the
+ * record is, and scopes `matches_logged_this_period` and every field the `period_`
+ * prefix names; the streak, the last five results and the days since the
  * last match are counted over every match, so a run that started in December is
  * still a run in January. A tracked stat's `current` is its value over the latest
  * match that can answer it, against a baseline of the ten matches before that one.
@@ -614,8 +614,8 @@ export const createPlayerTransferCode = <ThrowOnError extends boolean = false>(o
  * hold points, resulted or not, which is what a roster card means by current form.
  * That is not `last5_results`'s five, which are the five most recent matches
  * carrying a result, so the two fields can cover different matches. It carries its own
- * first-serve and forced : unforced figures rather than re-scoping the period's,
- * because the two screens above read those as a season (#260).
+ * copies of the period's point figures rather than re-scoping them, because the two
+ * screens above read those as a season (#260).
  *
  * `surface`, if given, narrows every count above to matches on that surface (#225).
  * A player with none on the requested surface still returns a zeroed row rather

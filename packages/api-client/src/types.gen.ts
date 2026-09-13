@@ -293,6 +293,14 @@ export type LastFiveStats = {
      */
     first_serve_in_percent: number | null;
     /**
+     * Forced Errors Induced
+     */
+    forced_errors_induced: number;
+    /**
+     * Forced Errors Suffered
+     */
+    forced_errors_suffered: number;
+    /**
      * Forced To Unforced Ratio
      */
     forced_to_unforced_ratio: number | null;
@@ -308,6 +316,10 @@ export type LastFiveStats = {
      * Return In Percent
      */
     return_in_percent: number | null;
+    /**
+     * Unforced Errors
+     */
+    unforced_errors: number;
 };
 
 /**
@@ -1539,10 +1551,10 @@ export type ShotType = 'drive' | 'volley' | 'dropshot' | 'lob';
  * Inputs and never a verdict: which of these amounts to needing attention (#204),
  * or to first place on the Squad stats leaderboard (#237), is the client's rule, so
  * the thresholds live there and the windows live here. Three of them, each named in
- * the field carrying it since `last5_stats` repeats two of these figures over a
- * window of its own (#263): the `period_` fields are the calendar year,
- * `last5_results` is the five most recent results, and `last5_stats` is the roster
- * card's five-match form window (#260).
+ * the field carrying it since `last5_stats` repeats several of these figures over a
+ * window of its own (#263): the `period_` fields are the calendar year, `last5_results`
+ * is the five most recent results, and `last5_stats` is the roster card's five-match
+ * form window (#260).
  */
 export type SquadMemberStats = {
     current_streak: CurrentStreak | null;
@@ -1564,10 +1576,30 @@ export type SquadMemberStats = {
      */
     period_first_serve_in_percent: number | null;
     /**
+     * Period Forced Errors Induced
+     */
+    period_forced_errors_induced: number;
+    /**
+     * Period Forced Errors Suffered
+     */
+    period_forced_errors_suffered: number;
+    /**
      * Period Forced To Unforced Ratio
      */
     period_forced_to_unforced_ratio: number | null;
+    /**
+     * Period Points Lost
+     */
+    period_points_lost: number;
+    /**
+     * Period Points Won
+     */
+    period_points_won: number;
     period_record: WinLossRecord;
+    /**
+     * Period Unforced Errors
+     */
+    period_unforced_errors: number;
     /**
      * Player Id
      */

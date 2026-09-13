@@ -1486,6 +1486,11 @@ def _tracked_counts_by_match(
             func.count()
             .filter(and_(~Point.won, Point.end_reason == EndReason.MISTAKE))
             .label("mistake_lost"),
+            # The error the ratio never divides (#264): a rally the opponent's
+            # pressure ended, rather than one this player gave away.
+            func.count()
+            .filter(and_(~Point.won, Point.end_reason == EndReason.FORCED))
+            .label("forced_lost"),
             # Watched serves only, named as `_point_counts` names the same figure: this is
             # the first-serve stat's denominator, and an unwatched serve is in neither its
             # numerator nor its sample.
@@ -1565,7 +1570,7 @@ def _last_five(
     matches_newest_first: Sequence[Row[Any]],
     counts_by_match: dict[uuid.UUID, Row[Any]],
 ) -> LastFiveStats:
-    """The roster card's four figures over the five newest matches holding points (#260).
+    """The roster card's figures over the five newest matches holding points (#260).
 
     Resulted or not, a match holding points long before anyone records who won it, but
     a match holding none is passed over rather than spending a slot: a match row exists
@@ -1591,6 +1596,9 @@ def _last_five(
             sum(counts.forced_won for counts in window),
             sum(counts.mistake_lost for counts in window),
         ),
+        forced_errors_induced=sum(counts.forced_won for counts in window),
+        unforced_errors=sum(counts.mistake_lost for counts in window),
+        forced_errors_suffered=sum(counts.forced_lost for counts in window),
         points_won=sum(counts.points_won for counts in window),
         points_lost=sum(counts.points_lost for counts in window),
     )
@@ -1619,6 +1627,11 @@ def _squad_member(
             sum(counts.forced_won for counts in period_counts),
             sum(counts.mistake_lost for counts in period_counts),
         ),
+        period_forced_errors_induced=sum(counts.forced_won for counts in period_counts),
+        period_unforced_errors=sum(counts.mistake_lost for counts in period_counts),
+        period_forced_errors_suffered=sum(counts.forced_lost for counts in period_counts),
+        period_points_won=sum(counts.points_won for counts in period_counts),
+        period_points_lost=sum(counts.points_lost for counts in period_counts),
         period_first_serve_in_percent=_percent_value_or_none(
             sum(counts.first_in for counts in period_counts),
             sum(counts.serves_seen for counts in period_counts),
@@ -1651,8 +1664,8 @@ def list_squad_member_stats(
     these numbers into a flag or a rank are the web app's (`lib/analytics/attention.ts`,
     `lib/analytics/squad-stats.ts`); what this endpoint owns is the windows they are
     measured over. The period is the calendar year, as the overview tab's season
-    record is, and scopes `matches_logged_this_period` and the three fields the
-    `period_` prefix names; the streak, the last five results and the days since the
+    record is, and scopes `matches_logged_this_period` and every field the `period_`
+    prefix names; the streak, the last five results and the days since the
     last match are counted over every match, so a run that started in December is
     still a run in January. A tracked stat's `current` is its value over the latest
     match that can answer it, against a baseline of the ten matches before that one.
@@ -1664,8 +1677,8 @@ def list_squad_member_stats(
     hold points, resulted or not, which is what a roster card means by current form.
     That is not `last5_results`'s five, which are the five most recent matches
     carrying a result, so the two fields can cover different matches. It carries its own
-    first-serve and forced : unforced figures rather than re-scoping the period's,
-    because the two screens above read those as a season (#260).
+    copies of the period's point figures rather than re-scoping them, because the two
+    screens above read those as a season (#260).
 
     `surface`, if given, narrows every count above to matches on that surface (#225).
     A player with none on the requested surface still returns a zeroed row rather

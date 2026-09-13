@@ -177,10 +177,13 @@ export const zGender = z.enum([
  */
 export const zLastFiveStats = z.object({
     first_serve_in_percent: z.number().nullable(),
+    forced_errors_induced: z.int(),
+    forced_errors_suffered: z.int(),
     forced_to_unforced_ratio: z.number().nullable(),
     points_lost: z.int(),
     points_won: z.int(),
-    return_in_percent: z.number().nullable()
+    return_in_percent: z.number().nullable(),
+    unforced_errors: z.int()
 });
 
 /**
@@ -930,10 +933,10 @@ export const zPlayerOverview = z.object({
  * Inputs and never a verdict: which of these amounts to needing attention (#204),
  * or to first place on the Squad stats leaderboard (#237), is the client's rule, so
  * the thresholds live there and the windows live here. Three of them, each named in
- * the field carrying it since `last5_stats` repeats two of these figures over a
- * window of its own (#263): the `period_` fields are the calendar year,
- * `last5_results` is the five most recent results, and `last5_stats` is the roster
- * card's five-match form window (#260).
+ * the field carrying it since `last5_stats` repeats several of these figures over a
+ * window of its own (#263): the `period_` fields are the calendar year, `last5_results`
+ * is the five most recent results, and `last5_stats` is the roster card's five-match
+ * form window (#260).
  */
 export const zSquadMemberStats = z.object({
     current_streak: zCurrentStreak.nullable(),
@@ -942,8 +945,13 @@ export const zSquadMemberStats = z.object({
     last5_stats: zLastFiveStats,
     matches_logged_this_period: z.int(),
     period_first_serve_in_percent: z.number().nullable(),
+    period_forced_errors_induced: z.int(),
+    period_forced_errors_suffered: z.int(),
     period_forced_to_unforced_ratio: z.number().nullable(),
+    period_points_lost: z.int(),
+    period_points_won: z.int(),
     period_record: zWinLossRecord,
+    period_unforced_errors: z.int(),
     player_id: z.uuid(),
     tracked_stats: z.array(zTrackedStat)
 });

@@ -404,8 +404,16 @@ class LastFiveStats(BaseModel):
     # games has none.
     return_in_percent: float | None
     # With no unforced errors counted at all the forced count stands in for the ratio,
-    # the convention the period field beside it follows. Null with neither counted.
+    # the convention the period field beside it follows. Null with neither counted, and
+    # the counts below are what separate no unforced errors from one (#264).
     forced_to_unforced_ratio: float | None
+    # The two the ratio above divides, and the forced ending the opponent drew out of
+    # this player instead. A forced ending is a winner or a forced error, which capture
+    # never separates. Zero reads as a clean window and an empty one alike, so the null
+    # ratio above is what tells those two apart.
+    forced_errors_induced: int
+    unforced_errors: int
+    forced_errors_suffered: int
     # Every point of the window, aces and double faults included, as `RallyStats`
     # counts the same pair. Counts, so zero here is the truth rather than a stand-in.
     points_won: int
@@ -418,10 +426,10 @@ class SquadMemberStats(BaseModel):
     Inputs and never a verdict: which of these amounts to needing attention (#204),
     or to first place on the Squad stats leaderboard (#237), is the client's rule, so
     the thresholds live there and the windows live here. Three of them, each named in
-    the field carrying it since `last5_stats` repeats two of these figures over a
-    window of its own (#263): the `period_` fields are the calendar year,
-    `last5_results` is the five most recent results, and `last5_stats` is the roster
-    card's five-match form window (#260).
+    the field carrying it since `last5_stats` repeats several of these figures over a
+    window of its own (#263): the `period_` fields are the calendar year, `last5_results`
+    is the five most recent results, and `last5_stats` is the roster card's five-match
+    form window (#260).
     """
 
     player_id: uuid.UUID
@@ -432,8 +440,19 @@ class SquadMemberStats(BaseModel):
     period_record: WinLossRecord
     # The most recent results, oldest first, at most five, as PlayerOverview's are.
     last5_results: list[MatchResult]
-    # Over this period's matches; null until a rally has ended either way.
+    # Over this period's matches; null until a rally has ended either way, and the
+    # counts below are what separate no unforced errors from one (#264).
     period_forced_to_unforced_ratio: float | None
+    # As `last5_stats` carries the same three over its own window: a forced ending is a
+    # winner or a forced error, which capture never separates, and zero reads as a clean
+    # period and an empty one alike, so the null ratio above is what tells those apart.
+    period_forced_errors_induced: int
+    period_unforced_errors: int
+    period_forced_errors_suffered: int
+    # Every point of the period, aces and double faults included, as `last5_stats`
+    # counts the same pair over its own window. Counts, so zero is the truth.
+    period_points_won: int
+    period_points_lost: int
     # Over this period's points; null until a first serve of the player's was watched,
     # so a player who served all period with nobody watching still has no rate.
     period_first_serve_in_percent: float | None

@@ -2203,6 +2203,7 @@ def _captured_match(
     *,
     forced: int = 0,
     mistake: int = 0,
+    forced_against: int = 0,
     first_in: int = 0,
     faults: int = 0,
     returns_missed: int = 0,
@@ -2214,11 +2215,17 @@ def _captured_match(
     double faults, so the forced : unforced ratio and the first-serve percentage can
     be arranged independently of each other. `returns_missed` is the exception and
     cannot be: a netted return is the player's own unforced error, so it lands in the
-    mistake tally too.
+    mistake tally too. `forced_against` is the error the opponent forced out of the
+    player, which the ratio never divides and the counts beside it carry (#264).
     """
     match = make_match(db_session, player_id=player_id, played_on=played_on, result=result)
     sequence = 0
-    for won, reason in [(True, EndReason.FORCED)] * forced + [(False, EndReason.MISTAKE)] * mistake:
+    rally_endings = (
+        [(True, EndReason.FORCED)] * forced
+        + [(False, EndReason.MISTAKE)] * mistake
+        + [(False, EndReason.FORCED)] * forced_against
+    )
+    for won, reason in rally_endings:
         make_point(
             db_session,
             match_id=match.id,
@@ -2285,6 +2292,12 @@ def test_squad_members_covers_a_player_with_no_matches(
             "period_record": {"wins": 0, "losses": 0},
             "last5_results": [],
             "period_forced_to_unforced_ratio": None,
+            # Counts again, so a player who has played nothing is nil all here.
+            "period_forced_errors_induced": 0,
+            "period_unforced_errors": 0,
+            "period_forced_errors_suffered": 0,
+            "period_points_won": 0,
+            "period_points_lost": 0,
             "period_first_serve_in_percent": None,
             "current_streak": None,
             "days_since_last_match": None,
@@ -2294,6 +2307,9 @@ def test_squad_members_covers_a_player_with_no_matches(
                 "return_in_percent": None,
                 "forced_to_unforced_ratio": None,
                 # Counts, so an empty window is nil all rather than absent.
+                "forced_errors_induced": 0,
+                "unforced_errors": 0,
+                "forced_errors_suffered": 0,
                 "points_won": 0,
                 "points_lost": 0,
             },
@@ -2792,6 +2808,9 @@ def test_squad_members_last_five_stops_at_the_fifth_newest_match(
         "first_serve_in_percent": 75,
         "return_in_percent": 75,
         "forced_to_unforced_ratio": 1.0,
+        "forced_errors_induced": 10,
+        "unforced_errors": 10,
+        "forced_errors_suffered": 0,
         "points_won": 25,
         "points_lost": 15,
     }
@@ -2864,6 +2883,9 @@ def test_squad_members_last_five_return_rate_counts_recorded_returns_only(
         "first_serve_in_percent": 100,
         "return_in_percent": 75,
         "forced_to_unforced_ratio": 3.0,
+        "forced_errors_induced": 3,
+        "unforced_errors": 1,
+        "forced_errors_suffered": 0,
         "points_won": 5,
         "points_lost": 1,
     }
@@ -2884,9 +2906,85 @@ def test_squad_members_last_five_rates_are_absent_without_their_own_points(
         "first_serve_in_percent": 75,
         "return_in_percent": None,
         "forced_to_unforced_ratio": None,
+        "forced_errors_induced": 0,
+        "unforced_errors": 0,
+        "forced_errors_suffered": 0,
         "points_won": 3,
         "points_lost": 1,
     }
+
+
+# --- the error counts beside the ratio (#264) ---
+
+
+def test_squad_members_tell_a_spotless_window_from_a_ratio_that_matched_it(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two players reading 12.0, only one of whom made an unforced error (#264).
+
+    With no unforced errors to divide by, the ratio field carries the forced count
+    itself, so a spotless window and a twelve-to-one one send the same number. The
+    counts beside it are what separate them, in both windows.
+    """
+    spotless = make_player(db_session, coach_id=coach.id, last_name="Abbott")
+    messier = make_player(db_session, coach_id=coach.id, last_name="Zubair")
+    _captured_match(db_session, spotless.id, date(THIS_YEAR, 7, 1), forced=12)
+    _captured_match(db_session, messier.id, date(THIS_YEAR, 7, 1), forced=12, mistake=1)
+
+    clean, messy = _squad(client)
+
+    assert clean["period_forced_to_unforced_ratio"] == 12.0
+    assert messy["period_forced_to_unforced_ratio"] == 12.0
+    assert (clean["period_forced_errors_induced"], clean["period_unforced_errors"]) == (12, 0)
+    assert (messy["period_forced_errors_induced"], messy["period_unforced_errors"]) == (12, 1)
+    assert clean["last5_stats"]["forced_to_unforced_ratio"] == 12.0
+    assert messy["last5_stats"]["forced_to_unforced_ratio"] == 12.0
+    assert (
+        clean["last5_stats"]["forced_errors_induced"],
+        clean["last5_stats"]["unforced_errors"],
+    ) == (12, 0)
+    assert (
+        messy["last5_stats"]["forced_errors_induced"],
+        messy["last5_stats"]["unforced_errors"],
+    ) == (12, 1)
+
+
+def test_squad_members_count_forced_errors_against_and_the_windows_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The third error count, which the ratio never divides, over both windows.
+
+    Two matches this year and one last. The period stops at this year's two, where the
+    card's five-match window reaches back over last year's as well, so the same counts
+    answer different totals. Points are every point of the window, serve attempts included.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    _captured_match(
+        db_session, player.id, date(THIS_YEAR, 7, 1), forced=3, mistake=2, forced_against=4
+    )
+    _captured_match(
+        db_session,
+        player.id,
+        date(THIS_YEAR, 7, 2),
+        forced=1,
+        forced_against=1,
+        first_in=2,
+        faults=1,
+    )
+    _captured_match(db_session, player.id, date(LAST_YEAR, 5, 1), forced=9, forced_against=9)
+
+    row = _squad(client)[0]
+
+    assert row["period_forced_errors_induced"] == 4
+    assert row["period_unforced_errors"] == 2
+    assert row["period_forced_errors_suffered"] == 5
+    assert row["period_points_won"] == 6
+    assert row["period_points_lost"] == 8
+    assert row["last5_stats"]["forced_errors_induced"] == 13
+    assert row["last5_stats"]["unforced_errors"] == 2
+    assert row["last5_stats"]["forced_errors_suffered"] == 14
+    assert row["last5_stats"]["points_won"] == 15
+    assert row["last5_stats"]["points_lost"] == 17
 
 
 # --- squad trend (#237) ---
