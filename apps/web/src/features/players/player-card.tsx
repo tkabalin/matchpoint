@@ -4,8 +4,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ChevronDown,
-  ChevronRight,
   ChevronUp,
+  CircleCheck,
+  CircleX,
   Flag,
   Rainbow,
   Ruler,
@@ -16,7 +17,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { BreakdownBars } from "@/components/breakdown-bars";
-import { OutcomeStack } from "@/components/outcome-swatch";
+import { OutcomeLegend, OutcomeStack } from "@/components/outcome-swatch";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { ResultDots } from "@/components/result-dots";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,10 @@ function useInView<T extends HTMLElement>() {
   return { ref, inView };
 }
 
+// Shared between the rally-length and winning-shots charts so their bars start
+// from the same baseline and their value/caption rows land at the same height.
+const RALLY_BAR_HEIGHT = 96;
+
 const SHOT_ICON: Record<string, typeof TrendingUp> = {
   Drive: TrendingUp,
   Volley: ChevronUp,
@@ -58,10 +63,9 @@ const SHOT_ICON: Record<string, typeof TrendingUp> = {
   Lob: Rainbow,
 };
 
-function favouriteAndLeast(shares: ShotShare[]): [ShotShare, ShotShare] | null {
+function favourite(shares: ShotShare[]): ShotShare | null {
   if (shares.length === 0) return null;
-  const sorted = [...shares].sort((a, b) => b.share - a.share);
-  return [sorted[0]!, sorted[sorted.length - 1]!];
+  return shares.reduce((best, share) => (share.share > best.share ? share : best));
 }
 
 /**
@@ -125,36 +129,28 @@ export function PlayerCard({
       )
     : 1;
 
-  const youShots = rallyStats ? favouriteAndLeast(rallyStats.shot_frequency.you) : null;
-  const againstShots = rallyStats ? favouriteAndLeast(rallyStats.shot_frequency.opponents) : null;
-  const showShotChart = youShots !== null || againstShots !== null;
+  const youFavourite = rallyStats ? favourite(rallyStats.shot_frequency.you) : null;
+  const againstFavourite = rallyStats ? favourite(rallyStats.shot_frequency.opponents) : null;
+  const showShotChart = youFavourite !== null || againstFavourite !== null;
 
   return (
     <Card ref={ref} className="overflow-hidden py-0">
-      <Link
-        to="/players/$playerId"
-        params={{ playerId: player.id }}
-        onClick={() => setLastViewedPlayerId(player.id)}
-        // Distinguishes this link's accessible name from the in-progress banner's
-        // (`in-progress-banner.tsx`), which is titled with the same bare player
-        // name whenever this player's match is the one left open — the roster
-        // and the banner can otherwise show identical text at the same time.
-        aria-label={`View ${playerName}'s profile`}
-        className="flex items-center gap-3 p-4"
-      >
+      {/* Not a link: "View stats" below is the one way to reach the profile now,
+          so a chevron here would promise a second one that doesn't exist. `role="group"`
+          plus its own label just gives this block a distinct accessible name from the
+          in-progress banner (`in-progress-banner.tsx`), which can show this same bare
+          player name at the same time — nothing here is interactive. */}
+      <div role="group" aria-label={`${playerName}'s card`} className="flex items-center gap-3 p-4">
         <PlayerAvatar player={player} size="md" />
         <div className="flex-1">
           <p className="flex items-center gap-2 font-bold">
             {playerName}
-            {/* Non-interactive — the whole header is already a link, so a live
-                transfer code is a badge here, not a control. #185 owns
-                cancelling it, from the player's profile. */}
+            {/* #185 owns cancelling a transfer code, from the player's profile. */}
             {player.has_transfer_code && <Badge variant="secondary">Transfer pending</Badge>}
           </p>
           {flag && <p className="text-xs text-outcome-unforced">{flag}</p>}
         </div>
-        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-      </Link>
+      </div>
 
       {hasLoggedMatches && member && (
         <CardContent className="flex flex-col gap-3 pb-4">
@@ -197,23 +193,26 @@ export function PlayerCard({
           {(rallyStats?.average_rally_length || showShotChart) && (
             <div className="flex gap-3 border-t pt-3">
               {rallyStats?.average_rally_length && (
-                <div className="flex flex-1 flex-col gap-1">
+                <div className="flex flex-1 flex-col gap-1.5">
                   <div className="flex items-center gap-1.5">
-                    <Ruler className="size-4 shrink-0 text-foreground" aria-hidden="true" />
-                    <p className="text-xs font-semibold text-muted-foreground">Rally length</p>
+                    <Ruler className="size-5 shrink-0 text-foreground" aria-hidden="true" />
+                    <p className="text-base font-bold text-foreground">Rally length</p>
                   </div>
                   <ColumnChart
                     ceiling={rallyCeiling}
                     unit=""
+                    barZoneHeight={RALLY_BAR_HEIGHT}
                     columns={[
                       {
                         value: rallyStats.average_rally_length.won,
                         caption: "Won",
+                        Icon: CircleCheck,
                         pattern: "win",
                       },
                       {
                         value: rallyStats.average_rally_length.lost,
                         caption: "Lost",
+                        Icon: CircleX,
                         pattern: "unforced",
                       },
                     ]}
@@ -223,57 +222,42 @@ export function PlayerCard({
 
               {showShotChart && (
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <p className="text-xs font-semibold text-muted-foreground">Winning shots</p>
-                  {/* Coloured by rank, not by side: a favourite shot is yellow whether
-                      it's yours or the opponent's, and a least-favourite is violet the
-                      same way — so the two favourites read as a pair at a glance, and
-                      the two least-favourites read as the other pair. "You"/"Against"
-                      labels are what tell whose column is whose, since colour no
-                      longer does that job. */}
-                  <div className="flex gap-3">
-                    <div className="flex flex-1 flex-col gap-1">
-                      <p className="text-center text-[0.625rem] text-muted-foreground">You</p>
-                      <ColumnChart
-                        ceiling={100}
-                        unit="%"
-                        columns={[
-                          {
-                            value: youShots ? Math.round(youShots[0].share * 100) : null,
-                            caption: youShots?.[0].shot ?? "",
-                            Icon: youShots ? SHOT_ICON[youShots[0].shot] : undefined,
-                            pattern: "yellow",
-                          },
-                          {
-                            value: youShots ? Math.round(youShots[1].share * 100) : null,
-                            caption: youShots?.[1].shot ?? "",
-                            Icon: youShots ? SHOT_ICON[youShots[1].shot] : undefined,
-                            pattern: "violet",
-                          },
-                        ]}
-                      />
-                    </div>
-                    <div className="flex flex-1 flex-col gap-1">
-                      <p className="text-center text-[0.625rem] text-muted-foreground">Against</p>
-                      <ColumnChart
-                        ceiling={100}
-                        unit="%"
-                        columns={[
-                          {
-                            value: againstShots ? Math.round(againstShots[0].share * 100) : null,
-                            caption: againstShots?.[0].shot ?? "",
-                            Icon: againstShots ? SHOT_ICON[againstShots[0].shot] : undefined,
-                            pattern: "yellow",
-                          },
-                          {
-                            value: againstShots ? Math.round(againstShots[1].share * 100) : null,
-                            caption: againstShots?.[1].shot ?? "",
-                            Icon: againstShots ? SHOT_ICON[againstShots[1].shot] : undefined,
-                            pattern: "violet",
-                          },
-                        ]}
-                      />
-                    </div>
+                  {/* Heading and key share one row — the same height as rally
+                      length's icon+heading row — so both charts' bars start at
+                      the same line rather than the key adding a row of its own
+                      above them. Key above the bars, not below: the two
+                      columns' colour is read the instant the chart is seen.
+                      Just the favourite per side — the profile's own shot
+                      radar (rally-tab.tsx) has the full breakdown; this is a
+                      summary, not a duplicate of it. */}
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-base font-bold text-foreground">Winning shots</p>
+                    <OutcomeLegend
+                      items={[
+                        { pattern: "yellow", label: "Yours" },
+                        { pattern: "violet", label: "Opponent's" },
+                      ]}
+                    />
                   </div>
+                  <ColumnChart
+                    ceiling={100}
+                    unit="%"
+                    barZoneHeight={RALLY_BAR_HEIGHT}
+                    columns={[
+                      {
+                        value: youFavourite ? Math.round(youFavourite.share * 100) : null,
+                        caption: youFavourite?.shot ?? "",
+                        Icon: youFavourite ? SHOT_ICON[youFavourite.shot] : undefined,
+                        pattern: "yellow",
+                      },
+                      {
+                        value: againstFavourite ? Math.round(againstFavourite.share * 100) : null,
+                        caption: againstFavourite?.shot ?? "",
+                        Icon: againstFavourite ? SHOT_ICON[againstFavourite.shot] : undefined,
+                        pattern: "violet",
+                      },
+                    ]}
+                  />
                 </div>
               )}
             </div>

@@ -221,12 +221,23 @@ test("each card offers a link to view stats and a separate link to start a match
   );
 });
 
-test("tapping the header navigates to the player's profile and records last-viewed", async () => {
+// The header itself is not a link — "View stats" is the one way in, so the
+// card doesn't offer a second, chevron-implied one that does the same thing.
+test("the header is not a link, only View stats and Start match are", async () => {
+  stubFetch(() => Response.json([player]));
+  await renderPlayerList();
+
+  await screen.findByText("Amahle Nkosi");
+  expect(screen.getByRole("group", { name: "Amahle Nkosi's card" })).toBeInTheDocument();
+  expect(screen.getAllByRole("link")).toHaveLength(2);
+});
+
+test("View stats navigates to the player's profile and records last-viewed", async () => {
   stubFetch(() => Response.json([player]));
   const user = userEvent.setup({ delay: null });
   await renderPlayerList();
 
-  await user.click(await screen.findByRole("link", { name: /Amahle Nkosi/ }));
+  await user.click(await screen.findByRole("link", { name: "View stats" }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
   expect(getLastViewedPlayerId()).toBe(player.id);

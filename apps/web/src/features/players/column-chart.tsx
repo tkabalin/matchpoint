@@ -3,14 +3,6 @@ import type { LucideIcon } from "lucide-react";
 import { PATTERN_CLASS, type PatternName } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
-// The bar zone's own fixed height in pixels. Every bar is computed as a share of
-// this in pixels directly, rather than a CSS percentage height — a percentage
-// height only resolves against an ancestor with a *definite* height, and this
-// chart's column is sized by its own content (icon, value, caption) with
-// `items-end` on the row so columns don't stretch to fill it; a percentage bar
-// inside that column has nothing definite to be a percentage of, and silently
-// collapses to zero. Pixels sidestep that entirely.
-const BAR_ZONE_HEIGHT = 64;
 // A visible sliver rather than nothing: a real zero and "no bar drew" must not
 // look the same, or a coach reads a zero as missing data.
 const MIN_FILL_HEIGHT = 4;
@@ -39,6 +31,15 @@ export function ColumnChart({
   columns,
   ceiling,
   unit = "",
+  // The bar zone's own fixed height in pixels — a caller-tunable prop, not a
+  // constant, so a chart the mockup wants bigger (rally length) can be bigger
+  // without a second component. Every bar is computed as a share of this in
+  // pixels directly, rather than a CSS percentage height: a percentage height
+  // only resolves against an ancestor with a *definite* height, and this
+  // chart's column is sized by its own content (icon, value, caption), so a
+  // percentage bar inside it has nothing definite to be a percentage of and
+  // silently collapses to zero. Pixels sidestep that entirely.
+  barZoneHeight = 64,
   className,
 }: {
   title?: string;
@@ -47,24 +48,31 @@ export function ColumnChart({
    *  directly comparable, so no column may scale to its own maximum. */
   ceiling: number;
   unit?: string;
+  barZoneHeight?: number;
   className?: string;
 }) {
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {title && <p className="text-xs font-semibold text-muted-foreground">{title}</p>}
-      <div className="flex items-end gap-2">
+      {title && <p className="text-sm font-semibold text-muted-foreground">{title}</p>}
+      {/* items-start, not items-end: a caption that wraps to two lines makes that
+          column taller overall, and bottom-aligning the row would shift its bar
+          zone up relative to a column whose caption stays on one line — the bars
+          would no longer share a baseline. Top-aligning means every bar zone (a
+          fixed height, first in each column) starts at the same Y regardless of
+          what its own caption does below it. */}
+      <div className="flex items-start gap-3">
         {columns.map((column, index) => {
           const heightPx =
             column.value === null
               ? 0
               : ceiling === 0
                 ? 0
-                : Math.max((column.value / ceiling) * BAR_ZONE_HEIGHT, MIN_FILL_HEIGHT);
+                : Math.max((column.value / ceiling) * barZoneHeight, MIN_FILL_HEIGHT);
           return (
-            <div key={index} className="flex flex-1 flex-col items-center gap-1">
+            <div key={index} className="flex flex-1 flex-col items-center gap-1.5">
               <div
                 className="flex w-full items-end justify-center"
-                style={{ height: BAR_ZONE_HEIGHT }}
+                style={{ height: barZoneHeight }}
               >
                 {column.value === null ? (
                   <div
@@ -78,11 +86,11 @@ export function ColumnChart({
                   />
                 )}
               </div>
-              <span className="text-xs font-bold tabular-nums">
+              <span className="text-base font-bold tabular-nums">
                 {column.value === null ? "—" : `${column.value}${unit}`}
               </span>
-              <span className="flex items-center gap-1 text-center text-[0.625rem] text-muted-foreground">
-                {column.Icon && <column.Icon className="size-3 shrink-0" aria-hidden="true" />}
+              <span className="flex items-center gap-1 text-center text-xs text-muted-foreground">
+                {column.Icon && <column.Icon className="size-4 shrink-0" aria-hidden="true" />}
                 {column.caption}
               </span>
             </div>

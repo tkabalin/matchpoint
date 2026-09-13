@@ -329,16 +329,14 @@ test.describe("with the service worker", () => {
     // because the save is throttled and a navigation drops the pending one: the
     // next boot then restores a snapshot the screen it came from is missing from.
     await page.goto("/players");
-    // Scoped to the roster card's own header link, not a bare text match: this
+    // Scoped to the roster card's own header group, not a bare text match: this
     // same match is genuinely still in progress (tapOutMatch never finishes it),
     // so the in-progress banner now legitimately shows this player's name too, on
     // every authenticated screen including this one (#251) — a plain getByText
     // would match both and fail strict mode. The card's header carries its own
-    // "View ... profile" accessible name (player-card.tsx) precisely so it reads
-    // differently from the banner's bare-name link.
-    await expect(
-      page.getByRole("link", { name: `View Offline Cached ${stamp}'s profile` }),
-    ).toBeVisible();
+    // "... card" accessible name (`role="group"`, player-card.tsx) precisely so
+    // it reads differently from the banner's bare-name link.
+    await expect(page.getByRole("group", { name: `Offline Cached ${stamp}'s card` })).toBeVisible();
     await expect
       .poll(() => persistedCacheHolds(page, `Cached ${stamp}`), { timeout: 20_000 })
       .toBe(true);
@@ -353,9 +351,7 @@ test.describe("with the service worker", () => {
     await expect(page.getByText(`vs ${marker}`)).toBeVisible();
     await page.goto("/players");
     // Same scoping reason as the first assertion above.
-    await expect(
-      page.getByRole("link", { name: `View Offline Cached ${stamp}'s profile` }),
-    ).toBeVisible();
+    await expect(page.getByRole("group", { name: `Offline Cached ${stamp}'s card` })).toBeVisible();
   });
 });
 
