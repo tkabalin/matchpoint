@@ -1,5 +1,5 @@
 import type { MatchResult } from "@matchpoint/api-client";
-import { History } from "lucide-react";
+import { Check, History, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,10 @@ import { cn } from "@/lib/utils";
  * Filled and hollow, not two colours: a loss dot never carries the outcome
  * red, since a losing streak isn't itself a bad-score band the way a single
  * ratio can be (`.claude/rules/web-color.md` reserves that palette for point
- * outcomes and hero score bands).
+ * outcomes and hero score bands). A check/cross glyph inside each dot is the
+ * pattern-rule's non-colour channel doing the same job here it does for every
+ * other swatch in the app — filled-vs-hollow already carries it, but the
+ * glyph makes it legible at this size without leaning in.
  */
 export function ResultDots({
   results,
@@ -35,10 +38,18 @@ export function ResultDots({
             role="img"
             aria-label={result === "win" ? "Won" : "Lost"}
             className={cn(
-              "size-2.5 shrink-0 rounded-full",
-              result === "win" ? "bg-outcome-win" : "border border-muted-foreground",
+              "flex size-4 shrink-0 items-center justify-center rounded-full",
+              result === "win"
+                ? "bg-outcome-win text-white"
+                : "border border-muted-foreground text-muted-foreground",
             )}
-          />
+          >
+            {result === "win" ? (
+              <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+            ) : (
+              <X className="size-3" strokeWidth={3} aria-hidden="true" />
+            )}
+          </span>
         ))}
       </div>
     </div>

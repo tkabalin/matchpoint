@@ -4,58 +4,40 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
   ChartColumn,
+  ChevronDown,
+  ChevronUp,
   CircleCheck,
   CircleX,
   type LucideIcon,
   Play,
+  Rainbow,
   Ruler,
   Shield,
   Swords,
+  TrendingUp,
   Zap,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
 
-import { OutcomeStack } from "@/components/outcome-swatch";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { ShotRadar } from "@/components/shot-radar";
 import { ResultDots } from "@/components/result-dots";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { attentionFor } from "@/lib/analytics/attention";
 import { PATTERN_CLASS } from "@/lib/palette";
 import { setLastViewedPlayerId } from "@/lib/last-viewed-player";
+import { useInView } from "@/lib/use-in-view";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-import { ColumnChart } from "./column-chart";
-
-// Rally length and shot frequency both need one HTTP call each, and the roster
-// can hold any number of players — a card only asks for them once it's
-// actually reached, rather than every card firing on mount.
-function useInView<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [inView, setInView] = useState(false);
-
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || inView) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) setInView(true);
-      },
-      { rootMargin: "200px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [inView]);
-
-  return { ref, inView };
-}
-
-// Shared between the rally-length and winning-shots charts so their bars start
-// from the same baseline and their value/caption rows land at the same height.
-const RALLY_BAR_HEIGHT = 96;
+// Same mapping shot-radar.tsx and rally-tab.tsx already use for these four shot
+// types — see .claude/rules/web-icons.md's Shot type rows.
+const SHOT_TYPE_ICON: Record<string, LucideIcon> = {
+  Drive: TrendingUp,
+  Volley: ChevronUp,
+  "Drop shot": ChevronDown,
+  Lob: Rainbow,
+};
 
 /**
  * A returns-into-play percentage from raw counts: `returning.breakdown` pools
@@ -93,6 +75,264 @@ function StatRow({
           <span className="tabular-nums">{value}</span>
         </div>
         {children}
+      </div>
+    </div>
+  );
+}
+
+/** `StatRow`'s label/value pair assumes a wide row, splitting the two apart
+ *  with `justify-between` — in the narrower Winning-shots column that wraps
+ *  label and value independently, so the two rows land out of step with each
+ *  other. This is one left-aligned line instead: label, an arrow pointing at
+ *  the shot itself, then the shot and its share, wrapping as one unit if it
+ *  has to rather than each half wrapping on its own. */
+function ShotStatRow({
+  icon: Icon,
+  label,
+  shot,
+  share,
+  intensity,
+}: {
+  icon: LucideIcon;
+  label: string;
+  shot: string;
+  share: number;
+  intensity: "strong" | "faint";
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Icon className="size-6 shrink-0 text-foreground" aria-hidden="true" />
+      <div className="flex-1">
+        <p className="text-sm font-bold text-foreground">
+          {label} <span aria-hidden="true">→</span> {shot} ({Math.round(share * 100)}%)
+        </p>
+        <ShotStreak share={share} intensity={intensity} />
+      </div>
+    </div>
+  );
+}
+
+/** A streak instead of a fill bar, at Danny's request: a shot a player leans on
+ *  is drawn as a thick, glowing sweep with a bright leading edge, the shot they
+ *  barely play as a thin, faint, dotted trace — the same "comet tail" for both,
+ *  just at opposite ends of its own weight and length. One neutral chart color
+ *  throughout, since this is a single-player figure, not a category legend. */
+function ShotStreak({ share, intensity }: { share: number; intensity: "strong" | "faint" }) {
+  const widthPercent = Math.max(share * 100, 10);
+  if (intensity === "faint") {
+    return (
+      <div className="relative mt-1.5 h-3 w-full">
+        {/* A border this thin renders as barely-there in most browsers, so the
+            dotted trace is a repeating background image instead — a real dash
+            pattern rather than a 1px border style that can vanish entirely. */}
+        <div
+          className="absolute top-1/2 left-0 h-[3px] -translate-y-1/2 rounded-full opacity-70"
+          style={{
+            width: `${widthPercent}%`,
+            backgroundImage:
+              "repeating-linear-gradient(to right, var(--color-chart-3) 0 3px, transparent 3px 7px)",
+          }}
+          aria-hidden="true"
+        />
+        <div
+          className="absolute top-1/2 size-2.5 -translate-y-1/2 rounded-full border-2 opacity-70"
+          style={{
+            left: `calc(${widthPercent}% - 5px)`,
+            borderColor: "var(--color-chart-3)",
+            background: "var(--background)",
+          }}
+          aria-hidden="true"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="relative mt-1.5 h-3 w-full">
+      <div
+        className="absolute inset-y-0 left-0 rounded-full"
+        style={{
+          width: `${widthPercent}%`,
+          background: "linear-gradient(to right, transparent, var(--color-chart-3))",
+        }}
+        aria-hidden="true"
+      />
+      {/* The comet's bright head: a lighter core so it reads as a highlight
+          rather than just the tail's own end, plus a background-colored halo
+          ring so it separates from the tail behind it (the same "render the
+          mark twice" halo pass web-color.md prescribes for a mark that has to
+          stand out from a line of its own color). */}
+      <div
+        className="absolute top-1/2 size-4 -translate-y-1/2 rounded-full"
+        style={{
+          left: `calc(${widthPercent}% - 8px)`,
+          background: "radial-gradient(circle at 35% 35%, white, var(--color-chart-3) 70%)",
+          boxShadow: "0 0 0 2px var(--background), 0 0 10px 2px var(--color-chart-3)",
+        }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
+
+const COURT_WIDTH = 200;
+const COURT_HEIGHT = 64;
+const COURT_MARGIN = 6;
+const NET_X = COURT_WIDTH / 2;
+const ROW_LOST_Y = 24;
+const ROW_WON_Y = 44;
+const MAX_LINE_LENGTH = NET_X - COURT_MARGIN - 14;
+const MIN_LINE_LENGTH = 10;
+
+/** A line length in svg units, both sides sharing one ceiling: a real zero
+ *  still gets a sliver so it reads as measured-and-zero rather than no data
+ *  at all; `null` (no side to show) gets none. */
+function lineLength(value: number | null, ceiling: number): number {
+  if (value === null || ceiling === 0) return 0;
+  if (value === 0) return 4;
+  return Math.max((value / ceiling) * MAX_LINE_LENGTH, MIN_LINE_LENGTH);
+}
+
+/** Rally length on a top-view court, at Danny's request: two arcs side by
+ *  side made close values hard to tell apart (a small peak-height difference
+ *  is subtle to eyeball), so this is two straight lines instead, each in its
+ *  own stacked row but both anchored at the same net position — sharing one
+ *  reference point turns "which is longer" into a direct read of where each
+ *  line ends, rather than comparing two curves. Lost grows left toward its
+ *  baseline, Won grows right toward its own. */
+function RallyLengthCourt({
+  won,
+  lost,
+  ceiling,
+}: {
+  won: number | null;
+  lost: number | null;
+  ceiling: number;
+}) {
+  const lostLength = lineLength(lost, ceiling);
+  const wonLength = lineLength(won, ceiling);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <svg
+        viewBox={`0 0 ${COURT_WIDTH} ${COURT_HEIGHT}`}
+        className="h-14 w-full"
+        aria-hidden="true"
+      >
+        {/* The court: a subtle, dark background, not a data mark — just
+            enough for the two lines to read as rallies on a court, not a
+            chart with axes. */}
+        <rect
+          x={COURT_MARGIN}
+          y={COURT_MARGIN}
+          width={COURT_WIDTH - COURT_MARGIN * 2}
+          height={COURT_HEIGHT - COURT_MARGIN * 2}
+          rx={4}
+          className="fill-court/15 stroke-muted-foreground/30"
+          strokeWidth={1.5}
+        />
+        <line
+          x1={NET_X}
+          y1={COURT_MARGIN}
+          x2={NET_X}
+          y2={COURT_HEIGHT - COURT_MARGIN}
+          className="stroke-muted-foreground/40"
+          strokeWidth={2}
+        />
+        {/* .claude/rules/web-color.md: two lines shown together must differ in
+            both thickness and dash style, never color alone — Lost is
+            thinner and dashed, Won is thicker and solid. */}
+        {lost !== null && (
+          <line
+            x1={NET_X}
+            y1={ROW_LOST_Y}
+            x2={NET_X - lostLength}
+            y2={ROW_LOST_Y}
+            stroke="var(--color-outcome-unforced)"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeDasharray="6 4"
+            className="motion-safe:animate-neon-pulse"
+            style={{ filter: "drop-shadow(0 0 3px var(--color-outcome-unforced))" }}
+          />
+        )}
+        {won !== null && (
+          <line
+            x1={NET_X}
+            y1={ROW_WON_Y}
+            x2={NET_X + wonLength}
+            y2={ROW_WON_Y}
+            stroke="var(--color-outcome-win)"
+            strokeWidth={4}
+            strokeLinecap="round"
+            className="motion-safe:animate-neon-pulse"
+            style={{ filter: "drop-shadow(0 0 3px var(--color-outcome-win))" }}
+          />
+        )}
+      </svg>
+      <div className="flex justify-between text-sm font-bold text-foreground">
+        <span className="flex items-center gap-1.5">
+          <CircleX className="size-5 shrink-0" aria-hidden="true" />
+          Lost {lost === null ? "—" : lost}
+        </span>
+        <span className="flex items-center gap-1.5">
+          <CircleCheck className="size-5 shrink-0" aria-hidden="true" />
+          Won {won === null ? "—" : won}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Forced:unforced as a levelling tool rather than a proportion bar: a faint
+ *  forced→unforced gradient track and a needle sitting at the unforced share
+ *  of the two counts — centred when balanced, drifting into the unforced
+ *  (vermillion) zone as errors mount, into the forced (orange) zone as forced
+ *  errors dominate. Position is the accessible channel here, same as the
+ *  tug-of-war bar before it: which side of centre the needle sits on reads
+ *  without needing to tell the two hues apart. */
+function ForcedUnforcedBalance({ forced, unforced }: { forced: number; unforced: number }) {
+  const total = forced + unforced;
+  const unforcedShare = total === 0 ? 0.5 : unforced / total;
+  const needlePercent = unforcedShare * 100;
+  const leaning = unforcedShare > 0.5 ? "unforced" : unforcedShare < 0.5 ? "forced" : null;
+  return (
+    <div className="relative mt-2 h-3 w-full">
+      <div
+        className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full opacity-30"
+        style={{
+          background:
+            "linear-gradient(to right, var(--color-outcome-forced), var(--color-outcome-unforced))",
+        }}
+        aria-hidden="true"
+      />
+      <div
+        className="absolute top-1/2 left-1/2 h-3 w-px -translate-x-1/2 -translate-y-1/2 bg-muted-foreground/40"
+        aria-hidden="true"
+      />
+      <div
+        className="absolute top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-px"
+        style={{ left: `${needlePercent}%` }}
+        aria-hidden="true"
+      >
+        <div
+          className={cn(
+            "size-2.5 rounded-full",
+            leaning === "unforced"
+              ? "bg-outcome-unforced"
+              : leaning === "forced"
+                ? "bg-outcome-forced"
+                : "bg-foreground",
+          )}
+        />
+        <div
+          className={cn(
+            "h-2.5 w-0.5",
+            leaning === "unforced"
+              ? "bg-outcome-unforced"
+              : leaning === "forced"
+                ? "bg-outcome-forced"
+                : "bg-foreground",
+          )}
+        />
       </div>
     </div>
   );
@@ -139,18 +379,22 @@ export function PlayerCard({
       )
     : 1;
 
-  // Drive excluded here, not just visually de-emphasised: it dominates nearly
-  // every player's mix, and a radar plotting it alongside the other three
-  // squashes them toward the centre regardless of the scale chosen. The stat
-  // line names the runner-up explicitly, since the radar itself no longer can.
-  const nonDriveShotFrequency = (rallyStats?.shot_frequency.you ?? []).filter(
-    (point) => point.shot !== "Drive",
+  // The radar this replaced squashed Volley/Lob/Drop shot toward the centre no
+  // matter how it was scaled, because Drive dominates nearly every player's
+  // mix. Naming the two extremes plainly says what the radar was straining to
+  // show — Drive is honestly still allowed to be "most used" here, since that's
+  // the real finding, not something to hide a second time.
+  const shotFrequency = rallyStats?.shot_frequency.you ?? [];
+  const hasShotFrequency = shotFrequency.length > 0;
+  const mostUsedShot = hasShotFrequency
+    ? shotFrequency.reduce((best, point) => (point.share > best.share ? point : best))
+    : null;
+  const leastUsedShot = hasShotFrequency
+    ? shotFrequency.reduce((worst, point) => (point.share < worst.share ? point : worst))
+    : null;
+  const hasShotContrast = Boolean(
+    mostUsedShot && leastUsedShot && mostUsedShot.shot !== leastUsedShot.shot,
   );
-  const hasShotFrequency = nonDriveShotFrequency.length > 0;
-  const topNonDriveShot =
-    nonDriveShotFrequency.length > 0
-      ? nonDriveShotFrequency.reduce((best, point) => (point.share > best.share ? point : best))
-      : null;
 
   return (
     <Card ref={ref} className="overflow-hidden py-0">
@@ -213,13 +457,7 @@ export function PlayerCard({
                 label="Your forced : unforced"
                 value={`${forcedCount} | ${unforcedCount}`}
               >
-                <OutcomeStack
-                  className="mt-1"
-                  segments={[
-                    { pattern: "forced", weight: forcedCount!, label: "Forced" },
-                    { pattern: "unforced", weight: unforcedCount!, label: "Unforced" },
-                  ]}
-                />
+                <ForcedUnforcedBalance forced={forcedCount!} unforced={unforcedCount!} />
               </StatRow>
             )}
           </div>
@@ -227,71 +465,58 @@ export function PlayerCard({
           {(rallyStats?.average_rally_length || hasShotFrequency) && (
             <div className="flex gap-3 border-t-2 border-muted-foreground/40 pt-3">
               {rallyStats?.average_rally_length && (
-                <div className="flex w-40 shrink-0 flex-col gap-1.5">
+                <div className="flex flex-1 flex-col gap-1.5">
                   <div className="flex h-7 items-center gap-1.5">
                     <Ruler className="size-5 shrink-0 text-foreground" aria-hidden="true" />
                     <p className="text-base font-bold text-foreground">Rally length</p>
                   </div>
                   {/* The heading stays pinned at the top, level with Winning
                       shots' own heading — it's the chart that moves, centring
-                      in whatever space is left once the taller radar sets the
+                      in whatever space is left once the taller side sets the
                       row's height, not the heading chasing it down. */}
-                  <div className="flex flex-1 items-center">
-                    <ColumnChart
+                  <div className="flex flex-1 flex-col justify-center">
+                    <RallyLengthCourt
+                      won={rallyStats.average_rally_length.won}
+                      lost={rallyStats.average_rally_length.lost}
                       ceiling={rallyCeiling}
-                      unit=""
-                      barZoneHeight={RALLY_BAR_HEIGHT}
-                      columns={[
-                        {
-                          value: rallyStats.average_rally_length.won,
-                          caption: "Won",
-                          Icon: CircleCheck,
-                          pattern: "win",
-                        },
-                        {
-                          value: rallyStats.average_rally_length.lost,
-                          caption: "Lost",
-                          Icon: CircleX,
-                          pattern: "unforced",
-                        },
-                      ]}
                     />
                   </div>
                 </div>
               )}
 
-              {hasShotFrequency && (
-                <div className="flex flex-1 flex-col gap-1.5">
+              {hasShotFrequency && mostUsedShot && (
+                <div
+                  className={cn(
+                    "flex flex-1 flex-col gap-1.5",
+                    // Only a divider when there's actually a Rally length column
+                    // on the other side of it — an orphaned border reads as a
+                    // stray line once this is the row's only content.
+                    rallyStats?.average_rally_length &&
+                      "border-l-2 border-muted-foreground/40 pl-3",
+                  )}
+                >
                   <div className="flex h-7 items-center gap-1.5">
                     <Zap className="size-5 shrink-0 text-foreground" aria-hidden="true" />
                     <p className="text-base font-bold text-foreground">Winning shots</p>
                   </div>
-                  {/* Drive dominates nearly every player's mix (regularly 60%+ of
-                      winners), which squashed the other three axes toward the
-                      radar's centre where their real differences from each other
-                      stopped being visible. Dropping it from the plot — rather
-                      than capping the scale, which still fought the same fixed
-                      chart geometry — gives Volley/Drop shot/Lob the whole radius
-                      to spread across, and the stat line below states plainly
-                      what the radar can no longer show on its own. One series
-                      only ("yours"), the same single-neutral-colour convention
-                      rally-tab.tsx uses for its own single-player view. */}
-                  <ShotRadar
-                    className="mx-auto aspect-square w-full max-w-56"
-                    series={[
-                      {
-                        name: "Share of point-enders",
-                        color: "var(--color-chart-3)",
-                        points: nonDriveShotFrequency,
-                      },
-                    ]}
-                  />
-                  {topNonDriveShot && (
-                    <p className="text-center text-sm font-bold text-foreground">
-                      Best beyond Drive: {topNonDriveShot.shot} (
-                      {Math.round(topNonDriveShot.share * 100)}%)
-                    </p>
-                  )}
+                  <div className="flex flex-1 flex-col justify-center gap-3">
+                    <ShotStatRow
+                      icon={SHOT_TYPE_ICON[mostUsedShot.shot] ?? TrendingUp}
+                      label="Most used"
+                      shot={mostUsedShot.shot}
+                      share={mostUsedShot.share}
+                      intensity="strong"
+                    />
+                    {hasShotContrast && leastUsedShot && (
+                      <ShotStatRow
+                        icon={SHOT_TYPE_ICON[leastUsedShot.shot] ?? TrendingUp}
+                        label="Least used"
+                        shot={leastUsedShot.shot}
+                        share={leastUsedShot.share}
+                        intensity="faint"
+                      />
+                    )}
+                  </div>
                 </div>
               )}
             </div>

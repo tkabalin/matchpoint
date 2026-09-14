@@ -57,6 +57,25 @@
       transform: scale(1);
     }
   }
+
+  /* A neon mark's glow, breathing rather than flashing — always applied
+     through `motion-safe:`, so a reduced-motion viewer still gets the static
+     glow, just none of the pulse. Opacity only, never `filter`: a caller's
+     own `drop-shadow`/`box-shadow` glow is a static `filter`/`box-shadow`
+     value, and a running animation replaces the property it targets rather
+     than combining with it — animating `filter` here would blank out that
+     glow every cycle instead of pulsing alongside it. */
+  --animate-neon-pulse: neon-pulse 2.2s ease-in-out infinite;
+
+  @keyframes neon-pulse {
+    0%,
+    100% {
+      opacity: 0.85;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
 }
 
 @theme inline {

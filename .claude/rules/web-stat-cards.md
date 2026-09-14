@@ -39,10 +39,15 @@ visual has to match the kind of quantity it is:
 - A **share of a fixed total** (a percentage, 0–100) gets a single fill bar against that ceiling.
 - A **ratio or two-way split** (forced vs. unforced, won vs. lost) gets a two-segment proportion bar
   (`OutcomeStack`), not a single fill — a single bar can't show a balance between two counts.
-- **Several comparable quantities** (rally length won vs. lost, a shot-type breakdown) read better
-  as **vertical columns on one shared ceiling** than as stacked horizontal rows — a horizontal row
-  turns "which is bigger" into a ruler measurement; columns side by side make it a single glance.
-  See `features/players/column-chart.tsx`.
+- **Two comparable quantities that pull in opposite directions** (rally length won vs. lost) read as
+  a **shared centre line with each side's track growing outward from it**, length still scaled
+  against one ceiling — the diverging shape itself carries the "pulling against each other" meaning,
+  which a plain side-by-side bar or column pair doesn't. See `TugOfWarBaseline` in
+  `features/players/player-card.tsx`.
+- **A ranked handful of individual values** (a shot-type breakdown's most/least-used entries)
+  doesn't need a shared-axis chart at all when only the extremes matter — naming them plainly, each
+  with its own magnitude visual scaled to its own share, states the finding instead of asking the
+  coach to read it off one. See `ShotStreak` in the same file.
 - Colour still follows `.claude/rules/web-color.md` on top of this: a true point outcome or good/bad
   score band gets the outcome palette (green/orange/vermillion); anything else gets the safe
   categorical set (yellow/indigo/violet), never blue where nav chrome is visible on the same screen.

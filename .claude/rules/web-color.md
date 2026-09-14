@@ -208,3 +208,13 @@ color at a couple of pixels, no second element needed. This is why violet (`#D95
 against the dark background) can still read as "hard to see" as a 2px line despite passing the raw
 contrast check on its own — thin strokes lose effective contrast that a filled swatch of the same
 color doesn't, and the halo is what recovers it.
+
+**No two lines drawn together may share both stroke width and stroke style.** Whenever a visual
+shows two or more line strokes at once (two arcs, two trend lines, two chart series drawn as lines),
+each one needs a genuinely different combination of thickness and dash pattern (solid, dashed,
+dotted — not just a different color), the same non-color-channel requirement the pattern rule
+already applies to filled swatches, extended to strokes specifically. Reusing the same thickness and
+the same solid/dashed/dotted style for two lines and separating them by hue alone fails a colorblind
+viewer exactly the way an unpatterned swatch does. Example: `player-card.tsx`'s rally-length
+flight-path arcs — Won is solid and thicker, Lost is dashed and thinner, on top of their
+win/unforced colors, never color alone.
