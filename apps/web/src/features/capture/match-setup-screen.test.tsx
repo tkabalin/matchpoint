@@ -120,23 +120,41 @@ test("what setup was left holding wins over the saved defaults", () => {
   expect(screen.getByLabelText("Event")).toHaveValue("Regional Open");
 });
 
-test("offers previous opponents as suggestions on the Opponent field", () => {
-  renderSetup({ previousOpponents: ["Okoye", "Zulu"] });
+test("offers previous opponents as suggestions on the Opponent field", async () => {
+  const { user } = renderSetup({ previousOpponents: ["Okoye", "Zulu"] });
 
-  const opponentInput = screen.getByLabelText("Opponent");
-  expect(opponentInput).toHaveAttribute("list", "previous-opponents");
+  await user.click(screen.getByLabelText("Opponent"));
 
-  const options = document.querySelectorAll("datalist#previous-opponents option");
-  expect(Array.from(options).map((option) => (option as HTMLOptionElement).value)).toEqual([
+  expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
     "Okoye",
     "Zulu",
   ]);
 });
 
-test("no previous opponents is an empty datalist, not a missing one", () => {
-  renderSetup();
+test("typing narrows the suggestions to matching opponents", async () => {
+  const { user } = renderSetup({ previousOpponents: ["Okoye", "Zulu"] });
 
-  expect(document.querySelector("datalist#previous-opponents")).toBeEmptyDOMElement();
+  await user.type(screen.getByLabelText("Opponent"), "zu");
+
+  expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["Zulu"]);
+});
+
+test("selecting a suggestion fills the field and closes the list", async () => {
+  const { user } = renderSetup({ previousOpponents: ["Okoye", "Zulu"] });
+
+  await user.click(screen.getByLabelText("Opponent"));
+  await user.click(screen.getByRole("option", { name: "Zulu" }));
+
+  expect(screen.getByLabelText("Opponent")).toHaveValue("Zulu");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
+test("no previous opponents means there's nothing to open", async () => {
+  const { user } = renderSetup();
+
+  await user.click(screen.getByLabelText("Opponent"));
+
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
 
 test("back steps out of setup", async () => {

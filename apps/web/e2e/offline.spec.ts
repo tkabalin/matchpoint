@@ -150,8 +150,8 @@ type Tap = "ace" | "winner only";
  * and its row was queued; three points is therefore the most a spec taps out.
  */
 async function tapOutMatch(page: Page, opponentName: string, taps: readonly Tap[]): Promise<void> {
-  // A native <datalist>-backed input is exposed as role "combobox", not "textbox" —
-  // see match-setup-screen.tsx's own comment on why it's a datalist.
+  // Opponent is a hand-rolled combobox (see match-setup-screen.tsx), given an explicit
+  // role="combobox" rather than "textbox".
   await page.getByRole("combobox", { name: "Opponent" }).fill(opponentName);
   await page.getByRole("button", { name: "Start match" }).click();
   await expect(page.getByRole("heading", { name: "1st Serve" })).toBeVisible();

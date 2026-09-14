@@ -8,8 +8,8 @@
  * match is for is settled before this screen, so it names them rather than asking.
  */
 
-import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { MATCH_EVENT_MAX } from "@/lib/match-form";
 import { SCORING_SYSTEM_LABEL, SURFACE_LABEL } from "@/lib/tennis-labels";
+import { cn } from "@/lib/utils";
 
 import { SCORING_SYSTEMS, SURFACE_TYPES } from "./match";
 import type { ScoringSystem, SurfaceType } from "./match";
@@ -63,12 +64,14 @@ export function MatchSetupScreen({
   // Opponent names this player has faced before, most-met first. Handed in rather
   // than fetched here — this slice never touches the network (see match-setup-screen's
   // own module doc comment and .claude/rules/web-capture.md). Empty when there's
-  // nothing to suggest, offline or otherwise — the datalist below just has no options.
+  // nothing to suggest, offline or otherwise — the suggestion list below just has no options.
   previousOpponents?: string[];
   onBack: () => void;
   onStart: (config: MatchSetupConfig) => void;
 }) {
   const [opponentName, setOpponentName] = useState(initial?.opponentName ?? "");
+  const [opponentListOpen, setOpponentListOpen] = useState(false);
+  const opponentFieldRef = useRef<HTMLDivElement>(null);
   const [event, setEvent] = useState(initial?.event ?? "");
   const [scoringSystem, setScoringSystem] = useState<ScoringSystem>(
     initial?.scoringSystem ?? defaultScoringSystem,
@@ -81,6 +84,27 @@ export function MatchSetupScreen({
   const [startedAt] = useState(() =>
     new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
   );
+
+  const matchingOpponents = useMemo(() => {
+    const query = opponentName.trim().toLowerCase();
+    if (query.length === 0) return previousOpponents;
+    return previousOpponents.filter((name) => name.toLowerCase().includes(query));
+  }, [opponentName, previousOpponents]);
+
+  // Closes on any tap outside the field — the input's own onBlur can't be trusted for
+  // this, since tapping an option blurs the input before that option's click lands.
+  useEffect(() => {
+    if (!opponentListOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!opponentFieldRef.current?.contains(event.target as Node)) {
+        setOpponentListOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [opponentListOpen]);
 
   const ready = opponentName.trim().length > 0;
 
@@ -103,24 +127,70 @@ export function MatchSetupScreen({
           <FieldLabel htmlFor="opponent" className="text-sm text-muted-foreground">
             Opponent
           </FieldLabel>
-          <Input
-            id="opponent"
-            value={opponentName}
-            placeholder="Name"
-            list="previous-opponents"
-            onChange={(event) => {
-              setOpponentName(event.target.value);
-            }}
-            className="h-11 rounded-lg text-sm"
-          />
-          {/* Native datalist, not a custom combobox: the browser handles the dropdown
-              and typing a name with no match still works — a first-time opponent isn't
-              blocked by not being in the list. */}
-          <datalist id="previous-opponents">
-            {previousOpponents.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
+          {/* Hand-rolled, not a native <datalist>: iOS Safari's datalist dropdown never
+              renders at all (see project memory capture-opponent-datalist-ios), so a
+              suggestion list has to be drawn ourselves to work on the platform this app
+              actually targets. Typing a name with no match still works — a first-time
+              opponent isn't blocked by not being in the list. */}
+          <div ref={opponentFieldRef} className="relative">
+            <Input
+              id="opponent"
+              value={opponentName}
+              placeholder="Name"
+              autoComplete="off"
+              role="combobox"
+              aria-expanded={opponentListOpen && matchingOpponents.length > 0}
+              aria-controls="previous-opponents-list"
+              onChange={(event) => {
+                setOpponentName(event.target.value);
+                setOpponentListOpen(true);
+              }}
+              onFocus={() => {
+                setOpponentListOpen(true);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setOpponentListOpen(false);
+                }
+              }}
+              className="h-11 rounded-lg pr-9 text-sm"
+            />
+            <ChevronDown
+              aria-hidden="true"
+              className={cn(
+                "pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted-foreground transition-transform",
+                opponentListOpen && "rotate-180",
+              )}
+            />
+            {opponentListOpen && matchingOpponents.length > 0 && (
+              <div
+                id="previous-opponents-list"
+                role="listbox"
+                className="absolute top-full right-0 left-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-sm bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+              >
+                {matchingOpponents.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    role="option"
+                    aria-selected={name === opponentName}
+                    onPointerDown={(event) => {
+                      // Prevents the input's blur (which would close this list before
+                      // the click below fires) when a touch/click starts on an option.
+                      event.preventDefault();
+                    }}
+                    onClick={() => {
+                      setOpponentName(name);
+                      setOpponentListOpen(false);
+                    }}
+                    className="block w-full px-3 py-2 text-left text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </Field>
 
         <Field>

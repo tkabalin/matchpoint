@@ -261,8 +261,9 @@ test("offers this player's previous opponents as suggestions", async () => {
   renderNewMatch();
 
   await screen.findByRole("heading", { name: "Match" });
+  await userEvent.setup().click(screen.getByLabelText("Opponent"));
 
-  expect(document.querySelector("datalist#previous-opponents option")).toHaveValue("Okoye");
+  expect(screen.getByRole("option", { name: "Okoye" })).toBeInTheDocument();
 });
 
 // The court is where the connection isn't — the suggestions list has to be able to
@@ -272,7 +273,9 @@ test("starts a match with no previous-opponent suggestions available", async () 
   renderNewMatch();
 
   expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
-  expect(document.querySelector("datalist#previous-opponents")).toBeEmptyDOMElement();
+  await userEvent.setup().click(screen.getByLabelText("Opponent"));
+
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 });
 
 // Reachable by typing a url, or from a stale link after the player was deleted.
