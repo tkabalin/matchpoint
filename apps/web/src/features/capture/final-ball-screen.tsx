@@ -107,22 +107,22 @@ export function FinalBallScreen({
           variant="ghost"
           disabled={pending}
           onClick={() => {
+            setAskingWinner(true);
+          }}
+          className="px-2 text-sm font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
             onAction({ type: "TAP_LET" });
           }}
           className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"
         >
           <RotateCcw className="size-5" />
           Let
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={pending}
-          onClick={() => {
-            setAskingWinner(true);
-          }}
-          className="px-2 text-sm font-semibold text-muted-foreground"
-        >
-          Didn&apos;t see
         </Button>
       </div>
 
