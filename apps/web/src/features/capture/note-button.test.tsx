@@ -227,6 +227,46 @@ test("stopping a recording adds the transcript as a note", async () => {
   );
 });
 
+test("the field fills in live as speech results arrive while recording", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  render(<NoteButton onAddNote={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  expect(screen.getByPlaceholderText("What happened?")).toHaveValue("");
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "serving into the body" }]] });
+  });
+
+  expect(screen.getByPlaceholderText("What happened?")).toHaveValue("serving into the body");
+});
+
+test("typing into the field mid-recording keeps the coach's edit, not later speech", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  const onAddNote = vi.fn();
+  render(<NoteButton onAddNote={onAddNote} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "serving into the body" }]] });
+  });
+  const field = screen.getByPlaceholderText("What happened?");
+  await user.clear(field);
+  await user.type(field, "actually the forehand");
+  act(() => {
+    // More speech arrives after the coach has started correcting the field — it must
+    // not clobber a correction they've already made.
+    instances[0]?.onresult?.({ results: [[{ transcript: "serving into the body, twice" }]] });
+  });
+
+  expect(field).toHaveValue("actually the forehand");
+
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(onAddNote).toHaveBeenCalledWith("actually the forehand");
+});
+
 test("a note goes to the caller's latest handler, not the one recording started with", async () => {
   const instances = installFakeSpeechRecognition();
   const user = userEvent.setup({ delay: null });

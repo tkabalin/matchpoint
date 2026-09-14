@@ -2,20 +2,30 @@
  * The header's note button — a round speech-bubble icon that appends a coach's note
  * to whichever point is currently being captured (see capture-flow.ts's ADD_NOTE).
  *
- * Voice-first where the browser can transcribe live: tap to start, the button turns
- * from blue to the recording color while listening, tap again to stop and the
- * transcript is added as the note. Press-and-hold instead opens a bottom sheet with a
- * text field, matching this screen's other quick-input sheets (unusual-point-sheet.tsx)
- * and the tap/hold split the skip button next to it already has: a coach on a noisy
- * court, or within earshot of the opponent, should not have to talk to their phone.
+ * Voice-first where the browser can transcribe live: tap to start, and a panel drops
+ * down from the header with a text field that fills in as the coach speaks. Tapping the
+ * same button again stops listening and immediately adds whatever the field holds as
+ * the note — the field stays plain-text editable throughout, so a coach can correct a
+ * mis-heard word before stopping and have their edit, not the raw transcript, become
+ * the note. That panel is a plain absolutely-positioned block anchored under
+ * `MatchHeader` (its `relative` root), not the shared `Sheet`: a modal sheet disables
+ * pointer interaction with everything outside it, which would make the very button that
+ * has to stop the recording untappable while it's up.
  *
- * That sheet has three ways in, because typing is the route that needs no microphone,
- * no permission and no network: the hold; the visually hidden button beside this one,
+ * Press-and-hold instead opens the shared `Sheet` straight into typing, no mic
+ * involved — from the top of the screen, not the bottom, where a coach's keyboard would
+ * cover the field — matching the tap/hold split the skip button next to it already has:
+ * a coach on a noisy court, or within earshot of the opponent, should not have to talk
+ * to their phone. That sheet has no reachability problem of its own: nothing outside it
+ * needs a tap while it's open, since Cancel and Add note are both inside it.
+ *
+ * That typed-first route exists for three reasons, since typing needs no microphone, no
+ * permission and no network: the hold; the visually hidden button beside this one,
  * since a keyboard or switch activation dispatches a click with no pointerdown and so
  * can never hold; and a plain tap where dictating is impossible at all, meaning no
  * SpeechRecognition (no Firefox, and some cloud-backed Chromium builds fail outright
  * with no connectivity, while capture has to work offline mid-match) or a recognition
- * error, transcript so far pre-filled.
+ * error, transcript so far pre-filled and left for the coach to add or cancel by hand.
  */
 
 import { MessageCircle } from "lucide-react";
@@ -52,7 +62,7 @@ interface NoteSession {
   failed: boolean;
   ended: boolean;
   stopping: boolean;
-  /** Adds what was heard as the note. Every caller clears the ref first, so it runs once. */
+  /** Adds what's in the field as the note. Every caller clears the ref first, so it runs once. */
   commit: () => void;
   /** The coach's stop, and unmount: commits an already-ended session, stops a live one. */
   finish: () => void;
@@ -71,6 +81,13 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
   const [sheetOpen, setSheetOpen] = useState(false);
   const [draftText, setDraftText] = useState("");
   const sessionRef = useRef<NoteSession | null>(null);
+  // Mirrors draftText for commit() to read synchronously: a ref update lands before the
+  // next render, where the state alone might not yet reflect the field's latest value.
+  const draftTextRef = useRef("");
+  // Set the moment the coach types into the field, so a live transcript stops
+  // overwriting a correction they've already made — their edit wins until the next
+  // recording session resets it.
+  const editedRef = useRef(false);
   const { holdHandlers, consumeHold } = usePressAndHold();
   // The caller rebuilds this prop every render over that render's own capture state, so
   // committing through the one captured when recording started would roll the flow back
@@ -89,8 +106,14 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
     };
   }, []);
 
+  function setDraft(text: string) {
+    draftTextRef.current = text;
+    setDraftText(text);
+  }
+
   function openTextEntry() {
-    setDraftText("");
+    editedRef.current = false;
+    setDraft("");
     setSheetOpen(true);
   }
 
@@ -103,7 +126,9 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
     try {
       const recognition = new Ctor();
       recognition.continuous = true;
-      recognition.interimResults = false;
+      // Live partial results, not just the final one, are what let the sheet's field
+      // fill in as the coach talks instead of sitting blank until they stop.
+      recognition.interimResults = true;
       const session: NoteSession = {
         recognition,
         transcript: "",
@@ -111,10 +136,10 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
         ended: false,
         stopping: false,
         commit: () => {
-          // An errored session's transcript is already sitting in the sheet, and
-          // appendNote joins with a newline: adding it here too is one note, twice.
+          // An errored session leaves its transcript sitting in the sheet for the
+          // coach to add or cancel by hand; adding it here too is one note, twice.
           if (session.failed) return;
-          const text = session.transcript.trim();
+          const text = draftTextRef.current.trim();
           if (text.length > 0) onAddNoteRef.current(text);
         },
         finish: () => {
@@ -139,16 +164,21 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
           .map((result) => result[0]?.transcript ?? "")
           .join(" ")
           .slice(0, NOTE_MAX_LENGTH);
+        // A superseded session's late result must not overwrite the live one's field,
+        // and a coach who's already started correcting the field keeps their own words.
+        if (sessionRef.current === session && !editedRef.current) {
+          setDraft(session.transcript);
+        }
       };
       recognition.onerror = () => {
         // Denied mic, no speech heard, or (some Chromium builds) no connectivity to
-        // reach the recognition service — fall back to typing instead of a dead end.
-        // Guarded, or a superseded session's late `aborted` opens the sheet over a
-        // live mic, pre-filled with a note the coach already added.
+        // reach the recognition service — the live panel's field already holds
+        // whatever was heard, so hand it to the modal sheet for the coach to add or
+        // cancel by hand instead of leaving a dead end. Guarded, or a superseded
+        // session's late `aborted` would open the sheet over a still-live recording.
         if (sessionRef.current !== session) return;
         session.failed = true;
         setRecording(false);
-        setDraftText(session.transcript.trim());
         setSheetOpen(true);
       };
       recognition.onend = () => {
@@ -167,6 +197,8 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
         session.ended = true;
       };
       sessionRef.current = session;
+      editedRef.current = false;
+      setDraft("");
       setRecording(true);
       recognition.start();
     } catch {
@@ -220,6 +252,28 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
         <MessageCircle className="size-5" />
       </Button>
 
+      {recording && (
+        // Anchored under MatchHeader's own `relative` root, not the viewport — it
+        // lands at the top of the screen wherever the header itself sits, with no need
+        // to know about the persistent app header above it or fight its stacking.
+        // Deliberately not the shared Sheet: see this file's top comment for why a
+        // modal here would strand the coach's only way to stop the recording.
+        <div className="absolute inset-x-0 top-full z-30 mt-1 rounded-sm border border-border bg-popover p-3 text-popover-foreground shadow-xl">
+          <p className="mb-2 text-sm font-medium text-muted-foreground">Listening…</p>
+          <Textarea
+            autoFocus
+            value={draftText}
+            onChange={(event) => {
+              editedRef.current = true;
+              setDraft(event.target.value);
+            }}
+            placeholder="What happened?"
+            maxLength={NOTE_MAX_LENGTH}
+            className="min-h-20"
+          />
+        </div>
+      )}
+
       {/* A keyboard or switch activation dispatches a click with no pointerdown, so it
           can never hold: without this there is no route to the typed sheet for anyone
           who can't perform the gesture. Out of the header's flow until it has focus. */}
@@ -237,7 +291,10 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
           setSheetOpen(open);
         }}
       >
-        <SheetContent side="bottom" className="mx-auto max-w-md gap-4 rounded-t-sm p-5">
+        {/* Top, not bottom: a coach's on-screen keyboard covers the bottom of the
+            screen, and this field needs to stay visible and editable while it's up,
+            whether they're typing from the start or correcting a live transcript. */}
+        <SheetContent side="top" className="mx-auto max-w-md gap-4 rounded-b-sm p-5">
           <SheetHeader className="p-0">
             <SheetTitle>Add a note</SheetTitle>
           </SheetHeader>
@@ -245,7 +302,8 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
             autoFocus
             value={draftText}
             onChange={(event) => {
-              setDraftText(event.target.value);
+              editedRef.current = true;
+              setDraft(event.target.value);
             }}
             placeholder="What happened?"
             maxLength={NOTE_MAX_LENGTH}

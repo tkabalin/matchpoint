@@ -114,7 +114,10 @@ export function MatchHeader({
   ];
 
   return (
-    <div className="flex h-10 items-center justify-between gap-3">
+    // `relative`: NoteButton's live-transcript panel anchors to this box with
+    // `absolute top-full`, so it drops down right under the header wherever it sits,
+    // with no need to know the persistent app header's height above it.
+    <div className="relative flex h-10 items-center justify-between gap-3">
       {/* Greyed rather than gone, so the header keeps its shape and the coach can see
           the control is there and unavailable. aria-disabled rather than disabled: a
           disabled button leaves the tab order, so the one person who most needs to be
