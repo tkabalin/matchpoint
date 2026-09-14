@@ -794,6 +794,26 @@ def test_more_points_than_one_statement_can_carry_still_land(
     assert _row_counts(db_session)["points"] == 2_500
 
 
+# --- _demo_password() --------------------------------------------------------------
+
+
+def test_a_demo_password_is_words_a_reader_can_relay() -> None:
+    """The shape is the point: an operator reads this off a terminal to someone typing it."""
+    password = import_sample_data._demo_password()
+
+    words = password.split("-")
+    assert len(words) == 4
+    assert all(word in import_sample_data._DEMO_PASSWORD_WORDS for word in words)
+    assert password.islower()
+
+
+def test_demo_passwords_differ_between_runs() -> None:
+    """Each import mints its own, so the credential is never a constant in the repo."""
+    passwords = {import_sample_data._demo_password() for _ in range(50)}
+
+    assert len(passwords) > 1
+
+
 # --- main() -----------------------------------------------------------------------
 
 
@@ -820,7 +840,7 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     assert "Coaches: 1 new, 0 already there." in printed
     assert "Points: 1 new, 0 already there, across 1 matches." in printed
     password = printed.rsplit("Demo coach password (same for every imported coach): ", 1)[1]
-    assert password.strip()
+    assert password.strip().count("-") == 3
     assert db_session.scalars(select(Coach)).one().password_hash == STUB_HASH
 
 

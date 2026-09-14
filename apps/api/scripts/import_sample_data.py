@@ -127,6 +127,26 @@ CSV_DIR = "/tmp"
 _TRUE_VALUES = {"true", "1", "yes"}
 _FALSE_VALUES = {"false", "0", "no"}
 
+# The demo password is read off a terminal, typed on whatever device is demoing, and
+# often said out loud to someone else in the room, so it is shaped to survive being
+# relayed rather than to be short: lowercase words, nothing to describe as punctuation,
+# no glyph anyone has to spell out. Four of these is a hundred million passwords, and
+# login spends a wrong guess against an account twice a minute (main.py's
+# login_per_account_limit), so the smaller space than token_urlsafe's costs nothing.
+_DEMO_PASSWORD_WORD_COUNT = 4
+_DEMO_PASSWORD_WORDS = """
+    anchor apple arrow autumn badge basket beacon bishop bottle branch
+    bridge bucket button cactus camera candle canvas carpet castle cellar
+    chapel cherry circus comet copper cotton cradle crayon crown dagger
+    donkey dragon drawer eagle ember engine fabric falcon fern flute
+    forest fossil garden grape gravel guitar hammer harvest helmet hollow
+    island jacket jungle kettle kitten ladder lantern lemon lizard magnet
+    mammoth marble meadow mirror muffin needle nutmeg orbit orchid otter
+    pebble pencil pepper pillow pirate pocket pottery prism puzzle rabbit
+    ribbon rocket saddle salmon sandal shovel silver sponge spruce statue
+    sunset teapot temple thunder tiger timber tunnel velvet walnut willow
+""".split()  # noqa: SIM905  # a 100-element list literal is a 100-line list literal
+
 
 class ImportSummary(NamedTuple):
     """What one run wrote, split by whether the row was already there.
@@ -412,11 +432,16 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     )
 
 
+def _demo_password() -> str:
+    """The password every imported coach shares, in a shape that survives being dictated."""
+    return "-".join(secrets.choice(_DEMO_PASSWORD_WORDS) for _ in range(_DEMO_PASSWORD_WORD_COUNT))
+
+
 def main() -> None:
     csv_dir = Path(CSV_DIR)
-    demo_password = secrets.token_urlsafe(12)
+    password = _demo_password()
     with session_factory() as db:
-        summary = run_import(db, csv_dir, hash_password(demo_password))
+        summary = run_import(db, csv_dir, hash_password(password))
         db.commit()
 
     print(
@@ -429,7 +454,7 @@ def main() -> None:
             f"Points: {summary.points_created} new, {summary.points_skipped} already there, "
             f"across {summary.matches_recomputed} matches."
         )
-    print(f"Demo coach password (same for every imported coach): {demo_password}")
+    print(f"Demo coach password (same for every imported coach): {password}")
 
 
 if __name__ == "__main__":
