@@ -1,7 +1,21 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import {
+  completeMatchOnServer,
+  createPlayer,
+  deletePlayer,
+  matchIdNamed,
+  matchStatus,
+  matchesNamed,
+  openHome,
+  pointsOf,
+  postJson,
+  recordedOwner,
+  signUpCoach,
+  originUnderTest,
+} from "./api";
+import { openCapture, queuedByTaps, tapOutMatch } from "./capture";
 import { COACH_STORAGE_STATE } from "./coach";
-import { readVerificationCode } from "./mail";
 import {
   buildMatchRow,
   buildPointRow,
@@ -28,184 +42,12 @@ import {
  * sync status UI (#115). The capture-claim conflict (#197) has its own spec,
  * capture-claim.spec.ts, since it needs no service worker and runs against the
  * dev server rather than this file's production build.
+ *
+ * The helpers for talking to the API and for driving the capture screens live in
+ * api.ts and capture.ts, shared with the specs that came after this one. What is
+ * left below is this file's own: reading the persisted cache, and holding a
+ * request open mid-flush.
  */
-
-/** OWNER_KEY in src/lib/local-data.ts: whose rows a drain flushes. */
-const OWNER_KEY = "matchpoint:local-data-owner";
-
-/**
- * The origin the run is against, read from the project rather than spelled out:
- * a port changed in the config would otherwise turn every write below into a 403
- * whose message says nothing about where the mismatch came from.
- */
-function originUnderTest(): string {
-  return test.info().project.use.baseURL!;
-}
-
-/**
- * POSTs as the app itself would. The API refuses a write whose Origin is not
- * its own (csrf.py), and Playwright's request context, unlike a browser page,
- * sends no Origin at all unless told to.
- */
-function postJson(page: Page, url: string, data: unknown) {
-  return page.request.post(url, { data, headers: { origin: originUnderTest() } });
-}
-
-/** The coach id the visit to an authenticated route just recorded. */
-async function recordedOwner(page: Page): Promise<string> {
-  const owner = await page.evaluate((key) => localStorage.getItem(key), OWNER_KEY);
-  expect(owner, "no owner recorded; did the authenticated route load?").not.toBeNull();
-  return owner as string;
-}
-
-/**
- * A player of this coach's for seeded matches to track, via the live API. The
- * surname is a parameter for the one spec that reads the roster back: the coach
- * is shared, so its rows include every other spec's players.
- */
-async function createPlayer(page: Page, lastName = `Player ${Date.now()}`): Promise<string> {
-  const response = await postJson(page, "/api/players", {
-    first_name: "Offline",
-    last_name: lastName,
-  });
-  expect(response.status()).toBe(201);
-  return ((await response.json()) as { id: string }).id;
-}
-
-/** Removes a player, as a second device could while this one is offline. */
-async function deletePlayer(page: Page, playerId: string): Promise<void> {
-  const response = await page.request.delete(`/api/players/${playerId}`, {
-    headers: { origin: originUnderTest() },
-  });
-  expect(response.status()).toBe(204);
-}
-
-/** How many of the coach's matches carry this marker name: the exactly-once probe. */
-async function matchesNamed(page: Page, opponentName: string): Promise<number> {
-  const response = await page.request.get("/api/matches");
-  expect(response.status()).toBe(200);
-  const matches = (await response.json()) as { opponent_name: string | null }[];
-  return matches.filter((match) => match.opponent_name === opponentName).length;
-}
-
-async function matchStatus(page: Page, matchId: string): Promise<number> {
-  return (await page.request.get(`/api/matches/${matchId}`)).status();
-}
-
-/** The id of the one match carrying this marker, once the server has it. */
-async function matchIdNamed(page: Page, opponentName: string): Promise<string> {
-  let id: string | undefined;
-  await expect
-    .poll(
-      async () => {
-        const response = await page.request.get("/api/matches");
-        expect(response.status()).toBe(200);
-        const matches = (await response.json()) as { id: string; opponent_name: string | null }[];
-        id = matches.find((match) => match.opponent_name === opponentName)?.id;
-        return id;
-      },
-      { timeout: 20_000 },
-    )
-    .toBeDefined();
-  return id!;
-}
-
-interface StoredPoint {
-  id: string;
-  sequence: number;
-  serve1_outcome: string | null;
-  end_reason: string | null;
-}
-
-/** A match's points as the server holds them, in the order it assigns: by sequence. */
-async function pointsOf(page: Page, matchId: string): Promise<StoredPoint[]> {
-  const response = await page.request.get(`/api/matches/${matchId}/points`);
-  expect(response.status()).toBe(200);
-  return (await response.json()) as StoredPoint[];
-}
-
-/**
- * Opens the capture screen for this player and waits for the setup form. Online,
- * because the screen fetches the player before it renders; a spec that must hold
- * the rows back goes offline once the form is showing, and the taps that follow
- * need no network at all (.claude/rules/web-capture.md).
- */
-async function openCapture(page: Page, playerId: string): Promise<void> {
-  await page.goto(`/new-match/${playerId}`);
-  await expect(page.getByRole("heading", { name: "Match", level: 1 })).toBeVisible();
-}
-
-/**
- * What a coach records in one point: an ace, the one-tap point, or a point seen
- * only for its winner, which is the shape #210 opened the API to (an unwatched
- * serve and an unwatched ending, both null on the wire).
- */
-type Tap = "ace" | "winner only";
-
-/**
- * Starts the match against this opponent and taps out the given points, which is
- * how rows reach the outbox in production: through `append`, whose Dexie write is
- * the one the drain's liveQuery trigger observes. Every tap is a point the player
- * wins, so the scoreboard reading 15, 30, 40 is the signal that the point committed
- * and its row was queued; three points is therefore the most a spec taps out.
- */
-async function tapOutMatch(page: Page, opponentName: string, taps: readonly Tap[]): Promise<void> {
-  // Opponent is a hand-rolled combobox (see match-setup-screen.tsx), given an explicit
-  // role="combobox" rather than "textbox".
-  await page.getByRole("combobox", { name: "Opponent" }).fill(opponentName);
-  await page.getByRole("button", { name: "Start match" }).click();
-  await expect(page.getByRole("heading", { name: "1st Serve" })).toBeVisible();
-  const score = page.getByRole("table", { name: "Score" });
-  for (const [index, tap] of taps.entries()) {
-    if (tap === "ace") {
-      await page.getByRole("button", { name: "Ace" }).click();
-    } else {
-      await page.getByRole("button", { name: "Didn't see" }).click();
-      await expect(page.getByRole("heading", { name: "Final ball" })).toBeVisible();
-      await page.getByRole("button", { name: "Didn't see" }).click();
-      await page.getByRole("dialog").getByRole("button", { name: /^Win/ }).click();
-    }
-    await expect(score.getByText(["15", "30", "40"][index]!, { exact: true })).toBeVisible();
-  }
-}
-
-/** The match row and point rows the taps just queued, in enqueue order. */
-async function queuedByTaps(page: Page): Promise<{ matchId: string; pointIds: string[] }> {
-  const rows = await readOutboxRows(page);
-  const match = rows.find((row) => row.kind === "match");
-  expect(match, "no match row queued; did the taps commit a point?").toBeDefined();
-  return {
-    matchId: match!.matchId,
-    pointIds: rows.filter((row) => row.kind === "point").map((row) => row.id),
-  };
-}
-
-/**
- * A match already on the server and already decided, which is the one state the
- * ingest route refuses for good: sent from a request context, as a second device
- * or the dashboard would have done it, never through this device's queue.
- */
-async function completeMatchOnServer(page: Page, playerId: string): Promise<string> {
-  const matchId = crypto.randomUUID();
-  const created = await postJson(page, "/api/matches", {
-    id: matchId,
-    player_id: playerId,
-    played_on: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-  });
-  expect(created.status()).toBe(201);
-  const completed = await page.request.patch(`/api/matches/${matchId}`, {
-    data: { result: "win" },
-    headers: { origin: originUnderTest() },
-  });
-  expect(completed.status()).toBe(200);
-  return matchId;
-}
-
-/** Signed-in load that the drain and the seeds both need to have happened. */
-async function openHome(page: Page): Promise<void> {
-  await page.goto("/home");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-}
 
 /**
  * Whether the persisted read cache holds this text yet: the database and store
@@ -312,7 +154,10 @@ test.describe("with the service worker", () => {
     await openHome(page);
     await waitForServiceWorkerControl(page);
     const stamp = crypto.randomUUID().slice(0, 8);
-    const playerId = await createPlayer(page, `Cached ${stamp}`);
+    const playerId = await createPlayer(page, {
+      firstName: "Offline",
+      lastName: `Cached ${stamp}`,
+    });
     const marker = `E2E cached ${stamp}`;
 
     // Through the capture screen rather than a hand-written body, so this spec
@@ -697,24 +542,10 @@ test.describe("a session revoked mid-queue", () => {
   test.use({ storageState: { cookies: [], origins: [] }, serviceWorkers: "block" });
 
   test("keeps the outbox, and signing back in flushes it", async ({ page, playwright }) => {
-    const email = `offline-401-${Date.now()}-${Math.round(Math.random() * 1e6)}@example.com`;
-    const password = "drop-volley-lantern-83";
-    const displayName = "Revoked Coach";
-
-    // The sign-up journey as requests rather than form fills: the form is
-    // auth.setup.ts's subject, and this spec only needs the account.
-    expect((await postJson(page, "/api/auth/request-otp", { email })).ok()).toBe(true);
-    const verified = await postJson(page, "/api/auth/verify-otp", {
-      email,
-      otp: readVerificationCode(email),
+    const { email, password } = await signUpCoach(page, {
+      prefix: "offline-401",
+      displayName: "Revoked Coach",
     });
-    expect(verified.ok()).toBe(true);
-    const created = await postJson(page, "/api/coaches", {
-      email,
-      password,
-      display_name: displayName,
-    });
-    expect(created.status()).toBe(201);
     expect((await postJson(page, "/api/auth/login", { email, password })).ok()).toBe(true);
 
     await openHome(page);
@@ -764,7 +595,7 @@ test.describe("a session revoked mid-queue", () => {
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign In" }).click();
     await expect(
-      page.getByRole("heading", { name: `Coach ${displayName}`, level: 1 }),
+      page.getByRole("heading", { name: "Coach Revoked Coach", level: 1 }),
     ).toBeVisible();
     await page.reload();
     await expect.poll(() => matchStatus(page, matchId), { timeout: 20_000 }).toBe(200);

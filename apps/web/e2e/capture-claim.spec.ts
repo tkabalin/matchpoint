@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { createPlayer, OWNER_KEY, postJson } from "./api";
 import { COACH_STORAGE_STATE } from "./coach";
 import { buildMatchLogRow, seedMatchLog } from "./outbox";
 
@@ -19,28 +20,6 @@ import { buildMatchLogRow, seedMatchLog } from "./outbox";
  * regardless of how the conflict was put there.
  */
 test.use({ storageState: COACH_STORAGE_STATE });
-
-// OWNER_KEY in src/lib/local-data.ts, the same literal offline.spec.ts duplicates:
-// whose rows the claim hook (and the drain) act for.
-const OWNER_KEY = "matchpoint:local-data-owner";
-
-function originUnderTest(): string {
-  return test.info().project.use.baseURL!;
-}
-
-/** POSTs as the app itself would — see offline.spec.ts's own `postJson` for why. */
-function postJson(page: Page, url: string, data: unknown) {
-  return page.request.post(url, { data, headers: { origin: originUnderTest() } });
-}
-
-async function createPlayer(page: Page): Promise<string> {
-  const response = await postJson(page, "/api/players", {
-    first_name: "Claim",
-    last_name: `Test ${Date.now()}`,
-  });
-  expect(response.status()).toBe(201);
-  return ((await response.json()) as { id: string }).id;
-}
 
 /**
  * A match already on the server and already claimed by a device standing in for
@@ -69,7 +48,7 @@ test("takes over a match another device is capturing", async ({ page }) => {
   const coachId = await page.evaluate((key) => localStorage.getItem(key), OWNER_KEY);
   expect(coachId, "no owner recorded; did the authenticated route load?").not.toBeNull();
 
-  const playerId = await createPlayer(page);
+  const playerId = await createPlayer(page, { firstName: "Claim" });
   const matchId = await createClaimedMatch(page, playerId);
   // The only way onto this match's capture screen at all — see buildMatchLogRow.
   await seedMatchLog(page, [
