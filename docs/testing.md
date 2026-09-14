@@ -100,6 +100,23 @@ so it gets a layer split of its own rather than one level covering it:
 - Behaviour specific to an installed iOS PWA stays a manual pass before a demo: nothing in CI runs
   on an installed PWA on real iOS.
 
+#### Pinning a known defect with `test.fail()`
+
+A spec for behaviour that is filed as broken is marked `test.fail()` and written as though the
+defect were already fixed. The run stays green while the defect stands, and the spec turns red the
+moment someone fixes it, which is when its assertions become the thing worth checking. Two of the
+capture specs pin the outcome that a corrected match never syncs (#269), and the squad stats one
+pins a failed read rendering as a skeleton (#274).
+
+This is only for a defect that has an issue, and every use names it in the reason argument. It is
+never a way to park a flaky or half-finished spec: a flaky spec is a bug in the spec, and a
+half-finished one belongs on a branch. Such a spec must also assert on a signal the fix does not
+move, or it will keep failing for a new reason and never go red at all.
+
+The marker inverts what a red pipeline means for these specs, so the reporting reads backwards from
+the usual: `Expected to fail, but passed` is the success it was written for, and the point at which
+the spec stops being a record of the defect and starts being the check on its fix.
+
 #### A live API by default
 
 Specs run against a real API, and `page.route` mocking is reserved for failure paths a healthy

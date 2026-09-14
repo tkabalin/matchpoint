@@ -38,7 +38,19 @@ paths:
   be asked to produce, and make the mocked body match the OpenAPI spec: FastAPI's 422 `detail` is an
   array of objects, not a string. See `docs/testing.md § A live API by default`.
 - A spec that needs a signed-in coach adopts the session `auth.setup.ts` saved
-  (`test.use({ storageState: COACH_STORAGE_STATE })`) rather than signing one up of its own.
+  (`test.use({ storageState: COACH_STORAGE_STATE })`) rather than signing one up of its own. The
+  exception is a spec that ends the session it runs as, or spends a per-account budget: that one
+  signs its own coach up through `signUpCoach` (`e2e/api.ts`) from a blank storage state, since the
+  shared session is one token every other context in the run replays.
+- Helpers for talking to the API live in `e2e/api.ts` and for driving capture in `e2e/capture.ts`.
+  Add to those rather than copying a helper into a second spec file.
+- `test.fail()` is for pinning a defect that has an issue, and the reason argument names it. It is
+  never a way to park a flaky or unfinished spec, and such a spec must assert on a signal the fix
+  does not move — see `docs/testing.md § Pinning a known defect`.
+- **A spec reporting `Expected to fail, but passed` means the defect it pins has been fixed.** The
+  entire correct response is to delete that spec's `test.fail(...)` call. Never skip, delete or
+  rewrite the spec, weaken its assertions, or widen its timeouts to clear the message — those
+  assertions are what verify the fix, and this is the one moment they matter.
 
 ## API Contract Checks
 
