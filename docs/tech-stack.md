@@ -168,13 +168,12 @@ and LLM-friendly.
 
 **Argon2id via argon2-cffi.** OWASP's first choice for new password storage; argon2-cffi is the
 reference binding, not a wrapper. Parameters are set explicitly for the hardware in
-`docs/infrastructure.md` rather than taken as shipped: Argon2's memory cost is allocated per
-concurrent hash, and the api container's memory limit bounds how many can run at once. The
-arithmetic is recorded in `security.py` so that whoever changes that limit knows which figures to
-redo. Alternatives considered: `pwdlib[argon2]` (a wrapper whose value is algorithm migration we
-don't plan, and pre-1.0); `bcrypt` (silently truncates at 72 bytes, no memory-hardness);
-`hashlib.scrypt` (zero deps, but hand-rolled salt/encoding/comparison); `passlib` (unmaintained
-since 2020).
+`docs/security.md` rather than taken as shipped: Argon2's memory cost is allocated per concurrent
+hash, and the api container's memory limit bounds how many can run at once. The arithmetic is
+recorded in `security.py` so that whoever changes that limit knows which figures to redo.
+Alternatives considered: `pwdlib[argon2]` (a wrapper whose value is algorithm migration we don't
+plan, and pre-1.0); `bcrypt` (silently truncates at 72 bytes, no memory-hardness); `hashlib.scrypt`
+(zero deps, but hand-rolled salt/encoding/comparison); `passlib` (unmaintained since 2020).
 
 **Pwned Passwords over its range API.** NIST SP 800-63B asks that a chosen password be compared
 against known-compromised ones, and Have I Been Pwned's range endpoint is the standard way to do it:
