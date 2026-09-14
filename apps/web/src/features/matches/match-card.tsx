@@ -36,8 +36,17 @@ interface MomentumSet {
  * won each point, so both the set score and the game-by-game momentum below
  * are derived client-side rather than needing a dedicated backend endpoint.
  * A game with no `is_game_end` point yet (still being played) is dropped
- * rather than guessed at. */
-function deriveSets(points: PointRead[]): MomentumSet[] {
+ * rather than guessed at.
+ *
+ * `matchFinished` overrides a missing `is_set_end` flag for the *last* set
+ * only: a real gap has shown up where a match had a definitive final result
+ * (`match.result`) but its own last set carried no end-of-set point, which
+ * otherwise read as "still in progress" — an impossible state for a match
+ * that's actually over — and left that set floating with no winner mark, at
+ * a different height to its neighbours (their score block reserves room for
+ * an icon that never renders). Every set *before* the last one is trusted
+ * regardless: the match couldn't have moved on to the next set otherwise. */
+function deriveSets(points: PointRead[], matchFinished: boolean): MomentumSet[] {
   const bySet = new Map<number, Map<number, PointRead[]>>();
   const setEnded = new Set<number>();
   for (const point of points) {
@@ -52,39 +61,39 @@ function deriveSets(points: PointRead[]): MomentumSet[] {
     else gamesByNumber.set(point.game_number, [point]);
   }
 
-  return [...bySet.entries()]
-    .sort(([a], [b]) => a - b)
-    .map(([setNumber, gamesByNumber]) => {
-      const games = [...gamesByNumber.entries()]
-        .sort(([a], [b]) => a - b)
-        .map(([gameNumber, gamePoints]): MomentumGame | null => {
-          const ended = gamePoints.find((point) => point.is_game_end);
-          if (!ended) return null;
-          const winner: MatchSide = ended.won ? "tracked" : "opponent";
-          // One player serves the whole game, so any point's `server` will do.
-          // A break is the winner not being the side who served it.
-          const server = gamePoints[0]!.server;
-          return {
-            gameNumber,
-            winner,
-            isBreak: winner !== server,
-            pointsPlayed: gamePoints.length,
-          };
-        })
-        .filter((game): game is MomentumGame => game !== null);
+  const setNumbers = [...bySet.keys()].sort((a, b) => a - b);
 
-      const tracked = games.filter((game) => game.winner === "tracked").length;
-      const opponent = games.filter((game) => game.winner === "opponent").length;
-      // Comparing games-so-far would call a 1-0 set "won" the moment the first
-      // game finishes — only an actual `is_set_end` point (a real completion
-      // signal, not a game-count heuristic) earns a winner mark.
-      const winner: MatchSide | null = setEnded.has(setNumber)
-        ? tracked > opponent
-          ? "tracked"
-          : "opponent"
-        : null;
-      return { setNumber, tracked, opponent, winner, games };
-    });
+  return setNumbers.map((setNumber, index) => {
+    const gamesByNumber = bySet.get(setNumber)!;
+    const games = [...gamesByNumber.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([gameNumber, gamePoints]): MomentumGame | null => {
+        const ended = gamePoints.find((point) => point.is_game_end);
+        if (!ended) return null;
+        const winner: MatchSide = ended.won ? "tracked" : "opponent";
+        // One player serves the whole game, so any point's `server` will do.
+        // A break is the winner not being the side who served it.
+        const server = gamePoints[0]!.server;
+        return {
+          gameNumber,
+          winner,
+          isBreak: winner !== server,
+          pointsPlayed: gamePoints.length,
+        };
+      })
+      .filter((game): game is MomentumGame => game !== null);
+
+    const tracked = games.filter((game) => game.winner === "tracked").length;
+    const opponent = games.filter((game) => game.winner === "opponent").length;
+    const isLastSet = index === setNumbers.length - 1;
+    // Comparing games-so-far would call a 1-0 set "won" the moment the first
+    // game finishes — only an actual `is_set_end` point (a real completion
+    // signal, not a game-count heuristic) earns a winner mark, unless this is
+    // the last set of a match that's definitively over.
+    const ended = setEnded.has(setNumber) || !isLastSet || matchFinished;
+    const winner: MatchSide | null = ended ? (tracked > opponent ? "tracked" : "opponent") : null;
+    return { setNumber, tracked, opponent, winner, games };
+  });
 }
 
 // A love game (4 points) reads as the most dominant win, drawn as the tallest
@@ -102,6 +111,19 @@ function blockHeight(pointsPlayed: number): number {
     BLOCK_MAX_HEIGHT - ((clamped - BLOCK_MIN_POINTS) / span) * (BLOCK_MAX_HEIGHT - BLOCK_MIN_HEIGHT)
   );
 }
+
+// The break-dot's own reserved space (a size-1 dot plus its mb-0.5 gap) above
+// the tallest possible bar — this is the games-row's own fixed height, not an
+// auto one. Left to size itself to its own tallest bar, a set whose longest
+// game happened to run a few points shorter than another set's would get a
+// shorter row overall, and since both rows are top-aligned (a set-group
+// column, not this row, is what shares a top edge with its neighbours), that
+// shorter row's *bottom* — its baseline — would sit measurably higher than
+// the other sets' (found against real seeded data: an 18.5px row next to a
+// 20px one). Every set's games-row now commits to the same fixed height
+// regardless of its own contents, which is what actually guarantees a shared
+// baseline, not just a shared top.
+const GAMES_ROW_HEIGHT = BLOCK_MAX_HEIGHT + 6;
 
 /** An initials-only avatar for our own tracked player on the rare roster
  * desync where their id no longer resolves. Never used for the opponent —
@@ -163,7 +185,7 @@ export function MatchCard({
     ...listPointsOptions({ path: { match_id: match.id } }),
     enabled: inView,
   });
-  const sets = points ? deriveSets(points) : [];
+  const sets = points ? deriveSets(points, match.result !== null) : [];
 
   return (
     // The row and the edit/delete buttons are siblings, not nested — a button
@@ -180,7 +202,14 @@ export function MatchCard({
         // size → 0" up the whole chain holds on desktop Chromium/Firefox but
         // not reliably on iOS Safari — min-w-0 has to be explicit at every
         // level between here and there, not just where the scrolling happens.
-        className="w-full min-w-0 flex-1 text-left"
+        // `overflow-hidden` on top of that is a hard clip rather than a flex
+        // sizing hint: it holds regardless of whether WebKit's min-width
+        // propagation quirk shows up again somewhere else in this chain. It
+        // belongs here only, not on the padding-free wrapper div below: that
+        // one clipped the avatar's own halo ring at the card's edge, since it
+        // has no clearance of its own to lose — Item's real padding is what
+        // was actually doing the containing, and still does.
+        className="w-full min-w-0 flex-1 overflow-hidden text-left"
       >
         <div className="flex w-full min-w-0 flex-col gap-2.5">
           <div className="flex items-center gap-2">
@@ -192,15 +221,26 @@ export function MatchCard({
               </div>
             </div>
             <span className="shrink-0 text-xs font-bold text-muted-foreground">vs</span>
-            {/* No avatar on this side, deliberately: `opponent_name` is free
-                text with no linked player row, so there's never a real photo
-                behind it — giving it an avatar box the same as our own
-                player's would imply a capability that doesn't exist. */}
-            <div className="min-w-0 flex-1">
-              <WinnerCrown won={match.result === "loss"} />
-              <p className="truncate text-center text-sm font-bold text-foreground">
-                {opponentName}
-              </p>
+            <div className="flex min-w-0 flex-1 items-center gap-2.5">
+              {/* Name before the spacer, mirroring our own side's [avatar,
+                  name] order around "vs" rather than repeating it — our
+                  avatar sits on the row's *outer* edge, far from "vs", so the
+                  opponent's decoration (real or not) has to sit on their own
+                  outer edge too. Putting the spacer first, like the first cut
+                  of this fix did, put it right next to "vs" instead — vs then
+                  read as centred between the two *decorations*, not the two
+                  names, which is exactly the asymmetry this is meant to fix.
+                  No real avatar here, deliberately: `opponent_name` is free
+                  text with no linked player row, so there's never a real
+                  photo behind it — an avatar box the same as our own
+                  player's would imply a capability that doesn't exist. */}
+              <div className="min-w-0 flex-1">
+                <WinnerCrown won={match.result === "loss"} />
+                <p className="truncate text-center text-sm font-bold text-foreground">
+                  {opponentName}
+                </p>
+              </div>
+              <div className="size-9 shrink-0" aria-hidden="true" />
             </div>
           </div>
 
@@ -220,7 +260,14 @@ export function MatchCard({
               // `min-w-0` lets this flex-1 child actually shrink below its
               // content's width so `overflow-x-auto` can do its job instead of
               // forcing the whole card wider once sets stop fitting.
-              <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto">
+              // `items-start`: with no explicit cross-axis alignment this
+              // defaults to `stretch`, which forces every set-group column to
+              // the height of the tallest one — and since a flex-col's content
+              // packs at the top by default, a set with a short/quiet game
+              // then floats near the top of an artificially taller column
+              // instead of sharing the bottom baseline with its neighbours,
+              // reading as a bar that's "cut off" partway up.
+              <div className="flex min-w-0 flex-1 items-start gap-3 overflow-x-auto">
                 {sets.map((set, index) => (
                   <div
                     key={set.setNumber}
@@ -233,22 +280,30 @@ export function MatchCard({
                       <span className="text-sm font-bold text-foreground tabular-nums">
                         {set.tracked}–{set.opponent}
                       </span>
-                      {set.winner === "tracked" && (
+                      {/* Always mounted, opacity-toggled rather than
+                          conditionally rendered: a set genuinely still in
+                          progress (no winner yet) must reserve the exact same
+                          height this icon takes up in a finished one, or its
+                          shorter score block floats its momentum bars higher
+                          than its neighbours' — the same "reserve the slot"
+                          pattern `WinnerCrown` already uses above. */}
+                      {set.winner === "tracked" ? (
                         <CircleCheck
                           className="size-4 text-outcome-win"
                           role="img"
                           aria-label={`Won set ${set.setNumber}`}
                         />
-                      )}
-                      {set.winner === "opponent" && (
+                      ) : set.winner === "opponent" ? (
                         <CircleX
                           className="size-4 text-outcome-unforced"
                           role="img"
                           aria-label={`Lost set ${set.setNumber}`}
                         />
+                      ) : (
+                        <CircleX className="size-4 opacity-0" aria-hidden="true" />
                       )}
                     </div>
-                    <div className="flex items-end gap-0.5">
+                    <div className="flex items-end gap-0.5" style={{ height: GAMES_ROW_HEIGHT }}>
                       {set.games.map((game) => (
                         <div key={game.gameNumber} className="flex flex-col items-center">
                           <span

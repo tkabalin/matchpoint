@@ -238,6 +238,30 @@ test("derives set scores and a per-set win/loss mark from the raw point log", as
   expect(await screen.findByRole("img", { name: "Won set 1" })).toBeInTheDocument();
 });
 
+// Found live in production data: a match with a definitive result whose own
+// last set carried no is_set_end point (a data gap upstream), which
+// previously read as "still in progress" — impossible for a match that's
+// actually over — and left that set with no winner mark, floating at a
+// different height to its neighbours.
+test("a finished match's last set still gets a winner mark even without its own is_set_end point", async () => {
+  stubFetch({
+    matches: () => Response.json([{ ...match, result: "loss" }]),
+    players: () => Response.json([player]),
+    points: () =>
+      Response.json([
+        ...endingSet(lovGameWonByTracked(1)),
+        // Set 2, the last one: tracked loses both games so far, but no
+        // is_set_end point anywhere in it.
+        ...gameWonByOpponent(1).map((p) => ({ ...p, set_number: 2 })),
+        ...gameWonByOpponent(2).map((p) => ({ ...p, set_number: 2 })),
+      ]),
+  });
+
+  renderMatchList();
+
+  expect(await screen.findByRole("img", { name: "Lost set 2" })).toBeInTheDocument();
+});
+
 test("a game still being played (no game-end point yet) is left off the timeline", async () => {
   stubFetch({
     matches: () => Response.json([match]),
