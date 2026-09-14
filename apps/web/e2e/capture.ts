@@ -91,12 +91,12 @@ export async function queuedByTaps(page: Page): Promise<{ matchId: string; point
  * The final ball lands on the opponent's half, which is what makes it the tracked
  * player's point.
  */
-export async function tapDetailedPoint(page: Page): Promise<void> {
+export async function tapDetailedPoint(page: Page, opponentName: string): Promise<void> {
   await page.getByRole("button", { name: "Deuce service box" }).click();
   await expect(page.getByRole("heading", { name: "Final ball" })).toBeVisible();
-  // Matched on the zone rather than the whole label: the opponent's name is the
-  // spec's own marker, and it prefixes every zone on that half of the court.
-  await page.getByRole("button", { name: /: deuce deep$/ }).click();
+  // Named for the opponent, not the zone alone: both halves of the court carry a
+  // deuce-deep zone, and which half the ball finished on is what decides the point.
+  await page.getByRole("button", { name: `${opponentName}: deuce deep` }).click();
   await expect(page.getByRole("heading", { name: "Rally length" })).toBeVisible();
   await page.getByRole("button", { name: "3-5", exact: true }).click();
   await expect(page.getByRole("heading", { name: "How it ended" })).toBeVisible();

@@ -12,6 +12,7 @@ import { Point } from "@/features/capture/point";
 const OUTBOX_DB = "matchpoint-outbox";
 const OUTBOX_STORE = "entries";
 const MATCHES_STORE = "matches";
+const EVENTS_STORE = "events";
 
 // OUTBOX_PAYLOAD_VERSION in db.ts. A literal rather than an import: importing
 // db.ts would construct its Dexie instance in Node, where no IndexedDB exists.
@@ -256,6 +257,44 @@ export function readOutboxRows(page: Page): Promise<(SeedRow & { seq: number })[
       }
     },
     { dbName: OUTBOX_DB, storeName: OUTBOX_STORE },
+  );
+}
+
+/**
+ * The match log's events for one match: what capture folds a match back from when
+ * it reopens. Distinct from the queue above, which is emptied as it drains, so a
+ * spec running online has to wait on this rather than on a row count.
+ */
+export function readLoggedEvents(
+  page: Page,
+  matchId: string,
+): Promise<{ id: string; sequence: number; kind: string }[]> {
+  return page.evaluate(
+    async ({ dbName, storeName, match }) => {
+      if (!(await indexedDB.databases()).some((db) => db.name === dbName)) return [];
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open(dbName);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error as Error);
+      });
+      try {
+        if (!db.objectStoreNames.contains(storeName)) return [];
+        const all = await new Promise<
+          { id: string; matchId: string; sequence: number; kind: string }[]
+        >((resolve, reject) => {
+          const request = db.transaction(storeName).objectStore(storeName).getAll();
+          request.onsuccess = () =>
+            resolve(
+              request.result as { id: string; matchId: string; sequence: number; kind: string }[],
+            );
+          request.onerror = () => reject(request.error as Error);
+        });
+        return all.filter((row) => row.matchId === match);
+      } finally {
+        db.close();
+      }
+    },
+    { dbName: OUTBOX_DB, storeName: EVENTS_STORE, match: matchId },
   );
 }
 

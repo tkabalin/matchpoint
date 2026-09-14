@@ -1,5 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const DESKTOP_ONLY = [
+  /offline\.spec\.ts/,
+  /capture-sync\.spec\.ts/,
+  /auth\.spec\.ts/,
+  /read-failures\.spec\.ts/,
+];
+
 export default defineConfig({
   testDir: "e2e",
   fullyParallel: true,
@@ -63,17 +70,23 @@ export default defineConfig({
       dependencies: ["setup"],
       testIgnore: /offline\.spec\.ts/,
     },
+    // The mobile projects skip more than the offline suite. What decides the specs
+    // below is the drain, the session or a mocked response, none of which a
+    // viewport changes, and the slowest of them plays a whole match out: running
+    // them three times over buys nothing and costs the job its headroom. Kept here
+    // rather than as a test.skip in each file, since browserName cannot tell
+    // chromium from mobile-chromium, and one list reads as the matrix it is.
     {
       name: "mobile-chromium",
       use: { ...devices["Pixel 7"] },
       dependencies: ["setup"],
-      testIgnore: /offline\.spec\.ts/,
+      testIgnore: DESKTOP_ONLY,
     },
     {
       name: "mobile-webkit",
       use: { ...devices["iPhone 15"] },
       dependencies: ["setup"],
-      testIgnore: /offline\.spec\.ts/,
+      testIgnore: DESKTOP_ONLY,
     },
     // The offline suite runs against the production build (port 4173), the only
     // place the service worker exists, and only in Chromium: the offline shell is
