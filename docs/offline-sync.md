@@ -111,8 +111,9 @@ Both endpoints the drain calls are idempotent:
   retried or overlapping flush converges instead of failing. A point, once ingested, is never
   rewritten: the one later change is the delete an undo sends, and re-sending that is a no-op too.
 
-After each point batch, `recompute_match_sets` derives the match's set scores from a `GROUP BY` over
-all its stored points, so a late, partial, or retried flush lands on the same answer.
+After each batch or delete, `recompute_match_sets` derives the match's set scores afresh: the board
+the newest stored checkpoint declared, plus a `GROUP BY` over the points after it. Every request
+lands on the same answer for the same stored events, whatever order they arrived in.
 
 ### Response classification
 

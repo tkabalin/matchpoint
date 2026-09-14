@@ -22,12 +22,13 @@ class MatchSide(enum.StrEnum):
 
 
 class MatchSet(Base):
-    """One set's game score, derived by the server from the points it holds (#174).
+    """One set's game score, derived by the server from the events it holds (#174).
 
     The capture client stamps a set and game number on every point, so a set score is a
-    group-by over them rather than a replay of the rules, and these rows are recomputed
-    at each ingest (#107). Recomputing from whatever points have arrived is what makes a
-    late, partial or duplicated batch land on the same answer.
+    group-by over them rather than a replay of the rules, added to the board the newest
+    score checkpoint declared, and these rows are recomputed at each ingest (#107).
+    Recomputing from whatever has arrived is what makes a late, partial or duplicated
+    batch land on the same answer.
     """
 
     __tablename__ = "match_sets"

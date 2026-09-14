@@ -822,7 +822,7 @@
         "type": "string"
       },
       "MatchSetRead": {
-        "description": "One set's game score, as the server counts it off the match's points.",
+        "description": "One set's game score, as the server derives it from the match's checkpoints and points.",
         "properties": {
           "created_at": {
             "format": "date-time",

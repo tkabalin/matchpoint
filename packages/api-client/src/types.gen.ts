@@ -464,7 +464,7 @@ export type MatchResult = 'win' | 'loss';
 /**
  * MatchSetRead
  *
- * One set's game score, as the server counts it off the match's points.
+ * One set's game score, as the server derives it from the match's checkpoints and points.
  */
 export type MatchSetRead = {
     /**

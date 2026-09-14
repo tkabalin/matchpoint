@@ -97,10 +97,10 @@ class MatchCaptureRead(BaseModel):
     expires_at: datetime
 
 
-# Derived from the match's points rather than sent by anyone, so there is no
-# MatchSetCreate to pair this with.
+# Derived by the server from the match's events rather than sent by anyone, so there is
+# no MatchSetCreate to pair this with.
 class MatchSetRead(BaseModel):
-    """One set's game score, as the server counts it off the match's points."""
+    """One set's game score, as the server derives it from the match's checkpoints and points."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -109,7 +109,7 @@ class MatchSetRead(BaseModel):
     set_number: int
     games_won_tracked: int
     games_won_opponent: int
-    # Null while the set is in flight, no point having closed it yet.
+    # Null while the set is in flight, nothing having closed it yet.
     winner: MatchSide | None
     created_at: datetime
     updated_at: datetime

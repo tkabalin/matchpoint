@@ -252,7 +252,7 @@ export const zMatchSide = z.enum(['tracked', 'opponent']);
 /**
  * MatchSetRead
  *
- * One set's game score, as the server counts it off the match's points.
+ * One set's game score, as the server derives it from the match's checkpoints and points.
  */
 export const zMatchSetRead = z.object({
     created_at: z.iso.datetime(),

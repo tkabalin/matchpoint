@@ -2380,6 +2380,12 @@ def test_ingest_score_checkpoints_stores_the_batch_as_sent(
     response = _ingest_checkpoints(client, match, [payload])
 
     assert response.status_code == 200
+    # The response is the set scores with the declared board folded in, as the point
+    # ingest's is the tally of its points.
+    assert [
+        (row["set_number"], row["games_won_tracked"], row["games_won_opponent"], row["winner"])
+        for row in response.json()
+    ] == [(1, 6, 4, "tracked"), (2, 6, 7, "opponent"), (3, 1, 0, None)]
     saved = db_session.get(ScoreCheckpoint, uuid.UUID(payload["id"]))
     assert saved is not None
     assert saved.match_id == match.id
@@ -2711,19 +2717,33 @@ def test_delete_point_in_a_deleted_match_is_410(
     assert response.json() == {"detail": MATCH_WAS_DELETED}
 
 
-def test_delete_score_checkpoint_erases_the_row(
+def test_delete_score_checkpoint_erases_the_row_and_rederives_the_sets(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
+    """The undo of a correction that had already synced: the row goes, and the board
+    falls back to the checkpoint before it rather than staying as the undone one said."""
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
-    undone = make_score_checkpoint(db_session, match_id=match.id, sequence=0)
-    kept = make_score_checkpoint(db_session, match_id=match.id, sequence=1)
+    kept = make_score_checkpoint(
+        db_session,
+        match_id=match.id,
+        sequence=0,
+        after={"sets": [snapshot_set(games_tracked=3, games_opponent=3, winner=None)]},
+    )
     db_session.commit()
+    undone = checkpoint_payload(sequence=1)
+    assert _ingest_checkpoints(client, match, [undone]).json()[0]["games_won_tracked"] == 6
 
-    response = client.delete(f"/matches/{match.id}/score-checkpoints/{undone.id}")
+    response = client.delete(f"/matches/{match.id}/score-checkpoints/{undone['id']}")
 
     assert response.status_code == 204
-    assert db_session.get(ScoreCheckpoint, undone.id) is None
+    assert db_session.get(ScoreCheckpoint, uuid.UUID(undone["id"])) is None
     assert db_session.get(ScoreCheckpoint, kept.id) is not None
+    [row] = db_session.scalars(
+        select(MatchSet)
+        .where(MatchSet.match_id == match.id)
+        .execution_options(populate_existing=True)
+    ).all()
+    assert (row.games_won_tracked, row.games_won_opponent, row.winner) == (3, 3, None)
 
 
 def test_delete_score_checkpoint_of_an_absent_id_is_still_204(

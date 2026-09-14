@@ -204,9 +204,10 @@ session can rotate under a live capture (password change, fresh login) without e
 `scoring_system` names the system the match was played under. What each name implies belongs to the
 client that scores the match; the database stores the label and never interprets it.
 
-`match_sets` is a server-derived cache, not client-sent data. A set's score is a group-by over the
-points the server holds, recomputed at the end of each ingest so that analytics read a handful of
-set rows instead of replaying points. `winner` is null while a set is in flight.
+`match_sets` is a server-derived cache, not client-sent data. A set's score is the board the newest
+score checkpoint declared, plus a group-by over the points after it, recomputed at the end of each
+ingest or delete so that analytics read a handful of set rows instead of replaying points. `winner`
+is null while a set is in flight.
 
 `points` is one row per point, in the order the client assigned via `sequence`. A row is never
 rewritten: the client appends, or deletes the newest one when the coach undoes it. There is no
@@ -263,7 +264,7 @@ elements rather than the column, so it keeps the same rollback property.
 
 **No JSON columns, with one exception.** A field the server reads or filters on is a column.
 `score_checkpoints.after` is a declared scoreboard: a bounded document the server validates on the
-way in and reads whole in one place, the set derivation, so splitting it into a child table would be
+way in and only ever reads whole, never queries inside, so splitting it into a child table would be
 plumbing for nothing.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** A delete that would orphan rows
