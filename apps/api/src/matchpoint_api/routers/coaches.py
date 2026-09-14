@@ -30,6 +30,7 @@ from matchpoint_api.models import (
     PlayerSession,
     PlayerTransferCode,
     Point,
+    ScoreCheckpoint,
 )
 from matchpoint_api.password_policy import REJECTION, check_password
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
@@ -414,6 +415,7 @@ def delete_current_coach(
     their_players = select(Player.id).where(Player.coach_id == coach.id)
     their_matches = select(Match.id).where(Match.player_id.in_(their_players))
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
+    db.execute(delete(ScoreCheckpoint).where(ScoreCheckpoint.match_id.in_(their_matches)))
     db.execute(delete(Match).where(Match.player_id.in_(their_players)))
     # The roster's own logins go too, before the players they authenticate: closing
     # the account ends what every player under it could still reach, not only what

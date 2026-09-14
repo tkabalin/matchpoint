@@ -22,6 +22,7 @@ from matchpoint_api.models import (
     PlayerSession,
     PlayerTransferCode,
     Point,
+    ScoreCheckpoint,
 )
 from matchpoint_api.routers import players as players_module
 from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
@@ -47,6 +48,7 @@ from tests.factories import (
     make_player_session,
     make_player_transfer_code,
     make_point,
+    make_score_checkpoint,
     sign_in,
     sign_in_player,
 )
@@ -790,6 +792,7 @@ def test_delete_player_takes_their_matches_points_with_them(
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     point = make_point(db_session, match_id=match.id)
+    checkpoint = make_score_checkpoint(db_session, match_id=match.id)
     db_session.commit()
 
     response = client.delete(f"/players/{player.id}")
@@ -797,6 +800,7 @@ def test_delete_player_takes_their_matches_points_with_them(
     assert response.status_code == 204
     assert db_session.get(Match, match.id) is None
     assert db_session.get(Point, point.id) is None
+    assert db_session.get(ScoreCheckpoint, checkpoint.id) is None
 
 
 def test_delete_player_takes_a_match_being_captured_with_it(

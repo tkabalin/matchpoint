@@ -607,6 +607,74 @@ export const zReturnOutcomeSplit = z.object({
 });
 
 /**
+ * ScoreSnapshotSet
+ *
+ * One set of the declared scoreboard: games each, the breaker if one was played,
+ * and who took the set, stamped by the client for the same reason `is_set_end` is:
+ * the server never replays the rules to work it out.
+ */
+export const zScoreSnapshotSet = z.object({
+    games_opponent: z.int().gte(0).lte(999),
+    games_tracked: z.int().gte(0).lte(999),
+    set_number: z.int().gte(1).lte(2147483647),
+    tiebreak_opponent: z.int().gte(0).lte(2147483647).nullish(),
+    tiebreak_tracked: z.int().gte(0).lte(2147483647).nullish(),
+    winner: zMatchSide.nullish()
+});
+
+/**
+ * ScoreSnapshot
+ *
+ * The whole scoreboard, set 1 first with no gaps: the last entry is the set in
+ * progress, or the set that decided the match.
+ */
+export const zScoreSnapshot = z.object({
+    sets: z.array(zScoreSnapshotSet).min(1).max(5)
+});
+
+/**
+ * ScoreCheckpointCreate
+ *
+ * One checkpoint as the capture client's score editor recorded it.
+ *
+ * Shape only, as with a point: the client is the rulebook, so nothing here asks
+ * whether 6-5 can close a set under the match's scoring system.
+ */
+export const zScoreCheckpointCreate = z.object({
+    after: zScoreSnapshot,
+    id: z.uuid(),
+    order_changed: z.boolean(),
+    sequence: z.int().gte(0).lte(2147483647),
+    serves_next: zMatchSide
+});
+
+/**
+ * ScoreCheckpointBatch
+ *
+ * One flush of a device's queued checkpoints, for one match, all-or-nothing like
+ * a point batch and idempotent on each checkpoint's id.
+ */
+export const zScoreCheckpointBatch = z.object({
+    checkpoints: z.array(zScoreCheckpointCreate).min(1).max(500),
+    device_id: z.uuid()
+});
+
+/**
+ * ScoreCheckpointRead
+ *
+ * One stored checkpoint, read back beside the match's points. No timestamps, for
+ * PointRead's reason: the row is never corrected, only deleted.
+ */
+export const zScoreCheckpointRead = z.object({
+    after: zScoreSnapshot,
+    id: z.uuid(),
+    match_id: z.uuid(),
+    order_changed: z.boolean(),
+    sequence: z.int(),
+    serves_next: zMatchSide
+});
+
+/**
  * ScoringSystem
  *
  * The scoring system the match is played under.
@@ -1440,6 +1508,30 @@ export const zIngestPointsPath = z.object({
  * Successful Response
  */
 export const zIngestPointsResponse = z.array(zMatchSetRead);
+
+export const zListScoreCheckpointsPath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Response List Score Checkpoints
+ *
+ * Successful Response
+ */
+export const zListScoreCheckpointsResponse = z.array(zScoreCheckpointRead);
+
+export const zIngestScoreCheckpointsBody = zScoreCheckpointBatch;
+
+export const zIngestScoreCheckpointsPath = z.object({
+    match_id: z.uuid()
+});
+
+/**
+ * Response Ingest Score Checkpoints
+ *
+ * Successful Response
+ */
+export const zIngestScoreCheckpointsResponse = z.array(zMatchSetRead);
 
 /**
  * Response List Players

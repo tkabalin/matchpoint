@@ -1396,6 +1396,119 @@ export type ReturnOutcomeSplit = {
 };
 
 /**
+ * ScoreCheckpointBatch
+ *
+ * One flush of a device's queued checkpoints, for one match, all-or-nothing like
+ * a point batch and idempotent on each checkpoint's id.
+ */
+export type ScoreCheckpointBatch = {
+    /**
+     * Checkpoints
+     */
+    checkpoints: Array<ScoreCheckpointCreate>;
+    /**
+     * Device Id
+     */
+    device_id: string;
+};
+
+/**
+ * ScoreCheckpointCreate
+ *
+ * One checkpoint as the capture client's score editor recorded it.
+ *
+ * Shape only, as with a point: the client is the rulebook, so nothing here asks
+ * whether 6-5 can close a set under the match's scoring system.
+ */
+export type ScoreCheckpointCreate = {
+    after: ScoreSnapshot;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Order Changed
+     */
+    order_changed: boolean;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    serves_next: MatchSide;
+};
+
+/**
+ * ScoreCheckpointRead
+ *
+ * One stored checkpoint, read back beside the match's points. No timestamps, for
+ * PointRead's reason: the row is never corrected, only deleted.
+ */
+export type ScoreCheckpointRead = {
+    after: ScoreSnapshot;
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Match Id
+     */
+    match_id: string;
+    /**
+     * Order Changed
+     */
+    order_changed: boolean;
+    /**
+     * Sequence
+     */
+    sequence: number;
+    serves_next: MatchSide;
+};
+
+/**
+ * ScoreSnapshot
+ *
+ * The whole scoreboard, set 1 first with no gaps: the last entry is the set in
+ * progress, or the set that decided the match.
+ */
+export type ScoreSnapshot = {
+    /**
+     * Sets
+     */
+    sets: Array<ScoreSnapshotSet>;
+};
+
+/**
+ * ScoreSnapshotSet
+ *
+ * One set of the declared scoreboard: games each, the breaker if one was played,
+ * and who took the set, stamped by the client for the same reason `is_set_end` is:
+ * the server never replays the rules to work it out.
+ */
+export type ScoreSnapshotSet = {
+    /**
+     * Games Opponent
+     */
+    games_opponent: number;
+    /**
+     * Games Tracked
+     */
+    games_tracked: number;
+    /**
+     * Set Number
+     */
+    set_number: number;
+    /**
+     * Tiebreak Opponent
+     */
+    tiebreak_opponent?: number | null;
+    /**
+     * Tiebreak Tracked
+     */
+    tiebreak_tracked?: number | null;
+    winner?: MatchSide | null;
+};
+
+/**
  * ScoringSystem
  *
  * The scoring system the match is played under.
@@ -3043,6 +3156,94 @@ export type IngestPointsResponses = {
 };
 
 export type IngestPointsResponse = IngestPointsResponses[keyof IngestPointsResponses];
+
+export type ListScoreCheckpointsData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/score-checkpoints';
+};
+
+export type ListScoreCheckpointsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type ListScoreCheckpointsError = ListScoreCheckpointsErrors[keyof ListScoreCheckpointsErrors];
+
+export type ListScoreCheckpointsResponses = {
+    /**
+     * Response List Score Checkpoints
+     *
+     * Successful Response
+     */
+    200: Array<ScoreCheckpointRead>;
+};
+
+export type ListScoreCheckpointsResponse = ListScoreCheckpointsResponses[keyof ListScoreCheckpointsResponses];
+
+export type IngestScoreCheckpointsData = {
+    body: ScoreCheckpointBatch;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/score-checkpoints';
+};
+
+export type IngestScoreCheckpointsErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Checkpoints cannot be ingested
+     */
+    409: ErrorDetail;
+    /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type IngestScoreCheckpointsError = IngestScoreCheckpointsErrors[keyof IngestScoreCheckpointsErrors];
+
+export type IngestScoreCheckpointsResponses = {
+    /**
+     * Response Ingest Score Checkpoints
+     *
+     * Successful Response
+     */
+    200: Array<MatchSetRead>;
+};
+
+export type IngestScoreCheckpointsResponse = IngestScoreCheckpointsResponses[keyof IngestScoreCheckpointsResponses];
 
 export type ListPlayersData = {
     body?: never;

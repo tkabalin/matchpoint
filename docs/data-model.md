@@ -20,6 +20,7 @@ erDiagram
     players ||--o{ matches : plays
     matches ||--o{ match_sets : "is scored in"
     matches ||--o{ points : "is captured as"
+    matches ||--o{ score_checkpoints : "is declared at"
     coaches ||--o{ deleted_matches : "deleted"
 
     coaches {
@@ -170,6 +171,17 @@ erDiagram
         timestamptz updated_at
     }
 
+    score_checkpoints {
+        uuid id PK "client-assigned, like every offline-captured row"
+        uuid match_id FK "the match whose board was declared"
+        int sequence "its place among the match's points and checkpoints, unique per match"
+        varchar(8) serves_next "tracked, opponent: who serves the next game"
+        boolean order_changed "the serving order deviated from the rotation, and this re-anchors it"
+        jsonb after "the declared scoreboard: one entry per set with games, breaker and winner"
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     deleted_matches {
         uuid id PK "a deleted match's own id; no foreign key, the row it named is gone"
         uuid coach_id FK "the coach who deleted it"
@@ -202,11 +214,20 @@ derived from `set_number`/`game_number` via group-by. The `is_*`/`in_tiebreak` b
 by the client's scoring engine and never recomputed server-side, since that logic already lives in
 the client for offline use.
 
-Deleting a match deletes its points too: the realistic delete is a coach backing out of a mis-set-up
-match. `deleted_matches` stops a delete being undone by a create still queued offline, whether the
-match went on its own or with the player it was recorded against: a queued create or point-flush
-naming a deleted id gets `410 Gone` rather than a 404, so the client can discard rather than surface
-an error. The record is kept for thirty days and holds only the id and the deleting coach.
+`score_checkpoints` is the coach's own word on the score. Capture's score editor records what the
+board says now, whether to correct a mis-tap or to catch up on games nobody watched, and the client
+stores that as one checkpoint rather than fabricating the points behind it. A checkpoint shares the
+match's `sequence` space with its points, so the two interleave into one record. `after` is the
+declared scoreboard as a document, validated structurally on the way in (sides, non-negative counts,
+sets numbered from 1) and never against the rules: the client is the rulebook, and stamps each set's
+`winner` the way it stamps `is_set_end`.
+
+Deleting a match deletes its points and checkpoints too: the realistic delete is a coach backing out
+of a mis-set-up match. `deleted_matches` stops a delete being undone by a create still queued
+offline, whether the match went on its own or with the player it was recorded against: a queued
+create or point-flush naming a deleted id gets `410 Gone` rather than a 404, so the client can
+discard rather than surface an error. The record is kept for thirty days and holds only the id and
+the deleting coach.
 
 `email_verifications` stands alone: it holds addresses proving themselves at sign-up, before any
 coach row exists. `otp_hash` and `token_hash` are exactly-one-of under a CHECK, one row per address.
@@ -238,6 +259,11 @@ a batch of rows synced together would share a creation time. Every table carries
 remove a value from a native enum, so a migration adding one could not be rolled back.
 `player_notes.focus_areas` is the one multi-valued enum: a VARCHAR array whose CHECK constrains the
 elements rather than the column, so it keeps the same rollback property.
+
+**No JSON columns, with one exception.** A field the server reads or filters on is a column.
+`score_checkpoints.after` is a declared scoreboard: a bounded document the server validates on the
+way in and reads whole in one place, the set derivation, so splitting it into a child table would be
+plumbing for nothing.
 
 **Foreign keys are indexed explicitly and declare no `ondelete`.** A delete that would orphan rows
 is refused. Routes that intend to cascade (deleting a match, a player, or closing an account) delete

@@ -40,6 +40,7 @@ from matchpoint_api.models import (
     PlayerSession,
     PlayerTransferCode,
     Point,
+    ScoreCheckpoint,
 )
 from matchpoint_api.password_policy import BREACHED, COMMON, CONTEXT, REPEATED, SEQUENTIAL
 from matchpoint_api.routers.matches import CAPTURE_CLAIM_TTL
@@ -64,6 +65,7 @@ from tests.factories import (
     make_player_session,
     make_player_transfer_code,
     make_point,
+    make_score_checkpoint,
     sign_in,
     verify_email,
 )
@@ -1175,6 +1177,7 @@ def test_closing_an_account_may_take_the_roster_along(
     match = make_match(db_session, player_id=player.id)
     make_match_set(db_session, match_id=match.id)
     point = make_point(db_session, match_id=match.id)
+    checkpoint = make_score_checkpoint(db_session, match_id=match.id)
     reset = make_password_reset(db_session, coach_id=coach.id)
     session_row = make_coach_session(db_session, coach_id=coach.id)
     player_session = make_player_session(db_session, player_id=player.id)
@@ -1188,6 +1191,7 @@ def test_closing_an_account_may_take_the_roster_along(
     assert db_session.get(Player, player.id) is None
     assert db_session.get(Match, match.id) is None
     assert db_session.get(Point, point.id) is None
+    assert db_session.get(ScoreCheckpoint, checkpoint.id) is None
     # Counted, not fetched by id: the cascade happens in the database, where the session
     # cannot see it, so its own copy of the row would answer a get() as if it were there.
     assert db_session.scalar(select(func.count()).select_from(MatchSet)) == 0

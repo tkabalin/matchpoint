@@ -8,9 +8,9 @@
 -- matches that do collide keep their stored points and end up half one season, half the
 -- other.
 --
--- Only the matches and their points go. The coaches and players stay for the import to
--- reuse, which is what lets each player keep the username they sign in with. match_sets
--- follows its match out on the constraint's own ON DELETE CASCADE.
+-- Only the matches go, with their points and score checkpoints. The coaches and players
+-- stay for the import to reuse, which is what lets each player keep the username they
+-- sign in with. match_sets follows its match out on the constraint's own ON DELETE CASCADE.
 --
 -- The coaches to clear are named by the coaches.csv about to be imported, so this can
 -- never purge a season other than the one being replaced:
@@ -36,6 +36,9 @@ JOIN coaches c ON c.id = p.coach_id
 WHERE c.email = ANY (string_to_array(lower(:'coach_emails'), ','));
 
 DELETE FROM points
+WHERE match_id IN (SELECT id FROM matches WHERE player_id IN (SELECT id FROM purge_players));
+
+DELETE FROM score_checkpoints
 WHERE match_id IN (SELECT id FROM matches WHERE player_id IN (SELECT id FROM purge_players));
 
 DELETE FROM matches WHERE player_id IN (SELECT id FROM purge_players);

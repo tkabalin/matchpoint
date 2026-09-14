@@ -12,7 +12,15 @@ from sqlalchemy.orm import Session
 from matchpoint_api.auth import CurrentCoach, CurrentPrincipal
 from matchpoint_api.db import get_db
 from matchpoint_api.match_sets import recompute_match_sets
-from matchpoint_api.models import Coach, DeletedMatch, Match, MatchSet, Player, Point
+from matchpoint_api.models import (
+    Coach,
+    DeletedMatch,
+    Match,
+    MatchSet,
+    Player,
+    Point,
+    ScoreCheckpoint,
+)
 from matchpoint_api.schemas.errors import ErrorDetail
 from matchpoint_api.schemas.match import (
     MatchCaptureClaim,
@@ -24,6 +32,7 @@ from matchpoint_api.schemas.match import (
     MatchUpdate,
 )
 from matchpoint_api.schemas.point import PointBatch, PointRead
+from matchpoint_api.schemas.score_checkpoint import ScoreCheckpointBatch, ScoreCheckpointRead
 
 # The 401 is declared once at the router because every route here requires a session:
 # the resolving dependency reads the cookie off the request rather than declaring a
@@ -56,8 +65,11 @@ MATCH_NOT_FOUND = "Match not found"
 MATCH_IS_BEING_CAPTURED = "Match is being captured on another device"
 MATCH_WAS_DELETED = "Match was deleted"
 COMPLETED_MATCH_IS_LOCKED = "A completed match's result and scoring system cannot be changed"
+MATCH_IS_COMPLETED = "Match is completed"
 POINT_SEQUENCE_TAKEN = "A different point already holds that sequence"
 POINT_IN_ANOTHER_MATCH = "A point in this batch is already stored against another match"
+CHECKPOINT_SEQUENCE_TAKEN = "A different checkpoint already holds that sequence"
+CHECKPOINT_IN_ANOTHER_MATCH = "A checkpoint in this batch is already stored against another match"
 
 # How long a capture claim stands without being renewed. Claiming again renews it, so
 # this only bounds how long a device that has gone quiet keeps the match to itself: it
@@ -253,6 +265,28 @@ def capture_holder(match: Match) -> uuid.UUID | None:
     return match.capture_claim_device_id
 
 
+def match_for_capture(
+    db: Session, match_id: uuid.UUID, coach_id: uuid.UUID, device_id: uuid.UUID
+) -> Match:
+    """One coach's match, locked and still open, with this device's capture claim renewed.
+
+    Locked because a flush reads the result and the claim and then writes against them,
+    and delete_match erases a match's events before the match itself. A flush is
+    evidence this device is capturing, so it takes an unheld match and renews its own
+    claim as claim_capture does, while another device's live claim is left standing:
+    two-device collision protection is each table's sequence unique violation, not the
+    claim, so the flush is ingested either way.
+    """
+    match = match_for_write(db, match_id, coach_id)
+    if match.result is not None:
+        raise HTTPException(status_code=409, detail=MATCH_IS_COMPLETED)
+    holder = capture_holder(match)
+    if holder is None or holder == device_id:
+        match.capture_claim_device_id = device_id
+        match.capture_claim_expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
+    return match
+
+
 # Declared above the /{match_id} routes because Starlette matches in declaration order
 # and that path parameter would take "in-progress" itself, answering 422 rather than
 # falling through to here.
@@ -367,7 +401,7 @@ def claim_capture(
     """Claim a match for capture on this device, or renew a claim it already holds."""
     match = match_for_coach(db, match_id, coach.id, for_update=True)
     if match.result is not None:
-        raise HTTPException(status_code=409, detail="Match is completed")
+        raise HTTPException(status_code=409, detail=MATCH_IS_COMPLETED)
     holder = capture_holder(match)
     if holder is not None and holder != data.device_id:
         raise HTTPException(status_code=409, detail=MATCH_IS_BEING_CAPTURED)
@@ -416,24 +450,7 @@ def ingest_points(
     1 MB request body limit is the real bound, which a batch of points carrying long
     notes reaches sooner.
     """
-    # Locked because this reads the result and the claim and then writes points
-    # against them, and because delete_match deletes the points and then the match:
-    # unlocked, a batch could land under a delete that had already erased its points.
-    match = match_for_write(db, match_id, coach.id)
-    if match.result is not None:
-        raise HTTPException(status_code=409, detail="Match is completed")
-    # A flush is evidence this device is capturing, so it claims an unheld match the
-    # same way claim_capture does, and renews its own claim the same way. A live claim
-    # held by another device is left standing: two-device collision protection is the
-    # POINT_SEQUENCE_TAKEN unique violation below, not the claim, so a flush is still
-    # ingested either way. Until now nothing but the never-called claim_capture route
-    # ever set a claim at all, which left two things dead: list_in_progress_matches
-    # above, and delete_match's cross-device refusal below (capture_holder was always
-    # None for a match nobody had explicitly claimed). This is what wakes both.
-    holder = capture_holder(match)
-    if holder is None or holder == data.device_id:
-        match.capture_claim_device_id = data.device_id
-        match.capture_claim_expires_at = datetime.now(UTC) + CAPTURE_CLAIM_TTL
+    match = match_for_capture(db, match_id, coach.id, data.device_id)
     try:
         # One statement, and DO NOTHING on the client's own id: a point is immutable
         # once ingested, so a repeat is the point we already hold, whatever the second
@@ -482,6 +499,74 @@ def list_points(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list
     )
 
 
+# Declared as the point ingest's are, and for the same reason: each status is one the
+# sync layer branches on without reading the sentence.
+@router.post(
+    "/{match_id}/score-checkpoints",
+    response_model=list[MatchSetRead],
+    responses={
+        409: {"model": ErrorDetail, "description": "Checkpoints cannot be ingested"},
+        410: {"model": ErrorDetail, "description": "Match was deleted"},
+    },
+)
+def ingest_score_checkpoints(
+    match_id: uuid.UUID, data: ScoreCheckpointBatch, db: DbSession, coach: CurrentCoach
+) -> list[MatchSet]:
+    """Ingest one flush of score checkpoints, answering with the match's set scores.
+
+    The point ingest's contract, row for row: all or nothing, a checkpoint already
+    stored is left as it is, a completed match refuses, and the flush renews this
+    device's capture claim. The set scores come back recomputed with the newest
+    checkpoint folded in.
+    """
+    match = match_for_capture(db, match_id, coach.id, data.device_id)
+    try:
+        # mode="json" so the stored document is the wire form exactly: enum members
+        # become their values, and read-back needs no translation.
+        db.execute(
+            insert(ScoreCheckpoint)
+            .values(
+                [
+                    {"match_id": match.id, **checkpoint.model_dump(mode="json")}
+                    for checkpoint in data.checkpoints
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=[ScoreCheckpoint.id])
+        )
+    except IntegrityError as exc:
+        db.rollback()
+        if isinstance(exc.orig, UniqueViolation):
+            raise HTTPException(status_code=409, detail=CHECKPOINT_SEQUENCE_TAKEN) from exc
+        raise
+    stray = db.scalar(
+        select(ScoreCheckpoint.id).where(
+            ScoreCheckpoint.id.in_([checkpoint.id for checkpoint in data.checkpoints]),
+            ScoreCheckpoint.match_id != match.id,
+        )
+    )
+    if stray is not None:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=CHECKPOINT_IN_ANOTHER_MATCH)
+    sets = recompute_match_sets(db, match.id)
+    db.commit()
+    return sets
+
+
+@router.get("/{match_id}/score-checkpoints", response_model=list[ScoreCheckpointRead])
+def list_score_checkpoints(
+    match_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+) -> list[ScoreCheckpoint]:
+    """A match's score checkpoints, in sequence order, read back beside its points."""
+    match = match_for_coach(db, match_id, coach.id)
+    return list(
+        db.scalars(
+            select(ScoreCheckpoint)
+            .where(ScoreCheckpoint.match_id == match.id)
+            .order_by(ScoreCheckpoint.sequence)
+        )
+    )
+
+
 # The 409 is declared because the client branches on it, and it now covers the one
 # refusal left: another device is capturing the match. Points recorded against it were a
 # second until #214, so the coach-facing delete reads the reason off the status alone.
@@ -514,6 +599,7 @@ def delete_match(
     # still holding any would refuse the delete outright. The derived set rows follow it
     # out through the schema's one cascade instead.
     db.execute(delete(Point).where(Point.match_id == match.id))
+    db.execute(delete(ScoreCheckpoint).where(ScoreCheckpoint.match_id == match.id))
     # The id is remembered for as long as a create queued elsewhere could still name it,
     # so flushing an already-acknowledged create cannot put the match back. DO UPDATE
     # because an id the window has freed can be used again, and deleted again.

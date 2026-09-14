@@ -2739,6 +2739,194 @@
         "title": "ReturnOutcomeSplit",
         "type": "object"
       },
+      "ScoreCheckpointBatch": {
+        "additionalProperties": false,
+        "description": "One flush of a device's queued checkpoints, for one match, all-or-nothing like\na point batch and idempotent on each checkpoint's id.",
+        "properties": {
+          "checkpoints": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreCheckpointCreate"
+            },
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Checkpoints",
+            "type": "array"
+          },
+          "device_id": {
+            "format": "uuid",
+            "title": "Device Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "device_id",
+          "checkpoints"
+        ],
+        "title": "ScoreCheckpointBatch",
+        "type": "object"
+      },
+      "ScoreCheckpointCreate": {
+        "additionalProperties": false,
+        "description": "One checkpoint as the capture client's score editor recorded it.\n\nShape only, as with a point: the client is the rulebook, so nothing here asks\nwhether 6-5 can close a set under the match's scoring system.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/ScoreSnapshot"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "order_changed": {
+            "title": "Order Changed",
+            "type": "boolean"
+          },
+          "sequence": {
+            "maximum": 2147483647.0,
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "serves_next": {
+            "$ref": "#/components/schemas/MatchSide"
+          }
+        },
+        "required": [
+          "id",
+          "sequence",
+          "serves_next",
+          "order_changed",
+          "after"
+        ],
+        "title": "ScoreCheckpointCreate",
+        "type": "object"
+      },
+      "ScoreCheckpointRead": {
+        "description": "One stored checkpoint, read back beside the match's points. No timestamps, for\nPointRead's reason: the row is never corrected, only deleted.",
+        "properties": {
+          "after": {
+            "$ref": "#/components/schemas/ScoreSnapshot"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "match_id": {
+            "format": "uuid",
+            "title": "Match Id",
+            "type": "string"
+          },
+          "order_changed": {
+            "title": "Order Changed",
+            "type": "boolean"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "serves_next": {
+            "$ref": "#/components/schemas/MatchSide"
+          }
+        },
+        "required": [
+          "id",
+          "match_id",
+          "sequence",
+          "serves_next",
+          "order_changed",
+          "after"
+        ],
+        "title": "ScoreCheckpointRead",
+        "type": "object"
+      },
+      "ScoreSnapshot": {
+        "additionalProperties": false,
+        "description": "The whole scoreboard, set 1 first with no gaps: the last entry is the set in\nprogress, or the set that decided the match.",
+        "properties": {
+          "sets": {
+            "items": {
+              "$ref": "#/components/schemas/ScoreSnapshotSet"
+            },
+            "maxItems": 5,
+            "minItems": 1,
+            "title": "Sets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sets"
+        ],
+        "title": "ScoreSnapshot",
+        "type": "object"
+      },
+      "ScoreSnapshotSet": {
+        "additionalProperties": false,
+        "description": "One set of the declared scoreboard: games each, the breaker if one was played,\nand who took the set, stamped by the client for the same reason `is_set_end` is:\nthe server never replays the rules to work it out.",
+        "properties": {
+          "games_opponent": {
+            "maximum": 999.0,
+            "minimum": 0.0,
+            "title": "Games Opponent",
+            "type": "integer"
+          },
+          "games_tracked": {
+            "maximum": 999.0,
+            "minimum": 0.0,
+            "title": "Games Tracked",
+            "type": "integer"
+          },
+          "set_number": {
+            "maximum": 2147483647.0,
+            "minimum": 1.0,
+            "title": "Set Number",
+            "type": "integer"
+          },
+          "tiebreak_opponent": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tiebreak Opponent"
+          },
+          "tiebreak_tracked": {
+            "anyOf": [
+              {
+                "maximum": 2147483647.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tiebreak Tracked"
+          },
+          "winner": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "set_number",
+          "games_tracked",
+          "games_opponent"
+        ],
+        "title": "ScoreSnapshotSet",
+        "type": "object"
+      },
       "ScoringSystem": {
         "description": "The scoring system the match is played under.",
         "enum": [
@@ -5400,6 +5588,170 @@
           }
         },
         "summary": "Ingest Points",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/{match_id}/score-checkpoints": {
+      "get": {
+        "description": "A match's score checkpoints, in sequence order, read back beside its points.",
+        "operationId": "list_score_checkpoints",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScoreCheckpointRead"
+                  },
+                  "title": "Response List Score Checkpoints",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "List Score Checkpoints",
+        "tags": [
+          "matches"
+        ]
+      },
+      "post": {
+        "description": "Ingest one flush of score checkpoints, answering with the match's set scores.\n\nThe point ingest's contract, row for row: all or nothing, a checkpoint already\nstored is left as it is, a completed match refuses, and the flush renews this\ndevice's capture claim. The set scores come back recomputed with the newest\ncheckpoint folded in.",
+        "operationId": "ingest_score_checkpoints",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScoreCheckpointBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MatchSetRead"
+                  },
+                  "title": "Response Ingest Score Checkpoints",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Checkpoints cannot be ingested"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match was deleted"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Ingest Score Checkpoints",
         "tags": [
           "matches"
         ]

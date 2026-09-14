@@ -22,6 +22,7 @@ from matchpoint_api.models.point import (
     UnusualReason,
     Wing,
 )
+from matchpoint_api.models.score_checkpoint import ScoreCheckpoint
 
 __all__ = [
     "Coach",
@@ -47,6 +48,7 @@ __all__ = [
     "Point",
     "RallyBucket",
     "ReturnOutcome",
+    "ScoreCheckpoint",
     "ScoringSystem",
     "ServeOutcome",
     "ShotType",

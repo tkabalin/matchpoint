@@ -527,13 +527,13 @@ returns 404.
 `GET /auth/player/me`, it reads the match list, one match, and the analytics under a player or a
 match. Those routes resolve either principal and then ask which rows it may see: someone else's
 player or match answers the 404 another coach's rows get, and the match list narrows to the player's
-own. Every write, the roster list, the point log and the squad analytics stay coach-only and answer
-a player the ordinary 401. Any further route is held to the same two rules: the player's own rows,
-and none of the coach's columns, which is why the coach's notes and the transfer plumbing stay coach
-workflow. One browser may hold both cookies; the coach wins wherever its cookie still authenticates,
-and a coach cookie that authenticates nothing steps aside for the player, though a 429 from a
-drained coach budget does not. Regenerating a password stays on the coach side of that line, with
-the same 404 for another coach's player.
+own. Every write, the roster list, the point and checkpoint logs and the squad analytics stay
+coach-only and answer a player the ordinary 401. Any further route is held to the same two rules:
+the player's own rows, and none of the coach's columns, which is why the coach's notes and the
+transfer plumbing stay coach workflow. One browser may hold both cookies; the coach wins wherever
+its cookie still authenticates, and a coach cookie that authenticates nothing steps aside for the
+player, though a 429 from a drained coach budget does not. Regenerating a password stays on the
+coach side of that line, with the same 404 for another coach's player.
 
 **Accepted residual channel: a minted username counts namesakes deployment-wide.** Usernames are
 unique across every coach, since the sign-in form has only the username to look a player up by, so

@@ -26,6 +26,7 @@ from matchpoint_api.models import (
     PlayerSession,
     PlayerTransferCode,
     Point,
+    ScoreCheckpoint,
 )
 from matchpoint_api.rate_limit import RateLimiter, client_key, take_all
 from matchpoint_api.schemas.errors import ErrorDetail
@@ -221,6 +222,7 @@ def delete_player(player_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> N
     photo_key = player.photo_key
     their_matches = select(Match.id).where(Match.player_id == player.id)
     db.execute(delete(Point).where(Point.match_id.in_(their_matches)))
+    db.execute(delete(ScoreCheckpoint).where(ScoreCheckpoint.match_id.in_(their_matches)))
     # Every match going with the player is remembered as its own delete would remember
     # it, so a create or point flush queued offline is refused with the 410 the sync
     # layer discards rather than the 404 it parks (#243). DO UPDATE for delete_match's

@@ -35,8 +35,8 @@ psql -U matchpoint -d matchpoint \
   < purge_sample_data.sql
 ```
 
-It clears those coaches' matches and points only. The coaches and players stay for the
-import to reuse, so each player keeps the username they sign in with.
+It clears those coaches' matches only, with their points and score checkpoints. The coaches
+and players stay for the import to reuse, so each player keeps the username they sign in with.
 
 ## `coaches.csv`
 

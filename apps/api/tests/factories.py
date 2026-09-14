@@ -39,6 +39,7 @@ from matchpoint_api.models import (
     PlayerSession,
     PlayerTransferCode,
     Point,
+    ScoreCheckpoint,
     ServeOutcome,
     ShotType,
     Wing,
@@ -366,4 +367,48 @@ def point_payload(**overrides: Any) -> dict[str, Any]:
         "is_set_point": False,
         "is_set_end": False,
         "is_match_point": False,
+    } | overrides
+
+
+def snapshot_set(**overrides: Any) -> dict[str, Any]:
+    """One set of a declared scoreboard, as the wire and the JSONB column both carry
+    it: a 6-4 first set to the tracked player unless a test says otherwise."""
+    return {
+        "set_number": 1,
+        "games_tracked": 6,
+        "games_opponent": 4,
+        "tiebreak_tracked": None,
+        "tiebreak_opponent": None,
+        "winner": "tracked",
+    } | overrides
+
+
+def make_score_checkpoint(session: Session, **overrides: Any) -> ScoreCheckpoint:
+    if "match_id" not in overrides:
+        overrides["match_id"] = make_match(session).id
+    # The coach declaring a finished 6-4 first set with the opponent to serve next: the
+    # smallest complete board, and the one a test about the fold usually builds on.
+    checkpoint = ScoreCheckpoint(
+        **{
+            "sequence": 0,
+            "serves_next": MatchSide.OPPONENT,
+            "order_changed": False,
+            "after": {"sets": [snapshot_set()]},
+        }
+        | overrides
+    )
+    session.add(checkpoint)
+    session.flush()
+    return checkpoint
+
+
+def checkpoint_payload(**overrides: Any) -> dict[str, Any]:
+    """One checkpoint as the ingest endpoint receives it, the JSON twin of
+    `make_score_checkpoint`'s row."""
+    return {
+        "id": str(uuid.uuid4()),
+        "sequence": 0,
+        "serves_next": "opponent",
+        "order_changed": False,
+        "after": {"sets": [snapshot_set()]},
     } | overrides

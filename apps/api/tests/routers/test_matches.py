@@ -23,12 +23,15 @@ from matchpoint_api.models import (
     Point,
     RallyBucket,
     ReturnOutcome,
+    ScoreCheckpoint,
     ScoringSystem,
     Surface,
 )
 from matchpoint_api.rate_limit import RateLimiter
 from matchpoint_api.routers.matches import (
     CAPTURE_CLAIM_TTL,
+    CHECKPOINT_IN_ANOTHER_MATCH,
+    CHECKPOINT_SEQUENCE_TAKEN,
     COMPLETED_MATCH_IS_LOCKED,
     DELETED_MATCH_TTL,
     MATCH_IS_BEING_CAPTURED,
@@ -38,15 +41,18 @@ from matchpoint_api.routers.matches import (
     POINT_SEQUENCE_TAKEN,
 )
 from tests.factories import (
+    checkpoint_payload,
     make_coach,
     make_deleted_match,
     make_match,
     make_match_set,
     make_player,
     make_point,
+    make_score_checkpoint,
     point_payload,
     sign_in,
     sign_in_player,
+    snapshot_set,
 )
 
 
@@ -2328,6 +2334,297 @@ def test_list_points_carries_no_ingestion_timestamps(
     assert "updated_at" not in point
 
 
+def _ingest_checkpoints(
+    client: TestClient,
+    match: Match,
+    checkpoints: list[dict[str, Any]],
+    device_id: uuid.UUID | None = None,
+) -> httpx2.Response:
+    body = {"device_id": str(device_id or uuid.uuid4()), "checkpoints": checkpoints}
+    return client.post(f"/matches/{match.id}/score-checkpoints", json=body)
+
+
+def _checkpoints_of(session: Session) -> list[int]:
+    return list(
+        session.scalars(select(ScoreCheckpoint.sequence).order_by(ScoreCheckpoint.sequence))
+    )
+
+
+def test_ingest_score_checkpoints_stores_the_batch_as_sent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The document lands as the wire carried it, enum values and nulls included, so
+    read-back and the set derivation both see the client's own form."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = checkpoint_payload(
+        sequence=9,
+        serves_next="tracked",
+        order_changed=True,
+        after={
+            "sets": [
+                snapshot_set(),
+                snapshot_set(
+                    set_number=2,
+                    games_tracked=6,
+                    games_opponent=7,
+                    tiebreak_tracked=4,
+                    tiebreak_opponent=7,
+                    winner="opponent",
+                ),
+                snapshot_set(set_number=3, games_tracked=1, games_opponent=0, winner=None),
+            ]
+        },
+    )
+
+    response = _ingest_checkpoints(client, match, [payload])
+
+    assert response.status_code == 200
+    saved = db_session.get(ScoreCheckpoint, uuid.UUID(payload["id"]))
+    assert saved is not None
+    assert saved.match_id == match.id
+    assert saved.sequence == 9
+    assert saved.serves_next is MatchSide.TRACKED
+    assert saved.order_changed is True
+    assert saved.after == payload["after"]
+
+
+def test_ingesting_the_same_checkpoints_again_is_a_no_op(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A retried flush, and one whose acknowledgement was lost: the second body under an
+    id already held is the checkpoint we have, whatever it now says."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = checkpoint_payload(order_changed=False)
+
+    assert _ingest_checkpoints(client, match, [payload]).status_code == 200
+    assert (
+        _ingest_checkpoints(client, match, [payload | {"order_changed": True}]).status_code == 200
+    )
+
+    saved = db_session.get(ScoreCheckpoint, uuid.UUID(payload["id"]))
+    assert saved is not None
+    assert saved.order_changed is False
+    assert _checkpoints_of(db_session) == [0]
+
+
+def test_a_sequence_already_held_by_a_different_checkpoint_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two devices declaring the board at the same sequence: the whole batch is
+    refused, and nothing in it lands."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_score_checkpoint(db_session, match_id=match.id, sequence=4)
+    db_session.commit()
+
+    response = _ingest_checkpoints(
+        client, match, [checkpoint_payload(sequence=3), checkpoint_payload(sequence=4)]
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": CHECKPOINT_SEQUENCE_TAKEN}
+    assert _checkpoints_of(db_session) == [4]
+
+
+def test_a_checkpoint_sequence_may_equal_a_points(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One sequence space on the client, two tables on the server: the unique pair is
+    per table, so a checkpoint at a point's sequence is refused by nothing here. A
+    correct client never produces the tie, and the derivation orders the checkpoint
+    after the point if one does."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_point(db_session, match_id=match.id, sequence=2)
+    db_session.commit()
+
+    assert _ingest_checkpoints(client, match, [checkpoint_payload(sequence=2)]).status_code == 200
+
+
+def test_a_checkpoint_already_stored_against_another_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The DO NOTHING branch an id held elsewhere takes would otherwise drop the
+    checkpoint and answer 200."""
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    elsewhere = make_score_checkpoint(
+        db_session, match_id=make_match(db_session, player_id=player_id).id
+    )
+    db_session.commit()
+
+    response = _ingest_checkpoints(client, match, [checkpoint_payload(id=str(elsewhere.id))])
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": CHECKPOINT_IN_ANOTHER_MATCH}
+
+
+def test_one_invalid_checkpoint_rejects_the_whole_batch(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    bad = checkpoint_payload(sequence=1, after={"sets": [snapshot_set(set_number=2)]})
+
+    response = _ingest_checkpoints(client, match, [checkpoint_payload(), bad])
+
+    assert response.status_code == 422
+    assert _checkpoints_of(db_session) == []
+
+
+def test_a_checkpoint_flush_from_the_claim_holder_renews_the_claim(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A checkpoint is as much evidence of capture as a point, so the flush renews the
+    claim the same way."""
+    device_id = uuid.uuid4()
+    match = _claimed_match(
+        db_session,
+        coach,
+        device_id,
+        capture_claim_expires_at=datetime.now(UTC) + timedelta(hours=1),
+    )
+    db_session.commit()
+
+    assert _ingest_checkpoints(client, match, [checkpoint_payload()], device_id).status_code == 200
+
+    db_session.refresh(match)
+    assert match.capture_claim_device_id == device_id
+    assert match.capture_claim_expires_at is not None
+    assert match.capture_claim_expires_at > datetime.now(UTC) + timedelta(hours=3)
+
+
+def test_a_checkpoint_flush_from_another_device_is_still_ingested(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    holder = uuid.uuid4()
+    match = _claimed_match(db_session, coach, holder)
+    db_session.commit()
+
+    assert (
+        _ingest_checkpoints(client, match, [checkpoint_payload()], uuid.uuid4()).status_code == 200
+    )
+
+    db_session.refresh(match)
+    assert match.capture_claim_device_id == holder
+    assert _checkpoints_of(db_session) == [0]
+
+
+def test_ingest_checkpoints_into_a_completed_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    db_session.commit()
+
+    response = _ingest_checkpoints(client, match, [checkpoint_payload()])
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Match is completed"}
+    assert _checkpoints_of(db_session) == []
+
+
+def test_ingest_checkpoints_into_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    other = make_match(db_session)
+    db_session.commit()
+
+    response = _ingest_checkpoints(client, other, [checkpoint_payload()])
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": MATCH_NOT_FOUND}
+
+
+def test_ingest_checkpoints_into_a_deleted_match_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The status the sync layer discards on, as for a point batch (#214)."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.post(
+        f"/matches/{match_id}/score-checkpoints",
+        json={"device_id": str(uuid.uuid4()), "checkpoints": [checkpoint_payload()]},
+    )
+
+    assert response.status_code == 410
+    assert response.json() == {"detail": MATCH_WAS_DELETED}
+
+
+def test_list_score_checkpoints_orders_by_sequence(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_score_checkpoint(db_session, match_id=match.id, sequence=5)
+    make_score_checkpoint(db_session, match_id=match.id, sequence=1)
+    make_score_checkpoint(db_session, match_id=make_match(db_session).id, sequence=0)
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}/score-checkpoints")
+
+    assert response.status_code == 200
+    assert [row["sequence"] for row in response.json()] == [1, 5]
+
+
+def test_list_score_checkpoints_round_trips_what_the_ingest_route_stored(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    payload = checkpoint_payload(
+        sequence=3,
+        after={
+            "sets": [
+                snapshot_set(
+                    games_tracked=7,
+                    games_opponent=6,
+                    tiebreak_tracked=7,
+                    tiebreak_opponent=5,
+                )
+            ]
+        },
+    )
+    assert _ingest_checkpoints(client, match, [payload]).status_code == 200
+
+    response = client.get(f"/matches/{match.id}/score-checkpoints")
+
+    assert response.status_code == 200
+    assert response.json() == [payload | {"match_id": str(match.id)}]
+
+
+def test_list_score_checkpoints_of_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    other = make_match(db_session)
+    make_score_checkpoint(db_session, match_id=other.id)
+    db_session.commit()
+
+    assert client.get(f"/matches/{other.id}/score-checkpoints").status_code == 404
+
+
+def test_delete_match_takes_its_checkpoints_with_it(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Erased by hand like the points, `score_checkpoints.match_id` declaring no
+    `ondelete`; a sibling match's checkpoints stay."""
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    make_score_checkpoint(db_session, match_id=match.id)
+    kept = make_score_checkpoint(
+        db_session, match_id=make_match(db_session, player_id=player_id).id
+    )
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}").status_code == 204
+    assert db_session.scalar(select(ScoreCheckpoint.id)) == kept.id
+
+
 def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -2354,6 +2651,25 @@ def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
     assert isinstance(caught.value.orig, ForeignKeyViolation)
 
 
+def test_a_checkpoint_integrity_error_that_is_not_a_conflict_is_not_absorbed(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The checkpoint ingest's copy of the arm above, engineered the same way."""
+    device_id = uuid.uuid4()
+    match = _claimed_match(db_session, coach, device_id)
+    db_session.commit()
+
+    @event.listens_for(db_session, "before_flush")
+    def _sabotage(session: Session, _context: object, _instances: object) -> None:
+        if any(isinstance(dirty, Match) for dirty in session.dirty):
+            session.add(Match(player_id=uuid.uuid4(), played_on=date(2026, 8, 1)))
+
+    with pytest.raises(IntegrityError) as caught:
+        _ingest_checkpoints(client, match, [checkpoint_payload()], device_id)
+
+    assert isinstance(caught.value.orig, ForeignKeyViolation)
+
+
 @pytest.mark.parametrize(
     ("method", "suffix", "body"),
     [
@@ -2364,6 +2680,11 @@ def test_an_integrity_error_that_is_not_a_conflict_is_not_absorbed(
             "post",
             "/points",
             {"device_id": str(uuid.UUID(int=1)), "points": [point_payload()]},
+        ),
+        (
+            "post",
+            "/score-checkpoints",
+            {"device_id": str(uuid.UUID(int=1)), "checkpoints": [checkpoint_payload()]},
         ),
         ("delete", "", None),
     ],
@@ -2418,6 +2739,8 @@ def test_the_routes_that_read_the_claim_lock_the_match_row(
         ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
         ("post", f"/matches/{uuid.UUID(int=0)}/points"),
         ("get", f"/matches/{uuid.UUID(int=0)}/points"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
+        ("get", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
@@ -2519,6 +2842,8 @@ def test_get_match_hides_a_stablemates_match_from_a_player(
         ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
         ("post", f"/matches/{uuid.UUID(int=0)}/points"),
         ("get", f"/matches/{uuid.UUID(int=0)}/points"),
+        ("post", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
+        ("get", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
     ],
 )
 @pytest.mark.usefixtures("signed_in_player")
