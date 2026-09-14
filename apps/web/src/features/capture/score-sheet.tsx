@@ -94,9 +94,12 @@ function Chips({
             onClick={() => {
               onChange(option.value);
             }}
-            className="h-11 text-sm"
+            // min-w-0 lets the grid cell shrink below the label's content width, so a long
+            // opponent name is clipped by `truncate` instead of overflowing onto the sibling
+            // chip and stealing its taps.
+            className="h-11 min-w-0 text-sm"
           >
-            {option.label}
+            <span className="truncate">{option.label}</span>
           </Button>
         ))}
       </div>

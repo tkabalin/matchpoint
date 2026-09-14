@@ -147,3 +147,26 @@ test("the opponent combobox starts a match on this device", async ({ page }) => 
   await tapOutMatch(page, marker, ["ace"]);
   await matchIdNamed(page, marker);
 });
+
+/**
+ * Chips (score-sheet.tsx) lays its two options out as a grid pair, and an
+ * unbounded opponent name used to overflow its own chip and cover the
+ * tracked player's chip beside it, so the tap below landed on the wrong
+ * button (or nothing) instead of ending the match. A name near the 100-char
+ * ShortText bound is what surfaced it on mobile-webkit; other projects
+ * regress just as well against the same fix.
+ */
+test("a long opponent name doesn't cover the tracked player's chip", async ({ page }) => {
+  await openHome(page);
+  const playerId = await createPlayer(page, { firstName: "Tracked" });
+  const marker = `E2E long ${"n".repeat(77)} ${crypto.randomUUID().slice(0, 8)}`;
+
+  await openCapture(page, playerId);
+  await startMatch(page, marker);
+  await endMatchAs(page, /Retirement/, "Tracked");
+
+  // The opponent retired, so the match is the tracked player's — reachable only
+  // if the "Tracked" chip's tap actually landed on it.
+  const matchId = await matchIdNamed(page, marker);
+  await expect.poll(() => matchResult(page, matchId), { timeout: 20_000 }).toBe("win");
+});
