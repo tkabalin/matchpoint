@@ -107,9 +107,9 @@ mutation queue is in memory until it is persisted next to the query cache, so ev
 that cache could take unsynced points with it; a separate database means it cannot. The outbox also
 has to answer a query the mutation queue does not: every row for one match, in enqueue order, so a
 tab that dies mid-match can be replayed from what was written. Dexie is the standard typed wrapper
-over IndexedDB, and its `liveQuery` feeds the sync indicator's pending and failed counts without
-polling. Alternative considered: raw IndexedDB, which is the same schema plus the transaction
-boilerplate Dexie exists to remove.
+over IndexedDB, and its `liveQuery` re-emits the outbox's pending and failed counts whenever the
+queue changes, without polling. Alternative considered: raw IndexedDB, which is the same schema plus
+the transaction boilerplate Dexie exists to remove.
 
 **@hey-api/openapi-ts.** FastAPI's auto-generated OpenAPI 3.1 spec feeds directly into typed
 TypeScript client generation with a TanStack Query plugin. This is now FastAPI's own recommended
