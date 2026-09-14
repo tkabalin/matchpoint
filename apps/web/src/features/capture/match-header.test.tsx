@@ -1,6 +1,9 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { toast } from "sonner";
+import { afterEach, expect, test, vi } from "vitest";
+
+import { Toaster } from "@/components/ui/sonner";
 
 import { Match } from "./match";
 import { MatchHeader } from "./match-header";
@@ -36,7 +39,9 @@ async function holdAndRelease(user: ReturnType<typeof userEvent.setup>, target: 
   await user.pointer({ keys: "[/MouseLeft]", target });
 }
 
-function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
+function renderHeader(
+  options: { board?: Scoreboard; server?: Server; withToaster?: boolean } = {},
+) {
   const handlers = {
     onBack: vi.fn(),
     onGoHome: vi.fn(),
@@ -44,7 +49,7 @@ function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
     onEditScore: vi.fn(),
     onAddNote: vi.fn(),
   };
-  render(
+  const header = (
     <MatchHeader
       match={match}
       board={options.board ?? initialBoard(match)}
@@ -52,10 +57,28 @@ function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
       trackedPlayerName="Rivera"
       opponentName="Okoye"
       {...handlers}
-    />,
+    />
+  );
+  render(
+    options.withToaster ? (
+      <>
+        <Toaster />
+        {header}
+      </>
+    ) : (
+      header
+    ),
   );
   return { ...handlers, user: userEvent.setup({ delay: null }) };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+  // Sonner's toast queue lives outside React, so a toast pushed in one test would
+  // otherwise still be sitting there for the next Toaster mount to render.
+  toast.dismiss();
+});
 
 test("marks the server of the point being captured", () => {
   renderHeader({ server: "OPPONENT" });
@@ -240,4 +263,46 @@ test("tapping the note button opens the text sheet where the browser can't trans
   await user.click(screen.getByRole("button", { name: "Add note" }));
 
   expect(onAddNote).toHaveBeenCalledWith("favoring the backhand today");
+});
+
+test("the first tap on Back shows a one-time hold hint", async () => {
+  const { user } = renderHeader({ withToaster: true });
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(await screen.findByText("Tip: press and hold to jump straight home")).toBeInTheDocument();
+});
+
+test("a second tap on Back doesn't repeat the hold hint", async () => {
+  // Asserted on the call itself rather than the DOM: Sonner auto-dismisses a toast
+  // a few seconds in, and waiting that out for real on every run just to look for
+  // its absence would make this test needlessly slow.
+  const infoSpy = vi.spyOn(toast, "info");
+  const { user } = renderHeader();
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(infoSpy).toHaveBeenCalledTimes(1);
+});
+
+test("the first tap on Skip shows a one-time hold hint", async () => {
+  const { user } = renderHeader({ withToaster: true });
+
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+
+  expect(
+    await screen.findByText("Tip: press and hold to edit the score instead"),
+  ).toBeInTheDocument();
+});
+
+test("a second tap on Skip doesn't repeat the hold hint", async () => {
+  const infoSpy = vi.spyOn(toast, "info");
+  const { user } = renderHeader();
+
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+  await user.click(screen.getByRole("button", { name: /Win/ }));
+  await user.click(screen.getByRole("button", { name: "Skip point" }));
+
+  expect(infoSpy).toHaveBeenCalledTimes(1);
 });

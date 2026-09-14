@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { hasSeenNoteHoldTip, markNoteHoldTipSeen } from "@/lib/note-hold-tip";
+import { hasSeenHoldTip, markHoldTipSeen } from "@/lib/hold-tip";
 import { cn } from "@/lib/utils";
 
 import { NOTE_MAX_LENGTH } from "./point";
@@ -209,8 +209,8 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
       // Hold reaches the typed sheet directly, but nothing about the button itself
       // hints that — worth surfacing once, right as a coach starts dictating, since
       // tap and hold do the same thing on a device with no SpeechRecognition at all.
-      if (!hasSeenNoteHoldTip()) {
-        markNoteHoldTipSeen();
+      if (!hasSeenHoldTip("note")) {
+        markHoldTipSeen("note");
         toast.info("Tip: press and hold to type instead");
       }
     } catch {

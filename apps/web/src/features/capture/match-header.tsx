@@ -23,8 +23,10 @@
 
 import { ArrowLeft, SkipForward } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { hasSeenHoldTip, markHoldTipSeen } from "@/lib/hold-tip";
 import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
@@ -183,6 +185,12 @@ export function MatchHeader({
             onGoHome();
             return;
           }
+          // Hold always does something different here, whether or not there's
+          // anywhere for the tap to step back into — worth surfacing once.
+          if (!hasSeenHoldTip("back")) {
+            markHoldTipSeen("back");
+            toast.info("Tip: press and hold to jump straight home");
+          }
           onBack?.();
         }}
         className={cn("relative overflow-hidden", onBack === null && "opacity-50")}
@@ -277,6 +285,10 @@ export function MatchHeader({
             if (consumeSkipHold()) {
               onEditScore();
               return;
+            }
+            if (!hasSeenHoldTip("skip")) {
+              markHoldTipSeen("skip");
+              toast.info("Tip: press and hold to edit the score instead");
             }
             setAskingWinner(true);
           }}

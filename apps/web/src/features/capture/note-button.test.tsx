@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -66,8 +67,12 @@ function installFakeSpeechRecognition({
 }
 
 afterEach(() => {
+  vi.restoreAllMocks();
   delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
   localStorage.clear();
+  // Sonner's toast queue lives outside React, so a toast pushed in one test would
+  // otherwise still be sitting there for the next Toaster mount to render.
+  toast.dismiss();
 });
 
 test("no SpeechRecognition on the window: tapping opens the text sheet directly", async () => {
@@ -629,21 +634,19 @@ test("the first recording ever started on this device shows a one-time hold hint
 });
 
 test("a second recording on the same device doesn't repeat the hold hint", async () => {
+  // Asserted on the call itself rather than the DOM: Sonner auto-dismisses a toast
+  // a few seconds in, and waiting that out for real on every run just to look for
+  // its absence would make this test needlessly slow.
+  const infoSpy = vi.spyOn(toast, "info");
   installFakeSpeechRecognition();
   const user = userEvent.setup({ delay: null });
-  render(
-    <>
-      <Toaster />
-      <NoteButton onAddNote={vi.fn()} />
-    </>,
-  );
+  render(<NoteButton onAddNote={vi.fn()} />);
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
-  await screen.findByText("Tip: press and hold to type instead");
   await user.click(screen.getByRole("button", { name: "Stop recording note" }));
   await user.click(screen.getByRole("button", { name: "Add a note" }));
 
-  expect(screen.queryByText("Tip: press and hold to type instead")).not.toBeInTheDocument();
+  expect(infoSpy).toHaveBeenCalledTimes(1);
 });
 
 test("no hold hint when tapping falls straight to the text sheet", async () => {
