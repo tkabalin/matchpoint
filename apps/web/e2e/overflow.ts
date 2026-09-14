@@ -1,7 +1,9 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 
 import { Point } from "@/features/capture/point";
 import { toPointCreate } from "@/features/sync/point-payload";
+
+import { createPlayer, postJson } from "./api";
 
 // STORAGE_KEY in src/lib/last-viewed-player.ts. A literal rather than an import,
 // matching outbox.ts's own reasoning for OUTBOX_DB: this file only needs the one
@@ -67,29 +69,15 @@ export function overflowingNodes(page: Page): Promise<
   });
 }
 
-/**
- * POSTs as the app itself would. The API refuses a write whose Origin is not
- * its own (csrf.py), and Playwright's request context, unlike a browser page,
- * sends no Origin at all unless told to. Mirrors offline.spec.ts's own helper.
- */
-function postJson(page: Page, url: string, data: unknown) {
-  return page.request.post(url, {
-    data,
-    headers: { origin: test.info().project.use.baseURL! },
-  });
-}
-
 /** A player with no matches at all — `attention.ts` hard-flags this as "No
  *  matches logged yet", which is enough on its own to make Home render an
  *  `AttentionCard`. Deliberately a long, unbroken name: this is the input the
  *  `min-w-0` bug needs to actually show up. */
-export async function seedAttentionFlagPlayer(page: Page): Promise<string> {
-  const response = await postJson(page, "/api/players", {
-    first_name: "Konstantinos-Maximilian",
-    last_name: "Papadopoulos-Wolfeschlegelstein",
+export function seedAttentionFlagPlayer(page: Page): Promise<string> {
+  return createPlayer(page, {
+    firstName: "Konstantinos-Maximilian",
+    lastName: "Papadopoulos-Wolfeschlegelstein",
   });
-  expect(response.status()).toBe(201);
-  return ((await response.json()) as { id: string }).id;
 }
 
 /**
@@ -100,12 +88,10 @@ export async function seedAttentionFlagPlayer(page: Page): Promise<string> {
  * to complete it here.
  */
 export async function seedMatchWithMomentumStrip(page: Page): Promise<string> {
-  const playerResponse = await postJson(page, "/api/players", {
-    first_name: "Jean-Baptiste",
-    last_name: "Grosjean-Vandermeulen",
+  const playerId = await createPlayer(page, {
+    firstName: "Jean-Baptiste",
+    lastName: "Grosjean-Vandermeulen",
   });
-  expect(playerResponse.status()).toBe(201);
-  const playerId = ((await playerResponse.json()) as { id: string }).id;
 
   const matchResponse = await postJson(page, "/api/matches", {
     player_id: playerId,
