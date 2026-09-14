@@ -13,7 +13,8 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
 import { outboxDb } from "@/features/outbox/db";
-import { append, readPending } from "@/features/outbox/outbox";
+import { append, markFailed, readPending } from "@/features/outbox/outbox";
+import { recordOwnerIfUnknown } from "@/lib/local-data";
 import { queryPersistOptions } from "@/lib/query-persist";
 
 import { SignOutAction } from "./sign-out-action";
@@ -81,6 +82,9 @@ async function renderSignOutAction() {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  // The unsynced-count tests below record an owner; nothing else in this file clears
+  // it, and recordOwnerIfUnknown is a no-op once one is recorded.
+  localStorage.clear();
 });
 
 test("opens a confirmation dialog when clicked", async () => {
@@ -151,6 +155,91 @@ test("confirming also deletes the points that never synced", async () => {
   // device is no longer theirs, and a queue left behind is a queue the next coach
   // on it inherits (#117). A revoked session takes the other branch and keeps them.
   expect(await readPending(COACH_ID)).toHaveLength(0);
+});
+
+test("warns with a count before confirming when a point hasn't synced", async () => {
+  recordOwnerIfUnknown(COACH_ID, "coach");
+  await outboxDb.delete();
+  await outboxDb.open();
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a2",
+    coachId: COACH_ID,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSignOutAction();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+
+  expect(
+    await screen.findByText(/1 point hasn't been saved to the server yet/),
+  ).toBeInTheDocument();
+});
+
+test("pluralizes the warning for more than one unsynced row", async () => {
+  recordOwnerIfUnknown(COACH_ID, "coach");
+  await outboxDb.delete();
+  await outboxDb.open();
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a3",
+    coachId: COACH_ID,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  await append({
+    id: "3f1c2b4e-0000-4000-8000-0000000000a4",
+    coachId: COACH_ID,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 6 },
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSignOutAction();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+
+  expect(
+    await screen.findByText(/2 points haven't been saved to the server yet/),
+  ).toBeInTheDocument();
+});
+
+test("counts a parked row toward the warning too", async () => {
+  recordOwnerIfUnknown(COACH_ID, "coach");
+  await outboxDb.delete();
+  await outboxDb.open();
+  const id = "3f1c2b4e-0000-4000-8000-0000000000a5";
+  await append({
+    id,
+    coachId: COACH_ID,
+    matchId: "3f1c2b4e-0000-4000-8000-000000000001",
+    kind: "point",
+    payload: { rallyLength: 4 },
+  });
+  await markFailed([id], { status: 409, message: "The match is completed." });
+  const user = userEvent.setup({ delay: null });
+  await renderSignOutAction();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+
+  expect(
+    await screen.findByText(/1 point hasn't been saved to the server yet/),
+  ).toBeInTheDocument();
+});
+
+test("shows no warning when nothing is queued", async () => {
+  recordOwnerIfUnknown(COACH_ID, "coach");
+  await outboxDb.delete();
+  await outboxDb.open();
+  const user = userEvent.setup({ delay: null });
+  await renderSignOutAction();
+
+  await user.click(screen.getByRole("button", { name: "Sign Out" }));
+  await screen.findByText("Sign out?");
+
+  expect(screen.queryByText(/hasn't been saved|haven't been saved/)).not.toBeInTheDocument();
 });
 
 test("says so with a toast when the device could not be cleared, but still signs out", async () => {

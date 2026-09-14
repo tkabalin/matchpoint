@@ -199,17 +199,24 @@ export async function deleteOutboxDatabase(): Promise<void> {
 
 /**
  * Pending and failed counts for the sync indicator, re-emitted whenever the
- * queue changes, so nothing polls. Both counts run in one read transaction, so
- * the pair is a consistent snapshot here rather than by grace of `liveQuery`
- * re-querying when a write lands between two untransacted reads.
+ * queue changes, so nothing polls.
  */
 export function watchCounts(coachId: string): Observable<OutboxCounts> {
-  return liveQuery(() =>
-    outboxDb.transaction("r", outboxDb.entries, async () => ({
-      pending: await countByStatus(coachId, "pending"),
-      failed: await countByStatus(coachId, "failed"),
-    })),
-  );
+  return liveQuery(() => countUnsynced(coachId));
+}
+
+/**
+ * One-shot form of watchCounts, for a caller that only needs a snapshot rather
+ * than a live subscription — the sign-out warning checks this once, right
+ * before showing its confirm dialog. Both counts run in one read transaction,
+ * so the pair is a consistent snapshot here rather than by grace of two
+ * untransacted reads racing a write landing between them.
+ */
+export function countUnsynced(coachId: string): Promise<OutboxCounts> {
+  return outboxDb.transaction("r", outboxDb.entries, async () => ({
+    pending: await countByStatus(coachId, "pending"),
+    failed: await countByStatus(coachId, "failed"),
+  }));
 }
 
 /**

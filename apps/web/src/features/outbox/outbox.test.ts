@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry, type OutboxFailure } from "./db";
 import {
   append,
+  countUnsynced,
   deleteOutboxDatabase,
   hasQueuedCreate,
   markFailed,
@@ -530,6 +531,16 @@ describe("watchCounts", () => {
     await append(pointEntry("p2"));
 
     await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 1, failed: 0 }));
+  });
+});
+
+describe("countUnsynced", () => {
+  test("agrees with watchCounts' snapshot, without staying subscribed", async () => {
+    await append(pointEntry("p1"));
+    await append(pointEntry("p2"));
+    await markFailed(["p2"], PARKED);
+
+    await expect(countUnsynced(COACH_ID)).resolves.toEqual({ pending: 1, failed: 1 });
   });
 });
 

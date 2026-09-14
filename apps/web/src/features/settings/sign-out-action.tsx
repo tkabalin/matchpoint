@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { purgeLocalData } from "@/lib/local-data";
+import { countUnsyncedRows, purgeLocalData } from "@/lib/local-data";
 
 /**
  * Sign out, with its confirm dialog — shown at the Settings root (fast,
@@ -47,6 +47,16 @@ export function SignOutAction({
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [unsyncedCount, setUnsyncedCount] = useState<number | null>(null);
+
+  // Checked before the dialog opens, not while it's up: it's a local IndexedDB
+  // count, fast enough that the dialog never needs a loading state of its own.
+  function handleOpenConfirm() {
+    void (async () => {
+      setUnsyncedCount(await countUnsyncedRows());
+      setConfirmOpen(true);
+    })();
+  }
 
   async function handleConfirmSignOut() {
     // Logout can't fail (always 204, cookie-present or not) — nothing to branch on.
@@ -67,13 +77,24 @@ export function SignOutAction({
 
   return (
     <>
-      {trigger(() => setConfirmOpen(true))}
+      {trigger(handleOpenConfirm)}
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Sign out?</AlertDialogTitle>
-            <AlertDialogDescription>{description}</AlertDialogDescription>
+            <AlertDialogDescription>
+              {description}
+              {unsyncedCount !== null && unsyncedCount > 0 && (
+                <>
+                  {" "}
+                  {unsyncedCount === 1
+                    ? "1 point hasn't been saved to the server yet."
+                    : `${unsyncedCount} points haven't been saved to the server yet.`}{" "}
+                  They'll be lost if you sign out now.
+                </>
+              )}
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>

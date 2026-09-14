@@ -10,7 +10,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 
-import { deleteOutboxDatabase } from "@/features/outbox/outbox";
+import { countUnsynced, deleteOutboxDatabase } from "@/features/outbox/outbox";
 
 import { clearLastViewedPlayerId } from "./last-viewed-player";
 import { removePersistedQueryCache } from "./query-persist";
@@ -44,6 +44,19 @@ const OWNER_KIND_KEY = "matchpoint:local-data-owner-kind";
 export async function clearCachedReads(queryClient: QueryClient): Promise<void> {
   queryClient.clear();
   await removePersistedQueryCache();
+}
+
+/**
+ * Points and other queued rows the outbox still holds for whoever's signed in, combined
+ * into one number: purgeLocalData doesn't distinguish pending from parked when it deletes
+ * them, so the sign-out warning shouldn't either. No recorded owner reads as nothing to
+ * lose.
+ */
+export async function countUnsyncedRows(): Promise<number> {
+  const ownerId = getRecordedOwner();
+  if (ownerId === null) return 0;
+  const { pending, failed } = await countUnsynced(ownerId);
+  return pending + failed;
 }
 
 /**
