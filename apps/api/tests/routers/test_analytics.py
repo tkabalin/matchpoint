@@ -2991,15 +2991,20 @@ def test_squad_members_count_forced_errors_against_and_the_windows_points(
 
 TREND_PATH = "/squad/analytics/trend"
 
-# The window is the six Monday-to-Sunday weeks ending with the one today falls in, so
-# every arranged date is derived from today rather than pinned to a calendar. One
-# reading of the clock, so the two halves cannot land either side of a midnight.
+# The window is the six Monday-to-Sunday weeks ending with the one the roster last
+# played in (#278), so every arranged date is derived from today rather than pinned to a
+# calendar. One reading of the clock, so the two halves cannot land either side of a
+# midnight.
 _TODAY = date.today()
 THIS_MONDAY = _TODAY - timedelta(days=_TODAY.weekday())
 
 
 def _in_week(index: int, weekday: int = 0) -> date:
-    """A date inside the window's week `index`, 0 being the oldest of the six."""
+    """A date inside week `index` of the window a match played this week anchors.
+
+    0 is the oldest of the six. A test reading these indices off its series seeds its
+    newest match in week 5, which is what leaves the window's far end on this week.
+    """
     return THIS_MONDAY - timedelta(weeks=5 - index) + timedelta(days=weekday)
 
 
@@ -3053,8 +3058,13 @@ def test_squad_trend_buckets_the_six_weeks_monday_to_sunday(
 def test_squad_trend_stops_at_the_windows_first_monday(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The Sunday before the window is outside it, so its win moves nothing."""
+    """The Sunday before the window is outside it, so its win moves nothing.
+
+    The loss this week is the newest match, which is what opens the window six weeks
+    back from this Monday.
+    """
     player = make_player(db_session, coach_id=coach.id)
+    make_match(db_session, player_id=player.id, played_on=_in_week(5), result=MatchResult.LOSS)
     make_match(
         db_session,
         player_id=player.id,
@@ -3062,25 +3072,61 @@ def test_squad_trend_stops_at_the_windows_first_monday(
         result=MatchResult.WIN,
     )
 
-    assert _values(client, "record") == [None] * 6
+    assert _values(client, "record") == [None, None, None, None, None, 0]
 
 
-def test_squad_trend_stops_at_the_current_weeks_sunday(
+def test_squad_trend_does_not_anchor_on_a_date_ahead_of_today(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """The window is closed at its far end too, so a later date falls outside it.
+    """A row dated next week leaves the window ending on this one, and falls outside it.
 
-    Nothing the API accepts writes a match ahead of today, but the sample-data
-    importer builds rows straight from a CSV, and a bucket past the sixth would be
-    an IndexError rather than a point off the chart.
+    Nothing the API accepts writes a match ahead of today, but the sample-data importer
+    builds rows straight from a CSV, and anchoring on a week the squad has not played
+    would carry the window off the end of its real matches.
     """
     player = make_player(db_session, coach_id=coach.id)
+    make_match(db_session, player_id=player.id, played_on=_in_week(5), result=MatchResult.LOSS)
     make_match(
         db_session,
         player_id=player.id,
         played_on=_in_week(5) + timedelta(weeks=1),
         result=MatchResult.WIN,
     )
+
+    assert _values(client, "record") == [None, None, None, None, None, 0]
+
+
+def test_squad_trend_ends_at_the_rosters_last_active_week(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A squad that stopped playing a month ago still gets six weeks of its own (#278).
+
+    The window ends on the newer match's week, so the older one four weeks before it
+    is still inside. Anchored on today, this series would have dropped the older match
+    off its left edge and run out in four empty weeks.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=THIS_MONDAY - timedelta(weeks=8),
+        result=MatchResult.WIN,
+    )
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=THIS_MONDAY - timedelta(weeks=4),
+        result=MatchResult.LOSS,
+    )
+
+    assert _values(client, "record") == [None, 100, None, None, None, 0]
+
+
+def test_squad_trend_answers_a_roster_that_has_never_played(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """No last active week to anchor on, so the six weeks are today's and all empty."""
+    make_player(db_session, coach_id=coach.id)
 
     assert _values(client, "record") == [None] * 6
 
@@ -3127,12 +3173,12 @@ def test_squad_trend_pools_a_weeks_points_rather_than_its_players(
         _captured_match(
             db_session,
             make_player(db_session, coach_id=coach.id).id,
-            _in_week(3),
+            _in_week(5),
             forced=forced,
             mistake=mistake,
         )
 
-    assert _values(client, "forced_to_unforced") == [None, None, None, 2.0, None, None]
+    assert _values(client, "forced_to_unforced") == [None, None, None, None, None, 2.0]
 
 
 def test_squad_trend_has_no_stand_in_for_a_missing_denominator(
@@ -3140,7 +3186,7 @@ def test_squad_trend_has_no_stand_in_for_a_missing_denominator(
 ) -> None:
     """A week of clean tennis has no ratio to draw, where a member row shows the count."""
     player = make_player(db_session, coach_id=coach.id)
-    _captured_match(db_session, player.id, _in_week(2), forced=3)
+    _captured_match(db_session, player.id, _in_week(5), forced=3)
 
     assert _values(client, "forced_to_unforced") == [None] * 6
 
@@ -3156,9 +3202,9 @@ def test_squad_trend_draws_a_lopsided_week_where_it_really_landed(
     played.
     """
     player = make_player(db_session, coach_id=coach.id)
-    _captured_match(db_session, player.id, _in_week(3), forced=18, mistake=2)
+    _captured_match(db_session, player.id, _in_week(5), forced=18, mistake=2)
 
-    assert _values(client, "forced_to_unforced") == [None, None, None, 9.0, None, None]
+    assert _values(client, "forced_to_unforced") == [None, None, None, None, None, 9.0]
 
 
 def test_squad_trend_first_serve_pools_the_weeks_serves(
@@ -3169,12 +3215,12 @@ def test_squad_trend_first_serve_pools_the_weeks_serves(
         _captured_match(
             db_session,
             make_player(db_session, coach_id=coach.id).id,
-            _in_week(1),
+            _in_week(5),
             first_in=first_in,
             faults=faults,
         )
 
-    assert _values(client, "first_serve_in") == [None, 50, None, None, None, None]
+    assert _values(client, "first_serve_in") == [None, None, None, None, None, 50]
 
 
 # --- the surface axis, squad side (#225) ---
@@ -3239,6 +3285,37 @@ def test_squad_trend_narrows_by_surface(
 
     assert response.status_code == 200
     assert response.json()[-1]["value"] == 100
+
+
+def test_squad_trend_anchors_on_the_surface_it_narrows_to(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A clay filter ends the window on the last clay match, not on the last match.
+
+    The hard-court win this week is outside the clay series entirely, so anchoring on
+    it would leave the clay match sitting four weeks short of the window's end and the
+    filtered line trailing off into nulls again (#278).
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.CLAY,
+        played_on=THIS_MONDAY - timedelta(weeks=4),
+        result=MatchResult.WIN,
+    )
+    make_match(
+        db_session,
+        player_id=player.id,
+        surface=Surface.HARD,
+        played_on=THIS_MONDAY,
+        result=MatchResult.LOSS,
+    )
+
+    response = client.get(TREND_PATH, params={"metric": "record", "surface": "clay"})
+
+    assert response.status_code == 200
+    assert [point["value"] for point in response.json()] == [None, None, None, None, None, 100]
 
 
 # --- the player principal ---

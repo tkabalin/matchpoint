@@ -1767,6 +1767,32 @@ def _week_tallies(
     return weeks
 
 
+def _trend_first_monday(
+    db: Session,
+    roster: Sequence[uuid.UUID],
+    surface: Surface | None = None,
+) -> date:
+    """The Monday the window opens on, six weeks back from the roster's last match.
+
+    Anchoring on today walks the window into weeks nobody played in, so a squad that
+    went quiet a month ago trails off into nulls instead of drawing its last six active
+    weeks (#278). `surface` narrows the anchor as well as the weeks, or the same empty
+    tail comes back under a filter; a roster with no matches has no last active week to
+    anchor on, so today stands in.
+
+    A date ahead of today is no more a week the roster has played in than a missing one,
+    so today stands in for that too. Nothing the API accepts writes one, but the
+    sample-data importer builds rows straight from a CSV, and one mistyped year would
+    otherwise carry the whole window past every real match and blank the chart.
+    """
+    today = date.today()
+    latest = db.scalar(
+        select(func.max(Match.played_on)).where(Match.player_id.in_(roster), *_on_surface(surface))
+    )
+    anchor = min(latest or today, today)
+    return anchor - timedelta(days=anchor.weekday(), weeks=SQUAD_TREND_WEEKS - 1)
+
+
 @squad_router.get("/trend", response_model=list[SquadTrendPoint])
 def get_squad_trend(
     metric: SquadMetricFilter,
@@ -1774,13 +1800,12 @@ def get_squad_trend(
     coach: CurrentCoach,
     surface: SurfaceFilter = None,
 ) -> list[SquadTrendPoint]:
-    """One roster-wide figure a week, over the six weeks ending with this one.
+    """One roster-wide figure a week, over the six weeks ending with the last match.
 
     Weeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather
-    than split across two, and the sixth is the current week however few of its days
-    have passed: a card about how the squad is trending now would be up to a week
-    stale if it stopped last Sunday. All six come back in order, so a quiet fortnight
-    draws a gap in the line rather than a shorter line.
+    than split across two, and the sixth is the week the roster last played in rather
+    than the week today falls in (#278). All six come back in order, so a quiet
+    fortnight inside the window draws a gap in the line rather than a shorter line.
 
     A week's figure pools every match the roster played in it rather than averaging
     the roster's players, for the reason the period's own rates are pooled: one match
@@ -1792,8 +1817,7 @@ def get_squad_trend(
     `surface`, if given, narrows every week's pooled matches to that surface (#225).
     """
     roster = list(db.scalars(select(Player.id).where(Player.coach_id == coach.id)))
-    today = date.today()
-    first_monday = today - timedelta(days=today.weekday(), weeks=SQUAD_TREND_WEEKS - 1)
+    first_monday = _trend_first_monday(db, roster, surface)
     value = _SQUAD_METRIC_VALUE[metric]
     return [
         SquadTrendPoint(week=f"Wk {position}", value=value(week))

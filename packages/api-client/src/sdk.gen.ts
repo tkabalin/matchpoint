@@ -666,13 +666,12 @@ export const listSquadMemberStats = <ThrowOnError extends boolean = false>(optio
 /**
  * Get Squad Trend
  *
- * One roster-wide figure a week, over the six weeks ending with this one.
+ * One roster-wide figure a week, over the six weeks ending with the last match.
  *
  * Weeks run Monday to Sunday, so a weekend's fixtures land in one bucket rather
- * than split across two, and the sixth is the current week however few of its days
- * have passed: a card about how the squad is trending now would be up to a week
- * stale if it stopped last Sunday. All six come back in order, so a quiet fortnight
- * draws a gap in the line rather than a shorter line.
+ * than split across two, and the sixth is the week the roster last played in rather
+ * than the week today falls in (#278). All six come back in order, so a quiet
+ * fortnight inside the window draws a gap in the line rather than a shorter line.
  *
  * A week's figure pools every match the roster played in it rather than averaging
  * the roster's players, for the reason the period's own rates are pooled: one match

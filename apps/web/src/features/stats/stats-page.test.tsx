@@ -239,7 +239,9 @@ test("shows the trend caption", async () => {
   stubFetch();
   await renderPage();
 
-  expect(await screen.findByText("last 6 weeks · pooled across the squad")).toBeInTheDocument();
+  expect(
+    await screen.findByText("6 weeks to the last match · pooled across the squad"),
+  ).toBeInTheDocument();
 });
 
 // A roster with no resulted matches in the window gets every week back as

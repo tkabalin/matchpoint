@@ -125,7 +125,7 @@ export function SquadTrendCard({
       )}
 
       <p className="text-[0.625rem] text-muted-foreground">
-        last 6 weeks · pooled across the squad
+        6 weeks to the last match · pooled across the squad
       </p>
     </StatCard>
   );
