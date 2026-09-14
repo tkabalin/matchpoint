@@ -187,10 +187,9 @@ async function flushMatch(
   const matchRow = rows.find((row) => row.kind === "match");
   const pointRows = rows.filter((row) => row.kind === "point");
   const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
-  // checkpoint and eventDelete rows are queued by capture with no endpoint to send them to
-  // yet (see outbox/db.ts). They sit pending rather than failing, and they hold the outcome
-  // back: completing the match would fence out its own checkpoints the moment those
-  // endpoints do land.
+  // checkpoint and eventDelete rows are queued by capture and not sent from here yet, though
+  // the API accepts both (see outbox/db.ts). They sit pending rather than failing, and they
+  // hold the outcome back: completing the match would fence out its own checkpoints.
   const sendable = rows.filter((row) => isDrainableKind(row.kind));
 
   if (matchRow) {

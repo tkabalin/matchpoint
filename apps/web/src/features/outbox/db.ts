@@ -27,9 +27,9 @@ import Dexie, { type EntityTable } from "dexie";
  * retirement/walkover/default queues this instead, under a derived id, and the
  * drain sends it as its own request. See live-match.tsx's `endMatch`.
  *
- * `checkpoint` and `eventDelete` are queued by capture but not yet drained: the API has
- * no score-checkpoint or delete endpoint yet (see docs/scratch/database-changes-needed.md), and the
- * drain selects rows by kind, so they sit pending rather than failing.
+ * `checkpoint` and `eventDelete` are queued by capture but not yet drained: the API
+ * accepts both now, but nothing here maps or sends them, and the drain selects rows by
+ * kind, so they sit pending rather than failing.
  */
 export type OutboxEntityKind = "match" | "point" | "matchOutcome" | "checkpoint" | "eventDelete";
 
