@@ -14,6 +14,11 @@
  * and it leaves the press-and-hold on skip free to do the same thing for a thumb
  * already resting there. A set the coach declared rather than watched is marked with a
  * dotted rule and says so to a screen reader: a filled-in 6-0 must never read as fact.
+ *
+ * Back's own hold ignores whatever the tap does — stepping back a screen, stepping out
+ * to setup, or asking to undo — and leaves for Home outright. Nothing has to mark the
+ * match paused for that: it already is, in every sense the app tracks, the moment a
+ * coach leaves without finishing it.
  */
 
 import { ArrowLeft, SkipForward } from "lucide-react";
@@ -28,7 +33,7 @@ import type { Server } from "./point";
 import { scoreboardFor } from "./score";
 import type { Scoreboard } from "./score";
 import { maxSetsFor } from "./state";
-import { usePressAndHold } from "./use-press-and-hold";
+import { HOLD_MS, usePressAndHold } from "./use-press-and-hold";
 import { WinnerSheet } from "./winner-sheet";
 
 // Completed sets recede, the live games read as the score, the current game's call is
@@ -69,6 +74,7 @@ export function MatchHeader({
   trackedPlayerName,
   opponentName,
   onBack,
+  onGoHome,
   onSkipPoint,
   onEditScore,
   onAddNote,
@@ -83,12 +89,30 @@ export function MatchHeader({
   // Null where there is nothing behind the coach — the button greys out rather than
   // disappearing, so the header keeps its shape.
   onBack: (() => void) | null;
+  // Back's hold, independent of the tap above and never null: there is always a Home
+  // to reach, even where there's nothing behind the coach to step back into.
+  onGoHome: () => void;
   onSkipPoint: (won: boolean) => void;
   onEditScore: () => void;
   onAddNote: (text: string) => void;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
-  const { holdHandlers, cancelHold, consumeHold } = usePressAndHold();
+  // Drives the back button's own fill bar — purely visual, so it stays a plain flag
+  // beside usePressAndHold's own timer rather than something threaded through it.
+  const [holdingBack, setHoldingBack] = useState(false);
+  // Two independent holds, each with its own timer — sharing one instance between
+  // Back and Skip would let a hold started on one button be consumed by a click on
+  // the other.
+  const {
+    holdHandlers: backHoldHandlers,
+    cancelHold: cancelBackHold,
+    consumeHold: consumeBackHold,
+  } = usePressAndHold();
+  const {
+    holdHandlers: skipHoldHandlers,
+    cancelHold: cancelSkipHold,
+    consumeHold: consumeSkipHold,
+  } = usePressAndHold();
 
   function skipTo(won: boolean) {
     setAskingWinner(false);
@@ -121,18 +145,75 @@ export function MatchHeader({
       {/* Greyed rather than gone, so the header keeps its shape and the coach can see
           the control is there and unavailable. aria-disabled rather than disabled: a
           disabled button leaves the tab order, so the one person who most needs to be
-          told why nothing happens is the one who can never reach it. With no handler
-          attached, the tap does nothing on its own. */}
+          told why nothing happens is the one who can never reach it. The tap still
+          no-ops with nothing behind it, but the hold reaches Home regardless. */}
       <Button
         variant="ghost"
         size="icon"
         aria-label={onBack === null ? "Back, nothing to go back to" : "Back"}
         aria-disabled={onBack === null}
-        onClick={onBack ?? undefined}
-        className={cn(onBack === null && "opacity-50")}
+        {...backHoldHandlers}
+        onPointerDown={() => {
+          backHoldHandlers.onPointerDown();
+          setHoldingBack(true);
+        }}
+        onPointerUp={() => {
+          backHoldHandlers.onPointerUp();
+          setHoldingBack(false);
+        }}
+        onPointerLeave={() => {
+          backHoldHandlers.onPointerLeave();
+          setHoldingBack(false);
+        }}
+        onPointerCancel={() => {
+          backHoldHandlers.onPointerCancel();
+          setHoldingBack(false);
+        }}
+        onContextMenu={(event) => {
+          // Same reasoning as skip's handler below: a touch long-press's contextmenu
+          // can fire before the click that would otherwise consume the hold, so this
+          // triggers Home directly rather than leaving it to a click that might not land.
+          event.preventDefault();
+          cancelBackHold();
+          setHoldingBack(false);
+          onGoHome();
+        }}
+        onClick={() => {
+          if (consumeBackHold()) {
+            onGoHome();
+            return;
+          }
+          onBack?.();
+        }}
+        className={cn("relative overflow-hidden", onBack === null && "opacity-50")}
       >
         <ArrowLeft className="size-5" />
+        {/* Fills left-to-right over the same HOLD_MS the timer itself runs on, so a
+            coach sees exactly how much longer to hold rather than guessing. Snaps back
+            with no transition on release — held long enough or not, the bar has no
+            reason to still be there once the press ends. */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-0.5 origin-left bg-primary"
+          style={{
+            transform: holdingBack ? "scaleX(1)" : "scaleX(0)",
+            transitionProperty: "transform",
+            transitionDuration: holdingBack ? `${String(HOLD_MS)}ms` : "0ms",
+            transitionTimingFunction: "linear",
+          }}
+        />
       </Button>
+
+      {/* A keyboard or switch activation dispatches a click with no pointerdown, so it
+          can never hold: without this there is no route straight to Home for anyone
+          who can't perform the gesture. */}
+      <button
+        type="button"
+        onClick={onGoHome}
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-sm focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:ring-2 focus:ring-ring"
+      >
+        Go home
+      </button>
 
       {/* The button sits over the table rather than around it: a table is not phrasing
           content, so it cannot legally live inside a button. */}
@@ -178,13 +259,13 @@ export function MatchHeader({
           variant="ghost"
           size="icon"
           aria-label="Skip point"
-          {...holdHandlers}
+          {...skipHoldHandlers}
           onContextMenu={(event) => {
             // The sheet mounts under the still-down finger and swallows the click this
             // gesture would have produced, so nothing consumes the flag. A later tap
             // clears it on its own pointerdown; a keyboard activation was left stuck.
             event.preventDefault();
-            cancelHold();
+            cancelSkipHold();
             onEditScore();
           }}
           onClick={() => {
@@ -193,7 +274,7 @@ export function MatchHeader({
             // to dismiss, so the sheet's own outside-press handling can't catch its own
             // trigger click and close what it just opened. A keyboard activation never
             // starts a hold, so it always lands here as a plain tap.
-            if (consumeHold()) {
+            if (consumeSkipHold()) {
               onEditScore();
               return;
             }

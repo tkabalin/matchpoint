@@ -33,6 +33,7 @@ beforeEach(async () => {
  */
 async function renderMatch() {
   const onExit = vi.fn();
+  const onGoHome = vi.fn();
   const onViewResults = vi.fn();
   const view = render(
     <LiveMatch
@@ -40,13 +41,21 @@ async function renderMatch() {
       trackedPlayerId={PLAYER_ID}
       playerName="Rivera"
       onExit={onExit}
+      onGoHome={onGoHome}
       onViewResults={onViewResults}
     />,
   );
   await waitFor(() => {
     expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
   });
-  return { ...view, onExit, onViewResults, user: userEvent.setup({ delay: null }) };
+  return { ...view, onExit, onGoHome, onViewResults, user: userEvent.setup({ delay: null }) };
+}
+
+/** Holds past HOLD_MS and lets go, the gesture that reaches a button's hold action. */
+async function holdAndRelease(user: ReturnType<typeof userEvent.setup>, target: HTMLElement) {
+  await user.pointer({ keys: "[MouseLeft>]", target });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]", target });
 }
 
 async function startMatch(user: Awaited<ReturnType<typeof renderMatch>>["user"]) {
@@ -352,6 +361,22 @@ test("back past a recorded point offers to undo it, and asks first", async () =>
   expect(screen.getByRole("heading", { name: "Undo the last point?" })).toBeVisible();
 });
 
+test("holding back goes home outright, bypassing the undo prompt entirely", async () => {
+  const { onGoHome, user } = await renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+
+  await holdAndRelease(user, screen.getByRole("button", { name: "Back" }));
+
+  expect(onGoHome).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("heading", { name: "Undo the last point?" })).not.toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
+});
+
 test("undoing takes the point back off the score and queues its delete", async () => {
   const { user } = await renderMatch();
   await startMatch(user);
@@ -467,6 +492,7 @@ test("a logged event this build cannot read leaves the coach on setup, told why"
         trackedPlayerId={PLAYER_ID}
         playerName="Rivera"
         onExit={vi.fn()}
+        onGoHome={vi.fn()}
         onViewResults={vi.fn()}
       />
     </>,

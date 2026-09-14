@@ -87,6 +87,7 @@ export function LiveMatch({
   defaultSurfaceType,
   previousOpponents = [],
   onExit,
+  onGoHome,
   onViewResults,
 }: {
   coachId: string;
@@ -102,6 +103,9 @@ export function LiveMatch({
   // screen treats as "no suggestions" rather than an error.
   previousOpponents?: string[];
   onExit: () => void;
+  // Back's hold reaches this directly, independent of onExit: onExit's own callers
+  // pop history rather than always landing on Home (see new-match.tsx).
+  onGoHome: () => void;
   onViewResults: (matchId: string) => void;
 }) {
   const [match, setMatch] = useState<Match | null>(null);
@@ -596,6 +600,7 @@ export function LiveMatch({
         trackedPlayerName={playerName}
         opponentName={opponentName}
         onBack={backAction}
+        onGoHome={onGoHome}
         onEditScore={() => {
           setScoreSheetOpen(true);
         }}

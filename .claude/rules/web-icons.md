@@ -91,6 +91,7 @@ whether an icon means "go to detail" or "expand this section" from its shape alo
 | Let (replay the point)   | `RotateCcw`                             | Capture's serve, return and final ball screens. A let replays the point and never changes the score.                                                                                                                                     |
 | Skip a point             | `SkipForward`                           | Capture's match header. Tap records the point winner-only, press-and-hold opens the score editor (which tapping the score itself also does).                                                                                             |
 | Add a note               | `MessageCircle`                         | Capture's match header note button. Tap dictates a voice note, press-and-hold opens the sheet to type one instead. Round, blue at rest, `--color-recording` while actively transcribing a voice note (see `.claude/rules/web-color.md`). |
+| Pause and go home        | `ArrowLeft`                             | Capture's match header back button. Tap steps back through the point/setup/undo flow as before; press-and-hold skips straight to `/home`, leaving the match exactly as paused as any other way of leaving it already does.               |
 
 ## Before picking a new icon
 

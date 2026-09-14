@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
 
 // Long enough that a deliberate press is unmistakable, short enough to feel like a
-// hold rather than a hang. From the design handoff.
-const HOLD_MS = 450;
+// hold rather than a hang. From the design handoff. Exported so a caller animating its
+// own hold progress (e.g. a fill bar) times it against this exact value, rather than a
+// second, hand-copied number drifting from the timer it's supposed to represent.
+export const HOLD_MS = 450;
 
 /**
  * A second action on a capture-header button, reached by holding it rather than by a

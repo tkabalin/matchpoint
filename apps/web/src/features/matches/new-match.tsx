@@ -165,6 +165,9 @@ export function NewMatch() {
         defaultSurfaceType={coach?.default_surface ?? undefined}
         previousOpponents={(opponents ?? []).map((opponent) => opponent.name)}
         onExit={goBack}
+        onGoHome={() => {
+          void navigate({ to: "/home" });
+        }}
         onViewResults={(matchId) => {
           void navigate({ to: "/matches/$matchId", params: { matchId } });
         }}

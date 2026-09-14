@@ -118,6 +118,13 @@ function renderNewMatch({
   return router;
 }
 
+/** Holds past HOLD_MS and lets go, the gesture that reaches a button's hold action. */
+async function holdAndRelease(user: ReturnType<typeof userEvent.setup>, target: HTMLElement) {
+  await user.pointer({ keys: "[MouseLeft>]", target });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]", target });
+}
+
 beforeEach(async () => {
   await outboxDb.matches.clear();
 });
@@ -219,6 +226,20 @@ test("hands the player and coach to capture, and starts at setup", async () => {
   expect(await screen.findByRole("heading", { name: "Match" })).toBeInTheDocument();
   expect(screen.getByText("Amahle")).toBeInTheDocument();
   expect(screen.getByLabelText("Opponent")).toBeInTheDocument();
+});
+
+test("holding the header's back button mid-match goes straight home", async () => {
+  stubFetch();
+  const user = userEvent.setup();
+  const router = renderNewMatch();
+
+  await screen.findByRole("heading", { name: "Match" });
+  await user.type(screen.getByLabelText("Opponent"), "Okoye");
+  await user.click(screen.getByRole("button", { name: "Start match" }));
+
+  await holdAndRelease(user, await screen.findByRole("button", { name: "Back" }));
+
+  await waitFor(() => expect(router.state.location.pathname).toBe("/home"));
 });
 
 // The court is where the connection isn't, and a version bump discards the persisted

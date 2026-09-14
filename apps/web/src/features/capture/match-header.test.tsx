@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
@@ -29,9 +29,17 @@ function boardWith(wins: boolean[]): Scoreboard {
   return wins.reduce((board, won) => applyPoint(match, board, won), initialBoard(match));
 }
 
+/** Holds past HOLD_MS and lets go, the gesture that reaches a button's hold action. */
+async function holdAndRelease(user: ReturnType<typeof userEvent.setup>, target: HTMLElement) {
+  await user.pointer({ keys: "[MouseLeft>]", target });
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  await user.pointer({ keys: "[/MouseLeft]", target });
+}
+
 function renderHeader(options: { board?: Scoreboard; server?: Server } = {}) {
   const handlers = {
     onBack: vi.fn(),
+    onGoHome: vi.fn(),
     onSkipPoint: vi.fn(),
     onEditScore: vi.fn(),
     onAddNote: vi.fn(),
@@ -91,6 +99,7 @@ test("back greys out where there is nothing behind, rather than vanishing", asyn
       trackedPlayerName="Rivera"
       opponentName="Okoye"
       onBack={null}
+      onGoHome={vi.fn()}
       onSkipPoint={vi.fn()}
       onEditScore={vi.fn()}
       onAddNote={vi.fn()}
@@ -111,6 +120,37 @@ test("back steps the capture flow back", async () => {
   await user.click(screen.getByRole("button", { name: "Back" }));
 
   expect(onBack).toHaveBeenCalledTimes(1);
+});
+
+test("holding back goes home instead of stepping back", async () => {
+  const { onBack, onGoHome, user } = renderHeader();
+  const back = screen.getByRole("button", { name: "Back" });
+
+  await holdAndRelease(user, back);
+
+  expect(onGoHome).toHaveBeenCalledTimes(1);
+  expect(onBack).not.toHaveBeenCalled();
+});
+
+test("a touch long-press's contextmenu on back goes home directly, not through the click", () => {
+  const { onBack, onGoHome } = renderHeader();
+
+  const notPrevented = fireEvent.contextMenu(screen.getByRole("button", { name: "Back" }));
+
+  expect(notPrevented).toBe(false);
+  expect(onGoHome).toHaveBeenCalledTimes(1);
+  expect(onBack).not.toHaveBeenCalled();
+});
+
+test("home is reachable by keyboard, which can't perform the hold", async () => {
+  const { onGoHome, user } = renderHeader();
+
+  await user.tab();
+  await user.tab();
+  expect(screen.getByRole("button", { name: "Go home" })).toHaveFocus();
+  await user.keyboard("{Enter}");
+
+  expect(onGoHome).toHaveBeenCalledTimes(1);
 });
 
 test("tapping skip asks who won before recording the point", async () => {
