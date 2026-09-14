@@ -259,8 +259,10 @@ export class Point {
   // from unusualNote above, which only ever accompanies an UNUSUAL end reason.
   readonly note: string | null;
   // Null on ACE / DOUBLE_FAULT / UNUSUAL (no contact) and on a return error (returnOutcome
-  // already describes it). Otherwise describes whichever player hit last — see lastShotPlayer.
-  // Also null on an unforced error, whose stroke capture doesn't ask for.
+  // already describes it). Otherwise the last *successful* shot of the point — theirs on our
+  // error, ours on a win (see lastShotPlayer) — not whoever hit last: on an error ending this
+  // is their preceding ball, and ballIn/ballLocation (where our failed ball went) describe a
+  // different stroke. Also null on an unforced error, whose stroke capture doesn't ask for.
   readonly wing: Wing | null;
   readonly shotType: ShotType | null;
   // Where the last ball to *land* finished, which on an unforced error is the shot
@@ -577,7 +579,9 @@ export class Point {
     };
   }
 
-  /** Derived, not stored — on a win the last ball was ours, on a loss the opponent's. */
+  /** Derived, not stored — whoever hit the point's last *successful* shot, on a win ours,
+   * on a loss the opponent's, never whoever's racket touched the ball last. On an error
+   * ending that's the opponent's preceding ball, not our own missed shot. */
   get lastShotPlayer(): Server {
     return this.won ? "TRACKED" : "OPPONENT";
   }
