@@ -1041,6 +1041,91 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
     }
 
 
+def test_an_unwatched_ending_stays_out_of_every_error_rate(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Eight points, four ended in front of the coach and four not (#280).
+
+    An unwatched ending is a real point with a real winner, so it still counts in the
+    win/loss tally, but it is in no error rate's sample: leaving it in the denominator
+    would read "didn't see it" as a point the player did not spoil, and drag both
+    rates down by however much of the match the coach skipped.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    watched = [
+        (True, EndReason.FORCED, False),
+        (True, EndReason.FORCED, False),
+        (False, EndReason.MISTAKE, True),
+        (False, EndReason.MISTAKE, False),
+    ]
+    for sequence, (won, end_reason, is_break_point) in enumerate(watched):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            won=won,
+            end_reason=end_reason,
+            is_break_point=is_break_point,
+        )
+    # The ending is what went unseen, so the shot that made it is null along with it.
+    unwatched = [(True, False), (False, False), (False, True), (True, True)]
+    for sequence, (won, is_break_point) in enumerate(unwatched, start=len(watched)):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            won=won,
+            is_break_point=is_break_point,
+            end_reason=None,
+            wing=None,
+            shot_type=None,
+        )
+
+    body = _get(client, player.id, "rally")
+
+    # Two unforced errors over the four endings anyone saw. Over all eight points it
+    # would have read 25%.
+    assert (body["errors_overall"]["value"], body["errors_overall"]["sample_size"]) == (50, "n=4")
+    # One of the three break points ended where the coach was watching, and the player
+    # spoiled it. The other two would have diluted this to 33%.
+    assert (
+        body["errors_under_pressure"]["value"],
+        body["errors_under_pressure"]["sample_size"],
+    ) == (100, "n=1")
+    # The unwatched points are still points, so they keep their place in the win/loss
+    # tally, and the hero ratio goes on normalising over its own two counts.
+    assert (body["won"], body["lost"]) == (4, 4)
+    assert (body["hero"]["value"], body["hero"]["sample_size"]) == (1.0, "n=4")
+
+
+def test_a_match_whose_endings_all_went_unwatched_has_no_error_rates(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The boundary between the two counts: the points happened and are tallied, but
+    no ending was watched, so each error rate is absent rather than zero.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = make_match(db_session, player_id=player.id)
+    for sequence, won in enumerate([True, False]):
+        make_point(
+            db_session,
+            match_id=match.id,
+            sequence=sequence,
+            won=won,
+            is_break_point=True,
+            end_reason=None,
+            wing=None,
+            shot_type=None,
+        )
+
+    body = _get(client, player.id, "rally")
+
+    assert body["errors_overall"] is None
+    assert body["errors_under_pressure"] is None
+    assert (body["won"], body["lost"]) == (1, 1)
+
+
 def test_rally_length_buckets_are_reported_whole(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:

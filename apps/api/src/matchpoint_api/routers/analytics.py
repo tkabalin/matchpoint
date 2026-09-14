@@ -399,6 +399,10 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
     # Tiebreak points are excluded from game tallies: the players alternate serve
     # inside one, so its final point says nothing about anyone holding.
     game = and_(Point.is_game_end, ~Point.in_tiebreak)
+    # The ending's twin of `served`: a point whose ending nobody watched is a real
+    # point with a real winner, but it says nothing about how the point ended, so it
+    # belongs in no error rate's numerator and must not pad the denominator either.
+    ended = Point.end_reason.is_not(None)
     forced = Point.end_reason == EndReason.FORCED
     mistake = Point.end_reason == EndReason.MISTAKE
 
@@ -434,8 +438,9 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(Point.won, mistake).label("mistake_won"),
             _count(~Point.won, forced).label("forced_lost"),
             _count(~Point.won, mistake).label("mistake_lost"),
+            _count(ended).label("endings_seen"),
             _count(Point.is_break_point, ~Point.won, mistake).label("bp_mistakes"),
-            _count(Point.is_break_point).label("bp_points"),
+            _count(Point.is_break_point, ended).label("bp_endings_seen"),
             *(
                 _count(Point.rally_length_bucket == bucket).label(f"rally_{bucket.value}")
                 for bucket in RallyBucket
@@ -1292,11 +1297,11 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
         errors_under_pressure=_percent(
             "Errors under pressure (BP)",
             counts.bp_mistakes,
-            counts.bp_points,
+            counts.bp_endings_seen,
             higher_is_better=False,
         ),
         errors_overall=_percent(
-            "Errors overall", counts.mistake_lost, counts.total, higher_is_better=False
+            "Errors overall", counts.mistake_lost, counts.endings_seen, higher_is_better=False
         ),
         shot_frequency=shot_frequency,
         rally_length=_rally_length(counts),
