@@ -47,7 +47,6 @@ function freshDraft(
     won: null,
     endReason: null,
     unusualReason: null,
-    unusualNote: null,
     note: null,
     wing: null,
     shotType: null,
@@ -350,7 +349,7 @@ describe("unusual point", () => {
   test("a point skipped from the serve commits with its winner and nothing else", () => {
     let state = transition(startTracked(), { type: "TAP_UNUSUAL" });
     state = transition(state, { type: "TAP_UNUSUAL_OUTCOME", won: false });
-    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: null, note: null });
+    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: null });
     expect(state.step).toEqual({ name: "READY" });
 
     const point = commitDraft(state.draft, "point-1", 1_700_000_000_000, CONTEXT);
@@ -370,21 +369,16 @@ describe("unusual point", () => {
     expect(state.draft.endReason).toBe("UNUSUAL");
 
     // The escape hatch stays an escape hatch — skipping the reason must not throw.
-    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: null, note: null });
+    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: null });
     expect(state.step).toEqual({ name: "READY" });
     expect(state.draft.unusualReason).toBeNull();
-    expect(state.draft.unusualNote).toBeNull();
   });
 
   test("an unusual point's rally length is never auto-filled, unlike ACE/DOUBLE_FAULT", () => {
     const onBall = transition(startTracked(), { type: "TAP_SERVE_IN" });
     let state = transition(onBall, { type: "TAP_UNUSUAL" });
     state = transition(state, { type: "TAP_UNUSUAL_OUTCOME", won: true });
-    state = transition(state, {
-      type: "TAP_UNUSUAL_REASON",
-      reason: "POINT_PENALTY",
-      note: null,
-    });
+    state = transition(state, { type: "TAP_UNUSUAL_REASON", reason: "POINT_PENALTY" });
     // Ready without the length ever being asked — bucket is still null, in contrast
     // to readyDraft's "B1" default for ACE/DOUBLE_FAULT.
     expect(state.step).toEqual({ name: "READY" });
@@ -488,7 +482,6 @@ describe("commitDraft", () => {
         won: false,
         endReason: "UNUSUAL",
         unusualReason: "HINDRANCE",
-        unusualNote: "adjacent court",
         rallyLengthBucket: null,
       }),
     ];

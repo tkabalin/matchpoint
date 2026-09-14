@@ -1071,7 +1071,7 @@ thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,8,tracked,true,f
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,9,tracked,true,in,ad,,,,,,mistake,,,,,true,deuce,short,,b1,1,2,false,false,true,true,false,false,false
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,10,opponent,true,in,,,,,,in,mistake,,,,,true,deuce,deep,,b2,1,3,false,false,false,false,false,false,false
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,11,opponent,true,in,,,,,,in,forced,,,,,true,deuce,short,,b1,1,3,false,false,false,false,false,false,false
-thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,12,opponent,false,in,,,,,,in,unusual,other,Ball from the next court,,,,,,,,1,3,false,false,false,false,false,false,false
+thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,12,opponent,false,in,,,,,,in,unusual,other,,,,,,,,,1,3,false,false,false,false,false,false,false
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,13,opponent,true,in,,,,,,in,forced,,,forehand,drive,true,ad,deep,,b3,1,3,false,false,false,false,false,false,false
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,14,opponent,true,in,,,,,,in,mistake,,,,,true,deuce,deep,,b4,1,3,false,true,false,true,false,false,false
 thandi.mokoena@example.com,91f3202e-8a6e-4e66-977b-2030a2261887,15,tracked,true,in,deuce,,,,,,mistake,,,,,true,ad,deep,,b1,1,4,false,false,false,false,false,false,false
@@ -3372,7 +3372,7 @@ thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,44,opponent,true
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,45,opponent,false,in,,,,,,wide,mistake,,,,,,,,,b1,1,7,false,true,false,false,false,false,false
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,46,opponent,true,fault,,,in,,,in,forced,,,forehand,drive,true,ad,deep,,b1,1,7,false,true,false,true,false,false,false
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,47,tracked,false,fault,,wide,in,deuce,,,forced,,,forehand,volley,true,deuce,deep,,b1,1,8,false,false,false,false,false,false,false
-thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,48,tracked,false,in,ad,,,,,,unusual,other,Ball from the next court,,,,,,,,1,8,false,false,false,false,false,false,false
+thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,48,tracked,false,in,ad,,,,,,unusual,other,,,,,,,,,1,8,false,false,false,false,false,false,false
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,49,tracked,true,in,deuce,,,,,,forced,,,forehand,lob,true,ad,deep,,b3,1,8,false,false,false,false,false,false,false
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,50,tracked,true,fault,,wide,in,ad,,,mistake,,,,,true,ad,deep,,b4,1,8,false,false,false,false,false,false,false
 thandi.mokoena@example.com,fc3e01ed-461a-4d24-93ea-695aae64c80f,51,tracked,true,fault,,net,in,deuce,,,forced,,,backhand,drive,true,ad,deep,,b1,1,8,false,false,false,false,false,false,false
@@ -4094,7 +4094,7 @@ thandi.mokoena@example.com,86488009-8fb1-4806-ab01-df69cc14fb3a,122,opponent,tru
 thandi.mokoena@example.com,86488009-8fb1-4806-ab01-df69cc14fb3a,123,tracked,false,in,ad,,,,,,forced,,,backhand,drive,true,deuce,deep,,b1,3,1,true,true,false,true,true,true,true
 thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,0,tracked,true,in,deuce,,,,,,forced,,,forehand,drive,true,ad,deep,,b1,1,1,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,1,tracked,true,in,ad,,,,,,forced,,,forehand,drive,true,ad,short,,b3,1,1,false,false,false,false,false,false,false
-thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,2,tracked,false,fault,,net,in,deuce,,,unusual,other,Ball from the next court,,,,,,,,1,1,false,false,false,false,false,false,false
+thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,2,tracked,false,fault,,net,in,deuce,,,unusual,other,,,,,,,,,1,1,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,3,tracked,false,in,ad,,,,,,forced,,,backhand,drive,true,deuce,deep,,b4,1,1,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,4,tracked,false,fault,,net,in,deuce,,,mistake,,,,,true,ad,deep,,b1,1,1,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e8ae03c4-922d-4e87-bdb1-00ed422b8508,5,tracked,true,in,ad,,,,,,forced,,,forehand,volley,true,deuce,deep,,b2,1,1,false,true,false,false,false,false,false
@@ -5766,7 +5766,7 @@ derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,67,opponent,true,
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,68,opponent,false,fault,,,in,,,long,mistake,,,,,,,,,b1,1,9,false,true,false,false,false,false,false
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,69,opponent,false,in,,,,,,long,forced,,,,,,,,,b1,1,9,false,false,false,false,false,false,false
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,70,opponent,true,fault,,,in,,,in,mistake,,,,,true,ad,deep,,b4,1,9,false,false,true,false,false,false,false
-derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,71,opponent,false,fault,,,in,,,in,unusual,other,Ball from the next court,,,,,,,,1,9,false,false,false,false,false,false,false
+derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,71,opponent,false,fault,,,in,,,in,unusual,other,,,,,,,,,1,9,false,false,false,false,false,false,false
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,72,opponent,false,in,,,,,,in,forced,,,backhand,drive,true,deuce,deep,,b2,1,9,false,false,true,true,false,false,false
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,73,tracked,false,fault,,long,in,deuce,,,mistake,,,,,true,deuce,deep,,b1,1,10,false,false,false,false,false,false,false
 derek.wallace@example.com,4c92e91f-de77-497c-94b2-a7ae2884db6b,74,tracked,false,in,ad,,,,,,mistake,,,,,true,deuce,deep,,b1,1,10,false,false,false,false,false,false,false
@@ -7652,7 +7652,7 @@ derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,10,opponent,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,11,opponent,false,ace,,,,,,,ace,,,,,,,,,b1,1,2,false,false,false,false,false,false,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,12,opponent,true,fault,,,in,,,in,forced,,,backhand,drive,true,ad,deep,,b1,1,2,false,false,true,false,false,false,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,13,opponent,false,in,,,,,,net,forced,,,,,,,,,b1,1,2,false,true,true,true,false,false,false
-derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,14,tracked,false,fault,,net,in,deuce,,,unusual,other,Ball from the next court,,,,,,,,1,3,false,false,false,false,false,false,false
+derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,14,tracked,false,fault,,net,in,deuce,,,unusual,other,,,,,,,,,1,3,false,false,false,false,false,false,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,15,tracked,true,in,ad,,,,,,forced,,,forehand,drive,true,deuce,short,,b4,1,3,false,false,false,false,false,false,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,16,tracked,true,in,deuce,,,,,,forced,,,forehand,drive,true,ad,deep,,b1,1,3,false,false,false,false,false,false,false
 derek.wallace@example.com,a0ae7146-bf11-4548-bdf0-30e8b495e6f7,17,tracked,false,in,ad,,,,,,forced,,,forehand,drive,true,ad,short,,b1,1,3,false,false,false,false,false,false,false
@@ -7810,7 +7810,7 @@ derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,62,tracked,true,f
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,63,tracked,true,in,deuce,,,,,,forced,,,forehand,lob,true,ad,deep,,b3,2,5,false,false,false,false,false,false,false
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,64,tracked,false,fault,,net,in,ad,,,forced,,,backhand,drive,true,ad,deep,,b3,2,5,false,false,true,false,false,false,false
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,65,tracked,false,fault,,long,in,deuce,,,mistake,,,,,true,ad,deep,,b2,2,5,false,false,true,false,false,false,false
-derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,66,tracked,false,in,ad,,,,,,unusual,other,Ball from the next court,,,,,,,,2,5,false,false,true,false,false,false,false
+derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,66,tracked,false,in,ad,,,,,,unusual,other,,,,,,,,,2,5,false,false,true,false,false,false,false
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,67,tracked,false,in,deuce,,,,,,mistake,,,,,true,deuce,short,,b1,2,5,false,false,false,false,false,false,false
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,68,tracked,false,fault,,wide,in,ad,,,mistake,,,,,true,deuce,deep,,b1,2,5,false,true,false,true,false,false,false
 derek.wallace@example.com,157ec537-94bb-4369-85d8-940028fa90e1,69,opponent,false,in,,,,,,in,forced,,,forehand,volley,true,ad,deep,,b2,2,6,false,false,false,false,false,false,false
@@ -9651,7 +9651,7 @@ thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,13,tracked,true,
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,14,tracked,false,in,ad,,,,,,forced,,,backhand,drive,true,ad,deep,,b2,1,3,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,15,tracked,true,fault,,long,in,deuce,,,forced,,,backhand,volley,true,ad,deep,,b4,1,3,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,16,tracked,true,in,ad,,,,,,mistake,,,,,true,deuce,short,,b2,1,3,false,false,true,true,false,false,false
-thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,17,opponent,false,fault,,,in,,,in,unusual,other,Ball from the next court,,,,,,,,1,4,false,false,false,false,false,false,false
+thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,17,opponent,false,fault,,,in,,,in,unusual,other,,,,,,,,,1,4,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,18,opponent,false,fault,,,in,,,net,forced,,,,,,,,,b1,1,4,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,19,opponent,true,in,,,,,,in,mistake,,,,,true,deuce,short,,b3,1,4,false,false,false,false,false,false,false
 thandi.mokoena@example.com,e2d5c897-03c6-4af7-87fc-877eece0984c,20,opponent,true,fault,,,in,,,in,forced,,,backhand,drive,true,ad,short,,b1,1,4,false,false,false,false,false,false,false
@@ -12537,7 +12537,7 @@ derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,116,tracked,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,117,tracked,false,fault,,long,in,ad,,,mistake,,,,,true,ad,deep,,b3,2,10,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,118,tracked,true,fault,,wide,in,deuce,,,forced,,,forehand,volley,true,ad,deep,,b4,2,10,false,true,false,false,true,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,119,tracked,true,fault,,net,in,ad,,,mistake,,,,,true,ad,deep,,b4,2,10,false,true,false,false,true,false,false
-derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,120,tracked,true,fault,,net,in,deuce,,,unusual,other,Ball from the next court,,,,,,,,2,10,false,false,false,false,false,false,false
+derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,120,tracked,true,fault,,net,in,deuce,,,unusual,other,,,,,,,,,2,10,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,121,tracked,false,in,ad,,,,,,mistake,,,,,true,deuce,short,,b2,2,10,false,false,true,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,122,tracked,false,in,deuce,,,,,,forced,,,backhand,drive,true,ad,deep,,b1,2,10,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,123,tracked,false,in,ad,,,,,,mistake,,,,,true,ad,short,,b1,2,10,false,true,false,true,true,true,false
@@ -12602,7 +12602,7 @@ derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,181,opponent,true
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,182,opponent,true,fault,,,in,,,in,forced,,,forehand,drive,true,deuce,short,,b2,3,11,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,183,opponent,true,in,,,,,,in,mistake,,,,,true,ad,short,,b1,3,11,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,184,opponent,true,fault,,,in,,,in,forced,,,,,true,ad,short,,b2,3,11,false,true,false,true,false,false,false
-derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,185,tracked,false,fault,,long,in,deuce,,,unusual,other,Ball from the next court,,,,,,,,3,12,false,false,false,false,false,false,false
+derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,185,tracked,false,fault,,long,in,deuce,,,unusual,other,,,,,,,,,3,12,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,186,tracked,true,fault,,net,in,ad,,,forced,,,,,true,deuce,deep,,b3,3,12,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,187,tracked,true,in,deuce,,,,,,mistake,,,,,true,deuce,deep,,b1,3,12,false,false,false,false,false,false,false
 derek.wallace@example.com,4478f2fd-a933-435d-a756-3c76a15750bf,188,tracked,false,in,ad,,,,,,mistake,,,,,true,deuce,deep,,b4,3,12,false,false,false,false,false,false,false
@@ -12670,7 +12670,7 @@ farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,58,tracked,true,in
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,59,tracked,false,fault,,long,in,ad,,,mistake,,,,,true,ad,deep,,b2,1,9,false,false,true,false,true,false,false
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,60,tracked,true,in,deuce,,,,,,forced,,,forehand,drive,true,ad,short,,b2,1,9,false,false,true,true,true,true,false
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,61,opponent,false,ace,,,,,,,ace,,,,,,,,,b1,2,1,false,false,false,false,false,false,false
-farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,62,opponent,true,in,,,,,,in,unusual,other,Ball from the next court,,,,,,,,2,1,false,false,false,false,false,false,false
+farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,62,opponent,true,in,,,,,,in,unusual,other,,,,,,,,,2,1,false,false,false,false,false,false,false
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,63,opponent,false,in,,,,,,in,forced,,,forehand,dropshot,true,ad,deep,,b4,2,1,false,false,false,false,false,false,false
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,64,opponent,false,in,,,,,,long,mistake,,,,,,,,,b1,2,1,false,false,false,false,false,false,false
 farah.ismail@example.com,a55af6c4-4278-4c2e-9126-bc8ddbab154b,65,opponent,false,in,,,,,,in,forced,,,forehand,drive,true,ad,short,,b3,2,1,false,false,true,true,false,false,false
@@ -14421,7 +14421,7 @@ derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,135,tracked,true,
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,136,tracked,false,in,deuce,,,,,,forced,,,forehand,drive,true,deuce,short,,b1,3,5,false,false,false,false,false,false,false
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,137,tracked,true,fault,,net,in,ad,,,mistake,,,,,true,deuce,deep,,b1,3,5,false,true,false,false,false,false,false
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,138,tracked,false,fault,,net,in,deuce,,,mistake,,,,,true,ad,deep,,b1,3,5,false,false,false,false,false,false,false
-derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,139,tracked,false,fault,,net,in,ad,,,unusual,other,Ball from the next court,,,,,,,,3,5,false,true,false,true,false,false,false
+derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,139,tracked,false,fault,,net,in,ad,,,unusual,other,,,,,,,,,3,5,false,true,false,true,false,false,false
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,140,opponent,false,fault,,,in,,,wide,forced,,,,,,,,,b1,3,6,false,false,false,false,false,false,false
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,141,opponent,true,fault,,,in,,,in,forced,,,backhand,drive,true,ad,deep,,b3,3,6,false,false,false,false,false,false,false
 derek.wallace@example.com,d5b81d21-298a-47ce-95d9-944aee1e425f,142,opponent,false,in,,,,,,in,forced,,,forehand,volley,true,deuce,short,,b3,3,6,false,false,false,false,false,false,false

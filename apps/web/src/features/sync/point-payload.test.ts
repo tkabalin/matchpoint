@@ -35,7 +35,6 @@ function point(overrides: Record<string, unknown> = {}) {
     returnOutcome: null,
     endReason: "FORCED",
     unusualReason: null,
-    unusualNote: null,
     note: null,
     wing: "FOREHAND",
     shotType: "DRIVE",
@@ -122,7 +121,6 @@ const SHAPES: [string, Record<string, unknown>][] = [
     {
       endReason: "UNUSUAL",
       unusualReason: "HINDRANCE",
-      unusualNote: "Ball from the next court.",
       ...NO_CONTACT,
     },
   ],
@@ -242,16 +240,9 @@ describe("toPointCreate", () => {
     });
   });
 
-  // The wire's one note column is the coach's general note. unusualNote is the
-  // capture model's separate unusual-point note, which no surface writes (#209).
-  test("sends the general note and ignores an unusual point's own", () => {
-    const unusual = { endReason: "UNUSUAL", unusualReason: "OTHER", ...NO_CONTACT };
+  test("sends the coach's general note", () => {
     expect(toPointCreate(point()).note).toBeNull();
     expect(toPointCreate(point({ note: "Tight." })).note).toBe("Tight.");
-    expect(toPointCreate(point({ ...unusual, unusualNote: "Rain delay." })).note).toBeNull();
-    expect(
-      toPointCreate(point({ ...unusual, note: "Tight.", unusualNote: "Rain delay." })).note,
-    ).toBe("Tight.");
   });
 
   // point.ts truncates a note at NOTE_MAX_LENGTH so a batch can never strand on a

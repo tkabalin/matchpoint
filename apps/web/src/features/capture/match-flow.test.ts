@@ -56,7 +56,6 @@ function pointAt(matchId: string, sequence: number) {
     returnOutcome: null,
     endReason: null,
     unusualReason: null,
-    unusualNote: null,
     note: null,
     wing: null,
     shotType: null,

@@ -113,7 +113,6 @@ async function logAMatchInProgress(updatedAt = Date.now()) {
       returnOutcome: null,
       endReason: null,
       unusualReason: null,
-      unusualNote: null,
       note: null,
       wing: null,
       shotType: null,

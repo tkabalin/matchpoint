@@ -55,7 +55,6 @@ export interface PointDraft {
   won: boolean | null;
   endReason: EndReason | null;
   unusualReason: UnusualReason | null;
-  unusualNote: string | null;
   // A coach note, added any time during the point via ADD_NOTE — see its own comment
   // in transition() for why it isn't gated to a particular step.
   note: string | null;
@@ -82,7 +81,6 @@ function freshDraft(
     won: null,
     endReason: null,
     unusualReason: null,
-    unusualNote: null,
     note: null,
     wing: null,
     shotType: null,
@@ -168,7 +166,7 @@ export type CaptureAction =
   // be told.
   | { type: "TAP_DIDNT_SEE"; won?: boolean }
   | { type: "TAP_UNUSUAL_OUTCOME"; won: boolean }
-  | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null; note: string | null }
+  | { type: "TAP_UNUSUAL_REASON"; reason: UnusualReason | null }
   // The last good ball finished on the loser's half, so the half the coach tapped is
   // also who won. The screen resolves that (it knows which half is drawn where); this
   // module only stores the answer.
@@ -386,11 +384,7 @@ export function transition(state: CaptureState, action: CaptureAction): CaptureS
 
     case "UNUSUAL_REASON": {
       if (action.type === "TAP_UNUSUAL_REASON") {
-        const nextDraft: PointDraft = {
-          ...draft,
-          unusualReason: action.reason,
-          unusualNote: action.note,
-        };
+        const nextDraft: PointDraft = { ...draft, unusualReason: action.reason };
         // rallyLengthBucket is left null, neither asked nor defaulted like ACE/
         // DOUBLE_FAULT: a mid-rally hindrance had a real length, a point penalty had
         // none, and a default either way would corrupt short-rally win-percentage stats.

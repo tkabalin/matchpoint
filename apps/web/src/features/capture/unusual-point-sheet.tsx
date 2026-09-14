@@ -150,7 +150,7 @@ export function UnusualPointSheet({
             disabled={askingWinner || reason === null}
             onClick={() => {
               if (reason === null) return;
-              onAction({ type: "TAP_UNUSUAL_REASON", reason, note: null });
+              onAction({ type: "TAP_UNUSUAL_REASON", reason });
             }}
             className="h-14 text-base"
           >

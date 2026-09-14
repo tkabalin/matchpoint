@@ -360,7 +360,7 @@ export function LiveMatch({
     advance(from, [
       { type: "TAP_UNUSUAL" },
       { type: "TAP_UNUSUAL_OUTCOME", won },
-      { type: "TAP_UNUSUAL_REASON", reason: null, note: null },
+      { type: "TAP_UNUSUAL_REASON", reason: null },
     ]);
   }
 

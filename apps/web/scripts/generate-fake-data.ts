@@ -574,12 +574,7 @@ function capturePoint(
   if (chance(0.008)) {
     act({ type: "TAP_UNUSUAL" });
     act({ type: "TAP_UNUSUAL_OUTCOME", won });
-    const reason = weighted(UNUSUAL_REASONS);
-    act({
-      type: "TAP_UNUSUAL_REASON",
-      reason,
-      note: reason === "OTHER" ? "Ball from the next court" : null,
-    });
+    act({ type: "TAP_UNUSUAL_REASON", reason: weighted(UNUSUAL_REASONS) });
     return finish(state, match, board, sequence, timestamp);
   }
 
@@ -883,7 +878,6 @@ const POINT_COLUMNS = [
   "return_outcome",
   "end_reason",
   "unusual_reason",
-  "unusual_note",
   "note",
   "wing",
   "shot_type",
@@ -924,7 +918,6 @@ function pointRow(generated: GeneratedMatch, payload: ReturnType<Point["toJSON"]
     payload.returnOutcome,
     payload.endReason,
     payload.unusualReason,
-    payload.unusualNote,
     payload.note,
     payload.wing,
     payload.shotType,
@@ -1076,9 +1069,7 @@ function toApiPoint(payload: ReturnType<Point["toJSON"]>): ApiPoint {
     end_reason: API_END_REASON[payload.endReason],
     unusual_reason:
       payload.unusualReason === null ? null : API_UNUSUAL_REASON[payload.unusualReason],
-    // One note column on this side of the wire, and a point can carry both a coach's
-    // note and an unusual point's own, so they join the way capture joins two notes.
-    note: [payload.note, payload.unusualNote].filter((text) => text !== null).join("\n") || null,
+    note: payload.note,
     wing: payload.wing === null ? null : API_WING[payload.wing],
     shot_type: payload.shotType === null ? null : API_SHOT_TYPE[payload.shotType],
     ball_in: payload.ballIn,

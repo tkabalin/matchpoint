@@ -89,7 +89,6 @@ function pointEntry(
       returnOutcome: null,
       endReason: "ACE",
       unusualReason: null,
-      unusualNote: null,
       note: null,
       wing: null,
       shotType: null,

@@ -254,9 +254,7 @@ export class Point {
   readonly endReason: EndReason | null;
   // Unusual points only — null otherwise, and optional even on one.
   readonly unusualReason: UnusualReason | null;
-  readonly unusualNote: string | null;
-  // A coach's free-text annotation on any point, not only an unusual one — distinct
-  // from unusualNote above, which only ever accompanies an UNUSUAL end reason.
+  // A coach's free-text annotation, legal on any point, not only an unusual one.
   readonly note: string | null;
   // Null on ACE / DOUBLE_FAULT / UNUSUAL (no contact) and on a return error (returnOutcome
   // already describes it). Otherwise the last *successful* shot of the point — theirs on our
@@ -290,7 +288,6 @@ export class Point {
     returnOutcome: ReturnOutcome | null;
     endReason: EndReason | null;
     unusualReason: UnusualReason | null;
-    unusualNote: string | null;
     note: string | null;
     wing: Wing | null;
     shotType: ShotType | null;
@@ -310,7 +307,6 @@ export class Point {
     this.returnOutcome = fields.returnOutcome;
     this.endReason = fields.endReason;
     this.unusualReason = fields.unusualReason;
-    this.unusualNote = fields.unusualNote;
     this.note = fields.note;
     this.wing = fields.wing;
     this.shotType = fields.shotType;
@@ -438,19 +434,8 @@ export class Point {
     }
     const unusualReason = data.unusualReason as UnusualReason | null;
 
-    if (
-      data.unusualNote !== null &&
-      (typeof data.unusualNote !== "string" || data.unusualNote.length === 0)
-    ) {
-      throw new Error("unusualNote must be a non-empty string, or null");
-    }
-    if (endReason !== "UNUSUAL" && data.unusualNote !== null) {
-      throw new Error("unusualNote must be null when endReason is not UNUSUAL");
-    }
-    const unusualNote = data.unusualNote as string | null;
-
-    // No endReason coupling, unlike unusualNote above — a coach can annotate any
-    // point, so this is just a plain nullable string.
+    // No endReason coupling — a coach can annotate any point, so this is just a plain
+    // nullable string.
     if (data.note !== null && (typeof data.note !== "string" || data.note.length === 0)) {
       throw new Error("note must be a non-empty string, or null");
     }
@@ -538,7 +523,6 @@ export class Point {
       returnOutcome,
       endReason,
       unusualReason,
-      unusualNote,
       note,
       wing,
       shotType,
@@ -569,7 +553,6 @@ export class Point {
       returnOutcome: this.returnOutcome,
       endReason: this.endReason,
       unusualReason: this.unusualReason,
-      unusualNote: this.unusualNote,
       note: this.note,
       wing: this.wing,
       shotType: this.shotType,

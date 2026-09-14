@@ -136,7 +136,6 @@ export async function seedMatchWithMomentumStrip(page: Page): Promise<string> {
           returnOutcome: null,
           endReason: "ACE",
           unusualReason: null,
-          unusualNote: null,
           note: null,
           wing: null,
           shotType: null,

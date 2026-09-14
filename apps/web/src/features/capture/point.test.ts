@@ -35,7 +35,6 @@ function pointData(overrides: Record<string, unknown> = {}) {
     won: true,
     endReason: "FORCED",
     unusualReason: null,
-    unusualNote: null,
     note: null,
     wing: null,
     shotType: null,
@@ -342,41 +341,33 @@ describe("Point.create structural validation", () => {
     expect(() => Point.create(pointData({ endReason: "WINNER" }))).toThrow(/endReason/);
   });
 
-  describe("unusualReason / unusualNote", () => {
+  describe("unusualReason", () => {
     test("rejects a non-null unusualReason when endReason isn't UNUSUAL", () => {
       expect(() => Point.create(pointData({ unusualReason: "HINDRANCE" }))).toThrow(
         /unusualReason/,
       );
     });
 
-    test("rejects a non-null unusualNote when endReason isn't UNUSUAL", () => {
-      expect(() => Point.create(pointData({ unusualNote: "let it go" }))).toThrow(/unusualNote/);
-    });
-
-    test("accepts an UNUSUAL point with no reason or note — the escape hatch stays optional", () => {
+    test("accepts an UNUSUAL point with no reason — the escape hatch stays optional", () => {
       const point = Point.create(
         pointData({
           endReason: "UNUSUAL",
           unusualReason: null,
-          unusualNote: null,
           ...NO_CONTACT,
         }),
       );
       expect(point.unusualReason).toBeNull();
-      expect(point.unusualNote).toBeNull();
     });
 
-    test("accepts an UNUSUAL point with a reason and note", () => {
+    test("accepts an UNUSUAL point with a reason", () => {
       const point = Point.create(
         pointData({
           endReason: "UNUSUAL",
           unusualReason: "POINT_PENALTY",
-          unusualNote: "coach warning",
           ...NO_CONTACT,
         }),
       );
       expect(point.unusualReason).toBe("POINT_PENALTY");
-      expect(point.unusualNote).toBe("coach warning");
     });
 
     test("rejects an unknown unusualReason", () => {

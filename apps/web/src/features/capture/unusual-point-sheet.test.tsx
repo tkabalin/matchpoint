@@ -69,11 +69,7 @@ test("the point cannot be recorded until a reason is picked", async () => {
   expect(screen.getByRole("radio", { name: /Hindrance/ })).toHaveAttribute("aria-checked", "true");
   await user.click(screen.getByRole("button", { name: "Record point" }));
 
-  expect(onAction).toHaveBeenCalledWith({
-    type: "TAP_UNUSUAL_REASON",
-    reason: "HINDRANCE",
-    note: null,
-  });
+  expect(onAction).toHaveBeenCalledWith({ type: "TAP_UNUSUAL_REASON", reason: "HINDRANCE" });
 });
 
 test("back on the reason step steps the flow back, it does not dismiss", async () => {
