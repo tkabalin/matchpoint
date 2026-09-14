@@ -61,10 +61,10 @@ function member(overrides: Partial<SquadMemberStats> & { player_id: string }): S
   };
 }
 
-// index 0 (8–2, ratio 1.6) beats index 2 (1–8, ratio 0.9) on Record, but
-// index 2 beats index 1 (5–5, ratio 0.7) on Forced:Unforced — a real
-// reordering between metrics. Index 3 (1 match) sits below the ranking
-// threshold.
+// index 0 (8–2, 80%) beats index 2 (1–8, 11%) on win %, but index 2 beats
+// index 1 (5–5, 0.7) on Forced:Unforced (0.9) — a real reordering between
+// metrics. Index 3 (1 match, 1–0, 100%) is no longer excluded by any
+// threshold — it simply ranks on its own numbers like everyone else.
 const players: PlayerRead[] = [
   player("p0", "Alex", "Chen"),
   player("p1", "Priya", "Singh"),
@@ -77,23 +77,32 @@ const squadStats: SquadMemberStats[] = [
     player_id: "p0",
     period_record: { wins: 8, losses: 2 },
     period_forced_to_unforced_ratio: 1.6,
+    period_forced_errors_induced: 16,
+    period_unforced_errors: 10,
     matches_logged_this_period: 10,
   }),
   member({
     player_id: "p1",
     period_record: { wins: 5, losses: 5 },
     period_forced_to_unforced_ratio: 0.7,
+    period_forced_errors_induced: 7,
+    period_unforced_errors: 10,
     matches_logged_this_period: 10,
   }),
   member({
     player_id: "p2",
     period_record: { wins: 1, losses: 8 },
     period_forced_to_unforced_ratio: 0.9,
+    period_forced_errors_induced: 9,
+    period_unforced_errors: 10,
     matches_logged_this_period: 9,
   }),
   member({
     player_id: "p3",
     period_record: { wins: 1, losses: 0 },
+    period_forced_to_unforced_ratio: 0.5,
+    period_forced_errors_induced: 2,
+    period_unforced_errors: 2,
     matches_logged_this_period: 1,
   }),
 ];
@@ -154,47 +163,57 @@ async function renderPage() {
   await screen.findByText("Leaderboard");
 }
 
+function leaderboardChips() {
+  return screen.getByRole("group", { name: "Leaderboard metric" });
+}
+
+function trendChips() {
+  return screen.getByRole("group", { name: "Trend metric" });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("shows the squad headline with an icon per stat, and the period's match count", async () => {
+test("shows the squad headline with an icon per stat, split forced/unforced counts, and the period's match count", async () => {
   stubFetch();
   await renderPage();
 
-  // "Record" also names the leaderboard's default metric selection, so this
-  // checks the labels that only appear on the headline card.
-  expect(screen.getByText("Forced : Unforced")).toBeInTheDocument();
-  expect(screen.getByText("1st serves landing in play")).toBeInTheDocument();
-  // Sum of the four members' wins/losses (8+5+1+1 / 2+5+8+0).
-  expect(screen.getByText("15W – 15L")).toBeInTheDocument();
+  expect(screen.getAllByText("First serves landing in play").length).toBeGreaterThan(0);
+  // Sum of the four members' wins/losses (8+5+1+1 / 2+5+8+0) — both happen to
+  // be 15, shown as two separate icon-marked numbers rather than "15W – 15L".
+  const winRecordBlock = screen.getByText("Win record").parentElement!;
+  expect(within(winRecordBlock).getAllByText("15")).toHaveLength(2);
+  // Sum of forced (16+7+9+2=34) and unforced (10+10+10+2=32) counts, not a ratio.
+  expect(screen.getByText("34 | 32")).toBeInTheDocument();
   // 10 + 10 + 9 + 1.
   expect(await screen.findByText("Squad · 30 matches this period")).toBeInTheDocument();
 });
 
-test("leaderboard defaults to Record order, sub-threshold player dimmed at the bottom", async () => {
+test("leaderboard ranks every player, no minimum-matches threshold or dimming", async () => {
   stubFetch();
   await renderPage();
 
   const rows = await screen.findAllByText(/Chen|Singh|Rivera|Ross/);
+  // Default metric is win %: Ross (1-0, 100%) now outranks everyone, since
+  // there's no threshold excluding a 1-match player any more.
   expect(rows.map((row) => row.textContent)).toEqual([
+    "Rookie Ross",
     "Alex Chen",
     "Priya Singh",
     "Sam Rivera",
-    "Rookie Ross",
   ]);
-  expect(screen.getByText("1 match")).toBeInTheDocument();
-  expect(screen.getByText(/3\+ matches logged/)).toBeInTheDocument();
+  expect(screen.queryByText(/3\+ matches logged/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/matches$/)).not.toBeInTheDocument();
 });
 
-test("switching the leaderboard metric reorders the ranked rows", async () => {
+test("switching the leaderboard metric chip reorders the ranked rows", async () => {
   stubFetch();
   const user = userEvent.setup({ delay: null });
   await renderPage();
   await screen.findAllByText(/Chen|Singh|Rivera|Ross/);
 
-  await user.click(screen.getByRole("combobox", { name: "Leaderboard metric" }));
-  await user.click(await screen.findByRole("option", { name: "Forced : Unforced" }));
+  await user.click(within(leaderboardChips()).getByRole("button", { name: "Forced : Unforced" }));
 
   const rows = screen.getAllByText(/Chen|Singh|Rivera|Ross/);
   expect(rows.map((row) => row.textContent)).toEqual([
@@ -203,6 +222,8 @@ test("switching the leaderboard metric reorders the ranked rows", async () => {
     "Priya Singh",
     "Rookie Ross",
   ]);
+  // The row shows the split counts, not the ratio, for this metric.
+  expect(screen.getByText("16 | 10")).toBeInTheDocument();
 });
 
 test("search filters the leaderboard", async () => {
@@ -222,16 +243,16 @@ test("the trend card's metric selection is independent of the leaderboard's", as
   const user = userEvent.setup({ delay: null });
   await renderPage();
 
-  await user.click(screen.getByRole("combobox", { name: "Leaderboard metric" }));
-  await user.click(await screen.findByRole("option", { name: "Forced : Unforced" }));
+  await user.click(within(leaderboardChips()).getByRole("button", { name: "Forced : Unforced" }));
 
   expect(
-    within(screen.getByRole("combobox", { name: "Trend metric" })).getByText("Record (win %)"),
+    within(trendChips()).getByRole("button", { name: "Win percentage", pressed: true }),
   ).toBeInTheDocument();
   expect(
-    within(screen.getByRole("combobox", { name: "Leaderboard metric" })).getByText(
-      "Forced : Unforced",
-    ),
+    within(leaderboardChips()).getByRole("button", {
+      name: "Forced : Unforced",
+      pressed: true,
+    }),
   ).toBeInTheDocument();
 });
 
@@ -323,4 +344,12 @@ test("picking a surface re-fetches both the members and the trend with it applie
       (url) => url.includes("/squad/analytics/trend") && url.includes("surface=clay"),
     ),
   ).toBe(true);
+});
+
+test("the Spread histogram is gone", async () => {
+  stubFetch();
+  await renderPage();
+  await screen.findAllByText(/Chen|Singh|Rivera|Ross/);
+
+  expect(screen.queryByText(/Spread/)).not.toBeInTheDocument();
 });

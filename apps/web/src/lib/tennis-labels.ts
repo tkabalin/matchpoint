@@ -1,10 +1,23 @@
 import type { ScoringSystem, Surface } from "@matchpoint/api-client";
+import { Layers, type LucideIcon, Rows3, Sprout, Square } from "lucide-react";
 
 export const SURFACE_LABEL: Record<Surface, string> = {
   hard: "Hard",
   clay: "Clay",
   grass: "Grass",
   carpet: "Carpet",
+};
+
+/** One icon per surface, everywhere a surface is shown (filter chips, Select
+ *  options, a match's own surface line) so the same shape always means the
+ *  same surface, per `.claude/rules/web-icons.md`. `LandPlot` stays the
+ *  generic "this is about court surface" concept icon (a card header, a
+ *  section title); this map is for a specific surface value. */
+export const SURFACE_ICON: Record<Surface, LucideIcon> = {
+  hard: Square,
+  clay: Layers,
+  grass: Sprout,
+  carpet: Rows3,
 };
 
 // "Women's Grand Slam" isn't its own entry — docs/scoring-systems.md records it as

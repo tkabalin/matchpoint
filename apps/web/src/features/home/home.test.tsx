@@ -605,6 +605,6 @@ test("renders the bottom nav with Home active", async () => {
   await renderHome();
 
   expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Squad stats" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("aria-current", "page");
 });

@@ -154,7 +154,7 @@ test("renders the bottom nav with Players active", async () => {
 
   expect(screen.getByRole("link", { name: "Home" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Squad stats" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Players" })).toHaveAttribute("aria-current", "page");
 });
 

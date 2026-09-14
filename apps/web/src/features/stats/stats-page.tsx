@@ -4,29 +4,33 @@ import {
   listSquadMemberStatsOptions,
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
+import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { ChipRow } from "@/components/chip-row";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
+import { SURFACE_ICON } from "@/lib/tennis-labels";
 
+import { PlayerInsightsCard } from "./player-insights-card";
 import { SquadHeadlineCard } from "./squad-headline-card";
 import { SquadLeaderboardCard } from "./squad-leaderboard-card";
 import { SquadTrendCard } from "./squad-trend-card";
 
 type SquadSurfaceFilter = "all" | Surface;
 
-// Deliberately not data-driven the way the player page's own surface chips are
-// (#225's product decision): this is one shared filter for the whole roster
-// rather than one player's own matches, and carpet is left out on purpose —
-// effectively extinct in tennis, and a squad-wide filter is a worse place than
-// a single player's page to first decide whether it's worth showing at all.
-const SURFACE_OPTIONS: { value: SquadSurfaceFilter; label: string }[] = [
+// Deliberately not data-driven the way the player page's own surface chips
+// are (#225's product decision): this is one shared filter for the whole
+// roster rather than one player's own matches, and carpet is left out on
+// purpose. It's effectively extinct in tennis, and a squad-wide filter is a
+// worse place than a single player's page to first decide whether it's
+// worth showing at all.
+const SURFACE_OPTIONS: { value: SquadSurfaceFilter; label: string; icon?: LucideIcon }[] = [
   { value: "all", label: "All" },
-  { value: "hard", label: "Hard" },
-  { value: "clay", label: "Clay" },
-  { value: "grass", label: "Grass" },
+  { value: "hard", label: "Hard", icon: SURFACE_ICON.hard },
+  { value: "clay", label: "Clay", icon: SURFACE_ICON.clay },
+  { value: "grass", label: "Grass", icon: SURFACE_ICON.grass },
 ];
 
 /**
@@ -64,6 +68,8 @@ export function StatsPage() {
       name: `${player.first_name} ${player.last_name}`,
       wins: member?.period_record.wins ?? 0,
       losses: member?.period_record.losses ?? 0,
+      forcedCount: member?.period_forced_errors_induced ?? 0,
+      unforcedCount: member?.period_unforced_errors ?? 0,
       forcedToUnforcedRatio: member?.period_forced_to_unforced_ratio ?? null,
       firstServeInPercent: member?.period_first_serve_in_percent ?? null,
       matchesLoggedThisPeriod: member?.matches_logged_this_period ?? 0,
@@ -80,8 +86,10 @@ export function StatsPage() {
         onChange={setSurface}
       />
       <SquadHeadlineCard entries={entries} />
+      <PlayerInsightsCard players={roster} surface={surfaceQuery} />
       <SquadLeaderboardCard
         entries={entries}
+        players={roster}
         metric={leaderboardMetric}
         onMetricChange={setLeaderboardMetric}
         search={search}

@@ -24,7 +24,7 @@ import {
   type MatchFormValues,
 } from "@/lib/match-form";
 import { parseErrorMessage } from "@/lib/parse-error";
-import { SCORING_SYSTEM_LABEL, SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SCORING_SYSTEM_LABEL, SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 
 const NONE = "none";
 
@@ -157,18 +157,29 @@ export function EditMatchSheet({
                   >
                     <SelectTrigger id="match-surface">
                       <SelectValue>
-                        {(value: string) =>
-                          value === NONE ? "Unspecified" : SURFACE_LABEL[value as Surface]
-                        }
+                        {(value: string) => {
+                          if (value === NONE) return "Unspecified";
+                          const SurfaceIcon = SURFACE_ICON[value as Surface];
+                          return (
+                            <>
+                              <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                              {SURFACE_LABEL[value as Surface]}
+                            </>
+                          );
+                        }}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NONE}>Unspecified</SelectItem>
-                      {SURFACE_OPTIONS.map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
+                      {SURFACE_OPTIONS.map(([value, label]) => {
+                        const SurfaceIcon = SURFACE_ICON[value];
+                        return (
+                          <SelectItem key={value} value={value}>
+                            <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                            {label}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </Field>

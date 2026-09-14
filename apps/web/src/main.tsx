@@ -48,7 +48,11 @@ const queryClient = new QueryClient({
     },
   },
 });
-const router = createRouter({ routeTree, context: { queryClient } });
+// Without this, every back-navigation drops the coach at the top of the
+// previous page — most noticeable coming back from a player's stats page to
+// a scrolled-down spot on the Players tab, Matches tab, or Squad stats
+// (the "Player insights" grid in particular; #225).
+const router = createRouter({ routeTree, context: { queryClient }, scrollRestoration: true });
 
 declare module "@tanstack/react-router" {
   interface Register {

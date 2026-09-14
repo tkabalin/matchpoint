@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
 import { MatchCard } from "./match-card";
@@ -219,18 +219,29 @@ export function MatchList({
               >
                 <SelectTrigger aria-label="Surface">
                   <SelectValue>
-                    {(value: string) =>
-                      value === "all" ? "Any surface" : SURFACE_LABEL[value as Surface]
-                    }
+                    {(value: string) => {
+                      if (value === "all") return "Any surface";
+                      const SurfaceIcon = SURFACE_ICON[value as Surface];
+                      return (
+                        <>
+                          <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                          {SURFACE_LABEL[value as Surface]}
+                        </>
+                      );
+                    }}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Any surface</SelectItem>
-                  {(Object.entries(SURFACE_LABEL) as [Surface, string][]).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
-                    </SelectItem>
-                  ))}
+                  {(Object.entries(SURFACE_LABEL) as [Surface, string][]).map(([value, label]) => {
+                    const SurfaceIcon = SURFACE_ICON[value];
+                    return (
+                      <SelectItem key={value} value={value}>
+                        <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                        {label}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
 

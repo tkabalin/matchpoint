@@ -45,7 +45,7 @@ test("renders all four coach tabs by default", async () => {
   expect(screen.getByRole("link", { name: "Home" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Players" })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Matches" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Stats" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Squad stats" })).toBeInTheDocument();
 });
 
 test("marks the current tab active and no other", async () => {
@@ -55,7 +55,7 @@ test("marks the current tab active and no other", async () => {
   expect(screen.getByRole("link", { name: "Matches" })).toHaveAttribute("aria-current", "page");
   expect(screen.getByRole("link", { name: "Home" })).not.toHaveAttribute("aria-current");
   expect(screen.getByRole("link", { name: "Players" })).not.toHaveAttribute("aria-current");
-  expect(screen.getByRole("link", { name: "Stats" })).not.toHaveAttribute("aria-current");
+  expect(screen.getByRole("link", { name: "Squad stats" })).not.toHaveAttribute("aria-current");
 });
 
 test("switches tabs on click", async () => {
@@ -63,10 +63,10 @@ test("switches tabs on click", async () => {
   renderAt("/home", COACH_PATHS);
   await screen.findByRole("heading", { name: "/home" });
 
-  await user.click(screen.getByRole("link", { name: "Stats" }));
+  await user.click(screen.getByRole("link", { name: "Squad stats" }));
 
   expect(await screen.findByRole("heading", { name: "/stats" })).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Stats" })).toHaveAttribute("aria-current", "page");
+  expect(screen.getByRole("link", { name: "Squad stats" })).toHaveAttribute("aria-current", "page");
 });
 
 // #203: a player's own nav is a different, smaller set — no roster, no Home
@@ -80,5 +80,5 @@ test("renders the player's three tabs instead, when given PLAYER_TABS", async ()
   expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Home" })).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Players" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("link", { name: "Stats" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Squad stats" })).not.toBeInTheDocument();
 });

@@ -15,7 +15,7 @@ export const COACH_TABS: NavTab[] = [
   { to: "/home", label: "Home", icon: House },
   { to: "/players", label: "Players", icon: Users },
   { to: "/matches", label: "Matches", icon: Volleyball },
-  { to: "/stats", label: "Stats", icon: ChartColumn },
+  { to: "/stats", label: "Squad stats", icon: ChartColumn },
 ];
 
 // A player's whole app is their own stats, their own matches, and changing their

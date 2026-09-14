@@ -1,10 +1,21 @@
+import type {
+  PointEnderKind,
+  PointEnderStyle,
+  PointEnderStyles,
+  SquadTrendPoint,
+} from "@matchpoint/api-client";
 import { expect, test } from "vitest";
 
 import {
-  buildHistogram,
+  aggressionScore,
   buildLeaderboard,
+  fillSquadTrendGaps,
   metricDisplay,
   metricValue,
+  mistakeResilience,
+  overallAverageRallyLength,
+  rallyLengthSizeBucket,
+  scaleToGroupRange,
   squadHeadline,
 } from "./squad-stats";
 import type { SquadStatsEntry } from "./types.provisional";
@@ -16,6 +27,8 @@ const alex: Named = {
   name: "Alex Chen",
   wins: 8,
   losses: 2,
+  forcedCount: 16,
+  unforcedCount: 10,
   forcedToUnforcedRatio: 1.6,
   firstServeInPercent: 68,
   matchesLoggedThisPeriod: 10,
@@ -25,6 +38,8 @@ const priya: Named = {
   name: "Priya Singh",
   wins: 1,
   losses: 8,
+  forcedCount: 9,
+  unforcedCount: 10,
   forcedToUnforcedRatio: 0.9,
   firstServeInPercent: 46,
   matchesLoggedThisPeriod: 9,
@@ -34,6 +49,8 @@ const rookie: Named = {
   name: "Rookie Reed",
   wins: 1,
   losses: 0,
+  forcedCount: 2,
+  unforcedCount: 2,
   forcedToUnforcedRatio: 1.0,
   firstServeInPercent: 55,
   matchesLoggedThisPeriod: 1,
@@ -57,14 +74,12 @@ test("metricDisplay shows an em dash for a metric that isn't computable yet", ()
   expect(metricDisplay(noRatioYet, "forcedToUnforced")).toBe("—");
 });
 
-test("squadHeadline sums wins/losses, and weighs each player's rate by their own match count", () => {
+test("squadHeadline sums wins/losses and raw forced/unforced counts, and weighs first-serve % by match count", () => {
   const headline = squadHeadline([alex, priya]);
 
   expect(headline.record).toEqual({ wins: 9, losses: 10 });
-  expect(headline.forcedToUnforcedRatio).toBeCloseTo(
-    (1.6 * alex.matchesLoggedThisPeriod + 0.9 * priya.matchesLoggedThisPeriod) /
-      (alex.matchesLoggedThisPeriod + priya.matchesLoggedThisPeriod),
-  );
+  expect(headline.forcedCount).toBe(alex.forcedCount + priya.forcedCount);
+  expect(headline.unforcedCount).toBe(alex.unforcedCount + priya.unforcedCount);
   expect(headline.firstServeInPercent).toBeCloseTo(
     (68 * alex.matchesLoggedThisPeriod + 46 * priya.matchesLoggedThisPeriod) /
       (alex.matchesLoggedThisPeriod + priya.matchesLoggedThisPeriod),
@@ -74,30 +89,27 @@ test("squadHeadline sums wins/losses, and weighs each player's rate by their own
   );
 });
 
-test("squadHeadline excludes a null rate from the average rather than counting it as zero", () => {
-  const noRatioYet: Named = { ...rookie, forcedToUnforcedRatio: null };
-
-  const headline = squadHeadline([alex, noRatioYet]);
-
-  expect(headline.forcedToUnforcedRatio).toBe(alex.forcedToUnforcedRatio);
-});
-
-test("squadHeadline returns a zeroed record and null rates for an empty squad", () => {
+test("squadHeadline returns a zeroed record, zeroed counts and a null rate for an empty squad", () => {
   const headline = squadHeadline([]);
 
   expect(headline.record).toEqual({ wins: 0, losses: 0 });
-  expect(headline.forcedToUnforcedRatio).toBeNull();
+  expect(headline.forcedCount).toBe(0);
+  expect(headline.unforcedCount).toBe(0);
   expect(headline.firstServeInPercent).toBeNull();
   expect(headline.matchesThisPeriod).toBe(0);
 });
 
-test("buildLeaderboard ranks eligible players by the selected metric, sub-threshold players unranked", () => {
+// No minimum-matches threshold any more: every player is ranked, including
+// one with a single match logged (rookie: 1-0, a 100% record outranks
+// everyone despite the small sample) — a null metric value sorts last rather
+// than being excluded.
+test("buildLeaderboard ranks every player by the selected metric, no threshold", () => {
   const rows = buildLeaderboard([alex, priya, rookie], "record", "");
 
-  expect(rows.map((row) => row.name)).toEqual(["Alex Chen", "Priya Singh", "Rookie Reed"]);
-  expect(rows[0]).toMatchObject({ rank: 1, metricValue: 80 });
-  expect(rows[1]).toMatchObject({ rank: 2 });
-  expect(rows[2]).toMatchObject({ rank: null, metricValue: null, matchesLoggedThisPeriod: 1 });
+  expect(rows.map((row) => row.name)).toEqual(["Rookie Reed", "Alex Chen", "Priya Singh"]);
+  expect(rows[0]).toMatchObject({ rank: 1, metricValue: 100 });
+  expect(rows[1]).toMatchObject({ rank: 2, metricValue: 80 });
+  expect(rows[2]).toMatchObject({ rank: 3 });
 });
 
 test("buildLeaderboard reorders when the metric key changes", () => {
@@ -106,28 +118,202 @@ test("buildLeaderboard reorders when the metric key changes", () => {
   expect(byForced.map((row) => row.name)).toEqual(["Alex Chen", "Priya Singh"]);
 });
 
-test("buildLeaderboard filters both ranked and unranked groups by search", () => {
+test("buildLeaderboard puts a null metric value last, displayed as an em dash", () => {
+  const noRatioYet: Named = { ...rookie, forcedToUnforcedRatio: null };
+  const rows = buildLeaderboard([alex, noRatioYet], "forcedToUnforced", "");
+
+  expect(rows.map((row) => row.name)).toEqual(["Alex Chen", "Rookie Reed"]);
+  expect(rows[1]).toMatchObject({ rank: 2, metricValue: null });
+});
+
+test("buildLeaderboard filters by search", () => {
   const rows = buildLeaderboard([alex, priya, rookie], "record", "priya");
 
   expect(rows).toHaveLength(1);
   expect(rows[0]!.name).toBe("Priya Singh");
 });
 
-test("buildHistogram always returns 5 buckets summing to the ranked-entry count", () => {
-  const buckets = buildHistogram([alex, priya], "record");
+function week(label: string, value: number | null): SquadTrendPoint {
+  return { week: label, value };
+}
 
-  expect(buckets).toHaveLength(5);
-  expect(buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(2);
+test("fillSquadTrendGaps carries a single interior null forward from the preceding value", () => {
+  const trend = [week("Wk 1", 60), week("Wk 2", null), week("Wk 3", 70)];
+
+  const { trend: filled } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([60, 60, 70]);
 });
 
-test("buildHistogram doesn't divide by zero when every value is equal", () => {
-  const same = { ...alex, playerId: "same", forcedToUnforcedRatio: 1.6 };
-  const buckets = buildHistogram([alex, same], "forcedToUnforced");
+test("fillSquadTrendGaps carries the same preceding value across a run of nulls, not the following one", () => {
+  const trend = [week("Wk 1", 50), week("Wk 2", null), week("Wk 3", null), week("Wk 4", 80)];
 
-  expect(buckets).toHaveLength(5);
-  expect(buckets.reduce((sum, bucket) => sum + bucket.count, 0)).toBe(2);
+  const { trend: filled } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([50, 50, 50, 80]);
 });
 
-test("buildHistogram returns no buckets for an empty ranked set", () => {
-  expect(buildHistogram([], "record")).toEqual([]);
+test("fillSquadTrendGaps leaves leading nulls untouched — nothing to carry forward yet", () => {
+  const trend = [week("Wk 1", null), week("Wk 2", null), week("Wk 3", 65)];
+
+  const { trend: filled } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([null, null, 65]);
+});
+
+test("fillSquadTrendGaps leaves an all-null trend unchanged", () => {
+  const trend = [week("Wk 1", null), week("Wk 2", null)];
+
+  const { trend: filled, carriedIndices } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([null, null]);
+  expect(carriedIndices.size).toBe(0);
+});
+
+test("fillSquadTrendGaps fills every null after a single real value, and none before it", () => {
+  const trend = [week("Wk 1", null), week("Wk 2", 40), week("Wk 3", null), week("Wk 4", null)];
+
+  const { trend: filled } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([null, 40, 40, 40]);
+});
+
+test("fillSquadTrendGaps passes a trend with no nulls through unchanged", () => {
+  const trend = [week("Wk 1", 10), week("Wk 2", 20), week("Wk 3", 30)];
+
+  const { trend: filled, carriedIndices } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.value)).toEqual([10, 20, 30]);
+  expect(carriedIndices.size).toBe(0);
+});
+
+test("fillSquadTrendGaps preserves each point's week label, only overwriting the value", () => {
+  const trend = [week("Wk 1", 60), week("Wk 2", null)];
+
+  const { trend: filled } = fillSquadTrendGaps(trend);
+
+  expect(filled.map((point) => point.week)).toEqual(["Wk 1", "Wk 2"]);
+});
+
+test("fillSquadTrendGaps marks exactly the carried positions, not real or leading-null ones", () => {
+  const trend = [
+    week("Wk 1", null),
+    week("Wk 2", 55),
+    week("Wk 3", null),
+    week("Wk 4", null),
+    week("Wk 5", 70),
+  ];
+
+  const { carriedIndices } = fillSquadTrendGaps(trend);
+
+  expect(carriedIndices).toEqual(new Set([2, 3]));
+});
+
+function style(kind: PointEnderKind, count: number): PointEnderStyle {
+  return {
+    kind,
+    count,
+    label: kind,
+    detail: { court_zones: [], shot_type: [], unusual_reasons: null, wing: null },
+  };
+}
+
+function pointEnderStyles(
+  you: { forced: number; unforced: number },
+  opponents: { forced: number; unforced: number },
+): PointEnderStyles {
+  return {
+    you: [style("forced", you.forced), style("unforced", you.unforced), style("unusual", 0)],
+    opponents: [
+      style("forced", opponents.forced),
+      style("unforced", opponents.unforced),
+      style("unusual", 0),
+    ],
+  };
+}
+
+test("mistakeResilience reads the tracked player's own errors from styles.opponents (points they lost)", () => {
+  const styles = pointEnderStyles({ forced: 0, unforced: 0 }, { forced: 12, unforced: 4 });
+
+  expect(mistakeResilience(styles)).toBeCloseTo((12 / 16) * 100);
+});
+
+test("mistakeResilience is null when the player has lost no points via a recorded error yet", () => {
+  const styles = pointEnderStyles({ forced: 5, unforced: 5 }, { forced: 0, unforced: 0 });
+
+  expect(mistakeResilience(styles)).toBeNull();
+});
+
+test("mistakeResilience is 100 when every own error was forced, 0 when every one was unforced", () => {
+  const allForced = pointEnderStyles({ forced: 0, unforced: 0 }, { forced: 6, unforced: 0 });
+  const allUnforced = pointEnderStyles({ forced: 0, unforced: 0 }, { forced: 0, unforced: 6 });
+
+  expect(mistakeResilience(allForced)).toBe(100);
+  expect(mistakeResilience(allUnforced)).toBe(0);
+});
+
+test("aggressionScore reads the opponent's own errors from styles.you (points the tracked player won)", () => {
+  const styles = pointEnderStyles({ forced: 9, unforced: 3 }, { forced: 0, unforced: 0 });
+
+  expect(aggressionScore(styles)).toBeCloseTo((9 / 12) * 100);
+});
+
+test("aggressionScore is null when the player has won no points via a recorded error yet", () => {
+  const styles = pointEnderStyles({ forced: 0, unforced: 0 }, { forced: 5, unforced: 5 });
+
+  expect(aggressionScore(styles)).toBeNull();
+});
+
+test("aggressionScore is 100 when every opponent error was forced, 0 when every one was unforced", () => {
+  const allForced = pointEnderStyles({ forced: 8, unforced: 0 }, { forced: 0, unforced: 0 });
+  const allUnforced = pointEnderStyles({ forced: 0, unforced: 8 }, { forced: 0, unforced: 0 });
+
+  expect(aggressionScore(allForced)).toBe(100);
+  expect(aggressionScore(allUnforced)).toBe(0);
+});
+
+test("overallAverageRallyLength weights won/lost averages by their own point counts", () => {
+  const rally = { average_rally_length: { won: 5, lost: 3 }, won: 30, lost: 10 };
+
+  expect(overallAverageRallyLength(rally)).toBeCloseTo((5 * 30 + 3 * 10) / 40);
+});
+
+test("overallAverageRallyLength falls back to whichever side is non-null", () => {
+  const wonOnly = { average_rally_length: { won: 4, lost: null }, won: 10, lost: 0 };
+  const lostOnly = { average_rally_length: { won: null, lost: 6 }, won: 0, lost: 10 };
+
+  expect(overallAverageRallyLength(wonOnly)).toBe(4);
+  expect(overallAverageRallyLength(lostOnly)).toBe(6);
+});
+
+test("overallAverageRallyLength is null when neither side has a value yet", () => {
+  const rally = { average_rally_length: { won: null, lost: null }, won: 0, lost: 0 };
+
+  expect(overallAverageRallyLength(rally)).toBeNull();
+});
+
+test("overallAverageRallyLength falls back to a plain mean when point counts are both zero", () => {
+  const rally = { average_rally_length: { won: 4, lost: 6 }, won: 0, lost: 0 };
+
+  expect(overallAverageRallyLength(rally)).toBe(5);
+});
+
+test("rallyLengthSizeBucket maps a value to one of four sizes, relative to the group's own range", () => {
+  expect(rallyLengthSizeBucket(2, 2, 10)).toBe("sm");
+  expect(rallyLengthSizeBucket(10, 2, 10)).toBe("xl");
+  expect(rallyLengthSizeBucket(6, 2, 10)).toBe("lg");
+});
+
+test("rallyLengthSizeBucket maps every value to md when the group has no spread", () => {
+  expect(rallyLengthSizeBucket(5, 5, 5)).toBe("md");
+});
+
+test("scaleToGroupRange maps the group's min/max to the 10-90 padded band, not raw 0-100", () => {
+  expect(scaleToGroupRange(40, 40, 60)).toBe(10);
+  expect(scaleToGroupRange(60, 40, 60)).toBe(90);
+  expect(scaleToGroupRange(50, 40, 60)).toBe(50);
+});
+
+test("scaleToGroupRange centers every value at 50 when the group has no spread", () => {
+  expect(scaleToGroupRange(50, 50, 50)).toBe(50);
 });

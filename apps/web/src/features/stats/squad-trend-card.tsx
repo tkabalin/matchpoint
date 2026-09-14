@@ -2,32 +2,29 @@ import type { SquadMetric, Surface } from "@matchpoint/api-client";
 import { getSquadTrendOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { TrendingUp } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
+import { ChipRow } from "@/components/chip-row";
 import { LegibleXTick, LegibleYTick } from "@/components/chart-ticks";
 import { StatCard } from "@/components/stat-card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { METRIC_PATTERN } from "@/lib/analytics/squad-stats";
+import {
+  METRIC_ICON,
+  METRIC_LABEL,
+  METRIC_PATTERN,
+  fillSquadTrendGaps,
+} from "@/lib/analytics/squad-stats";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
 import { CATEGORICAL_STROKE_DASH, PATTERN_VAR } from "@/lib/palette";
 
-const TREND_METRIC_LABEL: Record<SquadMetricKey, string> = {
-  record: "Record (win %)",
-  forcedToUnforced: "Forced : Unforced",
-  firstServe: "1st serve in %",
-};
+const METRIC_OPTIONS: { value: SquadMetricKey; label: string; icon: LucideIcon }[] = (
+  Object.entries(METRIC_LABEL) as [SquadMetricKey, string][]
+).map(([value, label]) => ({ value, label, icon: METRIC_ICON[value] }));
 
-// The dropdown's own vocabulary (shared with the leaderboard and histogram)
-// isn't the wire's — the API's `SquadMetric` enum spells the last two
-// differently.
+// The chip row's own vocabulary (shared with the leaderboard) isn't the
+// wire's — the API's `SquadMetric` enum spells the last two differently.
 const API_METRIC: Record<SquadMetricKey, SquadMetric> = {
   record: "record",
   forcedToUnforced: "forced_to_unforced",
@@ -55,34 +52,38 @@ export function SquadTrendCard({
   // Every point can legitimately be null at once — a roster with no resulted
   // matches in the window — which would otherwise draw a blank chart (axes,
   // no line, no dots) that reads as broken rather than as "not enough data".
+  // Computed off the raw `trend`, before the gap fill below, so an all-null
+  // week set still hits the empty state rather than the fill quietly turning
+  // "nothing at all" into "something" (fillSquadTrendGaps is a no-op here by
+  // construction, but this keeps the two checks independent regardless).
   const hasData = trend?.some((point) => point.value !== null) ?? false;
+  // A week nobody logged a match in isn't missing information — it's
+  // confirmation nothing changed, so it carries the last real value forward
+  // rather than breaking the line. `carriedIndices` is what lets a carried
+  // point draw as a hollow dot instead of a normal filled one, so a flat
+  // stretch never reads as "the squad held steady" when nobody played.
+  const { trend: filledTrend, carriedIndices } = trend
+    ? fillSquadTrendGaps(trend)
+    : { trend: undefined, carriedIndices: new Set<number>() };
   const pattern = METRIC_PATTERN[metric];
   const color = PATTERN_VAR[pattern];
   const dash = CATEGORICAL_STROKE_DASH[pattern];
-  const config = { value: { label: TREND_METRIC_LABEL[metric], color } };
+  const config = { value: { label: METRIC_LABEL[metric], color } };
 
   return (
     <StatCard>
       <div className="flex items-center gap-2">
         <TrendingUp className="size-6 shrink-0 text-primary" aria-hidden="true" />
-        <h3 className="flex-1 text-base font-bold text-foreground">Squad trend</h3>
-        <Select value={metric} onValueChange={(value) => onMetricChange(value as SquadMetricKey)}>
-          <SelectTrigger aria-label="Trend metric" size="sm">
-            <SelectValue>
-              {(value: string) => TREND_METRIC_LABEL[value as SquadMetricKey]}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.entries(TREND_METRIC_LABEL) as [SquadMetricKey, string][]).map(
-              ([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ),
-            )}
-          </SelectContent>
-        </Select>
+        <h3 className="text-base font-bold text-foreground">Squad trend</h3>
       </div>
+
+      <ChipRow<SquadMetricKey>
+        aria-label="Trend metric"
+        options={METRIC_OPTIONS}
+        value={metric}
+        onChange={onMetricChange}
+        scroll
+      />
 
       {trend && !hasData ? (
         <p className="flex aspect-[5/2] w-full items-center justify-center text-center text-xs text-muted-foreground">
@@ -90,7 +91,7 @@ export function SquadTrendCard({
         </p>
       ) : trend ? (
         <ChartContainer config={config} className="aspect-[5/2] w-full">
-          <LineChart data={trend}>
+          <LineChart data={filledTrend}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="week" tickLine={false} axisLine={false} tick={<LegibleXTick />} />
             <YAxis width={28} tick={<LegibleYTick />} />
@@ -116,7 +117,23 @@ export function SquadTrendCard({
               stroke={color}
               strokeWidth={2}
               strokeDasharray={dash}
-              dot={{ r: 3, fill: color, stroke: "var(--background)", strokeWidth: 2 }}
+              // A carried-forward point (no match logged that week) draws
+              // hollow — background fill, colored ring — instead of the
+              // normal solid dot, so it never looks like a real result.
+              dot={(dotProps: { cx?: number; cy?: number; index?: number }) => {
+                const isCarried = carriedIndices.has(dotProps.index ?? -1);
+                return (
+                  <circle
+                    key={dotProps.index}
+                    cx={dotProps.cx}
+                    cy={dotProps.cy}
+                    r={3}
+                    fill={isCarried ? "var(--background)" : color}
+                    stroke={isCarried ? color : "var(--background)"}
+                    strokeWidth={2}
+                  />
+                );
+              }}
             />
           </LineChart>
         </ChartContainer>

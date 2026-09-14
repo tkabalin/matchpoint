@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SURFACE_VALUES } from "@/lib/analytics/filter-options";
 import { formatRecord } from "@/lib/format-record";
-import { SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 
 /**
  * A standing win/loss record per surface, sitting beside Recent Form — both
@@ -61,12 +61,21 @@ export function PlayerSurfaceRecordCard({ playerId }: { playerId: string }) {
         <span className="text-xs font-semibold text-muted-foreground">Win/loss by surface</span>
       </div>
       <div className="mt-1 flex flex-col gap-1">
-        {bySurface.map(({ surface, wins, total }) => (
-          <div key={surface} className="flex items-center justify-between text-xs">
-            <span>{SURFACE_LABEL[surface]}</span>
-            <span className="tabular-nums">{formatRecord(wins, total - wins)}</span>
-          </div>
-        ))}
+        {bySurface.map(({ surface, wins, total }) => {
+          const SurfaceIcon = SURFACE_ICON[surface];
+          return (
+            <div key={surface} className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1.5">
+                <SurfaceIcon
+                  className="size-3.5 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                {SURFACE_LABEL[surface]}
+              </span>
+              <span className="tabular-nums">{formatRecord(wins, total - wins)}</span>
+            </div>
+          );
+        })}
       </div>
     </StatCard>
   );

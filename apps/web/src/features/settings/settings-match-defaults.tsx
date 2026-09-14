@@ -22,6 +22,7 @@ import {
 import {
   SCORING_SYSTEM_DESCRIPTION,
   SCORING_SYSTEM_LABEL,
+  SURFACE_ICON,
   SURFACE_LABEL,
 } from "@/lib/tennis-labels";
 
@@ -83,18 +84,29 @@ export function SettingsMatchDefaults() {
           >
             <SelectTrigger id="default-surface">
               <SelectValue>
-                {(value: string) =>
-                  value === NONE ? "No preference" : SURFACE_LABEL[value as Surface]
-                }
+                {(value: string) => {
+                  if (value === NONE) return "No preference";
+                  const SurfaceIcon = SURFACE_ICON[value as Surface];
+                  return (
+                    <>
+                      <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                      {SURFACE_LABEL[value as Surface]}
+                    </>
+                  );
+                }}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>No preference</SelectItem>
-              {SURFACE_OPTIONS.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
+              {SURFACE_OPTIONS.map(([value, label]) => {
+                const SurfaceIcon = SURFACE_ICON[value];
+                return (
+                  <SelectItem key={value} value={value}>
+                    <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                    {label}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </Field>

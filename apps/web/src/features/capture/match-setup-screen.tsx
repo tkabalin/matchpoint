@@ -22,18 +22,25 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { MATCH_EVENT_MAX } from "@/lib/match-form";
-import { SCORING_SYSTEM_LABEL, SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SCORING_SYSTEM_LABEL, SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
 import { SCORING_SYSTEMS, SURFACE_TYPES } from "./match";
 import type { ScoringSystem, SurfaceType } from "./match";
 
-// Surfaces carry "unspecified" here, which the API's own label map has no entry for —
-// it types a coach's saved default, where the same idea is expressed by no value at all.
+// Surfaces carry "unspecified" here, which the API's own label map has no
+// entry for. It types a coach's saved default, where the same idea is
+// expressed by no value at all.
 const SURFACE_LABELS: Record<SurfaceType, string> = {
   ...SURFACE_LABEL,
   unspecified: "Unspecified",
 };
+
+// "Unspecified" has no icon of its own, the same as "No preference"/"Unspecified"
+// in the other two surface Selects (settings-match-defaults.tsx, edit-match-sheet.tsx).
+function surfaceIconFor(surface: SurfaceType) {
+  return surface === "unspecified" ? null : SURFACE_ICON[surface];
+}
 
 export interface MatchSetupConfig {
   opponentName: string;
@@ -244,14 +251,31 @@ export function MatchSetupScreen({
             }}
           >
             <SelectTrigger id="court-type" className="h-11 rounded-lg text-sm">
-              <SelectValue>{(value: string) => SURFACE_LABELS[value as SurfaceType]}</SelectValue>
+              <SelectValue>
+                {(value: string) => {
+                  const surface = value as SurfaceType;
+                  const SurfaceIcon = surfaceIconFor(surface);
+                  return (
+                    <>
+                      {SurfaceIcon && (
+                        <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+                      )}
+                      {SURFACE_LABELS[surface]}
+                    </>
+                  );
+                }}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {SURFACE_TYPES.map((surface) => (
-                <SelectItem key={surface} value={surface}>
-                  {SURFACE_LABELS[surface]}
-                </SelectItem>
-              ))}
+              {SURFACE_TYPES.map((surface) => {
+                const SurfaceIcon = surfaceIconFor(surface);
+                return (
+                  <SelectItem key={surface} value={surface}>
+                    {SurfaceIcon && <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />}
+                    {SURFACE_LABELS[surface]}
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </Field>

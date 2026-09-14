@@ -87,15 +87,23 @@ export interface FormRankEntry {
 
 /** Per-player inputs behind the Squad stats page — built from the real
  *  `SquadMemberStats` payload plus the roster name it doesn't carry.
- *  `matchesLoggedThisPeriod` means the same thing here as on that payload. */
+ *  `matchesLoggedThisPeriod` means the same thing here as on that payload;
+ *  it's a caption/weighting input only — nothing on this page gates a player
+ *  out of the leaderboard by it. */
 export interface SquadStatsEntry {
   playerId: string;
   wins: number;
   losses: number;
-  /** Same field, same "capture can't distinguish a winner from a forced
-   *  error" caveat as the real API's `period_forced_to_unforced_ratio`
-   *  (#175/#206).
-   *  Null wherever the API's own ratio is. */
+  /** Raw counts, not just the ratio — a coach reads "12 forcing shots, 1
+   *  mistake" and "12 forcing shots, 12 mistakes" apart, which a single ratio
+   *  number can't show (same reasoning as the player card's own split
+   *  display). Same "capture can't distinguish a winner from a forced error"
+   *  caveat as the real API's fields (#175/#206). */
+  forcedCount: number;
+  unforcedCount: number;
+  /** Still needed for sorting the leaderboard/pooling the trend — the split
+   *  counts above are what's actually shown, this is what ranks by it. Null
+   *  wherever the API's own ratio is. */
   forcedToUnforcedRatio: number | null;
   /** Share of first-serve attempts landing in, 0–100. Null wherever the
    *  API's own percentage is. */
@@ -104,37 +112,30 @@ export interface SquadStatsEntry {
 }
 
 /** Which of the three squad-wide metrics is selected — shared vocabulary
- *  between the leaderboard's dropdown and the spread histogram (which always
- *  mirrors it), and separately by the trend card's own dropdown. */
+ *  between the leaderboard's own filter chips and the trend card's. */
 export type SquadMetricKey = "record" | "forcedToUnforced" | "firstServe";
 
 /** One row of the Squad stats leaderboard, after the selected metric has
- *  been resolved to a single sortable number. */
+ *  been resolved to a single sortable number. Every player is ranked — no
+ *  minimum-matches threshold gates this any more; a player with no data yet
+ *  for the selected metric just sorts last, with a null `metricValue`
+ *  displayed as "—" rather than a fabricated one. */
 export interface SquadLeaderboardRow {
   playerId: string;
   name: string;
-  /** Null for a below-threshold row — the row shows `matchesLoggedThisPeriod`
-   *  instead, never a fabricated value. */
   metricValue: number | null;
   matchesLoggedThisPeriod: number;
-  /** Null alongside `metricValue`, for the same reason. */
-  rank: number | null;
+  rank: number;
 }
 
-/** One bucket of the leaderboard's "Spread" histogram. */
-export interface SquadHistogramBucket {
-  /** The bucket's own value range, formatted for the metric (e.g. "40–52%"). */
-  label: string;
-  count: number;
-}
-
-/** The squad headline's three aggregate numbers, all matches, whole roster.
- *  The rate fields are null with nobody eligible to average; `matchesThisPeriod`
- *  is the card's own scope caption, since the true per-stat denominators behind
- *  a pooled squad-wide rate aren't on the payload (#249). */
+/** The squad headline's aggregate numbers, all matches, whole roster.
+ *  `matchesThisPeriod` is the card's own scope caption, since the true
+ *  per-stat denominators behind a pooled squad-wide rate aren't on the
+ *  payload (#249). */
 export interface SquadHeadline {
   record: WinLossRecord;
-  forcedToUnforcedRatio: number | null;
+  forcedCount: number;
+  unforcedCount: number;
   firstServeInPercent: number | null;
   matchesThisPeriod: number;
 }

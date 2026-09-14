@@ -17,7 +17,7 @@ import {
   SURFACE_VALUES,
 } from "@/lib/analytics/filter-options";
 import type { StatsFilters, SurfaceFilter } from "@/lib/analytics/types.provisional";
-import { SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
 // The real endpoint already sorts most-met opponent first, so the picker's
@@ -164,6 +164,7 @@ export function StatsScopePanel({
                   ...presentSurfaces.map((surface) => ({
                     value: surface,
                     label: SURFACE_LABEL[surface],
+                    icon: SURFACE_ICON[surface],
                   })),
                 ]}
                 value={draft.surface}

@@ -2,7 +2,7 @@ import type { MatchRead, MatchSide, PlayerRead, PointRead } from "@matchpoint/ap
 import { listPointsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ChevronRight, CircleCheck, CircleX, Crown, LandPlot, Pencil, Trash2 } from "lucide-react";
+import { ChevronRight, CircleCheck, CircleX, Crown, Pencil, Trash2 } from "lucide-react";
 
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Item } from "@/components/ui/item";
 import { initialsFor } from "@/lib/coach-initials";
 import { PATTERN_CLASS } from "@/lib/palette";
-import { SURFACE_LABEL } from "@/lib/tennis-labels";
+import { SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 import { useInView } from "@/lib/use-in-view";
 import { cn } from "@/lib/utils";
 
@@ -180,6 +180,7 @@ export function MatchCard({
   const { ref, inView } = useInView<HTMLDivElement>();
   const opponentName = match.opponent_name ?? "Unknown opponent";
   const ourName = player ? playerName(player) : "Unknown player";
+  const SurfaceIcon = match.surface ? SURFACE_ICON[match.surface] : null;
 
   const { data: points } = useQuery({
     ...listPointsOptions({ path: { match_id: match.id } }),
@@ -341,9 +342,9 @@ export function MatchCard({
                 <span className="text-sm font-semibold text-muted-foreground">
                   {formatPlayedOn(match.played_on)}
                 </span>
-                {match.surface && (
+                {match.surface && SurfaceIcon && (
                   <span className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-                    <LandPlot className="size-4 shrink-0" aria-hidden="true" />
+                    <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
                     {SURFACE_LABEL[match.surface]}
                   </span>
                 )}
