@@ -13,7 +13,7 @@ test.each([
   expect(container.querySelectorAll("circle")).toHaveLength(count);
 });
 
-test("B4 fills the basket and spills three balls over the rim", () => {
+test("B4 fills the basket and spills three balls out in front", () => {
   const { container } = render(<BasketIcon bucket="B4" />);
 
   expect(container.querySelectorAll("circle")).toHaveLength(13);

@@ -23,16 +23,19 @@ const BALL_POSITIONS: readonly { cx: number; cy: number }[] = [
   { cx: 40, cy: 10 },
 ];
 
-// Balls above the rim once the ten fixed positions above are already full — B4 is the
-// only bucket that reaches this ("11+" has no upper bound to draw an exact count for).
+// Once the ten fixed positions above are full, the overflow spills onto the ground in
+// front of the basket rather than stacking precariously above the rim — B4 is the only
+// bucket that reaches this ("11+" has no upper bound to draw an exact count for).
+// Drawn after (so on top of) the basket path below, which is what puts them visually
+// in front of it rather than behind.
 const OVERFLOW_POSITIONS: readonly { cx: number; cy: number }[] = [
-  { cx: 24, cy: 14 },
-  { cx: 56, cy: 14 },
-  { cx: 40, cy: 2 },
+  { cx: 21, cy: 66 },
+  { cx: 59, cy: 66 },
+  { cx: 40, cy: 73 },
 ];
 
 // How many of BALL_POSITIONS show for each bucket. B3 and B4 both fill all ten; only
-// B4 goes on to draw the overflow balls above.
+// B4 goes on to draw the overflow balls too.
 const BALL_COUNT: Record<RallyBucket, number> = { B1: 2, B2: 5, B3: 10, B4: 10 };
 
 const BALL_RADIUS = 8;
