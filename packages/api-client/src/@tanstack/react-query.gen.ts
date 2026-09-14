@@ -3,8 +3,8 @@
 import { type DefaultError, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerNote, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerNote, deletePlayerPhoto, deletePlayerTransferCode, forgotPassword, getCurrentCoach, getCurrentPlayer, getMatch, getMatchRallyStats, getMatchServeStats, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getSquadTrend, health, ingestPoints, ingestScoreCheckpoints, listInProgressMatches, listMatches, listOpponents, listPlayerNotes, listPlayers, listPoints, listScoreCheckpoints, listSquadMemberStats, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, updatePlayerNote, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
-import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerNoteData, CreatePlayerNoteError, CreatePlayerNoteResponse, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerNoteData, DeletePlayerNoteError, DeletePlayerNoteResponse, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetMatchData, GetMatchError, GetMatchRallyStatsData, GetMatchRallyStatsError, GetMatchRallyStatsResponse, GetMatchResponse, GetMatchServeStatsData, GetMatchServeStatsError, GetMatchServeStatsResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetSquadTrendData, GetSquadTrendError, GetSquadTrendResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, IngestScoreCheckpointsData, IngestScoreCheckpointsError, IngestScoreCheckpointsResponse, ListInProgressMatchesData, ListInProgressMatchesError, ListInProgressMatchesResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListOpponentsData, ListOpponentsError, ListOpponentsResponse, ListPlayerNotesData, ListPlayerNotesError, ListPlayerNotesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, ListScoreCheckpointsData, ListScoreCheckpointsError, ListScoreCheckpointsResponse, ListSquadMemberStatsData, ListSquadMemberStatsError, ListSquadMemberStatsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerNoteData, UpdatePlayerNoteError, UpdatePlayerNoteResponse, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
+import { changePassword, changePlayerPassword, claimCapture, createCoach, createMatch, createPlayer, createPlayerNote, createPlayerTransferCode, deleteCoachPhoto, deleteCurrentCoach, deleteMatch, deletePlayer, deletePlayerNote, deletePlayerPhoto, deletePlayerTransferCode, deletePoint, deleteScoreCheckpoint, forgotPassword, getCurrentCoach, getCurrentPlayer, getMatch, getMatchRallyStats, getMatchServeStats, getPlayer, getPlayerOverview, getRallyStats, getServeStats, getSquadTrend, health, ingestPoints, ingestScoreCheckpoints, listInProgressMatches, listMatches, listOpponents, listPlayerNotes, listPlayers, listPoints, listScoreCheckpoints, listSquadMemberStats, login, logout, type Options, playerLogin, playerLogout, redeemPlayerTransferCode, regeneratePlayerPassword, releaseCapture, requestOtp, resetPassword, revokeOtherSessions, updateCurrentCoach, updateMatch, updatePlayer, updatePlayerNote, uploadCoachPhoto, uploadPlayerPhoto, verifyCoachPassword, verifyOtp, verifyResetCode } from '../sdk.gen';
+import type { ChangePasswordData, ChangePasswordError, ChangePasswordResponse, ChangePlayerPasswordData, ChangePlayerPasswordError, ChangePlayerPasswordResponse, ClaimCaptureData, ClaimCaptureError, ClaimCaptureResponse, CreateCoachData, CreateCoachError, CreateCoachResponse, CreateMatchData, CreateMatchError, CreateMatchResponse, CreatePlayerData, CreatePlayerError, CreatePlayerNoteData, CreatePlayerNoteError, CreatePlayerNoteResponse, CreatePlayerResponse, CreatePlayerTransferCodeData, CreatePlayerTransferCodeError, CreatePlayerTransferCodeResponse, DeleteCoachPhotoData, DeleteCoachPhotoError, DeleteCoachPhotoResponse, DeleteCurrentCoachData, DeleteCurrentCoachError, DeleteCurrentCoachResponse, DeleteMatchData, DeleteMatchError, DeleteMatchResponse, DeletePlayerData, DeletePlayerError, DeletePlayerNoteData, DeletePlayerNoteError, DeletePlayerNoteResponse, DeletePlayerPhotoData, DeletePlayerPhotoError, DeletePlayerPhotoResponse, DeletePlayerResponse, DeletePlayerTransferCodeData, DeletePlayerTransferCodeError, DeletePlayerTransferCodeResponse, DeletePointData, DeletePointError, DeletePointResponse, DeleteScoreCheckpointData, DeleteScoreCheckpointError, DeleteScoreCheckpointResponse, ForgotPasswordData, ForgotPasswordError, GetCurrentCoachData, GetCurrentCoachError, GetCurrentCoachResponse, GetCurrentPlayerData, GetCurrentPlayerError, GetCurrentPlayerResponse, GetMatchData, GetMatchError, GetMatchRallyStatsData, GetMatchRallyStatsError, GetMatchRallyStatsResponse, GetMatchResponse, GetMatchServeStatsData, GetMatchServeStatsError, GetMatchServeStatsResponse, GetPlayerData, GetPlayerError, GetPlayerOverviewData, GetPlayerOverviewError, GetPlayerOverviewResponse, GetPlayerResponse, GetRallyStatsData, GetRallyStatsError, GetRallyStatsResponse, GetServeStatsData, GetServeStatsError, GetServeStatsResponse, GetSquadTrendData, GetSquadTrendError, GetSquadTrendResponse, HealthData, HealthResponse, IngestPointsData, IngestPointsError, IngestPointsResponse, IngestScoreCheckpointsData, IngestScoreCheckpointsError, IngestScoreCheckpointsResponse, ListInProgressMatchesData, ListInProgressMatchesError, ListInProgressMatchesResponse, ListMatchesData, ListMatchesError, ListMatchesResponse, ListOpponentsData, ListOpponentsError, ListOpponentsResponse, ListPlayerNotesData, ListPlayerNotesError, ListPlayerNotesResponse, ListPlayersData, ListPlayersError, ListPlayersResponse, ListPointsData, ListPointsError, ListPointsResponse, ListScoreCheckpointsData, ListScoreCheckpointsError, ListScoreCheckpointsResponse, ListSquadMemberStatsData, ListSquadMemberStatsError, ListSquadMemberStatsResponse, LoginData, LoginError, LoginResponse, LogoutData, LogoutResponse, PlayerLoginData, PlayerLoginError, PlayerLoginResponse, PlayerLogoutData, PlayerLogoutResponse, RedeemPlayerTransferCodeData, RedeemPlayerTransferCodeError, RedeemPlayerTransferCodeResponse, RegeneratePlayerPasswordData, RegeneratePlayerPasswordError, RegeneratePlayerPasswordResponse, ReleaseCaptureData, ReleaseCaptureError, ReleaseCaptureResponse, RequestOtpData, RequestOtpError, ResetPasswordData, ResetPasswordError, ResetPasswordResponse, RevokeOtherSessionsData, RevokeOtherSessionsError, RevokeOtherSessionsResponse, UpdateCurrentCoachData, UpdateCurrentCoachError, UpdateCurrentCoachResponse, UpdateMatchData, UpdateMatchError, UpdateMatchResponse, UpdatePlayerData, UpdatePlayerError, UpdatePlayerNoteData, UpdatePlayerNoteError, UpdatePlayerNoteResponse, UpdatePlayerResponse, UploadCoachPhotoData, UploadCoachPhotoError, UploadCoachPhotoResponse, UploadPlayerPhotoData, UploadPlayerPhotoError, UploadPlayerPhotoResponse, VerifyCoachPasswordData, VerifyCoachPasswordError, VerifyCoachPasswordResponse, VerifyOtpData, VerifyOtpError, VerifyResetCodeData, VerifyResetCodeError } from '../types.gen';
 
 /**
  * Change Password
@@ -696,6 +696,25 @@ export const ingestPointsMutation = (options?: Partial<Options<IngestPointsData>
     return mutationOptions;
 };
 
+/**
+ * Delete Point
+ *
+ * Erase one point the coach undid, and rederive the set scores without it.
+ */
+export const deletePointMutation = (options?: Partial<Options<DeletePointData>>): UseMutationOptions<DeletePointResponse, DeletePointError, Options<DeletePointData>> => {
+    const mutationOptions: UseMutationOptions<DeletePointResponse, DeletePointError, Options<DeletePointData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await deletePoint({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
 export const listScoreCheckpointsQueryKey = (options: Options<ListScoreCheckpointsData>) => createQueryKey('listScoreCheckpoints', options);
 
 /**
@@ -730,6 +749,25 @@ export const ingestScoreCheckpointsMutation = (options?: Partial<Options<IngestS
     const mutationOptions: UseMutationOptions<IngestScoreCheckpointsResponse, IngestScoreCheckpointsError, Options<IngestScoreCheckpointsData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await ingestScoreCheckpoints({
+                ...options,
+                ...fnOptions,
+                throwOnError: true
+            });
+            return data;
+        }
+    };
+    return mutationOptions;
+};
+
+/**
+ * Delete Score Checkpoint
+ *
+ * Erase one checkpoint the coach undid, and rederive the set scores without it.
+ */
+export const deleteScoreCheckpointMutation = (options?: Partial<Options<DeleteScoreCheckpointData>>): UseMutationOptions<DeleteScoreCheckpointResponse, DeleteScoreCheckpointError, Options<DeleteScoreCheckpointData>> => {
+    const mutationOptions: UseMutationOptions<DeleteScoreCheckpointResponse, DeleteScoreCheckpointError, Options<DeleteScoreCheckpointData>> = {
+        mutationFn: async (fnOptions) => {
+            const { data } = await deleteScoreCheckpoint({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

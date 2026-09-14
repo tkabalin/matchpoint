@@ -357,8 +357,8 @@ def test_created_at_differs_between_rows_in_one_transaction(db_session: Session)
 
 
 def test_updated_at_advances_when_a_row_changes(db_session: Session) -> None:
-    """Points are append-only in practice, but the column follows the schema's
-    standard pair regardless, so its onupdate is pinned like every other table's."""
+    """A point is never rewritten in practice, only deleted, but the column follows the
+    schema's standard pair regardless, so its onupdate is pinned like every other table's."""
     point = make_point(db_session)
     db_session.commit()
     first_written = point.updated_at

@@ -1867,8 +1867,8 @@ def test_ingesting_the_same_batch_again_lands_on_the_same_answer(
 def test_a_repeated_point_keeps_the_stored_version(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """A point is immutable once ingested, so a second body under the same id is the
-    point we already hold, whatever it says."""
+    """A point is never rewritten once ingested, so a second body under the same id is
+    the point we already hold, whatever it says."""
     match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
     db_session.commit()
     payload = point_payload(won=True)
@@ -2608,6 +2608,193 @@ def test_list_score_checkpoints_of_another_coachs_match_is_404(
     assert client.get(f"/matches/{other.id}/score-checkpoints").status_code == 404
 
 
+def test_delete_point_erases_the_point_and_rederives_the_sets(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The undo of a mis-tapped point that had already synced: the row goes, and the set
+    tally is counted again without it rather than left as the point had made it."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    make_point(db_session, match_id=match.id, sequence=0, won=True, is_game_end=True)
+    undone = make_point(db_session, match_id=match.id, sequence=1, won=False, is_game_end=True)
+    db_session.commit()
+    assert _ingest(client, match, [point_payload(sequence=2)]).json()[0]["games_won_opponent"] == 1
+
+    response = client.delete(f"/matches/{match.id}/points/{undone.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(Point, undone.id) is None
+    assert _points_of(db_session) == [0, 2]
+    [row] = db_session.scalars(
+        select(MatchSet)
+        .where(MatchSet.match_id == match.id)
+        .execution_options(populate_existing=True)
+    ).all()
+    assert (row.games_won_tracked, row.games_won_opponent) == (1, 0)
+
+
+def test_delete_point_of_an_absent_id_is_still_204(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Undo queues a delete whether or not the point was ever sent, since "not in the
+    outbox" is not "not on the server", so the delete of a point that never landed has to
+    be the same success as one that did."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/points/{uuid.uuid4()}")
+
+    assert response.status_code == 204
+
+
+def test_delete_point_leaves_a_point_of_another_match_alone(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Scoped to the match in the path: a point id under the wrong match deletes nothing,
+    and answers as an absent one does rather than confirming the id exists elsewhere."""
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    elsewhere = make_point(db_session, match_id=make_match(db_session, player_id=player_id).id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/points/{elsewhere.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(Point, elsewhere.id) is not None
+
+
+def test_delete_point_in_a_completed_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A recorded result locks the match (#108), for a delete as for an ingest: the sync
+    layer parks the row rather than retrying a request that will never be accepted."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    point = make_point(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/points/{point.id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Match is completed"}
+    assert db_session.get(Point, point.id) is not None
+
+
+def test_delete_point_in_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    point = make_point(db_session)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{point.match_id}/points/{point.id}")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": MATCH_NOT_FOUND}
+    assert db_session.get(Point, point.id) is not None
+
+
+def test_delete_point_in_a_deleted_match_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The undo a device queued after the coach deleted the match from another one: the
+    status the sync layer discards on, as for a batch (#214)."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.delete(f"/matches/{match_id}/points/{uuid.uuid4()}")
+
+    assert response.status_code == 410
+    assert response.json() == {"detail": MATCH_WAS_DELETED}
+
+
+def test_delete_score_checkpoint_erases_the_row(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    undone = make_score_checkpoint(db_session, match_id=match.id, sequence=0)
+    kept = make_score_checkpoint(db_session, match_id=match.id, sequence=1)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/score-checkpoints/{undone.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(ScoreCheckpoint, undone.id) is None
+    assert db_session.get(ScoreCheckpoint, kept.id) is not None
+
+
+def test_delete_score_checkpoint_of_an_absent_id_is_still_204(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    assert client.delete(f"/matches/{match.id}/score-checkpoints/{uuid.uuid4()}").status_code == 204
+
+
+def test_delete_score_checkpoint_leaves_another_matchs_alone(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    player_id = make_player(db_session, coach_id=coach.id).id
+    match = make_match(db_session, player_id=player_id)
+    elsewhere = make_score_checkpoint(
+        db_session, match_id=make_match(db_session, player_id=player_id).id
+    )
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/score-checkpoints/{elsewhere.id}")
+
+    assert response.status_code == 204
+    assert db_session.get(ScoreCheckpoint, elsewhere.id) is not None
+
+
+def test_delete_score_checkpoint_in_a_completed_match_is_refused(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+    )
+    checkpoint = make_score_checkpoint(db_session, match_id=match.id)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{match.id}/score-checkpoints/{checkpoint.id}")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "Match is completed"}
+    assert db_session.get(ScoreCheckpoint, checkpoint.id) is not None
+
+
+def test_delete_score_checkpoint_in_another_coachs_match_is_404(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    checkpoint = make_score_checkpoint(db_session)
+    db_session.commit()
+
+    response = client.delete(f"/matches/{checkpoint.match_id}/score-checkpoints/{checkpoint.id}")
+
+    assert response.status_code == 404
+    assert db_session.get(ScoreCheckpoint, checkpoint.id) is not None
+
+
+def test_delete_score_checkpoint_in_a_deleted_match_is_410(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+    match_id = match.id
+    assert client.delete(f"/matches/{match_id}").status_code == 204
+
+    response = client.delete(f"/matches/{match_id}/score-checkpoints/{uuid.uuid4()}")
+
+    assert response.status_code == 410
+    assert response.json() == {"detail": MATCH_WAS_DELETED}
+
+
 def test_delete_match_takes_its_checkpoints_with_it(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -2687,6 +2874,8 @@ def test_a_checkpoint_integrity_error_that_is_not_a_conflict_is_not_absorbed(
             {"device_id": str(uuid.UUID(int=1)), "checkpoints": [checkpoint_payload()]},
         ),
         ("delete", "", None),
+        ("delete", f"/points/{uuid.UUID(int=0)}", None),
+        ("delete", f"/score-checkpoints/{uuid.UUID(int=0)}", None),
     ],
 )
 def test_the_routes_that_read_the_claim_lock_the_match_row(
@@ -2741,6 +2930,8 @@ def test_the_routes_that_read_the_claim_lock_the_match_row(
         ("get", f"/matches/{uuid.UUID(int=0)}/points"),
         ("post", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
         ("get", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}/points/{uuid.UUID(int=0)}"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}/score-checkpoints/{uuid.UUID(int=0)}"),
     ],
 )
 def test_match_routes_require_a_session(client: TestClient, method: str, path: str) -> None:
@@ -2844,6 +3035,8 @@ def test_get_match_hides_a_stablemates_match_from_a_player(
         ("get", f"/matches/{uuid.UUID(int=0)}/points"),
         ("post", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
         ("get", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}/points/{uuid.UUID(int=0)}"),
+        ("delete", f"/matches/{uuid.UUID(int=0)}/score-checkpoints/{uuid.UUID(int=0)}"),
     ],
 )
 @pytest.mark.usefixtures("signed_in_player")

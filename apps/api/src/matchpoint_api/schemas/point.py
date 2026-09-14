@@ -225,8 +225,9 @@ class PointRead(BaseModel):
     reconciliation read it back.
 
     Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
-    created_at or updated_at: a point is never corrected after it lands, so those would
-    only restate when the row was ingested, which is bookkeeping neither reader needs.
+    created_at or updated_at: a point is never rewritten after it lands, only deleted,
+    so those would only restate when the row was ingested, which is bookkeeping neither
+    reader needs.
     """
 
     model_config = ConfigDict(from_attributes=True)

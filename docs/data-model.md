@@ -208,8 +208,9 @@ client that scores the match; the database stores the label and never interprets
 points the server holds, recomputed at the end of each ingest so that analytics read a handful of
 set rows instead of replaying points. `winner` is null while a set is in flight.
 
-`points` is one row per point, append-only, in the order the client assigned via `sequence`. There
-is no timestamp (client clocks are unreliable) and no foreign key to a set or game: `match_sets` is
+`points` is one row per point, in the order the client assigned via `sequence`. A row is never
+rewritten: the client appends, or deletes the newest one when the coach undoes it. There is no
+timestamp (client clocks are unreliable) and no foreign key to a set or game: `match_sets` is
 derived from `set_number`/`game_number` via group-by. The `is_*`/`in_tiebreak` booleans are stamped
 by the client's scoring engine and never recomputed server-side, since that logic already lives in
 the client for offline use.

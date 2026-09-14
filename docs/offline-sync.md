@@ -94,9 +94,12 @@ failed. For the same reason it is skipped entirely whenever anything earlier in 
 land: a transient failure (offline, 429, 5xx) means the points have simply not been sent yet, and
 fencing them off would turn a retry into a loss.
 
-Capture also queues `checkpoint` and `eventDelete` rows, which have no server endpoint yet. They sit
-pending rather than failing, and while any remain the match's outcome is held back too — completing
-the match would fence out its own checkpoints the moment those endpoints land.
+Capture also queues `checkpoint` and `eventDelete` rows. The API accepts both: a score-checkpoint
+ingest with the point ingest's contract, and a `DELETE` for a point or a checkpoint that answers 204
+whether or not the row was there, so the delete an undo queues for a never-sent event is harmless.
+The drain's sendable kinds leave them out: they sit pending rather than failing, and while any
+remain the match's outcome is held back too, since completing the match would fence out its own
+checkpoints.
 
 ### Server-side idempotency
 
@@ -105,7 +108,8 @@ Both endpoints the drain calls are idempotent:
 - `POST /matches` uses Postgres `ON CONFLICT DO UPDATE` (a no-op SET that takes the row lock and
   returns the existing row), so two retries of the same offline match cannot both insert.
 - `POST /matches/{id}/points` uses `ON CONFLICT DO NOTHING` on the point's client-assigned id, so a
-  retried or overlapping flush converges instead of failing. A point, once ingested, is immutable.
+  retried or overlapping flush converges instead of failing. A point, once ingested, is never
+  rewritten: the one later change is the delete an undo sends, and re-sending that is a no-op too.
 
 After each point batch, `recompute_match_sets` derives the match's set scores from a `GROUP BY` over
 all its stored points, so a late, partial, or retried flush lands on the same answer.

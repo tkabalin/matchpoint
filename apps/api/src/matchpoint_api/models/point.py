@@ -116,8 +116,9 @@ class RallyBucket(enum.StrEnum):
 class Point(Base):
     """One captured point, in the order the capture client assigned it (#175).
 
-    Append-only: a point syncs once its rally is over and is never corrected
-    afterwards, so the schema carries no correction or tombstone column. The nine
+    Never corrected in place: a point syncs once its rally is over, and the one
+    edit the client makes afterwards is undo, which deletes the row rather than
+    rewriting it, so the schema carries no correction or tombstone column. The nine
     stamped score-context columns from `set_number` on are the client scoring
     engine's own answer for this point; the server never replays tennis scoring to
     recover them.

@@ -2234,7 +2234,7 @@
         "type": "string"
       },
       "PointRead": {
-        "description": "One stored point, as the analytics dashboard and the capture client's sync\nreconciliation read it back.\n\nCarries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not\ncreated_at or updated_at: a point is never corrected after it lands, so those would\nonly restate when the row was ingested, which is bookkeeping neither reader needs.",
+        "description": "One stored point, as the analytics dashboard and the capture client's sync\nreconciliation read it back.\n\nCarries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not\ncreated_at or updated_at: a point is never rewritten after it lands, only deleted,\nso those would only restate when the row was ingested, which is bookkeeping neither\nreader needs.",
         "properties": {
           "ball_depth": {
             "anyOf": [
@@ -5593,6 +5593,93 @@
         ]
       }
     },
+    "/matches/{match_id}/points/{point_id}": {
+      "delete": {
+        "description": "Erase one point the coach undid, and rederive the set scores without it.",
+        "operationId": "delete_point",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "point_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Point Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match is completed"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match was deleted"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Point",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
     "/matches/{match_id}/score-checkpoints": {
       "get": {
         "description": "A match's score checkpoints, in sequence order, read back beside its points.",
@@ -5752,6 +5839,93 @@
           }
         },
         "summary": "Ingest Score Checkpoints",
+        "tags": [
+          "matches"
+        ]
+      }
+    },
+    "/matches/{match_id}/score-checkpoints/{checkpoint_id}": {
+      "delete": {
+        "description": "Erase one checkpoint the coach undid, and rederive the set scores without it.",
+        "operationId": "delete_score_checkpoint",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "match_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Match Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "checkpoint_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Checkpoint Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Not signed in"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match is completed"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Match was deleted"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorDetail"
+                }
+              }
+            },
+            "description": "Too many requests"
+          }
+        },
+        "summary": "Delete Score Checkpoint",
         "tags": [
           "matches"
         ]

@@ -1093,8 +1093,9 @@ export const zPointBatch = z.object({
  * reconciliation read it back.
  *
  * Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
- * created_at or updated_at: a point is never corrected after it lands, so those would
- * only restate when the row was ingested, which is bookkeeping neither reader needs.
+ * created_at or updated_at: a point is never rewritten after it lands, only deleted,
+ * so those would only restate when the row was ingested, which is bookkeeping neither
+ * reader needs.
  */
 export const zPointRead = z.object({
     ball_depth: zCourtDepth.nullable(),
@@ -1509,6 +1510,16 @@ export const zIngestPointsPath = z.object({
  */
 export const zIngestPointsResponse = z.array(zMatchSetRead);
 
+export const zDeletePointPath = z.object({
+    match_id: z.uuid(),
+    point_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeletePointResponse = z.void();
+
 export const zListScoreCheckpointsPath = z.object({
     match_id: z.uuid()
 });
@@ -1532,6 +1543,16 @@ export const zIngestScoreCheckpointsPath = z.object({
  * Successful Response
  */
 export const zIngestScoreCheckpointsResponse = z.array(zMatchSetRead);
+
+export const zDeleteScoreCheckpointPath = z.object({
+    match_id: z.uuid(),
+    checkpoint_id: z.uuid()
+});
+
+/**
+ * Successful Response
+ */
+export const zDeleteScoreCheckpointResponse = z.void();
 
 /**
  * Response List Players

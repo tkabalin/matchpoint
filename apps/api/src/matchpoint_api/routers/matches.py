@@ -1,6 +1,6 @@
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from psycopg.errors import UniqueViolation
@@ -452,9 +452,9 @@ def ingest_points(
     """
     match = match_for_capture(db, match_id, coach.id, data.device_id)
     try:
-        # One statement, and DO NOTHING on the client's own id: a point is immutable
-        # once ingested, so a repeat is the point we already hold, whatever the second
-        # body says about it. No follow-up read needs the row, which is what create_match
+        # One statement, and DO NOTHING on the client's own id: a point is never
+        # rewritten once ingested, so a repeat is the point we already hold, whatever
+        # the second body says about it. No follow-up read needs the row, which is what create_match
         # takes a lock through DO UPDATE for.
         db.execute(
             insert(Point)
@@ -565,6 +565,60 @@ def list_score_checkpoints(
             .order_by(ScoreCheckpoint.sequence)
         )
     )
+
+
+# The 409 and 410 are the point ingest's, declared for the same reasons.
+_DELETE_RESPONSES: dict[int | str, dict[str, Any]] = {
+    409: {"model": ErrorDetail, "description": "Match is completed"},
+    410: {"model": ErrorDetail, "description": "Match was deleted"},
+}
+
+
+def _delete_event(
+    db: Session,
+    match_id: uuid.UUID,
+    coach_id: uuid.UUID,
+    model: type[Point] | type[ScoreCheckpoint],
+    event_id: uuid.UUID,
+) -> None:
+    """Erase one point or checkpoint the coach undid, and rederive the set scores.
+
+    Undo pops the newest event and always queues its delete: a row stays in the outbox
+    from send until the 2xx lands, so "not in the outbox" is not "not on the server",
+    and the delete of a never-sent event has to be harmless. Scoped to the match in the
+    path, so an id held by another match deletes nothing and reveals nothing. Ungated
+    by the capture claim, as ingest is: the request is the capturing device's own undo.
+    """
+    match = match_for_write(db, match_id, coach_id)
+    if match.result is not None:
+        raise HTTPException(status_code=409, detail=MATCH_IS_COMPLETED)
+    erased = db.scalar(
+        delete(model).where(model.id == event_id, model.match_id == match.id).returning(model.id)
+    )
+    # A recompute rewrites every set row, and the absent-row request is the routine one.
+    if erased is not None:
+        recompute_match_sets(db, match.id)
+    db.commit()
+
+
+@router.delete("/{match_id}/points/{point_id}", status_code=204, responses=_DELETE_RESPONSES)
+def delete_point(
+    match_id: uuid.UUID, point_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+) -> None:
+    """Erase one point the coach undid, and rederive the set scores without it."""
+    _delete_event(db, match_id, coach.id, Point, point_id)
+
+
+@router.delete(
+    "/{match_id}/score-checkpoints/{checkpoint_id}",
+    status_code=204,
+    responses=_DELETE_RESPONSES,
+)
+def delete_score_checkpoint(
+    match_id: uuid.UUID, checkpoint_id: uuid.UUID, db: DbSession, coach: CurrentCoach
+) -> None:
+    """Erase one checkpoint the coach undid, and rederive the set scores without it."""
+    _delete_event(db, match_id, coach.id, ScoreCheckpoint, checkpoint_id)
 
 
 # The 409 is declared because the client branches on it, and it now covers the one

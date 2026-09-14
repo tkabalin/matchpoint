@@ -1174,8 +1174,9 @@ export type PointPhase = 'full' | 'tiebreaks' | 'break_points' | 'game_points' |
  * reconciliation read it back.
  *
  * Carries match_id, for symmetry with MatchSetRead's own match-scoped rows, but not
- * created_at or updated_at: a point is never corrected after it lands, so those would
- * only restate when the row was ingested, which is bookkeeping neither reader needs.
+ * created_at or updated_at: a point is never rewritten after it lands, only deleted,
+ * so those would only restate when the row was ingested, which is bookkeeping neither
+ * reader needs.
  */
 export type PointRead = {
     ball_depth: CourtDepth | null;
@@ -3157,6 +3158,56 @@ export type IngestPointsResponses = {
 
 export type IngestPointsResponse = IngestPointsResponses[keyof IngestPointsResponses];
 
+export type DeletePointData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+        /**
+         * Point Id
+         */
+        point_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/points/{point_id}';
+};
+
+export type DeletePointErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Match is completed
+     */
+    409: ErrorDetail;
+    /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeletePointError = DeletePointErrors[keyof DeletePointErrors];
+
+export type DeletePointResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeletePointResponse = DeletePointResponses[keyof DeletePointResponses];
+
 export type ListScoreCheckpointsData = {
     body?: never;
     path: {
@@ -3244,6 +3295,56 @@ export type IngestScoreCheckpointsResponses = {
 };
 
 export type IngestScoreCheckpointsResponse = IngestScoreCheckpointsResponses[keyof IngestScoreCheckpointsResponses];
+
+export type DeleteScoreCheckpointData = {
+    body?: never;
+    path: {
+        /**
+         * Match Id
+         */
+        match_id: string;
+        /**
+         * Checkpoint Id
+         */
+        checkpoint_id: string;
+    };
+    query?: never;
+    url: '/matches/{match_id}/score-checkpoints/{checkpoint_id}';
+};
+
+export type DeleteScoreCheckpointErrors = {
+    /**
+     * Not signed in
+     */
+    401: ErrorDetail;
+    /**
+     * Match is completed
+     */
+    409: ErrorDetail;
+    /**
+     * Match was deleted
+     */
+    410: ErrorDetail;
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+    /**
+     * Too many requests
+     */
+    429: ErrorDetail;
+};
+
+export type DeleteScoreCheckpointError = DeleteScoreCheckpointErrors[keyof DeleteScoreCheckpointErrors];
+
+export type DeleteScoreCheckpointResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteScoreCheckpointResponse = DeleteScoreCheckpointResponses[keyof DeleteScoreCheckpointResponses];
 
 export type ListPlayersData = {
     body?: never;
