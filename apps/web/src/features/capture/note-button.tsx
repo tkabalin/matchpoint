@@ -30,6 +30,7 @@
 
 import { MessageCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -140,7 +141,10 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
           // coach to add or cancel by hand; adding it here too is one note, twice.
           if (session.failed) return;
           const text = draftTextRef.current.trim();
-          if (text.length > 0) onAddNoteRef.current(text);
+          if (text.length > 0) {
+            onAddNoteRef.current(text);
+            toast.success("Note saved");
+          }
         },
         finish: () => {
           // Per spec, stop() on a session the service already ended does nothing and
@@ -323,6 +327,7 @@ export function NoteButton({ onAddNote }: { onAddNote: (text: string) => void })
               disabled={draftText.trim().length === 0}
               onClick={() => {
                 onAddNote(draftText.trim());
+                toast.success("Note saved");
                 setSheetOpen(false);
               }}
               className="h-14 text-base"

@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
+import { Toaster } from "@/components/ui/sonner";
+
 import { NoteButton } from "./note-button";
 import { NOTE_MAX_LENGTH } from "./point";
 
@@ -575,4 +577,37 @@ test("the sheet's Add note button is disabled until there's text to add", async 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
 
   expect(screen.getByRole("button", { name: "Add note" })).toBeDisabled();
+});
+
+test("stopping a recording shows a confirmation toast", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  render(
+    <>
+      <Toaster />
+      <NoteButton onAddNote={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  instances[0]?.onresult?.({ results: [[{ transcript: "favoring the backhand" }]] });
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+
+  expect(await screen.findByText("Note saved")).toBeInTheDocument();
+});
+
+test("adding a typed note from the sheet shows a confirmation toast", async () => {
+  const user = userEvent.setup({ delay: null });
+  render(
+    <>
+      <Toaster />
+      <NoteButton onAddNote={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  await user.type(screen.getByPlaceholderText("What happened?"), "chasing every ball down");
+  await user.click(screen.getByRole("button", { name: "Add note" }));
+
+  expect(await screen.findByText("Note saved")).toBeInTheDocument();
 });
