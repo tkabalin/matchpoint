@@ -23,6 +23,21 @@ recognised by natural key (coach by email, player by coach+first+last name, matc
 player+played_on+opponent+event, point by match+sequence) and refreshed, not
 duplicated.
 
+A **regenerated** season is not an edited one. The generator draws each match's date and
+opponent from its RNG stream, so a fresh run shares almost no match natural key with the
+last, and importing it over the old season leaves both in place, roughly 240 matches
+where 120 were wanted. Clear the old one first with `purge_sample_data.sql`, which takes
+the coach emails from the `coaches.csv` about to be imported:
+
+```sh
+psql -U matchpoint -d matchpoint \
+  -v coach_emails="$(tail -n +2 coaches.csv | cut -d, -f1 | paste -sd,)" \
+  < purge_sample_data.sql
+```
+
+It clears those coaches' matches and points only. The coaches and players stay for the
+import to reuse, so each player keeps the username they sign in with.
+
 ## `coaches.csv`
 
 ```

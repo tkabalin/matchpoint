@@ -24,9 +24,11 @@ Running this against prod:
        docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
        docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv
        docker compose -f /opt/matchpoint/compose.yml cp points.csv api:/tmp/points.csv
-  3. Run the script with the container's own Python and environment:
+  3. If this is replacing a season already imported there, clear it first with
+     purge_sample_data.sql; see the paragraph on regenerated seasons below.
+  4. Run the script with the container's own Python and environment:
        docker compose -f /opt/matchpoint/compose.yml exec -T api python - < import_sample_data.py
-  4. Record the printed demo password somewhere it won't get lost.
+  5. Record the printed demo password somewhere it won't get lost.
 
 Expected CSV files, read from /tmp inside the container:
 
@@ -80,6 +82,12 @@ is why those four columns have to tell one of a player's matches from another. T
 are deliberately not refreshed: a player keeps the username minted on its first import,
 being what that player signs in with, and a point already stored is left as it is rather
 than rewritten, the rule the ingest route follows for a repeated point.
+
+What re-running does not do is replace a regenerated season. The generator draws each
+match's date and opponent from its RNG stream, so a fresh run shares almost none of the
+four columns above with the last one, and this adds a second season beside the first
+rather than correcting it. Clear the old one with purge_sample_data.sql next to this
+script, then import, taking the same backup first.
 """
 
 import csv
