@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 
-import { MatchRow } from "./match-list";
+import { MatchCard } from "./match-card";
 
 /**
  * A player's own matches list — `MatchList` minus everything coach-only: no
@@ -51,7 +51,7 @@ export function PlayerMatchList() {
   return (
     <div className="flex flex-col gap-2">
       {matches.map((match) => (
-        <MatchRow key={match.id} match={match} player={player} />
+        <MatchCard key={match.id} match={match} player={player} />
       ))}
     </div>
   );

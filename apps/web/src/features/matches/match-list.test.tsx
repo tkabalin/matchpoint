@@ -1,4 +1,4 @@
-import type { MatchRead, PlayerRead } from "@matchpoint/api-client";
+import type { MatchRead, PlayerRead, PointRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -45,8 +45,86 @@ const player: PlayerRead = {
   updated_at: "2026-08-01T09:00:00Z",
 };
 
-/** Routes by pathname — same reasoning as matches-page.test.tsx's stubFetch. */
-function stubFetch(routes: { matches?: () => Response; players?: () => Response }) {
+// Every field the type requires, defaulted to "didn't happen" — a test builds
+// only the fields its own assertion cares about on top of this.
+function point(overrides: Partial<PointRead> & Pick<PointRead, "game_number" | "won">): PointRead {
+  return {
+    id: `point-${overrides.game_number}-${Math.random()}`,
+    match_id: match.id,
+    set_number: 1,
+    sequence: 0,
+    server: "tracked",
+    in_tiebreak: false,
+    is_break_point: false,
+    is_game_end: false,
+    is_game_point: false,
+    is_match_point: false,
+    is_set_end: false,
+    is_set_point: false,
+    ball_depth: null,
+    ball_half: null,
+    ball_in: null,
+    ball_out_mode: null,
+    end_reason: null,
+    note: null,
+    return_outcome: null,
+    rally_length_bucket: null,
+    serve1_box: null,
+    serve1_fault_mode: null,
+    serve1_outcome: null,
+    serve2_box: null,
+    serve2_fault_mode: null,
+    serve2_outcome: null,
+    shot_type: null,
+    unusual_reason: null,
+    wing: null,
+    ...overrides,
+  };
+}
+
+/** A love game (4 points), tracked serving and winning — the shortest, most
+ * dominant kind of game this component can plot. */
+function lovGameWonByTracked(gameNumber: number): PointRead[] {
+  return [
+    point({ game_number: gameNumber, won: true }),
+    point({ game_number: gameNumber, won: true }),
+    point({ game_number: gameNumber, won: true }),
+    point({ game_number: gameNumber, won: true, is_game_end: true }),
+  ];
+}
+
+/** A break: the opponent serves but tracked wins the game anyway. */
+function gameBrokenByTracked(gameNumber: number): PointRead[] {
+  return [
+    point({ game_number: gameNumber, won: true, server: "opponent" }),
+    point({ game_number: gameNumber, won: true, server: "opponent" }),
+    point({ game_number: gameNumber, won: true, server: "opponent", is_game_end: true }),
+  ];
+}
+
+function gameWonByOpponent(gameNumber: number): PointRead[] {
+  return [
+    point({ game_number: gameNumber, won: false }),
+    point({ game_number: gameNumber, won: false }),
+    point({ game_number: gameNumber, won: false, is_game_end: true }),
+  ];
+}
+
+/** Marks a game's final point as also ending the set — a real completion
+ * signal, not something derivable from game counts alone. */
+function endingSet(games: PointRead[]): PointRead[] {
+  const last = games.at(-1)!;
+  return [...games.slice(0, -1), { ...last, is_set_end: true }];
+}
+
+/** Routes by pathname — same reasoning as matches-page.test.tsx's stubFetch. A
+ * match card's own `listPoints` call is per-match-id, so it's matched by
+ * pattern rather than the exact-path checks the other two routes use. */
+function stubFetch(routes: {
+  matches?: () => Response;
+  players?: () => Response;
+  points?: () => Response;
+}) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
@@ -55,6 +133,8 @@ function stubFetch(routes: { matches?: () => Response; players?: () => Response 
         return Promise.resolve((routes.matches ?? (() => Response.json([])))());
       if (pathname === "/api/players")
         return Promise.resolve((routes.players ?? (() => Response.json([])))());
+      if (/^\/api\/matches\/[^/]+\/points$/.test(pathname))
+        return Promise.resolve((routes.points ?? (() => Response.json([])))());
       throw new Error(`Unstubbed fetch: ${pathname}`);
     }),
   );
@@ -90,14 +170,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the matches the API returns", async () => {
+test("renders the matches the API returns, both names inline at the same size", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
 
   renderMatchList();
 
   expect(await screen.findByText("Nomsa Dube")).toBeInTheDocument();
-  expect(screen.getByText("vs T. Naidoo")).toBeInTheDocument();
-  expect(screen.getByText("Aug 10 · Hard")).toBeInTheDocument();
+  expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("vs")).toBeInTheDocument();
+  expect(screen.getByText("Aug 10")).toBeInTheDocument();
+  expect(screen.getByText("Hard")).toBeInTheDocument();
 });
 
 test("falls back to a placeholder for a match whose player can't be resolved", async () => {
@@ -113,15 +195,68 @@ test("falls back to a placeholder for a match with no opponent name", async () =
 
   renderMatchList();
 
-  expect(await screen.findByText("vs Unknown opponent")).toBeInTheDocument();
+  expect(await screen.findByText("Unknown opponent")).toBeInTheDocument();
 });
 
-test("marks a finished match with its result, as an icon rather than a hard-to-read letter", async () => {
-  stubFetch({ matches: () => Response.json([{ ...match, result: "win" }]) });
+test("crowns the tracked player once they've won the match", async () => {
+  stubFetch({
+    matches: () => Response.json([{ ...match, result: "win" }]),
+    players: () => Response.json([player]),
+  });
 
   renderMatchList();
 
-  expect(await screen.findByRole("img", { name: "Won" })).toBeInTheDocument();
+  expect(await screen.findByRole("img", { name: "Match winner" })).toBeInTheDocument();
+});
+
+test("an unfinished match crowns nobody and says so", async () => {
+  stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
+
+  renderMatchList();
+
+  await screen.findByText("Nomsa Dube");
+  expect(screen.queryByRole("img", { name: "Match winner" })).not.toBeInTheDocument();
+  expect(screen.getByText("Not finished yet — no winner")).toBeInTheDocument();
+});
+
+test("derives set scores and a per-set win/loss mark from the raw point log", async () => {
+  stubFetch({
+    matches: () => Response.json([{ ...match, result: "win" }]),
+    players: () => Response.json([player]),
+    points: () =>
+      Response.json([
+        // Set 1: tracked wins 2 games to 1.
+        ...lovGameWonByTracked(1),
+        ...gameWonByOpponent(2),
+        ...endingSet(gameBrokenByTracked(3)),
+      ]),
+  });
+
+  renderMatchList();
+
+  expect(await screen.findByText("2–1")).toBeInTheDocument();
+  expect(await screen.findByRole("img", { name: "Won set 1" })).toBeInTheDocument();
+});
+
+test("a game still being played (no game-end point yet) is left off the timeline", async () => {
+  stubFetch({
+    matches: () => Response.json([match]),
+    players: () => Response.json([player]),
+    points: () =>
+      Response.json([
+        ...lovGameWonByTracked(1),
+        // Game 2 has points but never reaches is_game_end — still in progress.
+        point({ game_number: 2, won: true }),
+        point({ game_number: 2, won: false }),
+      ]),
+  });
+
+  renderMatchList();
+
+  // Only the one completed game counts, so the set is still 1-0 with no
+  // winner mark yet rather than reading the in-progress game as a loss.
+  expect(await screen.findByText("1–0")).toBeInTheDocument();
+  expect(screen.queryByRole("img", { name: /Won set|Lost set/ })).not.toBeInTheDocument();
 });
 
 test("shows an empty state when there are no matches", async () => {
@@ -144,8 +279,9 @@ test("tapping a match row navigates to its stats page", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
   const user = userEvent.setup({ delay: null });
   renderMatchList();
+  await screen.findByText("T. Naidoo");
 
-  await user.click(await screen.findByRole("link", { name: /vs T\. Naidoo/ }));
+  await user.click(screen.getByRole("link"));
 
   expect(await screen.findByRole("heading", { name: "Match Stats" })).toBeInTheDocument();
 });
@@ -178,7 +314,7 @@ test("the edit icon is still offered once the match has a result", async () => {
     players: () => Response.json([player]),
   });
   renderMatchList();
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
 
   expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Delete the match/ })).toBeInTheDocument();
@@ -207,14 +343,14 @@ test("filters by opponent name", async () => {
   });
   const user = userEvent.setup({ delay: null });
   renderMatchList();
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
 
   await user.click(screen.getByRole("button", { name: /All matches/ }));
   await user.type(screen.getByPlaceholderText("Search opponent"), "Sarah");
 
-  expect(screen.getByText("vs Sarah K")).toBeInTheDocument();
-  expect(screen.queryByText("vs T. Naidoo")).not.toBeInTheDocument();
-  expect(screen.queryByText("vs Priya M")).not.toBeInTheDocument();
+  expect(screen.getByText("Sarah K")).toBeInTheDocument();
+  expect(screen.queryByText("T. Naidoo")).not.toBeInTheDocument();
+  expect(screen.queryByText("Priya M")).not.toBeInTheDocument();
 });
 
 // The three fixtures below are shared by the surface, result and date-range tests, which
@@ -246,7 +382,7 @@ async function openFilters(user: ReturnType<typeof userEvent.setup>) {
     players: () => Response.json([player]),
   });
   renderMatchList();
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
   await user.click(screen.getByRole("button", { name: /All matches/ }));
 }
 
@@ -257,9 +393,9 @@ test("filters by surface", async () => {
   await user.click(screen.getByRole("combobox", { name: "Surface" }));
   await user.click(await screen.findByRole("option", { name: "Clay" }));
 
-  expect(screen.getByText("vs Sarah K")).toBeInTheDocument();
-  expect(screen.queryByText("vs T. Naidoo")).not.toBeInTheDocument();
-  expect(screen.queryByText("vs Priya M")).not.toBeInTheDocument();
+  expect(screen.getByText("Sarah K")).toBeInTheDocument();
+  expect(screen.queryByText("T. Naidoo")).not.toBeInTheDocument();
+  expect(screen.queryByText("Priya M")).not.toBeInTheDocument();
 });
 
 test("filters by result", async () => {
@@ -269,8 +405,8 @@ test("filters by result", async () => {
   await user.click(screen.getByRole("combobox", { name: "Result" }));
   await user.click(await screen.findByRole("option", { name: "Losses" }));
 
-  expect(screen.getByText("vs Priya M")).toBeInTheDocument();
-  expect(screen.queryByText("vs Sarah K")).not.toBeInTheDocument();
+  expect(screen.getByText("Priya M")).toBeInTheDocument();
+  expect(screen.queryByText("Sarah K")).not.toBeInTheDocument();
 });
 
 // "Unfinished" is not the absence of a result filter — it selects matches whose result
@@ -282,9 +418,9 @@ test("filters to matches that were never finished", async () => {
   await user.click(screen.getByRole("combobox", { name: "Result" }));
   await user.click(await screen.findByRole("option", { name: "Unfinished" }));
 
-  expect(screen.getByText("vs T. Naidoo")).toBeInTheDocument();
-  expect(screen.queryByText("vs Sarah K")).not.toBeInTheDocument();
-  expect(screen.queryByText("vs Priya M")).not.toBeInTheDocument();
+  expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
+  expect(screen.queryByText("Sarah K")).not.toBeInTheDocument();
+  expect(screen.queryByText("Priya M")).not.toBeInTheDocument();
 });
 
 test("filters by a date range, inclusive at both ends", async () => {
@@ -295,9 +431,9 @@ test("filters by a date range, inclusive at both ends", async () => {
   await user.type(screen.getByLabelText("To"), "2026-08-20");
 
   // 2026-07-01 falls outside; both boundary dates are kept.
-  expect(screen.getByText("vs T. Naidoo")).toBeInTheDocument();
-  expect(screen.getByText("vs Priya M")).toBeInTheDocument();
-  expect(screen.queryByText("vs Sarah K")).not.toBeInTheDocument();
+  expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("Priya M")).toBeInTheDocument();
+  expect(screen.queryByText("Sarah K")).not.toBeInTheDocument();
 });
 
 test("filters by which of the coach's players played the match", async () => {
@@ -319,14 +455,14 @@ test("filters by which of the coach's players played the match", async () => {
   });
   const user = userEvent.setup({ delay: null });
   renderMatchList();
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
 
   await user.click(screen.getByRole("button", { name: /All matches/ }));
   await user.click(screen.getByRole("combobox", { name: "Player" }));
   await user.click(await screen.findByRole("option", { name: "Riaan Botha" }));
 
-  expect(screen.getByText("vs Priya M")).toBeInTheDocument();
-  expect(screen.queryByText("vs T. Naidoo")).not.toBeInTheDocument();
+  expect(screen.getByText("Priya M")).toBeInTheDocument();
+  expect(screen.queryByText("T. Naidoo")).not.toBeInTheDocument();
 });
 
 test("clearing filters restores the full list", async () => {
@@ -337,14 +473,14 @@ test("clearing filters restores the full list", async () => {
   });
   const user = userEvent.setup({ delay: null });
   renderMatchList();
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
 
   await user.click(screen.getByRole("button", { name: /All matches/ }));
   await user.type(screen.getByPlaceholderText("Search opponent"), "Sarah");
-  expect(screen.queryByText("vs T. Naidoo")).not.toBeInTheDocument();
+  expect(screen.queryByText("T. Naidoo")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
 
-  expect(screen.getByText("vs T. Naidoo")).toBeInTheDocument();
-  expect(screen.getByText("vs Sarah K")).toBeInTheDocument();
+  expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("Sarah K")).toBeInTheDocument();
 });

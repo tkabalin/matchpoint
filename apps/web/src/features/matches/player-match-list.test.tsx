@@ -48,6 +48,8 @@ function stubFetch(routes: { matches?: () => Response; playerSelf?: () => Respon
         return Promise.resolve((routes.matches ?? (() => Response.json([])))());
       if (pathname === "/api/auth/player/me")
         return Promise.resolve((routes.playerSelf ?? (() => Response.json(player)))());
+      if (/^\/api\/matches\/[^/]+\/points$/.test(pathname))
+        return Promise.resolve(Response.json([]));
       throw new Error(`Unstubbed fetch: ${pathname}`);
     }),
   );
@@ -83,7 +85,7 @@ test("renders the player's own matches, with no Edit or Delete controls", async 
   renderPlayerMatchList();
 
   expect(await screen.findByText("Nomsa Dube")).toBeInTheDocument();
-  expect(screen.getByText("vs T. Naidoo")).toBeInTheDocument();
+  expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Edit details/ })).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Delete the match/ })).not.toBeInTheDocument();
 });

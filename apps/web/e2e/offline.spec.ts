@@ -341,14 +341,14 @@ test.describe("with the service worker", () => {
       .poll(() => persistedCacheHolds(page, `Cached ${stamp}`), { timeout: 20_000 })
       .toBe(true);
     await page.goto("/matches");
-    await expect(page.getByText(`vs ${marker}`)).toBeVisible();
+    await expect(page.getByText(marker)).toBeVisible();
     await expect.poll(() => persistedCacheHolds(page, marker), { timeout: 20_000 }).toBe(true);
 
     // Both screens with the network down and nothing in memory: the API is not
     // in the precache, so the rows can only have come from the snapshot.
     await page.context().setOffline(true);
     await page.reload();
-    await expect(page.getByText(`vs ${marker}`)).toBeVisible();
+    await expect(page.getByText(marker)).toBeVisible();
     await page.goto("/players");
     // Same scoping reason as the first assertion above.
     await expect(page.getByRole("group", { name: `Offline Cached ${stamp}'s card` })).toBeVisible();

@@ -41,6 +41,8 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
       const { pathname } = new URL(input.url);
       if (pathname === "/api/players" && !routes[pathname])
         return Promise.resolve(Response.json([]));
+      if (/^\/api\/matches\/[^/]+\/points$/.test(pathname) && !routes[pathname])
+        return Promise.resolve(Response.json([]));
       const handler = routes[pathname];
       if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
       return Promise.resolve(handler(input));
@@ -115,7 +117,7 @@ test("the edit icon is still offered once the match has a result", async () => {
   stubFetch({ "/api/matches": () => Response.json([{ ...match, result: "win" }]) });
   renderMatchesPage();
 
-  await screen.findByText("vs T. Naidoo");
+  await screen.findByText("T. Naidoo");
 
   expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
 });

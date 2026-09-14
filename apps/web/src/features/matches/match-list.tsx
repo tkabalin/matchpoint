@@ -1,30 +1,13 @@
 import type { MatchRead, PlayerRead, Surface } from "@matchpoint/api-client";
 import { listMatchesOptions, listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import {
-  ChevronDown,
-  ChevronRight,
-  CircleCheck,
-  CircleX,
-  Pencil,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
 import {
   Select,
   SelectContent,
@@ -36,7 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
-import { formatPlayedOn } from "./match-format";
+import { MatchCard } from "./match-card";
 
 type ResultFilter = "all" | "win" | "loss" | "unfinished";
 type SurfaceFilter = "all" | Surface;
@@ -289,7 +272,7 @@ export function MatchList({
         <p className="px-1 py-2 text-sm text-muted-foreground">No matches match those filters.</p>
       ) : (
         filtered.map((match) => (
-          <MatchRow
+          <MatchCard
             key={match.id}
             match={match}
             player={playersById.get(match.player_id)}
@@ -297,106 +280,6 @@ export function MatchList({
             onDelete={onDelete}
           />
         ))
-      )}
-    </div>
-  );
-}
-
-export function MatchRow({
-  match,
-  player,
-  onEdit,
-  onDelete,
-}: {
-  match: MatchRead;
-  player: Pick<PlayerRead, "first_name" | "last_name"> | undefined;
-  // Both absent is the player's own matches list (#203): a player can't edit or
-  // delete a match, so the whole actions column disappears rather than rendering
-  // disabled buttons nobody can use.
-  onEdit?: (match: MatchRead) => void;
-  onDelete?: (match: MatchRead) => void;
-}) {
-  const opponent = match.opponent_name ?? "Unknown opponent";
-  const detail = [formatPlayedOn(match.played_on), match.surface && SURFACE_LABEL[match.surface]]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    // The row and the edit/delete buttons are siblings, not nested — a button
-    // inside an anchor is invalid HTML, and an earlier overlay-link version of
-    // this (an absolutely-positioned `<a>` behind pointer-events-none
-    // siblings) turned out unreliable for real clicks despite passing in
-    // tests. This is the same "Link via Item's `render`" shape `SquadRow`
-    // (home.tsx) already uses, just with the actions pulled out to a sibling
-    // since this row needs them and SquadRow doesn't.
-    <div className="flex items-stretch gap-1">
-      <Item
-        variant="outline"
-        render={<Link to="/matches/$matchId" params={{ matchId: match.id }} />}
-        className="w-full flex-1 text-left"
-      >
-        <ItemMedia>
-          {match.result ? (
-            <span
-              className={cn(
-                "flex size-6 items-center justify-center",
-                match.result === "win" ? "text-outcome-win" : "text-outcome-unforced",
-              )}
-            >
-              {match.result === "win" ? (
-                <CircleCheck className="size-6" role="img" aria-label="Won" />
-              ) : (
-                <CircleX className="size-6" role="img" aria-label="Lost" />
-              )}
-            </span>
-          ) : (
-            // An unfinished match has no result to show, and guessing one would
-            // read as a loss.
-            <span className="size-6 rounded-sm border border-dashed" aria-hidden="true" />
-          )}
-        </ItemMedia>
-        <ItemContent>
-          <ItemTitle>{playerName(player)}</ItemTitle>
-          <ItemDescription>{`vs ${opponent}`}</ItemDescription>
-          <ItemDescription>{detail}</ItemDescription>
-        </ItemContent>
-        <ItemActions>
-          <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-        </ItemActions>
-      </Item>
-      {/* Stacked rather than side by side, matching the ask — edit (blue,
-          the app's reserved interactive/brand color) above delete (red, the
-          same destructive tone every other delete control in the app uses).
-          Offered on a completed match too: finishing one freezes only its result and
-          scoring system (#228), and the sheet locks that one field itself rather than
-          the row hiding the whole control. */}
-      {(onEdit ?? onDelete) && (
-        <div className="flex flex-col gap-1">
-          {onEdit && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="text-primary"
-              aria-label={`Edit details for the match vs ${opponent}`}
-              onClick={() => onEdit(match)}
-            >
-              <Pencil />
-            </Button>
-          )}
-          {onDelete && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="text-destructive"
-              aria-label={`Delete the match vs ${opponent}`}
-              onClick={() => onDelete(match)}
-            >
-              <Trash2 />
-            </Button>
-          )}
-        </div>
       )}
     </div>
   );
