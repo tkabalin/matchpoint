@@ -250,7 +250,7 @@ export function MatchCard({
             </p>
           )}
 
-          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 items-start gap-3">
             {sets.length > 0 && (
               // Each set is one column — its score sits directly above its own
               // momentum group rather than two separately-centred rows, which

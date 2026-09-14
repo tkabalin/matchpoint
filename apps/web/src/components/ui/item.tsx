@@ -113,8 +113,13 @@ function ItemContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="item-content"
+      // min-w-0: without it, a flex item's automatic minimum size is its
+      // min-content width — the longest unbreakable run of its own text (a
+      // full name, a free-form sentence) — so this refuses to shrink below
+      // that on the main axis, however narrow the screen actually is. See
+      // .claude/rules/web.md's horizontal-scroll rule.
       className={cn(
-        "flex flex-1 flex-col gap-1 group-data-[size=xs]/item:gap-0.5 [&+[data-slot=item-content]]:flex-none",
+        "flex min-w-0 flex-1 flex-col gap-1 group-data-[size=xs]/item:gap-0.5 [&+[data-slot=item-content]]:flex-none",
         className,
       )}
       {...props}
@@ -126,8 +131,12 @@ function ItemTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="item-title"
+      // w-fit still shrink-wraps a short title (so a hover underline spans
+      // only the text), but fit-content never resolves below min-content
+      // either — max-w-full caps a long title at its parent's width, which is
+      // what line-clamp-1 needs to actually truncate rather than overflow.
       className={cn(
-        "line-clamp-1 flex w-fit items-center gap-2 text-sm leading-snug font-medium underline-offset-4",
+        "line-clamp-1 flex w-fit max-w-full items-center gap-2 text-sm leading-snug font-medium underline-offset-4",
         className,
       )}
       {...props}

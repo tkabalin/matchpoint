@@ -412,7 +412,7 @@ function AttentionCard({
             onClick={() => setLastViewedPlayerId(player.id)}
           />
         }
-        className="flex-1"
+        className="min-w-0 flex-1"
       >
         <ItemMedia>
           {/* CircleAlert, not TriangleAlert — TriangleAlert already means "unforced
@@ -461,7 +461,7 @@ function ContinueWithCard({ player }: { player: PlayerRead }) {
             reading this card by name has already decided to look, so the
             whole header goes there directly rather than through a picker. */}
         <Item
-          className="p-0"
+          className="min-w-0 p-0"
           render={
             <Link
               to="/players/$playerId"

@@ -31,6 +31,22 @@ paths:
   than an obvious one: check this specifically before shipping a new `Item`-based row with a single
   wide child, and test on a real phone (or real mobile WebKit devtools emulation, not just a resized
   desktop window) before calling a horizontal-scroll fix done.
+- **A grid needs an explicit column track too, not just `min-w-0` inside flex rows.**
+  `AuthenticatedLayout` (`components/authenticated-layout.tsx`) wraps every authenticated screen in
+  a CSS grid (`grid-rows-[auto_1fr]`, for the sticky header plus the routed page) but, until this
+  was found, declared no `grid-cols-*` at all. A grid with no column track defaults its one implicit
+  column to a bare `auto` track, which — unlike Tailwind's `grid-cols-*` utilities, which always
+  wrap their tracks in `minmax(0, 1fr)` specifically to prevent this — sizes itself off a
+  descendant's max-content or explicit `max-width` (here, `AppPage`'s own `max-w-md`, 448px) rather
+  than the viewport. This is the CSS Grid "blowout" bug, the grid-layout sibling of the flex
+  `min-w-0` trap above: it clipped Home and Matches specifically (a long player or opponent name was
+  enough to trigger it) while Players and Squad stats, whose content never got that wide, looked
+  fine — no flex-chain `min-w-0` fix anywhere lower in the tree would have touched this, since the
+  point of failure was the grid container itself, several layers above `AppPage`. Fixed with
+  `grid-cols-1`. Any future top-level CSS grid in this app needs an explicit `grid-cols-*` for the
+  same reason a flex row needs `min-w-0` on its items: measure with `e2e/overflow.ts`'s
+  `overflowingNodes()` helper (`e2e/layout-overflow.spec.ts` is the permanent regression guard)
+  rather than assuming a grid with only rows declared is safe.
 - **This also explains an oddly-behaving fixed bottom nav.** `BottomNav` itself
   (`components/bottom-nav.tsx`) is a correctly-built `fixed inset-x-0 bottom-0`, but nothing between
   it and the real viewport clips an overflowing descendant elsewhere on the page (no ancestor sets
