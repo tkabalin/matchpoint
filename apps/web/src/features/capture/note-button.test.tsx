@@ -67,6 +67,7 @@ function installFakeSpeechRecognition({
 
 afterEach(() => {
   delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+  localStorage.clear();
 });
 
 test("no SpeechRecognition on the window: tapping opens the text sheet directly", async () => {
@@ -610,4 +611,51 @@ test("adding a typed note from the sheet shows a confirmation toast", async () =
   await user.click(screen.getByRole("button", { name: "Add note" }));
 
   expect(await screen.findByText("Note saved")).toBeInTheDocument();
+});
+
+test("the first recording ever started on this device shows a one-time hold hint", async () => {
+  installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  render(
+    <>
+      <Toaster />
+      <NoteButton onAddNote={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(await screen.findByText("Tip: press and hold to type instead")).toBeInTheDocument();
+});
+
+test("a second recording on the same device doesn't repeat the hold hint", async () => {
+  installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  render(
+    <>
+      <Toaster />
+      <NoteButton onAddNote={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  await screen.findByText("Tip: press and hold to type instead");
+  await user.click(screen.getByRole("button", { name: "Stop recording note" }));
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(screen.queryByText("Tip: press and hold to type instead")).not.toBeInTheDocument();
+});
+
+test("no hold hint when tapping falls straight to the text sheet", async () => {
+  const user = userEvent.setup({ delay: null });
+  render(
+    <>
+      <Toaster />
+      <NoteButton onAddNote={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+
+  expect(screen.queryByText("Tip: press and hold to type instead")).not.toBeInTheDocument();
 });
