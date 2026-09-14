@@ -38,6 +38,9 @@ export default defineConfig({
       command: "pnpm run dev",
       url: "http://localhost:5173",
       reuseExistingServer: !process.env.CI,
+      // Suppresses the react-grab overlay (src/main.tsx), whose toolbar otherwise
+      // intercepts taps on the mobile projects' viewports.
+      env: { VITE_E2E: "1" },
     },
     {
       // The production build, for the offline project below: `vite dev` never

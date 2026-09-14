@@ -14,7 +14,10 @@ import { routeTree } from "@/routeTree.gen";
 
 // react-grab lets coding agents select page context to work from. Dev-only — the
 // `import.meta.env.DEV` guard means Vite tree-shakes this out of production builds.
-if (import.meta.env.DEV) {
+// Off under Playwright as well: its toolbar floats over the bottom of the viewport
+// and swallows taps meant for whatever is under it, which on a phone-sized screen
+// is the primary action of half the capture screens.
+if (import.meta.env.DEV && !import.meta.env.VITE_E2E) {
   import("react-grab").catch((error: unknown) => {
     console.error("Failed to load react-grab", error);
   });
