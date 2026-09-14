@@ -48,12 +48,12 @@ test.each([
 
 test("a shot tap zooms the court back out immediately, ahead of the dispatch it delays", async () => {
   const { user } = renderFinalShot();
-  const court = screen.getByTestId("court-surface");
-  expect(court.style.transform).not.toBe("");
+  const zoomLayer = screen.getByTestId("zoom-layer");
+  expect(zoomLayer).not.toHaveStyle({ width: "100%" });
 
   await user.click(screen.getByRole("button", { name: "Backhand drive" }));
 
-  expect(court.style.transform).toBe("");
+  expect(zoomLayer).toHaveStyle({ width: "100%" });
 });
 
 test("didn't see the shot also waits out the exit zoom before dispatching", async () => {
@@ -87,5 +87,5 @@ test("a second tap during the exit zoom does not queue a second dispatch", async
 // renders straight into the target region rather than animating there itself.
 test("renders already zoomed to the given region, with no entrance delay", () => {
   renderFinalShot();
-  expect(screen.getByTestId("court-surface").style.transform).not.toBe("");
+  expect(screen.getByTestId("zoom-layer")).not.toHaveStyle({ width: "100%" });
 });

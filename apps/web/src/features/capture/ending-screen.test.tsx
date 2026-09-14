@@ -49,5 +49,5 @@ test("and the other way round when the ball finished on our half", () => {
 // no local "starts full-court" state to settle out of.
 test("renders already zoomed to the given region, with no entrance delay", () => {
   renderEnding(true);
-  expect(screen.getByTestId("court-surface").style.transform).not.toBe("");
+  expect(screen.getByTestId("zoom-layer")).not.toHaveStyle({ width: "100%" });
 });

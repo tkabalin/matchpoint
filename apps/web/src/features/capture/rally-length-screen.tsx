@@ -22,7 +22,7 @@ import { BasketIcon } from "./basket-icon";
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
 import { CourtDiagram, ZoomedCard } from "./court-diagram";
-import { subCells, toCourtBox, zoomScale } from "./court-geometry";
+import { subCells, toCourtBox } from "./court-geometry";
 import type { RallyBucket } from "./point";
 
 // The four stored buckets, in the coach's own vocabulary. B1 is also what the flow
@@ -59,7 +59,6 @@ export function RallyLengthScreen({
 
   // subCells(zoomTo, 2, 2) always returns exactly 4 regions, one per bucket below.
   const cells = subCells(zoomTo, 2, 2);
-  const scale = zoomScale(zoomTo);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -70,12 +69,7 @@ export function RallyLengthScreen({
 
       <CourtDiagram zoomTo={cameraTarget} className="min-h-0 flex-1">
         {BUCKET_LABELS.map(({ bucket, label }, index) => (
-          <ZoomedCard
-            key={bucket}
-            box={toCourtBox(cells[index]!)}
-            scale={scale}
-            gapClassName="p-[3px]"
-          >
+          <ZoomedCard key={bucket} box={toCourtBox(cells[index]!)} gapClassName="p-[3px]">
             <Button
               variant="ghost"
               onClick={() => {

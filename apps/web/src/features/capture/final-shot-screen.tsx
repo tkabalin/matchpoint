@@ -38,7 +38,7 @@ import { Button } from "@/components/ui/button";
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
 import { COURT_ACTIONS, CourtDiagram, ZoomedCard, ZOOM_MS } from "./court-diagram";
-import { subCells, toCourtBox, zoomScale } from "./court-geometry";
+import { subCells, toCourtBox } from "./court-geometry";
 import type { ShotType, Wing } from "./point";
 
 // Rows, in the order the design lays them out. Smash and slice are deliberately absent
@@ -81,8 +81,8 @@ export function FinalShotScreen({
   onAction: (action: CaptureAction) => void;
 }) {
   // Set once, by whichever exit fires first — onAction itself waits for the zoom this
-  // triggers (CourtDiagram animates its own transform whenever zoomTo changes) rather
-  // than firing immediately, and the guard against a second tap during that wait is the
+  // triggers (CourtDiagram animates its own zoom whenever zoomTo changes) rather than
+  // firing immediately, and the guard against a second tap during that wait is the
   // same "already have one queued" check, not a separate pending flag.
   const [exiting, setExiting] = useState<CaptureAction | null>(null);
   const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,7 +99,6 @@ export function FinalShotScreen({
     }, ZOOM_MS);
   }
 
-  const scale = zoomScale(zoomTo);
   const headerRegion: CourtRegion = {
     ...zoomTo,
     height: zoomTo.height * HEADER_HEIGHT_FRACTION,
@@ -120,7 +119,7 @@ export function FinalShotScreen({
       </div>
 
       <CourtDiagram zoomTo={exiting !== null ? null : zoomTo} className="min-h-0 flex-1">
-        <ZoomedCard box={toCourtBox(headerRegion)} scale={scale}>
+        <ZoomedCard box={toCourtBox(headerRegion)}>
           {/* gap-2 keeps the two labels from running into one word ("BACKHANDFOREHAND")
               when the region is squeezed narrow (a short viewport in landscape);
               overflow-hidden + truncate on the label is the same guard rather than
@@ -148,12 +147,8 @@ export function FinalShotScreen({
             <ZoomedCard
               key={`${wing.wing}-${shot.shotType}`}
               box={toCourtBox(cells[shotIndex * 2 + wingIndex]!)}
-              scale={scale}
               // 8px, not the 3px other zoomed screens use: eight cards packed this
-              // tight compound two nested transforms (this card's own unscale, the
-              // court's own zoom), and 3px wasn't enough margin for the sub-pixel
-              // rounding that stacks up from that — adjacent cards' *painted* edges
-              // overlapped by a hair even though their own boxes, unrounded, didn't.
+              // tight need more breathing room between them than the other grids do.
               gapClassName="p-[8px]"
             >
               <Button

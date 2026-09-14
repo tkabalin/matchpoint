@@ -28,11 +28,11 @@ test.each([
 
 // This is the one screen that plays the zoom-in itself (see its own doc comment) — it
 // starts its own local target at null and flips to the real one in an effect, so it
-// settles on the zoomed transform rather than staying at the full-court default.
-test("settles on the zoomed transform, not the full-court default", async () => {
+// settles on the zoomed box rather than staying at the full-court default.
+test("settles on the zoomed box, not the full-court default", async () => {
   render(<RallyLengthScreen zoomTo={ZOOM_TO} onAction={vi.fn()} />);
 
   await waitFor(() => {
-    expect(screen.getByTestId("court-surface").style.transform).not.toBe("");
+    expect(screen.getByTestId("zoom-layer")).not.toHaveStyle({ width: "100%" });
   });
 });

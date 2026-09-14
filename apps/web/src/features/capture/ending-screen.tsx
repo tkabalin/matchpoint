@@ -24,7 +24,7 @@ import { cn } from "@/lib/utils";
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
 import { CourtDiagram, ZoomedCard } from "./court-diagram";
-import { subCells, toCourtBox, zoomScale } from "./court-geometry";
+import { subCells, toCourtBox } from "./court-geometry";
 
 const ENDINGS: {
   endReason: "FORCED" | "MISTAKE";
@@ -64,7 +64,6 @@ export function EndingScreen({
   const loser = won ? opponentName : trackedPlayerName;
   // subCells(zoomTo, 1, 2) always returns exactly 2 regions, one per ending below.
   const cells = subCells(zoomTo, 1, 2);
-  const scale = zoomScale(zoomTo);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -74,12 +73,7 @@ export function EndingScreen({
 
       <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
         {ENDINGS.map(({ endReason, label, Icon, colorClass }, index) => (
-          <ZoomedCard
-            key={endReason}
-            box={toCourtBox(cells[index]!)}
-            scale={scale}
-            gapClassName="p-[3px]"
-          >
+          <ZoomedCard key={endReason} box={toCourtBox(cells[index]!)} gapClassName="p-[3px]">
             <Button
               variant="ghost"
               onClick={() => {

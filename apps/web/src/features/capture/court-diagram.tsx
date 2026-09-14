@@ -49,17 +49,31 @@ export interface CourtRegion {
   height: number;
 }
 
-/** The transform that makes `region` fill the diagram at `zoomScale(region)`. */
-function zoomTransform(region: CourtRegion): string {
+/**
+ * The real left/top/width/height — not a transform — that makes `region` fill the
+ * diagram at `zoomScale(region)`, as percentages of court-surface's own frame (which
+ * never itself resizes — see zoom-layer's own comment in `CourtDiagram` for why the
+ * zoom is real layout rather than a transform).
+ */
+function zoomBox(region: CourtRegion): {
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+} {
   const scale = zoomScale(region);
   const cx = (region.left + region.width / 2) / 100;
   const cy = (region.top + region.height / 2) / 100;
-  // transform-origin stays at the box's own top-left (0 0); translate is a percentage
-  // of that same box, which is what lets this be pure arithmetic on 0-1 fractions
-  // rather than needing the box's rendered pixel size.
-  const tx = (0.5 - cx * scale) * 100;
-  const ty = (0.5 - cy * scale) * 100;
-  return `translate(${String(tx)}%, ${String(ty)}%) scale(${String(scale)})`;
+  // Percentages of court-surface's own fixed frame, which is what lets this be pure
+  // arithmetic on 0-1 fractions rather than needing the frame's rendered pixel size.
+  const left = (0.5 - cx * scale) * 100;
+  const top = (0.5 - cy * scale) * 100;
+  return {
+    left: `${String(left)}%`,
+    top: `${String(top)}%`,
+    width: `${String(scale * 100)}%`,
+    height: `${String(scale * 100)}%`,
+  };
 }
 
 /**
@@ -129,55 +143,31 @@ const NET_MESH = [
 ].join(",");
 
 /**
- * Anchors one card at `box` (a cell from `subCells`, in the diagram's own tiny,
- * pre-zoom percentage space) without the card's *own* rendering happening at that tiny
- * size — a card positioned and sized directly by `box` still sits in the *same*
- * transformed layer as the court lines, so `transform: scale()` enlarges its text,
- * border-radius and shadow exactly as it enlarges everything else, at whatever
- * fractional pixel size `box` resolves to. Dividing each of those properties down to
- * compensate was tried first and rejected on two counts: at the fractional sizes a real
- * zoom factor produces, text lays out and kerns inconsistently (magnified back up into
- * visibly uneven letter-spacing), and a border-radius that's a normal fraction of a
- * *normal*-sized card becomes most of a *few-pixel-tall* one, degenerating toward a
- * capsule. Rendering the card at `scale`-times-over-size and shrinking the whole,
- * already-laid-out result back down instead leaves nothing to re-lay-out at a bad
- * size — only the finished paint shrinks, which a browser does exactly.
+ * Anchors one card at `box` (a cell from `subCells`) inside a zoomed `CourtDiagram` —
+ * a plain wrapper, sized and positioned by `box` directly. This used to need a
+ * compensating `transform: scale()` (render the card at normal size, then shrink it
+ * to fit) because the ancestor's own zoom was itself a transform: its layout size
+ * never changed, so `box`'s real pixel size stayed at its tiny pre-zoom fraction
+ * forever, and a card rendered directly at that size degenerated (uneven kerning, a
+ * border-radius that ate the whole card). Now that the ancestor zoom is real layout
+ * (see zoom-layer's own comment in `CourtDiagram`), `box` itself genuinely grows to
+ * its full on-screen size once the zoom settles, so there's nothing left to undo.
  */
 export function ZoomedCard({
   box,
-  scale,
   gapClassName,
   children,
 }: {
   box: CourtBox;
-  /** The diagram's own zoomScale(zoomTo) — the enlargement this card must undo. */
-  scale: number;
-  // Padding on the scaled wrapper, in ordinary units (e.g. "p-[3px]") — the gap between
-  // adjacent cards. A margin on the card itself would eat into the `h-full w-full` it's
-  // given below; padding here reads as the same visual gap without that fight.
+  // Padding, in ordinary units (e.g. "p-[3px]") — the gap between adjacent cards. A
+  // margin on the card itself would eat into the `h-full w-full` it's given, padding
+  // here reads as the same visual gap without that fight.
   gapClassName?: string;
-  // The card itself — a Button given `h-full w-full` so it fills the scaled wrapper
-  // below, carrying its own visual classes (rounded-lg, shadow, colour) unchanged from
-  // how they'd be authored for a normal-sized button, since that's the size it renders
-  // at before the wrapper's own transform shrinks the whole thing back down.
   children: React.ReactNode;
 }) {
   return (
-    <div style={box} className="absolute flex items-center justify-center">
-      <div
-        // shrink-0: `box` is the anchor's own (tiny, pre-zoom) size, so a flex row's
-        // default flex-shrink would squeeze this oversized child back down along the
-        // main (width) axis alone, distorting it — the cross (height) axis has no such
-        // shrink behaviour, so the two ended up scaled by different amounts without this.
-        className={cn("shrink-0", gapClassName)}
-        style={{
-          width: `${String(scale * 100)}%`,
-          height: `${String(scale * 100)}%`,
-          transform: `scale(${String(1 / scale)})`,
-        }}
-      >
-        {children}
-      </div>
+    <div style={box} className={cn("absolute", gapClassName)}>
+      {children}
     </div>
   );
 }
@@ -191,7 +181,9 @@ export function ZoomedCard({
  *
  * `zoomTo`, when given, scales and pans the whole diagram — lines, zones and children
  * alike — so that region fills the frame instead of the full court, animated via CSS
- * transition rather than replayed by hand. A screen that wants the animation to play on
+ * transition rather than replayed by hand (see zoom-layer's own comment below on why
+ * that transition is real left/top/width/height rather than `transform: scale()`). A
+ * screen that wants the animation to play on
  * its own arrival (rather than snapping straight to the zoomed frame on mount, which is
  * what a screen reached *after* the zoom has already happened wants) starts its own
  * local `zoomTo` state at `null` and flips it to the target region in an effect — see
@@ -253,66 +245,82 @@ export function CourtDiagram({
       )}
     >
       {/* The surface color follows the match's court type, set as --court-surface on a
-          screen root; --color-court is the hard/unspecified default. The zoom transform
-          lives here, on the layer everything else (lines, zones, children) sits inside,
-          so all of it scales and pans together. */}
+          screen root; --color-court is the hard/unspecified default. This frame's own
+          size never changes — it's the stable reference the zoom pans and scales
+          *inside of*, not the thing that moves (see zoom-layer just below). */}
       <div
         data-testid="court-surface"
-        className="relative aspect-[165/216] w-[min(100cqw,calc(100cqh*165/216))] overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))] transition-transform"
-        style={{
-          transform: zoomTo ? zoomTransform(zoomTo) : undefined,
-          transformOrigin: "0 0",
-          transitionDuration: `${String(ZOOM_MS)}ms`,
-          transitionTimingFunction: ZOOM_EASE,
-        }}
+        className="relative aspect-[165/216] w-[min(100cqw,calc(100cqh*165/216))] overflow-hidden rounded-md bg-[var(--court-surface,var(--color-court))]"
       >
-        {COURT_LINES.map((line, index) => (
-          <div key={index} className="absolute bg-white" style={line} />
-        ))}
+        {/* The zoom itself: real left/top/width/height, not `transform: scale()`, so
+            every frame of the transition is a genuine layout+paint at that frame's
+            actual size — the court lines and any ZoomedCard content redraw crisp at
+            every size the zoom passes through, rather than one small raster getting
+            GPU-stretched across the whole animation (which is what read as blurry
+            mid-zoom; `backface-visibility`/`will-change` tweaks to the old transform
+            couldn't fix that, since stretching a cached raster is the mechanism, not
+            a missing hint). The cost is real per-frame layout instead of a
+            compositor-only transform — acceptable for a diagram this simple. */}
+        <div
+          data-testid="zoom-layer"
+          className="absolute"
+          style={{
+            ...(zoomTo
+              ? zoomBox(zoomTo)
+              : { left: "0%", top: "0%", width: "100%", height: "100%" }),
+            transitionProperty: "left, top, width, height",
+            transitionDuration: `${String(ZOOM_MS)}ms`,
+            transitionTimingFunction: ZOOM_EASE,
+          }}
+        >
+          {COURT_LINES.map((line, index) => (
+            <div key={index} className="absolute bg-white" style={line} />
+          ))}
 
-        {zones?.map((zone) => (
-          <button
-            key={zone.name}
-            type="button"
-            aria-label={zone.name}
-            onClick={() => {
-              tap(zone);
-            }}
-            style={zone.box}
-            // transition-colors' defaults are already the handoff's --duration-fast
-            // (150ms) and --ease-standard (cubic-bezier(0.4, 0, 0.2, 1)).
-            className={cn(
-              "absolute z-10 flex transition-colors",
-              LABEL_PLACEMENTS[zone.labelPlacement ?? "center"],
-              flashing === zone.name ? ZONE_TONES[zone.tone].flash : ZONE_TONES[zone.tone].idle,
-            )}
-          >
-            {zone.label !== undefined && (
-              <span
-                className={cn(
-                  "text-[10px] font-medium tracking-[0.08em] text-white/95 uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.25)]",
-                  LABEL_ORIENTATIONS[zone.labelOrientation ?? "horizontal"],
-                )}
-              >
-                {zone.label}
+          {zones?.map((zone) => (
+            <button
+              key={zone.name}
+              type="button"
+              aria-label={zone.name}
+              onClick={() => {
+                tap(zone);
+              }}
+              style={zone.box}
+              // transition-colors' defaults are already the handoff's --duration-fast
+              // (150ms) and --ease-standard (cubic-bezier(0.4, 0, 0.2, 1)).
+              className={cn(
+                "absolute z-10 flex transition-colors",
+                LABEL_PLACEMENTS[zone.labelPlacement ?? "center"],
+                flashing === zone.name ? ZONE_TONES[zone.tone].flash : ZONE_TONES[zone.tone].idle,
+              )}
+            >
+              {zone.label !== undefined && (
+                <span
+                  className={cn(
+                    "text-[10px] font-medium tracking-[0.08em] text-white/95 uppercase [text-shadow:0_1px_2px_rgb(0_0_0/0.25)]",
+                    LABEL_ORIENTATIONS[zone.labelOrientation ?? "horizontal"],
+                  )}
+                >
+                  {zone.label}
+                </span>
+              )}
+            </button>
+          ))}
+
+          <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex h-[26px] -translate-y-1/2 items-center justify-center px-2">
+            <span
+              className="absolute inset-x-2 h-[22px] border-t-[3px] border-foreground bg-muted"
+              style={{ backgroundImage: NET_MESH }}
+            />
+            {netLabel !== undefined && (
+              <span className="relative z-10 rounded-sm bg-background px-[7px] py-0.5 text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase shadow-[0_1px_3px_rgb(0_0_0/0.15)]">
+                {netLabel}
               </span>
             )}
-          </button>
-        ))}
+          </div>
 
-        <div className="pointer-events-none absolute inset-x-0 top-1/2 z-20 flex h-[26px] -translate-y-1/2 items-center justify-center px-2">
-          <span
-            className="absolute inset-x-2 h-[22px] border-t-[3px] border-foreground bg-muted"
-            style={{ backgroundImage: NET_MESH }}
-          />
-          {netLabel !== undefined && (
-            <span className="relative z-10 rounded-sm bg-background px-[7px] py-0.5 text-[10px] font-medium tracking-[0.08em] text-muted-foreground uppercase shadow-[0_1px_3px_rgb(0_0_0/0.15)]">
-              {netLabel}
-            </span>
-          )}
+          {children}
         </div>
-
-        {children}
       </div>
     </div>
   );
