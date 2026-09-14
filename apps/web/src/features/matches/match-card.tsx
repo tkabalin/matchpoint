@@ -173,9 +173,16 @@ export function MatchCard({
       <Item
         variant="outline"
         render={<Link to="/matches/$matchId" params={{ matchId: match.id }} />}
-        className="w-full flex-1 text-left"
+        // `Item`'s own base class is a flex row (`item.tsx`), and this is the
+        // one shape that trips a real mobile WebKit bug: a single full-width
+        // flex-col child, several layers above the sets strip's own
+        // `overflow-x-auto`. Relying on that div alone to establish "auto min
+        // size → 0" up the whole chain holds on desktop Chromium/Firefox but
+        // not reliably on iOS Safari — min-w-0 has to be explicit at every
+        // level between here and there, not just where the scrolling happens.
+        className="w-full min-w-0 flex-1 text-left"
       >
-        <div className="flex w-full flex-col gap-2.5">
+        <div className="flex w-full min-w-0 flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
               {player ? <PlayerAvatar player={player} size="md" /> : <NameAvatar name={ourName} />}
@@ -305,7 +312,7 @@ export function MatchCard({
           locks that one field itself rather than the row hiding the whole
           control. */}
       {(onEdit ?? onDelete) && (
-        <div className="flex flex-col justify-between">
+        <div className="flex flex-col justify-between py-2 pr-1">
           {onEdit && (
             <Button
               type="button"

@@ -11,6 +11,36 @@ paths:
 - New tokens (colours, spacing, fonts) go in `@theme` and are used via the generated utilities.
   Don't hardcode hex values in `className`.
 
+## The page itself must never scroll horizontally
+
+- Only a component's own explicitly-built strip (`overflow-x-auto` on a specific, narrow container —
+  `match-card.tsx`'s momentum timeline, `home.tsx:259`'s horizontal card row) may ever scroll
+  sideways. The page around it always scrolls vertically only. `app.css`'s
+  `html, body { overflow-x: hidden }` is the backstop, not the fix — anything that actually
+  overflows still looks broken (clipped) even with that rule in place, it just stops the whole page
+  from scrolling.
+- **A single missing `min-w-0` breaks this, and only on mobile WebKit.** A flex item that's supposed
+  to shrink below its content's natural width needs `min-w-0` at _every_ flex layer between the
+  viewport and the actual `overflow-x-auto` container, not just on the container itself. Desktop
+  Chromium/Firefox apply CSS's "automatic minimum size → 0 inside `overflow: auto`" rule leniently
+  enough to paper over a missing `min-w-0` a few layers up; iOS Safari (and Chrome-for-iOS, also
+  WebKit) does not, reliably, especially through `Item`'s (`components/ui/item.tsx`) flex-row base
+  class wrapping a single full-width flex-column child — an unusual shape for `Item`, which normally
+  holds multiple side-by-side children. This is exactly the shape that broke once for real
+  (`match-card.tsx`) and reads as an intermittent, hard-to-reproduce-on-desktop layout bug rather
+  than an obvious one: check this specifically before shipping a new `Item`-based row with a single
+  wide child, and test on a real phone (or real mobile WebKit devtools emulation, not just a resized
+  desktop window) before calling a horizontal-scroll fix done.
+- **This also explains an oddly-behaving fixed bottom nav.** `BottomNav` itself
+  (`components/bottom-nav.tsx`) is a correctly-built `fixed inset-x-0 bottom-0`, but nothing between
+  it and the real viewport clips an overflowing descendant elsewhere on the page (no ancestor sets
+  `overflow-x: hidden` short of the new global backstop above). An overflowing card bleeds past its
+  own bounds all the way to the true viewport edge, which is exactly the condition that expands
+  mobile Safari/Chrome's layout viewport and detaches a `position: fixed` element from the visual
+  viewport it's supposed to track — so a horizontal-overflow bug elsewhere on the page can look like
+  a bottom-nav bug with no connection to it at all. Fix the overflow at its source; don't go looking
+  in `bottom-nav.tsx` first.
+
 ## Dark mode — toggle-only, never OS-detected
 
 - Light/dark is decided **solely** by the coach's own choice in Settings > App > Appearance,
