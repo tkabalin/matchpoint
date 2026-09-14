@@ -6,22 +6,16 @@
  * columns there. Annotating the return type is what makes a backend field change a
  * compile error in this app: see "Contract checks against the API" in docs/testing.md.
  *
- * Every enum member on the wire is the capture member lowercased, which is what lets
- * one helper carry them all and still be checked: `Lowercase<"DOUBLE_FAULT">` is the
- * literal "double_fault", so a member the API lacks fails to type against PointCreate.
+ * Every enum member on the wire is the capture member lowercased, via enum-case.ts's
+ * `lower`/`lowerOrNull` — shared with checkpoint-payload.ts, the sibling that also
+ * lowers a capture enum onto the wire.
  */
 
 import type { PointCreate } from "@matchpoint/api-client";
 
 import type { Point, ServeAttempt } from "@/features/capture/point";
 
-function lower<T extends string>(value: T): Lowercase<T> {
-  return value.toLowerCase() as Lowercase<T>;
-}
-
-function lowerOrNull<T extends string>(value: T | null): Lowercase<T> | null {
-  return value === null ? null : lower(value);
-}
+import { lower, lowerOrNull } from "./enum-case";
 
 /**
  * One attempt's three columns. A serve that landed records the box it was aimed at,

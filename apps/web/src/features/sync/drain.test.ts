@@ -1,6 +1,13 @@
-import { zMatchCreate, zMatchRead, zMatchUpdate, zPointBatch } from "@matchpoint/api-client/zod";
+import {
+  zMatchCreate,
+  zMatchRead,
+  zMatchUpdate,
+  zPointBatch,
+  zScoreCheckpointBatch,
+} from "@matchpoint/api-client/zod";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
+import { ScoreCheckpoint } from "@/features/capture/checkpoint";
 import { createMatch } from "@/features/capture/match";
 import { outboxDb, type OutboxEntry, type OutboxFailure } from "@/features/outbox/db";
 import { appendEvent, findInProgressFor, readLog, saveMatch } from "@/features/outbox/match-log";
@@ -105,10 +112,34 @@ function outcomeEntry(matchId: string, trackedPlayerWon = true): OutboxEntry {
   };
 }
 
-/** A checkpoint row: no endpoint takes one yet, so the drain never maps the payload. */
+/** A checkpoint row: one set in progress at 2-1, love-all in the current game. */
 function checkpointEntry(tag: string, matchId: string, sequence: number): OutboxEntry {
   const id = uid(tag);
-  return { id, coachId: COACH_ID, matchId, kind: "checkpoint", payload: { id, matchId, sequence } };
+  const checkpoint = ScoreCheckpoint.create({
+    id,
+    matchId,
+    timestamp: 1_755_600_000_000,
+    sequence,
+    after: { sets: [{ tracked: 2, opponent: 1, tiebreak: null }], game: null },
+    servesNext: "TRACKED",
+    orderChanged: false,
+  });
+  return { id, coachId: COACH_ID, matchId, kind: "checkpoint", payload: checkpoint.toJSON() };
+}
+
+/** The row `undo()` queues for a point or checkpoint it just popped off the log. */
+function eventDeleteEntry(
+  kind: "point" | "checkpoint",
+  targetId: string,
+  matchId: string,
+): OutboxEntry {
+  return {
+    id: `${targetId}:delete`,
+    coachId: COACH_ID,
+    matchId,
+    kind: "eventDelete",
+    payload: { kind },
+  };
 }
 
 /** A point carrying the longest note the API takes, for the byte-bound test. */
@@ -153,12 +184,15 @@ function stubTransport(respond: Responder): RecordedRequest[] {
     "fetch",
     vi.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
+      // A delete carries no body at all, unlike every other request this engine
+      // sends: `.json()` on an empty stream throws, so read text first.
+      const text = await request.clone().text();
       const recorded: RecordedRequest = {
         method: request.method,
         // Minus the client's /api base path: that prefix belongs to the proxy
         // config, the route below it is what the engine chooses.
         pathname: new URL(request.url).pathname.replace(/^\/api/, ""),
-        body: await request.clone().json(),
+        body: text.length > 0 ? (JSON.parse(text) as unknown) : null,
       };
       requests.push(recorded);
       const schema =
@@ -166,9 +200,11 @@ function stubTransport(respond: Responder): RecordedRequest[] {
           ? zMatchCreate
           : /^\/matches\/[^/]+\/points$/.test(recorded.pathname)
             ? zPointBatch
-            : recorded.method === "PATCH" && /^\/matches\/[^/]+$/.test(recorded.pathname)
-              ? zMatchUpdate
-              : null;
+            : /^\/matches\/[^/]+\/score-checkpoints$/.test(recorded.pathname)
+              ? zScoreCheckpointBatch
+              : recorded.method === "PATCH" && /^\/matches\/[^/]+$/.test(recorded.pathname)
+                ? zMatchUpdate
+                : null;
       const parsed = schema?.safeParse(recorded.body);
       if (parsed?.success === false) {
         contractViolations.push(`${recorded.pathname}: ${parsed.error.message}`);
@@ -421,7 +457,187 @@ describe("flushing", () => {
   });
 });
 
+describe("score checkpoints", () => {
+  test("sends a checkpoint after the match's points, batched like a point", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(
+      matchEntry(MATCH_A),
+      pointEntry("a1", MATCH_A, 0),
+      checkpointEntry("a2", MATCH_A, 1),
+    );
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      "/matches",
+      `/matches/${MATCH_A}/points`,
+      `/matches/${MATCH_A}/score-checkpoints`,
+    ]);
+    const batch = zScoreCheckpointBatch.parse(requests[2]!.body);
+    expect(batch.device_id).toBe(DEVICE_ID);
+    expect(batch.checkpoints.map((checkpoint) => checkpoint.id)).toEqual([uid("a2")]);
+    expect(await pendingIds()).toEqual([]);
+    expect(result).toMatchObject({ acknowledged: 3 });
+  });
+
+  test("maps a checkpoint off the match log once its own create has already landed", async () => {
+    const match = createMatch("2026-08-15", PLAYER_ID, { opponentId: OPPONENT_ID }, PLAYER_ID);
+    await saveMatch({
+      matchId: MATCH_A,
+      coachId: COACH_ID,
+      trackedPlayerId: PLAYER_ID,
+      nextSequence: 1,
+      finished: false,
+      updatedAt: Date.now(),
+      payload: { ...match.toJSON(), matchId: MATCH_A },
+    });
+    const requests = stubTransport(respondOk);
+    await queue(checkpointEntry("a1", MATCH_A, 0));
+
+    await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      `/matches/${MATCH_A}/score-checkpoints`,
+    ]);
+    expect(await pendingIds()).toEqual([]);
+  });
+
+  test("parks a checkpoint the drain has no logged match to map it against", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(checkpointEntry("a1", MATCH_A, 0));
+
+    const result = await drain();
+
+    expect(requests).toEqual([]);
+    const [row] = await readByMatch(MATCH_A);
+    expect(row!.status).toBe("failed");
+    // A missing match log isn't a bad payload — the checkpoint itself is fine —
+    // so this must not read like the generic "app version cannot map it" failure
+    // an actually malformed payload gets.
+    expect(row!.failure?.message).toMatch(/local record is missing/);
+    expect(result).toMatchObject({ parked: 1 });
+  });
+});
+
+describe("event deletes", () => {
+  test("deletes a point and a checkpoint by the id undo queued", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(
+      matchEntry(MATCH_A),
+      eventDeleteEntry("point", uid("a1"), MATCH_A),
+      eventDeleteEntry("checkpoint", uid("a2"), MATCH_A),
+    );
+
+    const result = await drain();
+
+    expect(
+      requests.map((request) => ({ method: request.method, pathname: request.pathname })),
+    ).toEqual([
+      { method: "POST", pathname: "/matches" },
+      { method: "DELETE", pathname: `/matches/${MATCH_A}/points/${uid("a1")}` },
+      { method: "DELETE", pathname: `/matches/${MATCH_A}/score-checkpoints/${uid("a2")}` },
+    ]);
+    expect(await pendingIds()).toEqual([]);
+    expect(result).toMatchObject({ acknowledged: 3 });
+  });
+
+  test("parks one refused delete and still sends the next, independent, delete", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points/${uid("a1")}`
+        ? jsonResponse(409, { detail: "Match is completed" })
+        : respondOk(request),
+    );
+    await queue(
+      eventDeleteEntry("point", uid("a1"), MATCH_A),
+      eventDeleteEntry("checkpoint", uid("a2"), MATCH_A),
+    );
+
+    const result = await drain();
+
+    expect(requests.map((request) => request.pathname)).toEqual([
+      `/matches/${MATCH_A}/points/${uid("a1")}`,
+      `/matches/${MATCH_A}/score-checkpoints/${uid("a2")}`,
+    ]);
+    // The checkpoint delete's own success removes its row; the point delete's
+    // refusal is the only one left to have parked.
+    const rows = await readByMatch(MATCH_A);
+    expect(rows.map((row) => row.status)).toEqual(["failed"]);
+    expect(result).toMatchObject({ parked: 1, acknowledged: 1 });
+  });
+
+  // A refused delete parks alone (siblings are independent), but the outcome must
+  // still wait: sending it anyway would complete the match with a delete it should
+  // have erased still sitting in its stats, and the parked delete would then 409
+  // forever once the match is done.
+  test("holds the outcome back when an event delete is refused", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points/${uid("a1")}`
+        ? jsonResponse(409, { detail: "Match is completed" })
+        : respondOk(request),
+    );
+    await queue(
+      matchEntry(MATCH_A),
+      eventDeleteEntry("point", uid("a1"), MATCH_A),
+      eventDeleteEntry("checkpoint", uid("a2"), MATCH_A),
+      outcomeEntry(MATCH_A),
+    );
+
+    const result = await drain();
+
+    expect(requests.some((request) => request.method === "PATCH")).toBe(false);
+    expect(await pendingIds()).toEqual([`${MATCH_A}:outcome`]);
+    expect(result).toMatchObject({ parked: 1 });
+  });
+
+  test("discards every queued delete together once one of them turns out to be gone", async () => {
+    const requests = stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points/${uid("a1")}`
+        ? jsonResponse(410, { detail: "This match was deleted." })
+        : respondOk(request),
+    );
+    await queue(
+      eventDeleteEntry("point", uid("a1"), MATCH_A),
+      eventDeleteEntry("checkpoint", uid("a2"), MATCH_A),
+    );
+
+    const result = await drain();
+
+    // Only the first delete goes out: the 410 it gets discards the rest of the
+    // match's queued deletes with it, rather than 410ing them one at a time.
+    expect(requests.map((request) => request.pathname)).toEqual([
+      `/matches/${MATCH_A}/points/${uid("a1")}`,
+    ]);
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    expect(result).toMatchObject({ discarded: 2 });
+  });
+});
+
 describe("match outcome", () => {
+  // The bug this whole change fixes (#268's web half): a checkpoint or an event
+  // delete used to hold the outcome back forever, since nothing ever sent them.
+  test("sends the outcome once a checkpoint and an event delete both land", async () => {
+    const requests = stubTransport(respondOk);
+    await queue(
+      matchEntry(MATCH_A),
+      checkpointEntry("a1", MATCH_A, 0),
+      eventDeleteEntry("point", uid("a2"), MATCH_A),
+      outcomeEntry(MATCH_A),
+    );
+
+    const result = await drain();
+
+    expect(
+      requests.map((request) => ({ method: request.method, pathname: request.pathname })),
+    ).toEqual([
+      { method: "POST", pathname: "/matches" },
+      { method: "POST", pathname: `/matches/${MATCH_A}/score-checkpoints` },
+      { method: "DELETE", pathname: `/matches/${MATCH_A}/points/${uid("a2")}` },
+      { method: "PATCH", pathname: `/matches/${MATCH_A}` },
+    ]);
+    expect(await pendingIds()).toEqual([]);
+    expect(result).toMatchObject({ acknowledged: 4 });
+  });
+
   test("sends the outcome as its own request, right after the match create", async () => {
     const requests = stubTransport(respondOk);
     await queue(matchEntry(MATCH_A), outcomeEntry(MATCH_A));
@@ -612,7 +828,7 @@ describe("refusals", () => {
     });
   });
 
-  test("leaves a refused match's undrainable rows pending", async () => {
+  test("parks a refused match's checkpoint and eventDelete rows alongside its match and points", async () => {
     stubTransport((request) =>
       request.pathname === "/matches"
         ? jsonResponse(409, { detail: "That player has been archived." })
@@ -622,17 +838,20 @@ describe("refusals", () => {
       matchEntry(MATCH_A),
       pointEntry("a1", MATCH_A, 0),
       checkpointEntry("a2", MATCH_A, 1),
+      eventDeleteEntry("point", uid("a3"), MATCH_A),
     );
 
     const result = await drain();
 
-    // The checkpoint has no endpoint to have refused it, so it is not a failure.
+    // The match create never lands, so nothing behind it — points, checkpoints
+    // and deletes alike — can be sent either; all four park together.
     expect((await readByMatch(MATCH_A)).map((row) => [row.kind, row.status])).toEqual([
       ["match", "failed"],
       ["point", "failed"],
-      ["checkpoint", "pending"],
+      ["checkpoint", "failed"],
+      ["eventDelete", "failed"],
     ]);
-    expect(result).toMatchObject({ parked: 2 });
+    expect(result).toMatchObject({ parked: 4 });
   });
 
   test("parks a refused point batch with the 422's own words, never retrying it", async () => {

@@ -83,33 +83,42 @@ match's rows in one fixed order:
 
 1. the match create, if queued;
 2. its points, in batches;
-3. its outcome (the PATCH recording who won and how), last.
+3. its score checkpoints, in batches;
+4. its point/checkpoint deletes (an undo's other half), one at a time;
+5. its outcome (the PATCH recording who won and how), last.
 
-Batches are bounded by both a count ceiling (500 points, the spec's `maxItems`) and a byte budget
-(950 KB, under the API's 1 MB body limit), whichever is reached first.
+Score-checkpoint batches share the point batch's contract and ceilings (500 checkpoints, the same
+950 KB byte budget). A delete is a single idempotent `DELETE` — for a point or a checkpoint,
+depending on which the queued row names — answering 204 whether or not the row was there, so the
+delete an undo queues for a never-sent event is harmless. Mapping a checkpoint needs the match too
+(the checkpoint's own stored snapshot carries no winner; `score.ts`'s `interpretSnapshot` derives
+one), which the drain reads off the match log rather than re-sending when the match's own create
+already landed on an earlier sweep.
 
-The outcome goes last because it is what completes the match server-side, and `ingest_points`
-refuses a completed match with a 409. Sent first, it would park every point behind it as permanently
-failed. For the same reason it is skipped entirely whenever anything earlier in that match did not
-land: a transient failure (offline, 429, 5xx) means the points have simply not been sent yet, and
-fencing them off would turn a retry into a loss.
+The outcome goes last because it is what completes the match server-side, and every one of the
+requests above refuses a completed match with a 409. Sent first, it would park everything behind it
+as permanently failed. For the same reason it is skipped entirely whenever anything earlier in that
+match did not land: a transient failure (offline, 429, 5xx) means the row has simply not been sent
+yet, and fencing it off would turn a retry into a loss.
 
-Capture also queues `checkpoint` and `eventDelete` rows. The API accepts both: a score-checkpoint
-ingest with the point ingest's contract, and a `DELETE` for a point or a checkpoint that answers 204
-whether or not the row was there, so the delete an undo queues for a never-sent event is harmless.
-The drain's sendable kinds leave them out: they sit pending rather than failing, and while any
-remain the match's outcome is held back too, since completing the match would fence out its own
-checkpoints.
+A checkpoint or an event delete used to have no endpoint to send to, so they sat pending forever and
+held the outcome back with them — a match a coach ever undid a point on, or corrected the score of,
+would never show as finished server-side. Both now drain like any other row, so nothing about that
+match holds the outcome back once its own points, checkpoints and deletes have gone out.
 
 ### Server-side idempotency
 
-Both endpoints the drain calls are idempotent:
+Every endpoint the drain calls is idempotent:
 
 - `POST /matches` uses Postgres `ON CONFLICT DO UPDATE` (a no-op SET that takes the row lock and
   returns the existing row), so two retries of the same offline match cannot both insert.
-- `POST /matches/{id}/points` uses `ON CONFLICT DO NOTHING` on the point's client-assigned id, so a
-  retried or overlapping flush converges instead of failing. A point, once ingested, is never
-  rewritten: the one later change is the delete an undo sends, and re-sending that is a no-op too.
+- `POST /matches/{id}/points` and `POST /matches/{id}/score-checkpoints` both use
+  `ON CONFLICT DO NOTHING` on the row's client-assigned id, so a retried or overlapping flush
+  converges instead of failing. Neither a point nor a checkpoint is ever rewritten once ingested:
+  the one later change either can have is the delete an undo sends, and re-sending that is a no-op
+  too.
+- `DELETE /matches/{id}/points/{id}` and `DELETE /matches/{id}/score-checkpoints/{id}` answer 204
+  whether or not the row existed, so a delete replayed after a lost acknowledgement is a no-op.
 
 After each batch or delete, `recompute_match_sets` derives the match's set scores afresh: the board
 the newest stored checkpoint declared, plus a `GROUP BY` over the points after it. Every request

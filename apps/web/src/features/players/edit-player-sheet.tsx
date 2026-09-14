@@ -23,7 +23,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { removeForPlayer } from "@/features/outbox/match-log";
+import { matchIdsForPlayer, removeForPlayer } from "@/features/outbox/match-log";
 import { removeByMatch } from "@/features/outbox/outbox";
 import { getErrorStatus } from "@/lib/error-status";
 import { getRecordedOwner } from "@/lib/local-data";
@@ -154,11 +154,14 @@ export function EditPlayerSheet({
       // an unfinished one pins the in-progress banner on a player id `NewMatch` can
       // never resolve again, and a queued row for it would repost the match on the
       // next drain (#214) — the same two-step `delete-match-sheet.tsx` already does,
-      // just scoped to every match this player had rather than one named by id.
+      // just scoped to every match this player had rather than one named by id. In
+      // that same order too: the outbox clears first, so a drain sweep racing this
+      // can't find a checkpoint row whose match just dropped out of the log.
       const coachId = getRecordedOwner();
       if (coachId !== null) {
-        const matchIds = await removeForPlayer(coachId, player.id);
+        const matchIds = await matchIdsForPlayer(coachId, player.id);
         await Promise.all(matchIds.map((matchId) => removeByMatch(matchId)));
+        await removeForPlayer(coachId, player.id);
       }
     },
     onSuccess: async () => {

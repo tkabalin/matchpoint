@@ -76,8 +76,14 @@ afterEach(async () => {
 });
 
 describe("isDrainableKind", () => {
-  test("holds back the kinds the API has no endpoint for", () => {
-    expect(ALL_KINDS.filter(isDrainableKind)).toEqual(["match", "point", "matchOutcome"]);
+  test("every kind now has a request the drain can send", () => {
+    expect(ALL_KINDS.filter(isDrainableKind)).toEqual([
+      "match",
+      "point",
+      "matchOutcome",
+      "checkpoint",
+      "eventDelete",
+    ]);
   });
 });
 

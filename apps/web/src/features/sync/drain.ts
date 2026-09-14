@@ -4,38 +4,48 @@
  *
  * One entry point, drainOutbox. It takes a web lock so two tabs never
  * double-flush, then sweeps the queue: rows grouped by match, the match create
- * first, then its points in enqueue order, in batches bounded by the spec's
- * ceiling and by the body limit, then the outcome PATCH last. The outcome goes
- * last because ingest_points answers 409 for a match whose result is set, so a
- * PATCH sent first would park every point behind it. Every server answer lands
- * in one of five buckets: success removes the rows; a 401 halts the whole run
- * with the queue intact, because a revoked session must never cost a match; a
- * 410 means the match those rows belong to was deliberately deleted, so they are
- * discarded rather than parked, and this device's log of it goes with them; any other 4xx, a 404 included, is a permanent
- * refusal, so the match's rows park as failed with the reason recorded; network
- * errors, 5xx and 429 are transient, so the sweep runs again on a doubling
- * backoff until the schedule runs out. All three requests are idempotent
- * server-side, which is what makes re-sending after a lost acknowledgement safe.
+ * first, then its points and its score checkpoints in enqueue order, each in
+ * batches bounded by the spec's ceiling and by the body limit, then its point/
+ * checkpoint deletes one at a time, then the outcome PATCH last. The outcome
+ * goes last because ingest_points (and the checkpoint/delete endpoints beside
+ * it) answer 409 for a match whose result is already set, so a PATCH sent first
+ * would park everything behind it. Every server answer lands in one of five
+ * buckets: success removes the rows; a 401 halts the whole run with the queue
+ * intact, because a revoked session must never cost a match; a 410 means the
+ * match those rows belong to was deliberately deleted, so they are discarded
+ * rather than parked, and this device's log of it goes with them; any other
+ * 4xx, a 404 included, is a permanent refusal, so the rows park as failed with
+ * the reason recorded; network errors, 5xx and 429 are transient, so the sweep
+ * runs again on a doubling backoff until the schedule runs out. All the
+ * requests here are idempotent server-side, which is what makes re-sending
+ * after a lost acknowledgement safe.
  */
 
 import {
   createMatch,
+  deletePoint,
+  deleteScoreCheckpoint,
   ingestPoints,
+  ingestScoreCheckpoints,
   updateMatch,
   type ErrorDetail,
   type HttpValidationError,
   type MatchCreate,
   type MatchUpdate,
   type PointCreate,
+  type ScoreCheckpointCreate,
 } from "@matchpoint/api-client";
 
+import { ScoreCheckpoint } from "@/features/capture/checkpoint";
 import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
-import { isDrainableKind, type OutboxFailure, type OutboxRow } from "@/features/outbox/db";
-import { removeMatch } from "@/features/outbox/match-log";
+import type { OutboxFailure, OutboxRow } from "@/features/outbox/db";
+import { readMatch, removeMatch } from "@/features/outbox/match-log";
 import { markFailed, readByMatch, readPending, remove } from "@/features/outbox/outbox";
 import { getRetryAfterSeconds, parseErrorMessage } from "@/lib/parse-error";
 
+import { toScoreCheckpointCreate } from "./checkpoint-payload";
+import { toEventDeleteTarget, type EventDeleteTarget } from "./event-delete-payload";
 import { toMatchOutcomeUpdate } from "./match-outcome-payload";
 import { toMatchCreate } from "./match-payload";
 import { toPointCreate } from "./point-payload";
@@ -45,6 +55,12 @@ import { toPointCreate } from "./point-payload";
  * with zPointBatch, so drift from the real bound fails there, not live.
  */
 export const MAX_POINTS_PER_BATCH = 500;
+
+/**
+ * The spec's maxItems on ScoreCheckpointBatch.checkpoints — the same ceiling as
+ * points, but its own name since it documents a different schema field.
+ */
+export const MAX_CHECKPOINTS_PER_BATCH = 500;
 
 /**
  * The byte ceiling on one batch, under the API's 1 MB body limit. The count
@@ -166,14 +182,17 @@ function matchIdsInOrder(rows: readonly OutboxRow[]): string[] {
 
 /**
  * Sends one match's rows in the only order the API accepts: the match create, then its
- * points in chunks, then the outcome last.
+ * points and checkpoints in chunks, then its event deletes one at a time, then the
+ * outcome last.
  *
- * The outcome goes last because `ingest_points` refuses a match whose `result` is set
- * (409). Sending the PATCH first would complete the match and then park every point
- * behind it as permanently failed. For the same reason it is skipped whenever anything
- * earlier in this match did not land: every non-ok branch below returns before reaching
- * it, so a transient failure holds the outcome back rather than fencing off a tail that
- * had simply not been sent yet.
+ * The outcome goes last because ingest_points, ingest_score_checkpoints and the delete
+ * endpoints all refuse a match whose `result` is already set. Sending the PATCH first
+ * would complete the match and then park everything behind it as permanently failed.
+ * For the same reason it is skipped whenever anything earlier in this match did not
+ * land: every non-"ok" branch in the match/point/checkpoint sections returns before
+ * reaching it. Deletes are the one exception, since each targets an independent id and
+ * a refusal on one says nothing about the next — that loop keeps going, but still
+ * tracks whether anything in it failed and holds the outcome back if so.
  *
  * Answers true only for a 401, which halts the entire run.
  */
@@ -186,18 +205,19 @@ async function flushMatch(
   if (first === undefined) return false;
   const matchRow = rows.find((row) => row.kind === "match");
   const pointRows = rows.filter((row) => row.kind === "point");
+  const checkpointRows = rows.filter((row) => row.kind === "checkpoint");
+  const eventDeleteRows = rows.filter((row) => row.kind === "eventDelete");
   const outcomeRow = rows.find((row) => row.kind === "matchOutcome");
-  // checkpoint and eventDelete rows are queued by capture and not sent from here yet, though
-  // the API accepts both (see outbox/db.ts). They sit pending rather than failing, and they
-  // hold the outcome back: completing the match would fence out its own checkpoints.
-  const sendable = rows.filter((row) => isDrainableKind(row.kind));
+
+  let match: Match | undefined;
 
   if (matchRow) {
     let payload: MatchCreate;
     try {
-      payload = toMatchCreate(Match.fromJSON(matchRow.payload));
+      match = Match.fromJSON(matchRow.payload);
+      payload = toMatchCreate(match);
     } catch (cause) {
-      await park(sendable, unmappable(cause), sweep);
+      await park(rows, unmappable(cause), sweep);
       return false;
     }
     const { error, response } = await createMatch({ body: payload });
@@ -215,7 +235,7 @@ async function flushMatch(
         await discard(rows, first.matchId, sweep);
         return false;
       case "refused":
-        await park(sendable, refusal(verdict.response, error), sweep);
+        await park(rows, refusal(verdict.response, error), sweep);
         return false;
       case "ok":
         await acknowledge([matchRow], sweep);
@@ -224,16 +244,18 @@ async function flushMatch(
 
   let start = 0;
   while (start < pointRows.length) {
-    let batch: Batch;
+    let batch: Batch<PointCreate>;
     try {
-      batch = mapBatch(pointRows, start);
+      batch = mapBatch(pointRows, start, MAX_POINTS_PER_BATCH, (payload) =>
+        toPointCreate(Point.fromJSON(payload)),
+      );
     } catch (cause) {
       await park(pointRows.slice(start), unmappable(cause), sweep);
       return false;
     }
     const { error, response } = await ingestPoints({
       path: { match_id: first.matchId },
-      body: { device_id: deviceId, points: batch.points },
+      body: { device_id: deviceId, points: batch.items },
     });
     const verdict = classify(response);
     switch (verdict.kind) {
@@ -259,7 +281,101 @@ async function flushMatch(
     start = batch.end;
   }
 
-  if (outcomeRow && sendable.length === rows.length) {
+  if (checkpointRows.length > 0 && match === undefined) {
+    // The match create already landed in an earlier sweep, so it's off this
+    // match's rows — the log is where the current Match still lives.
+    const logged = await readMatch(first.matchId);
+    if (logged === undefined) {
+      // Not the same failure as a bad payload: the checkpoint itself is fine,
+      // its match's local record is just gone (a race with a match/player
+      // delete elsewhere on this device). Parks rather than discards, since
+      // this isn't a choice the coach made — see discard()'s own reasoning.
+      await park(checkpointRows, matchLogMissing(), sweep);
+      return false;
+    }
+    match = Match.fromJSON(logged.payload);
+  }
+
+  let checkpointStart = 0;
+  while (match !== undefined && checkpointStart < checkpointRows.length) {
+    const currentMatch = match;
+    let batch: Batch<ScoreCheckpointCreate>;
+    try {
+      batch = mapBatch(checkpointRows, checkpointStart, MAX_CHECKPOINTS_PER_BATCH, (payload) =>
+        toScoreCheckpointCreate(currentMatch, ScoreCheckpoint.fromJSON(payload)),
+      );
+    } catch (cause) {
+      await park(checkpointRows.slice(checkpointStart), unmappable(cause), sweep);
+      return false;
+    }
+    const { error, response } = await ingestScoreCheckpoints({
+      path: { match_id: first.matchId },
+      body: { device_id: deviceId, checkpoints: batch.items },
+    });
+    const verdict = classify(response);
+    switch (verdict.kind) {
+      case "transient":
+        noteTransient(sweep, response);
+        return false;
+      case "unauthorized":
+        sweep.unauthorized = true;
+        return true;
+      case "gone":
+        await discard(checkpointRows.slice(checkpointStart), first.matchId, sweep);
+        return false;
+      case "refused":
+        await park(checkpointRows.slice(checkpointStart), refusal(verdict.response, error), sweep);
+        return false;
+      case "ok":
+        await acknowledge(checkpointRows.slice(checkpointStart, batch.end), sweep);
+    }
+    checkpointStart = batch.end;
+  }
+
+  // Each delete targets one independent id, unlike a point/checkpoint batch, so a
+  // refusal on one row says nothing about the next: it parks alone and the loop
+  // moves on, rather than halting the rest of this match the way a batch does. A
+  // parked delete still has to hold the outcome back, though — completing the
+  // match while one of its deletes is stuck would fence it out for good.
+  let deleteFailed = false;
+  for (const [index, row] of eventDeleteRows.entries()) {
+    let target: EventDeleteTarget;
+    try {
+      target = toEventDeleteTarget(row);
+    } catch (cause) {
+      await park([row], unmappable(cause), sweep);
+      deleteFailed = true;
+      continue;
+    }
+    const { error, response } =
+      target.kind === "point"
+        ? await deletePoint({ path: { match_id: first.matchId, point_id: target.targetId } })
+        : await deleteScoreCheckpoint({
+            path: { match_id: first.matchId, checkpoint_id: target.targetId },
+          });
+    const verdict = classify(response);
+    switch (verdict.kind) {
+      case "transient":
+        noteTransient(sweep, response);
+        return false;
+      case "unauthorized":
+        sweep.unauthorized = true;
+        return true;
+      case "gone":
+        // The match was deleted, which every delete behind this one would hit
+        // too, so they discard together rather than one 410 at a time.
+        await discard(eventDeleteRows.slice(index), first.matchId, sweep);
+        return false;
+      case "refused":
+        await park([row], refusal(verdict.response, error), sweep);
+        deleteFailed = true;
+        continue;
+      case "ok":
+        await acknowledge([row], sweep);
+    }
+  }
+
+  if (outcomeRow && !deleteFailed) {
     const halt = await flushOutcome(outcomeRow, first.matchId, sweep);
     if (halt) return true;
   }
@@ -300,8 +416,8 @@ async function flushOutcome(row: OutboxRow, matchId: string, sweep: Sweep): Prom
   }
 }
 
-interface Batch {
-  points: PointCreate[];
+interface Batch<T> {
+  items: T[];
   /** Index one past the last row in the batch. */
   end: number;
 }
@@ -310,24 +426,30 @@ const encoder = new TextEncoder();
 
 /**
  * The rows from `start` that fit one request: whichever of the count ceiling and
- * the byte budget it reaches first. A single point over the budget still goes on
- * its own, since there is nothing left to split it into.
+ * the byte budget it reaches first. A single item over the budget still goes on its
+ * own, since there is nothing left to split it into. Shared between points and score
+ * checkpoints — the two request bodies the API batches under the same contract.
  */
-function mapBatch(rows: readonly OutboxRow[], start: number): Batch {
-  const points: PointCreate[] = [];
+function mapBatch<T>(
+  rows: readonly OutboxRow[],
+  start: number,
+  maxItems: number,
+  toItem: (payload: unknown) => T,
+): Batch<T> {
+  const items: T[] = [];
   let bytes = 0;
   let end = start;
-  while (end < rows.length && points.length < MAX_POINTS_PER_BATCH) {
-    const point = toPointCreate(Point.fromJSON(rows[end]!.payload));
+  while (end < rows.length && items.length < maxItems) {
+    const item = toItem(rows[end]!.payload);
     // Encoded, not `.length`: a note is free text, and outside ASCII a character
     // is more than one byte, which is what the server's limit counts.
-    const size = encoder.encode(JSON.stringify(point)).length + 1;
-    if (points.length > 0 && bytes + size > MAX_BATCH_BYTES) break;
-    points.push(point);
+    const size = encoder.encode(JSON.stringify(item)).length + 1;
+    if (items.length > 0 && bytes + size > MAX_BATCH_BYTES) break;
+    items.push(item);
     bytes += size;
     end += 1;
   }
-  return { points, end };
+  return { items, end };
 }
 
 type Verdict =
@@ -402,6 +524,14 @@ function unmappable(cause: unknown): OutboxFailure {
   return {
     status: null,
     message: cause instanceof Error ? cause.message : String(cause),
+  };
+}
+
+/** A checkpoint whose match dropped out of the local log — not a bad payload. */
+function matchLogMissing(): OutboxFailure {
+  return {
+    status: null,
+    message: "This match's local record is missing, so its checkpoints cannot be mapped.",
   };
 }
 

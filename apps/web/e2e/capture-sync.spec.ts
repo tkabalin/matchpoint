@@ -92,14 +92,6 @@ const CORRECTIONS = [
 
 for (const correction of CORRECTIONS) {
   test(`a match with ${correction.what} still lands its result`, async ({ page }) => {
-    // IF THIS TEST FAILS WITH "Expected to fail, but passed", #269 IS FIXED: delete the test.fail line below and change nothing else. Do not skip, delete or rewrite the test, and do not touch its assertions.
-    test.fail(
-      true,
-      "#269 is not fixed yet: an undrainable row holds the outcome PATCH back for good. " +
-        'When this reports "Expected to fail, but passed", #269 is fixed — delete this ' +
-        "test.fail(...) call and nothing else.",
-    );
-
     await openHome(page);
     const playerId = await createPlayer(page, { firstName: "Tracked" });
     const marker = `E2E fix ${crypto.randomUUID().slice(0, 8)}`;

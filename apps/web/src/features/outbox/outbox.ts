@@ -220,8 +220,9 @@ export function countUnsynced(coachId: string): Promise<OutboxCounts> {
 }
 
 /**
- * Counts only what a drain could actually send: a checkpoint has no endpoint yet,
- * so counting it would show unsynced work no action of the coach's ever clears.
+ * Counts only what a drain could actually send — every kind today, but a future
+ * one lands undrainable until it's wired up (see `isDrainableKind`), and counting
+ * it before then would show unsynced work no action of the coach's ever clears.
  * Filtered in memory over one coach's rows, the kind union not being indexed.
  */
 function countByStatus(coachId: string, status: OutboxRow["status"]): Promise<number> {

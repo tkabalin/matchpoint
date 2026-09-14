@@ -501,26 +501,27 @@ describe("watchCounts", () => {
     await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 2, failed: 1 }));
   });
 
-  test("leaves out kinds no drain can send", async () => {
+  // Regression coverage: checkpoint and eventDelete used to have no endpoint the
+  // drain could send them to, and watchCounts left them out of the pending count
+  // for exactly that reason. Both now drain like any other kind, so both count.
+  test("counts checkpoint and eventDelete rows like any other pending kind", async () => {
     await append(pointEntry("p1"));
     await append(pointEntry("c1", { kind: "checkpoint" }));
     await append(pointEntry("d1", { kind: "eventDelete" }));
 
     const seen = watch(COACH_ID);
 
-    // These have no endpoint yet, so counting them would show the coach unsynced
-    // work that nothing they can do would ever clear.
-    await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 1, failed: 0 }));
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 3, failed: 0 }));
   });
 
-  test("leaves them out of the failed count when a refused match parks them", async () => {
+  test("counts checkpoint and eventDelete rows like any other failed kind", async () => {
     await append(pointEntry("m1", { kind: "match" }));
     await append(pointEntry("c1", { kind: "checkpoint" }));
     await markFailed(["m1", "c1"], PARKED);
 
     const seen = watch(COACH_ID);
 
-    await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 0, failed: 1 }));
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual({ pending: 0, failed: 2 }));
   });
 
   test("ignores writes belonging to another coach", async () => {

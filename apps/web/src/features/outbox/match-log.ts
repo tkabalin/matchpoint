@@ -106,13 +106,30 @@ export async function removeMatch(matchId: string): Promise<void> {
 }
 
 /**
- * Forgets every match logged for one player of this coach's, finished or not, and
- * answers which match ids it removed. Deleting a player deletes their matches
- * server-side too (#243); left behind here, a still-open one pins the in-progress
- * banner on an id `NewMatch` can never resolve again (the player is gone), and a
- * finished one would just sit as dead rows. The caller still owes `removeByMatch` on
- * each returned id (`features/outbox/outbox.ts`) — the same two-step `delete-match-
- * sheet.tsx` already does for #214, so a queued row can't survive to repost the match.
+ * The match ids logged for one player of this coach's, finished or not — the read
+ * half of a player delete, kept apart from `removeForPlayer` below so a caller can
+ * clear each match's outbox rows (`removeByMatch`) before the log entries they'd
+ * otherwise need to re-discover are gone.
+ */
+export async function matchIdsForPlayer(
+  coachId: string,
+  trackedPlayerId: string,
+): Promise<string[]> {
+  const rows = await outboxDb.matches.where({ coachId, trackedPlayerId }).toArray();
+  return rows.map((row) => row.matchId);
+}
+
+/**
+ * Forgets every match logged for one player of this coach's, finished or not.
+ * Deleting a player deletes their matches server-side too (#243); left behind here,
+ * a still-open one pins the in-progress banner on an id `NewMatch` can never resolve
+ * again (the player is gone), and a finished one would just sit as dead rows.
+ *
+ * The caller owes `removeByMatch` (`features/outbox/outbox.ts`) on every id
+ * `matchIdsForPlayer` above returns, and — like `delete-match-sheet.tsx` already
+ * does for #214 — before calling this: a drain sweep between the two would
+ * otherwise find a queued checkpoint row whose match just dropped out of the log,
+ * rather than an outbox already empty for it.
  */
 export async function removeForPlayer(coachId: string, trackedPlayerId: string): Promise<string[]> {
   return outboxDb.transaction("rw", outboxDb.matches, outboxDb.events, async () => {
