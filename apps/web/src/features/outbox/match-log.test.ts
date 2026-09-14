@@ -13,6 +13,7 @@ import {
   removeMatch,
   saveMatch,
   watchInProgress,
+  watchInProgressFor,
 } from "./match-log";
 
 const COACH_ID = "coach-1";
@@ -221,5 +222,40 @@ describe("watchInProgress", () => {
 
     await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
     expect(seen.at(-1)).toEqual([]);
+  });
+});
+
+describe("watchInProgressFor", () => {
+  const subscriptions: { unsubscribe: () => void }[] = [];
+
+  afterEach(() => {
+    for (const subscription of subscriptions.splice(0)) subscription.unsubscribe();
+  });
+
+  function watch(coachId: string, trackedPlayerId: string): (LoggedMatch | undefined)[] {
+    const seen: (LoggedMatch | undefined)[] = [];
+    subscriptions.push(
+      watchInProgressFor(coachId, trackedPlayerId).subscribe((row) => seen.push(row)),
+    );
+    return seen;
+  }
+
+  test("emits the match the moment capture writes it, then again when it finishes", async () => {
+    const seen = watch(COACH_ID, PLAYER_ID);
+    await vi.waitFor(() => expect(seen.at(-1)).toBeUndefined());
+
+    await saveMatch(matchOf());
+    await vi.waitFor(() => expect(seen.at(-1)?.matchId).toBe(MATCH_ID));
+
+    await saveMatch(matchOf({ finished: true }));
+    await vi.waitFor(() => expect(seen.at(-1)).toBeUndefined());
+  });
+
+  test("never emits a match logged for a different player", async () => {
+    await saveMatch(matchOf({ trackedPlayerId: "player-2" }));
+    const seen = watch(COACH_ID, PLAYER_ID);
+
+    await vi.waitFor(() => expect(seen.length).toBeGreaterThan(0));
+    expect(seen.at(-1)).toBeUndefined();
   });
 });

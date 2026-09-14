@@ -84,6 +84,19 @@ export async function findInProgressFor(
     .sort((left, right) => right.updatedAt - left.updatedAt)[0];
 }
 
+/**
+ * `findInProgressFor` above, re-emitted whenever the log changes — the single-writer
+ * claim (#197) needs the current match id the moment capture starts or resumes one,
+ * with no prop out of `LiveMatch` (which exposes none): this fires from the same
+ * `saveMatch` write `LiveMatch` itself reads back on the next render.
+ */
+export function watchInProgressFor(
+  coachId: string,
+  trackedPlayerId: string,
+): Observable<LoggedMatch | undefined> {
+  return liveQuery(() => findInProgressFor(coachId, trackedPlayerId));
+}
+
 /** Forgets a match and everything logged for it — used when a match is deleted. */
 export async function removeMatch(matchId: string): Promise<void> {
   await outboxDb.transaction("rw", outboxDb.matches, outboxDb.events, async () => {

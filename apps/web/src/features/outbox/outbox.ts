@@ -131,6 +131,25 @@ export async function remove(ids: readonly string[]): Promise<void> {
 }
 
 /**
+ * Whether this match's own create row is still queued, pending or parked. A claim
+ * attempted before this clears would land on a match id the server doesn't know
+ * about yet — indistinguishable from one deleted out from under it (#197) — so a
+ * claim attempt has to check this first.
+ */
+export async function hasQueuedCreate(matchId: string): Promise<boolean> {
+  const rows = await readByMatch(matchId);
+  return rows.some((row) => row.kind === "match");
+}
+
+/**
+ * Reactive form of hasQueuedCreate, so a claim can retry the moment the drain
+ * acknowledges the create rather than waiting on the next `online` event.
+ */
+export function watchQueuedCreate(matchId: string): Observable<boolean> {
+  return liveQuery(() => hasQueuedCreate(matchId));
+}
+
+/**
  * Clears one match's rows, parked ones included, and answers how many went. The
  * device that deleted the match calls this, because rows left in the queue are
  * re-sent on the next drain, which is how a device puts back the match it just

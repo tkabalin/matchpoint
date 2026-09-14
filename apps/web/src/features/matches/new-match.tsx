@@ -7,9 +7,20 @@ import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, useNavigate, useRouter } from "@tanstack/react-router";
 
 import { PlayerLoadError } from "@/components/player-load-error";
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LiveMatch } from "@/features/capture/live-match";
 import { getRecordedOwner } from "@/lib/local-data";
+
+import { useCaptureClaim } from "./capture-claim";
+import { CaptureTakeoverSheet } from "./capture-takeover-sheet";
 
 // Avoids a circular import between this component and its route file — same pattern as
 // player-profile.tsx.
@@ -48,6 +59,24 @@ export function NewMatch() {
   // queued under the id that will send it.
   const coachId = getRecordedOwner();
 
+  // Called unconditionally, ahead of the early returns below, per the rules of hooks —
+  // an empty id before the coach/player are known simply matches no in-progress match,
+  // so the claim stays idle until there's something real to claim.
+  const claim = useCaptureClaim({ coachId: coachId ?? "", trackedPlayerId: player?.id ?? "" });
+
+  function goBack() {
+    // Reachable from Home and from the Players tab's own card now, so a
+    // fixed destination would send half of those visits somewhere they
+    // didn't come from — same reasoning as `player-profile.tsx`'s back
+    // button. Pops real browser history, falling back to Home only for
+    // a direct/deep link with nothing to pop.
+    if (router.history.canGoBack()) {
+      router.history.back();
+    } else {
+      void navigate({ to: "/home" });
+    }
+  }
+
   // Without this the flow offers to start a match for a player the coach cannot reach
   // — the 404 has to stop it rather than leave a blank (#78).
   if (isError)
@@ -78,6 +107,51 @@ export function NewMatch() {
     );
   }
 
+  // Deleted from another device (#214) — stop rendering capture at all, which is
+  // what stops further points being queued against a match that no longer exists.
+  if (claim.gone) {
+    return (
+      <div className="mx-auto max-w-sm p-4">
+        <Empty role="alert">
+          <EmptyHeader>
+            <EmptyTitle>This match was deleted</EmptyTitle>
+            <EmptyDescription>
+              It was deleted from another device. Nothing more will be sent for it.
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button onClick={goBack}>Back</Button>
+          </EmptyContent>
+        </Empty>
+      </div>
+    );
+  }
+
+  // Completed from another device — the claim's own 409 already told us so.
+  if (claim.finishedElsewhere) {
+    return (
+      <div className="mx-auto max-w-sm p-4">
+        <Empty role="alert">
+          <EmptyHeader>
+            <EmptyTitle>This match is already finished</EmptyTitle>
+            <EmptyDescription>It was completed on another device.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button
+              onClick={() => {
+                if (claim.matchId !== null) {
+                  void navigate({ to: "/matches/$matchId", params: { matchId: claim.matchId } });
+                }
+              }}
+            >
+              View results
+            </Button>
+          </EmptyContent>
+        </Empty>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto flex h-full w-full max-w-md flex-col px-5 pt-4 pb-8">
       <LiveMatch
@@ -90,20 +164,19 @@ export function NewMatch() {
         defaultScoringSystem={coach?.default_scoring_system ?? undefined}
         defaultSurfaceType={coach?.default_surface ?? undefined}
         previousOpponents={(opponents ?? []).map((opponent) => opponent.name)}
-        onExit={() => {
-          // Reachable from Home and from the Players tab's own card now, so a
-          // fixed destination would send half of those visits somewhere they
-          // didn't come from — same reasoning as `player-profile.tsx`'s back
-          // button. Pops real browser history, falling back to Home only for
-          // a direct/deep link with nothing to pop.
-          if (router.history.canGoBack()) {
-            router.history.back();
-          } else {
-            void navigate({ to: "/home" });
-          }
-        }}
+        onExit={goBack}
         onViewResults={(matchId) => {
           void navigate({ to: "/matches/$matchId", params: { matchId } });
+        }}
+      />
+      <CaptureTakeoverSheet
+        open={claim.conflict}
+        takingOver={claim.takingOver}
+        error={claim.takeoverError}
+        onTakeOver={claim.takeOver}
+        onDecline={() => {
+          claim.declineTakeover();
+          goBack();
         }}
       />
     </div>

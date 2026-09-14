@@ -24,11 +24,10 @@ import {
  * in the last describe block that need hundreds of rows, a match completed on
  * the server, or a second match queued before the first one's points.
  *
- * What #217 still leaves uncovered, and what each waits on: retrying a parked
- * match by hand needs the sync status UI (#115); the capture-claim conflict
- * needs the claim lifecycle, and re-specifying, since ingest_points deliberately
- * takes another device's batch while a claim is held rather than refusing it
- * (#197).
+ * What #217 still leaves uncovered: retrying a parked match by hand needs the
+ * sync status UI (#115). The capture-claim conflict (#197) has its own spec,
+ * capture-claim.spec.ts, since it needs no service worker and runs against the
+ * dev server rather than this file's production build.
  */
 
 /** OWNER_KEY in src/lib/local-data.ts: whose rows a drain flushes. */

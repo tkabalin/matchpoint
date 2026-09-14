@@ -3,13 +3,15 @@ import { expect, type Page } from "@playwright/test";
 import { Match } from "@/features/capture/match";
 import { Point } from "@/features/capture/point";
 
-// The database and store src/features/outbox/db.ts declares. Most offline specs
-// fill it through capture-screen taps; the ones that need hundreds of rows, or a
-// state taps cannot set up, write rows into it directly (see offline.spec.ts),
-// so the shape here has to match what the drain reads back. A drifted row fails
-// loudly in-spec when Match.fromJSON or Point.fromJSON refuses the payload.
+// The database src/features/outbox/db.ts declares, and its two stores this file
+// seeds directly. Most offline specs fill the queue through capture-screen taps;
+// the ones that need hundreds of rows, or a state taps cannot set up, write rows
+// in directly (see offline.spec.ts and capture-claim.spec.ts), so the shapes here
+// have to match what the app reads back. A drifted row fails loudly in-spec when
+// Match.fromJSON or Point.fromJSON refuses the payload.
 const OUTBOX_DB = "matchpoint-outbox";
 const OUTBOX_STORE = "entries";
+const MATCHES_STORE = "matches";
 
 // OUTBOX_PAYLOAD_VERSION in db.ts. A literal rather than an import: importing
 // db.ts would construct its Dexie instance in Node, where no IndexedDB exists.
@@ -115,13 +117,18 @@ export function buildPointRow(fields: {
 }
 
 /**
- * Writes rows into the outbox exactly as a capture tap's `append` would land
- * them, once the app's own Dexie instance has the store open (see the poll).
- * Written outside Dexie, though, so the drain's liveQuery nudge never fires for
- * these: a seeded row waits for a launch or for connectivity to return, which is
- * why every seeding spec brackets the seed in setOffline(true)/setOffline(false).
+ * Waits for the app to have opened `storeName`, then writes `records` into it —
+ * the shared mechanics `seedOutbox` and `seedMatchLog` below both need. Written
+ * outside Dexie, so neither the drain's liveQuery nudge nor the claim hook's fire
+ * for these until something else touches the table: a seeded row waits for a
+ * launch, a reconnect, or a navigation, which is why every seeding spec brackets
+ * one in setOffline(true)/setOffline(false) or seeds before its first navigation.
  */
-export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<void> {
+async function seedStore(
+  page: Page,
+  storeName: string,
+  records: readonly unknown[],
+): Promise<void> {
   await expect
     .poll(
       () =>
@@ -141,13 +148,13 @@ export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<
             db.close();
             return ready;
           },
-          { dbName: OUTBOX_DB, storeName: OUTBOX_STORE },
+          { dbName: OUTBOX_DB, storeName },
         ),
-      { message: `the app never created ${OUTBOX_DB}` },
+      { message: `the app never created ${OUTBOX_DB}'s ${storeName} store` },
     )
     .toBe(true);
   await page.evaluate(
-    async ({ dbName, storeName, entries }) => {
+    async ({ dbName, storeName, records }) => {
       const db = await new Promise<IDBDatabase>((resolve, reject) => {
         const request = indexedDB.open(dbName);
         request.onsuccess = () => resolve(request.result);
@@ -156,7 +163,7 @@ export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<
       try {
         await new Promise<void>((resolve, reject) => {
           const tx = db.transaction(storeName, "readwrite");
-          for (const entry of entries) tx.objectStore(storeName).add(entry);
+          for (const record of records) tx.objectStore(storeName).put(record);
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error as Error);
         });
@@ -164,8 +171,68 @@ export async function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<
         db.close();
       }
     },
-    { dbName: OUTBOX_DB, storeName: OUTBOX_STORE, entries: rows },
+    { dbName: OUTBOX_DB, storeName, records },
   );
+}
+
+/** Writes rows into the outbox exactly as a capture tap's `append` would land them. */
+export function seedOutbox(page: Page, rows: readonly SeedRow[]): Promise<void> {
+  return seedStore(page, OUTBOX_STORE, rows);
+}
+
+/** `features/outbox/match-log.ts`'s own `LoggedMatch` shape, minus nothing: the
+ *  match-log table has no auto-generated field for `seedMatchLog` to leave out. */
+export interface SeedMatch {
+  matchId: string;
+  coachId: string;
+  trackedPlayerId: string;
+  nextSequence: number;
+  finished: boolean;
+  updatedAt: number;
+  payload: unknown;
+}
+
+/**
+ * A match-log row for a match this device did not itself capture, its payload
+ * built by the real capture model for the reason `buildMatchRow` above gives.
+ * The only way onto a match's own capture screen at all is `NewMatch` finding one
+ * of these for the player (`findInProgressFor`, features/outbox/match-log.ts) —
+ * there is no path from the UI that discovers a match id a device never queued
+ * itself, which is what makes seeding this row, rather than tapping it out,
+ * genuinely necessary for a second "device" to reach a capture-claim conflict
+ * (#197) in capture-claim.spec.ts.
+ */
+export function buildMatchLogRow(fields: {
+  coachId: string;
+  playerId: string;
+  matchId: string;
+  opponentName: string;
+}): SeedMatch {
+  const match = Match.create({
+    matchId: fields.matchId,
+    playedOn: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    trackedPlayerId: fields.playerId,
+    opponentId: crypto.randomUUID(),
+    opponentName: fields.opponentName,
+    scoringSystem: "traditional",
+    firstServer: fields.playerId,
+    surfaceType: "unspecified",
+    outcomeOverride: null,
+  });
+  return {
+    matchId: fields.matchId,
+    coachId: fields.coachId,
+    trackedPlayerId: fields.playerId,
+    nextSequence: 0,
+    finished: false,
+    updatedAt: Date.now(),
+    payload: match.toJSON(),
+  };
+}
+
+/** Writes rows into the match log — see `SeedMatch`/`buildMatchLogRow` above. */
+export function seedMatchLog(page: Page, rows: readonly SeedMatch[]): Promise<void> {
+  return seedStore(page, MATCHES_STORE, rows);
 }
 
 /** Every outbox row, in enqueue order, as a spec's durability assertions read them. */

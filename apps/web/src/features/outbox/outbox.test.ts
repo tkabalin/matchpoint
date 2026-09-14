@@ -4,6 +4,7 @@ import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry, type OutboxFailure 
 import {
   append,
   deleteOutboxDatabase,
+  hasQueuedCreate,
   markFailed,
   onAppendFailure,
   readByMatch,
@@ -12,6 +13,7 @@ import {
   removeByMatch,
   retryFailed,
   watchCounts,
+  watchQueuedCreate,
   type AppendFailure,
   type AppendResult,
   type OutboxCounts,
@@ -275,6 +277,64 @@ describe("readByMatch", () => {
     const rows = await readByMatch(MATCH_ID);
 
     expect(rows.map((row) => row.id)).toEqual(["zz-match", "mm-parked", "aa-last"]);
+  });
+});
+
+describe("hasQueuedCreate", () => {
+  test("is true while the match's own create row is pending", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+
+    expect(await hasQueuedCreate(MATCH_ID)).toBe(true);
+  });
+
+  test("is still true once the create row is parked", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+    await markFailed(["m1"], PARKED);
+
+    // The server doesn't know the match exists either way — pending or parked. A
+    // claim attempted against either would land on an id it has never seen.
+    expect(await hasQueuedCreate(MATCH_ID)).toBe(true);
+  });
+
+  test("is false once the create row is drained", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+    await remove(["m1"]);
+
+    expect(await hasQueuedCreate(MATCH_ID)).toBe(false);
+  });
+
+  test("is false for a match with nothing queued at all", async () => {
+    expect(await hasQueuedCreate(OTHER_MATCH_ID)).toBe(false);
+  });
+
+  test("a queued point with no matching create row doesn't count as one", async () => {
+    await append(pointEntry("p1"));
+
+    expect(await hasQueuedCreate(MATCH_ID)).toBe(false);
+  });
+});
+
+describe("watchQueuedCreate", () => {
+  const subscriptions: { unsubscribe: () => void }[] = [];
+
+  afterEach(() => {
+    for (const subscription of subscriptions.splice(0)) subscription.unsubscribe();
+  });
+
+  function watch(matchId: string): boolean[] {
+    const seen: boolean[] = [];
+    subscriptions.push(watchQueuedCreate(matchId).subscribe((queued) => seen.push(queued)));
+    return seen;
+  }
+
+  test("flips to false the moment the drain acknowledges the create", async () => {
+    await append(pointEntry("m1", { kind: "match" }));
+    const seen = watch(MATCH_ID);
+    await vi.waitFor(() => expect(seen.at(-1)).toBe(true));
+
+    await remove(["m1"]);
+
+    await vi.waitFor(() => expect(seen.at(-1)).toBe(false));
   });
 });
 
