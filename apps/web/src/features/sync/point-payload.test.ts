@@ -1,7 +1,7 @@
 import { zPointCreate } from "@matchpoint/api-client/zod";
 import { describe, expect, test } from "vitest";
 
-import { Point } from "@/features/capture/point";
+import { NOTE_MAX_LENGTH, Point } from "@/features/capture/point";
 
 import { toPointCreate } from "./point-payload";
 
@@ -252,5 +252,15 @@ describe("toPointCreate", () => {
     expect(
       toPointCreate(point({ ...unusual, note: "Tight.", unusualNote: "Rain delay." })).note,
     ).toBe("Tight.");
+  });
+
+  // point.ts truncates a note at NOTE_MAX_LENGTH so a batch can never strand on a
+  // 422'd note (#113's drain parks the whole batch). Pin that bound to the API's own
+  // one rather than trusting the two constants to stay in sync by hand.
+  test("truncates a note to exactly the API's own bound, never past it", () => {
+    const body = toPointCreate(point({ note: "a".repeat(NOTE_MAX_LENGTH + 500) }));
+    expect(body.note).toHaveLength(NOTE_MAX_LENGTH);
+    expect(() => zPointCreate.parse(body)).not.toThrow();
+    expect(() => zPointCreate.parse({ ...body, note: body.note + "a" })).toThrow();
   });
 });
