@@ -31,7 +31,7 @@ export function CaptureTakeoverSheet({
         <p className="text-sm text-muted-foreground">
           This match is being captured on another device. Take over on this one? Any points it's
           recorded but hasn't synced yet will need that device reconnected before you finish this
-          match here — otherwise they'll be lost.
+          match here, otherwise they'll be lost.
         </p>
 
         {error && (

@@ -420,7 +420,7 @@ export function EditPlayerSheet({
 
               <p className="text-sm text-muted-foreground">
                 {player.first_name}, their notes, and their match history move to another coach's
-                roster. You'll get a one-time code to hand over yourself — it won't be shown again,
+                roster. You'll get a one-time code to hand over yourself. It won't be shown again,
                 but you can cancel it any time before it's used. While it's outstanding, this player
                 can't be deleted and your account can't be closed.
               </p>
@@ -459,7 +459,7 @@ export function EditPlayerSheet({
               </SheetHeader>
 
               <p className="text-sm text-muted-foreground">
-                This is the only time it's shown — copy it now.
+                This is the only time it's shown. Copy it now.
               </p>
 
               {mintedCode && <CopyCodeField code={mintedCode} label="Transfer code" />}
@@ -482,7 +482,7 @@ export function EditPlayerSheet({
               </SheetHeader>
 
               <p className="text-sm text-muted-foreground">
-                A transfer code for {player.first_name} is outstanding. It can't be shown again — if
+                A transfer code for {player.first_name} is outstanding. It can't be shown again. If
                 it's lost, cancel it and generate a new one.
               </p>
 
@@ -519,7 +519,7 @@ export function EditPlayerSheet({
 
               <p className="text-sm text-muted-foreground">
                 This signs {player.first_name} out wherever they're currently logged in. You'll get
-                a new one-time password to hand over — it won't be shown again.
+                a new one-time password to hand over. It won't be shown again.
               </p>
 
               {mintErrorText && (
@@ -557,7 +557,7 @@ export function EditPlayerSheet({
                 </SheetHeader>
 
                 <p className="text-sm text-muted-foreground">
-                  This is the only time the password is shown — copy it now and hand both over to{" "}
+                  This is the only time the password is shown. Copy it now and hand both over to{" "}
                   {player.first_name}.
                 </p>
 

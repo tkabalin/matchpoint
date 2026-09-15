@@ -140,7 +140,7 @@ export function ServeScreen({
   const firstServe = step.number === 2 ? draft.serves[0] : undefined;
   const faultLine =
     firstServe?.outcome === "FAULT"
-      ? `Fault — ${faultReason(firstServe.location)}. Second serve.`
+      ? `Fault: ${faultReason(firstServe.location)}. Second serve.`
       : null;
   const status = letNotice ?? faultLine ?? "Tap where the serve landed";
 
@@ -198,7 +198,7 @@ export function ServeScreen({
           variant="ghost"
           disabled={pending}
           onClick={() => {
-            setLetNotice("Let — replay the point.");
+            setLetNotice("Let. Replay the point.");
             onAction({ type: "TAP_LET" });
           }}
           className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"

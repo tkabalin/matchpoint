@@ -103,7 +103,7 @@ test("the second attempt says why the first one faulted", () => {
   });
 
   expect(screen.getByRole("heading", { name: "2nd Serve" })).toBeVisible();
-  expect(screen.getByRole("status")).toHaveTextContent("Fault — into net. Second serve.");
+  expect(screen.getByRole("status")).toHaveTextContent("Fault: into net. Second serve.");
 });
 
 test("a let reports itself and leaves the attempt where it was", async () => {
@@ -112,6 +112,6 @@ test("a let reports itself and leaves the attempt where it was", async () => {
   await user.click(screen.getByRole("button", { name: "Let" }));
 
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_LET" });
-  expect(screen.getByRole("status")).toHaveTextContent("Let — replay the point.");
+  expect(screen.getByRole("status")).toHaveTextContent("Let. Replay the point.");
   expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
 });

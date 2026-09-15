@@ -446,7 +446,7 @@ function readSet(
   // The match-tiebreak decider is a breaker outright: no games phase to check.
   if (rules.gamesToWin === 0) {
     if (tracked !== 0 || opponent !== 0) {
-      return { problems: [{ cell, message: "This set is a match tiebreak — it plays no games." }] };
+      return { problems: [{ cell, message: "This set is a match tiebreak. It plays no games." }] };
     }
     const winner = tiebreak === null ? null : breakerWinnerOf(tiebreak, rules.tiebreakTarget);
     return winner === null
@@ -517,7 +517,7 @@ function readSet(
       problems: [
         {
           cell,
-          message: "That tiebreak is over — record the set as won.",
+          message: "That tiebreak is over. Record the set as won.",
         },
       ],
     };
@@ -666,8 +666,8 @@ export function interpretSnapshot(
             cell: "game",
             message:
               currentSet === null
-                ? "The match is over — there's no game in progress."
-                : "A tiebreak is in progress — record its points instead.",
+                ? "The match is over. There's no game in progress."
+                : "A tiebreak is in progress. Record its points instead.",
           },
         ],
       };

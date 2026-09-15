@@ -119,5 +119,5 @@ test("a let reports itself and leaves the attempt where it was", async () => {
   await user.click(screen.getByRole("button", { name: "Let" }));
 
   expect(onAction).toHaveBeenCalledWith({ type: "TAP_LET" });
-  expect(screen.getByRole("status")).toHaveTextContent("Let — replay the point.");
+  expect(screen.getByRole("status")).toHaveTextContent("Let. Replay the point.");
 });

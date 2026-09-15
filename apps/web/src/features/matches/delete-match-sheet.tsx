@@ -151,7 +151,7 @@ export function DeleteMatchSheet({
 
             <p className="text-sm text-muted-foreground">
               This match is being captured on another device right now. Releasing it and deleting
-              anyway discards the match {`vs ${opponent}`} — any points still queued on that other
+              anyway discards the match {`vs ${opponent}`}. Any points still queued on that other
               device need it reconnected before they can land, and they'll be lost otherwise.
             </p>
 

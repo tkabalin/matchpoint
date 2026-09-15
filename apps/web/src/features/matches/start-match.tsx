@@ -90,7 +90,7 @@ export function StartMatch() {
       )}
 
       <p className="mt-auto text-xs text-muted-foreground">
-        Tap a player to prefill match setup — or search for someone new.
+        Tap a player to prefill match setup, or search for someone new.
       </p>
     </AppPage>
   );

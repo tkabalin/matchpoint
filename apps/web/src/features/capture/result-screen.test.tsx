@@ -61,7 +61,7 @@ test("a match won in straight sets reads as a win, with the score from its point
   renderResult({ wins: [...gamesFor(true, 6), ...gamesFor(true, 6)] });
 
   expect(screen.getByRole("heading", { name: "Win" })).toBeVisible();
-  expect(screen.getByText("Rivera d. Okoye — 6-0, 6-0")).toBeVisible();
+  expect(screen.getByText("Rivera d. Okoye 6-0, 6-0")).toBeVisible();
 
   const score = screen.getByRole("table");
   expect(within(score).getByRole("columnheader", { name: "S1" })).toBeVisible();
@@ -72,7 +72,7 @@ test("a lost match names the winner first and reads the score from their side", 
   renderResult({ wins: [...gamesFor(false, 6), ...gamesFor(false, 6)] });
 
   expect(screen.getByRole("heading", { name: "Loss" })).toBeVisible();
-  expect(screen.getByText("Okoye d. Rivera — 6-0, 6-0")).toBeVisible();
+  expect(screen.getByText("Okoye d. Rivera 6-0, 6-0")).toBeVisible();
 });
 
 test("a retirement beats the set count and says so", () => {
@@ -90,7 +90,7 @@ test("a walkover with no points played drops the score, not just its numbers", (
   const match = matchWith({ outcomeOverride: { reason: "walkover", winner: TRACKED_ID } });
   renderResult({ match });
 
-  expect(screen.getByText("Rivera d. Okoye — walkover")).toBeVisible();
+  expect(screen.getByText("Rivera d. Okoye (walkover)")).toBeVisible();
 });
 
 test("reports coverage in games, so a filled-in set never reads as watched", () => {

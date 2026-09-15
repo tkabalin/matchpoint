@@ -106,7 +106,7 @@ export function PlayerFormFields({
           maxLength={PLAYER_NOTES_MAX}
           value={values.notes}
           onChange={(event) => onChange("notes", event.target.value)}
-          placeholder="Optional — anything worth remembering before the first session"
+          placeholder="Optional: anything worth remembering before the first session"
         />
       </Field>
     </FieldGroup>

@@ -216,7 +216,7 @@ test("an unfinished match crowns nobody and says so", async () => {
 
   await screen.findByText("Nomsa Dube");
   expect(screen.queryByRole("img", { name: "Match winner" })).not.toBeInTheDocument();
-  expect(screen.getByText("Not finished yet — no winner")).toBeInTheDocument();
+  expect(screen.getByText("Not finished yet, no winner")).toBeInTheDocument();
 });
 
 test("derives set scores and a per-set win/loss mark from the raw point log", async () => {

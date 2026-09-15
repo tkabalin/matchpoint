@@ -33,7 +33,7 @@ export function SettingsFaq() {
           <p>
             Every player on your roster, and their entire match history, is deleted along with your
             account. This can't be undone. If you want to keep a player, transfer them to another
-            coach or delete them individually first — the delete-account screen lists anyone with an
+            coach or delete them individually first. The delete-account screen lists anyone with an
             outstanding transfer code before you can continue.
           </p>
         </Question>
@@ -50,7 +50,7 @@ export function SettingsFaq() {
           <p>
             A one-time code that moves a player to another coach's roster, taking their match
             history with them. Generate one from a player's page, and share it with the coach
-            they're moving to — cancel it at any time before it's redeemed.
+            they're moving to. Cancel it at any time before it's redeemed.
           </p>
         </Question>
       </div>

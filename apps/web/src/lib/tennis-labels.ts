@@ -37,9 +37,9 @@ export const SCORING_SYSTEM_LABEL: Record<ScoringSystem, string> = {
 export const SCORING_SYSTEM_DESCRIPTION: Record<ScoringSystem, string> = {
   traditional: "Deuce at 40-40, win by 2. Best of 3 sets, tiebreak at 6-6.",
   mens_grand_slam: "Same scoring as Traditional, but best of 5 sets.",
-  no_ad_scoring: "Sudden death at 40-40 — next point wins the game outright.",
+  no_ad_scoring: "Sudden death at 40-40: next point wins the game outright.",
   match_tiebreak_10_points: "As Traditional, but the deciding set is a first-to-10 tiebreak.",
   short_sets: "No-ad scoring, sets to 4 games, tiebreak at 3-3. Built for short sessions.",
   pro_set: "One set to 8 games, win by 2, tiebreak at 8-8. Replaces a full match.",
-  legacy: "As Traditional, but the deciding set has no tiebreak — win by 2 games instead.",
+  legacy: "As Traditional, but the deciding set has no tiebreak: win by 2 games instead.",
 };

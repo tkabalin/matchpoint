@@ -79,14 +79,14 @@ export function ResultScreen({
     )
     .join(", ");
   // A walkover can finish a match with no sets at all, so the score half is dropped
-  // rather than left as a dangling dash.
+  // rather than left as a dangling separator.
   const summary = [
     `${won ? trackedPlayerName : opponentName} d. ${won ? opponentName : trackedPlayerName}`,
     scoreLine,
-    match.outcomeOverride === null ? null : match.outcomeOverride.reason,
+    match.outcomeOverride === null ? null : `(${match.outcomeOverride.reason})`,
   ]
     .filter((part) => part !== null && part !== "")
-    .join(" — ");
+    .join(" ");
 
   const rows = [
     { name: trackedPlayerName, cells: scores.map((score) => score.trackedPlayer), tracked: true },

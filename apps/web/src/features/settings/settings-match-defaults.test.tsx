@@ -122,7 +122,7 @@ test("shows a short rule explanation for the selected scoring system", async () 
   await renderPage({ ...coach, default_scoring_system: "no_ad_scoring" });
 
   expect(
-    await screen.findByText("Sudden death at 40-40 — next point wins the game outright."),
+    await screen.findByText("Sudden death at 40-40: next point wins the game outright."),
   ).toBeInTheDocument();
 });
 

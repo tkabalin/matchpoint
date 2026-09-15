@@ -189,7 +189,7 @@ export function AddPlayerSheet({
                 </SheetHeader>
 
                 <p className="text-sm text-muted-foreground">
-                  This is the only time the password is shown — copy it now and hand both over to{" "}
+                  This is the only time the password is shown. Copy it now and hand both over to{" "}
                   {credentials.first_name} before you close this.
                 </p>
 

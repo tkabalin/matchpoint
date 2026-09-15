@@ -68,7 +68,7 @@ export function ReturnScreen({
       name: "Safe area",
       box: { left: "18.79%", right: "18.79%", top: "6.2%", height: "35.8%" },
       tone: "in",
-      label: "Safe area — in",
+      label: "Safe area (in)",
       labelPlacement: "top",
       onTap: () => {
         setLetNotice(null);
@@ -159,7 +159,7 @@ export function ReturnScreen({
           variant="ghost"
           disabled={pending}
           onClick={() => {
-            setLetNotice("Let — replay the point.");
+            setLetNotice("Let. Replay the point.");
             onAction({ type: "TAP_LET" });
           }}
           className="gap-1.5 border-primary/30 bg-primary/10 px-2 text-sm font-semibold text-primary hover:bg-primary/20"

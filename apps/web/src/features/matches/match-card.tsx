@@ -247,7 +247,7 @@ export function MatchCard({
 
           {match.result === null && (
             <p className="text-center text-xs font-semibold text-muted-foreground">
-              Not finished yet — no winner
+              Not finished yet, no winner
             </p>
           )}
 
