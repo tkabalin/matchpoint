@@ -1,4 +1,10 @@
-import type { MatchRead, RallyStats, ServeSideStats, ServeStats } from "@matchpoint/api-client";
+import type {
+  MatchRead,
+  PlayerRead,
+  RallyStats,
+  ServeSideStats,
+  ServeStats,
+} from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -26,6 +32,22 @@ const match: MatchRead = {
   result_reason: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
+};
+
+const player: PlayerRead = {
+  id: match.player_id,
+  coach_id: "3f1c2b4e-0000-4000-8000-000000000003",
+  first_name: "Amahle",
+  last_name: "Mokoena",
+  username: "amahle.mokoena",
+  date_of_birth: null,
+  dominant_hand: null,
+  gender: null,
+  has_transfer_code: false,
+  notes: null,
+  photo_url: null,
+  created_at: "2026-08-01T09:00:00Z",
+  updated_at: "2026-08-01T09:00:00Z",
 };
 
 const EMPTY_SERVE_SIDE: ServeSideStats = {
@@ -89,6 +111,7 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
   const defaults: Record<string, () => Response> = {
     [`/api/matches/${match.id}/analytics/serve`]: () => Response.json(DEFAULT_SERVE_STATS),
     [`/api/matches/${match.id}/analytics/rally`]: () => Response.json(DEFAULT_RALLY_STATS),
+    "/api/players": () => Response.json([]),
   };
   vi.stubGlobal(
     "fetch",
@@ -136,7 +159,7 @@ function buildRouter(matchId: string, initialEntries = [`/matches/${matchId}`]) 
   });
 }
 
-async function renderPage(matchId = match.id, initialEntries?: string[]) {
+async function renderPage(matchId = match.id, heading = "vs T. Naidoo", initialEntries?: string[]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = buildRouter(matchId, initialEntries);
   render(
@@ -144,7 +167,7 @@ async function renderPage(matchId = match.id, initialEntries?: string[]) {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   );
-  await screen.findByRole("heading", { name: "vs T. Naidoo" });
+  await screen.findByRole("heading", { name: heading });
 }
 
 afterEach(() => {
@@ -158,6 +181,26 @@ test("shows the match's own summary and its result", async () => {
 
   expect(screen.getByText("Aug 10 · Hard")).toBeInTheDocument();
   expect(screen.getByRole("img", { name: "Won" })).toBeInTheDocument();
+});
+
+test("names the player whose match it is, with the opponent alongside the rest", async () => {
+  stubFetch({
+    [`/api/matches/${match.id}`]: () => Response.json(match),
+    "/api/players": () => Response.json([player]),
+  });
+
+  await renderPage(match.id, "Amahle Mokoena");
+
+  expect(screen.getByText("vs T. Naidoo · Aug 10 · Hard")).toBeInTheDocument();
+});
+
+test("falls back to the opponent as the title where the roster has no such player", async () => {
+  stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
+
+  await renderPage();
+
+  expect(screen.getByText("Aug 10 · Hard")).toBeInTheDocument();
+  expect(screen.queryByText(/Unknown player/)).not.toBeInTheDocument();
 });
 
 // A direct/deep link has nothing to pop, so the back control falls back to
@@ -178,7 +221,7 @@ test("falls back to the matches list for a direct link with no history to pop", 
 test("returns to Home when that's where the coach came from", async () => {
   stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
   const user = userEvent.setup({ delay: null });
-  await renderPage(match.id, ["/home", `/matches/${match.id}`]);
+  await renderPage(match.id, "vs T. Naidoo", ["/home", `/matches/${match.id}`]);
 
   await user.click(screen.getByRole("button", { name: "Back" }));
 

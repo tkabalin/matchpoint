@@ -1,4 +1,4 @@
-import { getMatchOptions } from "@matchpoint/api-client/react-query";
+import { getMatchOptions, listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import {
@@ -41,13 +41,21 @@ type Tab = "serve" | "rally";
  * `getRouteApi` id, because this mounts under two different routes now —
  * `/matches/$matchId` for a coach, `/me/matches/$matchId` for a player (#203)
  * — and each route file supplies its own correctly-bound params.
+ *
+ * `showPlayer` is the other thing those two routes disagree on. A coach reaches
+ * this from a roster of several players, so which one's match it is has to be on
+ * the page; a player only ever reaches their own, and the roster it would be read
+ * from is coach-only anyway (a player session 401s on it, see
+ * `player-self-view.tsx`).
  */
 export function MatchStatsPage({
   matchId,
   backTo = "/matches",
+  showPlayer = false,
 }: {
   matchId: string;
   backTo?: string;
+  showPlayer?: boolean;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("serve");
@@ -58,6 +66,11 @@ export function MatchStatsPage({
     isPending,
     isError,
   } = useQuery(getMatchOptions({ path: { match_id: matchId } }));
+  // The roster rather than `getPlayer`, for the same lookup `match-list.tsx` does:
+  // it needs no `player_id` to start, so it runs alongside the match instead of
+  // waiting a round trip for one, and the matches list the coach just came from has
+  // usually warmed it already.
+  const { data: players } = useQuery({ ...listPlayersOptions(), enabled: showPlayer });
 
   if (isPending) {
     return (
@@ -78,14 +91,21 @@ export function MatchStatsPage({
   }
 
   const opponent = match.opponent_name ?? "Unknown opponent";
-  const detail = [formatPlayedOn(match.played_on), match.surface && SURFACE_LABEL[match.surface]]
+  // Only once it resolves: until then, and for a player whose row is gone, the header
+  // stays the one it was before rather than flashing a placeholder name as its title.
+  const player = players?.find((candidate) => candidate.id === match.player_id);
+  const detail = [
+    player && `vs ${opponent}`,
+    formatPlayedOn(match.played_on),
+    match.surface && SURFACE_LABEL[match.surface],
+  ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <AppPage nav={false}>
       <PageHeader
-        title={`vs ${opponent}`}
+        title={player ? `${player.first_name} ${player.last_name}` : `vs ${opponent}`}
         subtitle={detail}
         back={
           // Reachable from the matches list (match-card.tsx) and, since a completed

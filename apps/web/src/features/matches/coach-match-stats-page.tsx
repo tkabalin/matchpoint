@@ -9,5 +9,5 @@ const routeApi = getRouteApi("/_authenticated/matches/$matchId");
  *  them off a hardcoded route id (#203). */
 export function CoachMatchStatsPage() {
   const { matchId } = routeApi.useParams();
-  return <MatchStatsPage matchId={matchId} backTo="/matches" />;
+  return <MatchStatsPage matchId={matchId} backTo="/matches" showPlayer />;
 }
