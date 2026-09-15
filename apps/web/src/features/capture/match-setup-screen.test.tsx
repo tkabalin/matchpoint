@@ -20,6 +20,13 @@ test("names the player the match is for", () => {
   expect(screen.getByText("Rivera")).toBeVisible();
 });
 
+test("says which fields are required and which can be left alone", () => {
+  renderSetup();
+
+  expect(screen.getAllByText("(required)")).toHaveLength(1);
+  expect(screen.getAllByText("(optional)")).toHaveLength(4);
+});
+
 test("a match cannot start without an opponent", async () => {
   const { onStart, user } = renderSetup();
 

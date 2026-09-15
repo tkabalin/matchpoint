@@ -1,5 +1,6 @@
+import { FieldLabelRow } from "@/components/field-label-row";
 import { SegmentedControl } from "@/components/segmented-control";
-import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { earliestDateOfBirthIso, todayIso } from "@/lib/date-of-birth";
@@ -29,7 +30,9 @@ export function PlayerFormFields({
   return (
     <FieldGroup>
       <Field data-invalid={showErrors && values.firstName.trim() === "" ? true : undefined}>
-        <FieldLabel htmlFor="first-name">First name</FieldLabel>
+        <FieldLabelRow htmlFor="first-name" required>
+          First name
+        </FieldLabelRow>
         <Input
           id="first-name"
           autoComplete="given-name"
@@ -43,7 +46,9 @@ export function PlayerFormFields({
       </Field>
 
       <Field data-invalid={showErrors && values.lastName.trim() === "" ? true : undefined}>
-        <FieldLabel htmlFor="last-name">Last name</FieldLabel>
+        <FieldLabelRow htmlFor="last-name" required>
+          Last name
+        </FieldLabelRow>
         <Input
           id="last-name"
           autoComplete="family-name"
@@ -57,7 +62,9 @@ export function PlayerFormFields({
       </Field>
 
       <Field data-invalid={showErrors && dobError !== null ? true : undefined}>
-        <FieldLabel htmlFor="date-of-birth">Date of birth</FieldLabel>
+        <FieldLabelRow htmlFor="date-of-birth" required>
+          Date of birth
+        </FieldLabelRow>
         <Input
           id="date-of-birth"
           type="date"
@@ -72,7 +79,9 @@ export function PlayerFormFields({
       </Field>
 
       <Field data-invalid={showErrors && genderError !== null ? true : undefined}>
-        <FieldLabel htmlFor="gender">Gender</FieldLabel>
+        <FieldLabelRow htmlFor="gender" required>
+          Gender
+        </FieldLabelRow>
         <SegmentedControl
           aria-label="Gender"
           value={values.gender}
@@ -87,7 +96,9 @@ export function PlayerFormFields({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="dominant-hand">Dominant hand</FieldLabel>
+        <FieldLabelRow htmlFor="dominant-hand" required={false}>
+          Dominant hand
+        </FieldLabelRow>
         <SegmentedControl
           aria-label="Dominant hand"
           value={values.hand}
@@ -100,13 +111,15 @@ export function PlayerFormFields({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="player-notes">Notes</FieldLabel>
+        <FieldLabelRow htmlFor="player-notes" required={false}>
+          Notes
+        </FieldLabelRow>
         <Textarea
           id="player-notes"
           maxLength={PLAYER_NOTES_MAX}
           value={values.notes}
           onChange={(event) => onChange("notes", event.target.value)}
-          placeholder="Optional: anything worth remembering before the first session"
+          placeholder="Anything worth remembering before the first session"
         />
       </Field>
     </FieldGroup>

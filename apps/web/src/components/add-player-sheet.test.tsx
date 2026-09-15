@@ -63,6 +63,13 @@ function playerCreatedResponse(body: Record<string, unknown>) {
   );
 }
 
+test("says which fields are required and which can be left alone", () => {
+  renderSheet();
+
+  expect(screen.getAllByText("(required)")).toHaveLength(4);
+  expect(screen.getAllByText("(optional)")).toHaveLength(2);
+});
+
 test("adds a player with no photo, then reveals credentials before closing", async () => {
   const created: unknown[] = [];
   stubFetch({

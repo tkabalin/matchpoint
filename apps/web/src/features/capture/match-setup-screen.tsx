@@ -11,8 +11,9 @@
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { FieldLabelRow } from "@/components/field-label-row";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -131,9 +132,9 @@ export function MatchSetupScreen({
         </div>
 
         <Field>
-          <FieldLabel htmlFor="opponent" className="text-sm text-muted-foreground">
+          <FieldLabelRow htmlFor="opponent" required className="text-sm text-muted-foreground">
             Opponent
-          </FieldLabel>
+          </FieldLabelRow>
           {/* Hand-rolled, not a native <datalist>: iOS Safari's datalist dropdown never
               renders at all (see project memory capture-opponent-datalist-ios), so a
               suggestion list has to be drawn ourselves to work on the platform this app
@@ -201,9 +202,9 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="event" className="text-sm text-muted-foreground">
+          <FieldLabelRow htmlFor="event" required={false} className="text-sm text-muted-foreground">
             Event
-          </FieldLabel>
+          </FieldLabelRow>
           <Input
             id="event"
             value={event}
@@ -216,9 +217,13 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="scoring-system" className="text-sm text-muted-foreground">
+          <FieldLabelRow
+            htmlFor="scoring-system"
+            required={false}
+            className="text-sm text-muted-foreground"
+          >
             Scoring system
-          </FieldLabel>
+          </FieldLabelRow>
           <Select
             value={scoringSystem}
             onValueChange={(value) => {
@@ -241,9 +246,13 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="court-type" className="text-sm text-muted-foreground">
+          <FieldLabelRow
+            htmlFor="court-type"
+            required={false}
+            className="text-sm text-muted-foreground"
+          >
             Court type
-          </FieldLabel>
+          </FieldLabelRow>
           <Select
             value={surfaceType}
             onValueChange={(value) => {
@@ -281,7 +290,9 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabel className="text-sm text-muted-foreground">First serve</FieldLabel>
+          <FieldLabelRow required={false} className="text-sm text-muted-foreground">
+            First serve
+          </FieldLabelRow>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "Player", value: true },
