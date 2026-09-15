@@ -115,7 +115,10 @@ const longRallyStats = rallyStats({
 
 const roster = [shortRally, noRallyData, midRally, longRally];
 
-function stubFetch(statsByPlayerId: Record<string, RallyStats>) {
+/** `gate`, when given, holds every stubbed response back until it settles, so a
+ *  test can observe the loading state before the data arrives rather than racing
+ *  a response that would otherwise resolve on the next microtask (#289). */
+function stubFetch(statsByPlayerId: Record<string, RallyStats>, gate?: Promise<void>) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
@@ -124,7 +127,9 @@ function stubFetch(statsByPlayerId: Record<string, RallyStats>) {
       if (match) {
         const stats = statsByPlayerId[match[1]!];
         if (!stats) throw new Error(`Unstubbed player id: ${match[1]}`);
-        return Promise.resolve(Response.json(stats));
+        return gate === undefined
+          ? Promise.resolve(Response.json(stats))
+          : gate.then(() => Response.json(stats));
       }
       throw new Error(`Unstubbed fetch: ${pathname}`);
     }),
@@ -172,18 +177,26 @@ afterEach(() => {
 });
 
 test("shows a loading skeleton, then the real grid", async () => {
-  stubFetch({
-    [shortRally.id]: shortRallyStats,
-    [noRallyData.id]: noRallyDataStats,
-    [midRally.id]: midRallyStats,
-    [longRally.id]: longRallyStats,
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
   });
+  stubFetch(
+    {
+      [shortRally.id]: shortRallyStats,
+      [noRallyData.id]: noRallyDataStats,
+      [midRally.id]: midRallyStats,
+      [longRally.id]: longRallyStats,
+    },
+    gate,
+  );
 
   renderCard();
 
   await vi.waitFor(() =>
     expect(document.querySelector('[data-slot="skeleton"]')).toBeInTheDocument(),
   );
+  release();
   await screen.findByRole("link", { name: "Alex Chen's player insights" });
   expect(document.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument();
 });
