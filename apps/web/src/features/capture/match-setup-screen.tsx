@@ -173,7 +173,7 @@ export function MatchSetupScreen({
               <div
                 id="previous-opponents-list"
                 role="listbox"
-                className="absolute top-full right-0 left-0 z-20 mt-1 max-h-60 overflow-y-auto rounded-sm bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
+                className="absolute top-full right-0 left-0 z-20 mt-1 max-h-60 touch-pan-y touch-pinch-zoom overflow-x-hidden overflow-y-auto overscroll-contain rounded-sm bg-popover text-popover-foreground shadow-lg ring-1 ring-foreground/5 dark:ring-foreground/10"
               >
                 {matchingOpponents.map((name) => (
                   <button

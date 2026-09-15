@@ -97,7 +97,7 @@ export function SquadLeaderboardCard({
         onChange={(event) => onSearchChange(event.target.value)}
       />
 
-      <div className="flex max-h-[320px] flex-col gap-1 overflow-y-auto">
+      <div className="flex max-h-[320px] touch-pan-y touch-pinch-zoom flex-col gap-1 overflow-x-hidden overflow-y-auto overscroll-contain">
         {rows.length === 0 ? (
           <p className="px-1 py-2 text-xs text-muted-foreground">No players match.</p>
         ) : (
