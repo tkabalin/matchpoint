@@ -83,6 +83,10 @@ export function SyncStatus({ coachId }: { coachId: string }) {
     try {
       await retryFailed(coachId);
       await drainOutbox(coachId, getDeviceId());
+    } catch {
+      // A storage failure the drain could not classify, the same one
+      // `features/sync/flush-triggers.ts` swallows: there is nothing this badge
+      // could say about it, and the rows stay queued for the next sweep.
     } finally {
       setRetrying(null);
     }
