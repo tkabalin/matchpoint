@@ -40,10 +40,11 @@ const SELF_PLAYER: PlayerSelfRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-test("shows date of birth, dominant hand and notes", () => {
+test("shows username, date of birth, dominant hand and notes", () => {
   render(<PlayerDetailsCard player={BASE_PLAYER} onEdit={() => {}} />);
 
   expect(screen.getByText("Player details")).toBeInTheDocument();
+  expect(screen.getByText("nksama001")).toBeInTheDocument();
   expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
   expect(screen.getByText("right")).toBeInTheDocument();
   expect(screen.getByText("Strong two-handed backhand.")).toBeInTheDocument();
@@ -75,6 +76,7 @@ test("Edit lives in this card and fires the handler", async () => {
 test("shows a player's own details with no Edit button and no Notes row", () => {
   render(<PlayerDetailsCard player={SELF_PLAYER} />);
 
+  expect(screen.getByText("nksama001")).toBeInTheDocument();
   expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
   expect(screen.getByText("right")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();

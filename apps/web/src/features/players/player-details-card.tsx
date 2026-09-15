@@ -18,11 +18,14 @@ function formatDateOfBirth(dateOfBirth: string): string {
 }
 
 /**
- * Date of birth, dominant hand and the player's own notes field — real
- * `PlayerRead` data that lost its only view surface when the Overview tab was
- * removed; write-only via the edit sheet isn't good enough for a coach who
+ * Username, date of birth, dominant hand and the player's own notes field —
+ * real `PlayerRead` data that lost its only view surface when the Overview tab
+ * was removed; write-only via the edit sheet isn't good enough for a coach who
  * just wants to check it. Owns the Edit trigger too, now that it sits in the
  * one card whose whole content that button edits.
+ *
+ * The username is shown once at player creation and never again, so a coach
+ * with a player who has forgotten theirs has nowhere else to read it.
  *
  * Also mounted on a player's own view of themselves (#203), reading the
  * trimmer `PlayerSelfRead` the player-auth endpoints return — no `notes`
@@ -51,6 +54,12 @@ export function PlayerDetailsCard({
           (next to the win/loss card), and a label-left/value-right row has
           no room to breathe at that width. */}
       <dl className="flex flex-col gap-2 text-xs">
+        <div>
+          <dt className="text-muted-foreground">Username</dt>
+          {/* `break-all` because a username has no spaces to wrap at, and this
+              card is half the page wide. */}
+          <dd className="font-mono break-all">{player.username}</dd>
+        </div>
         <div>
           <dt className="text-muted-foreground">Date of birth</dt>
           <dd>{player.date_of_birth ? formatDateOfBirth(player.date_of_birth) : "—"}</dd>
