@@ -326,17 +326,17 @@ export function SignUp() {
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex-col">
+        <CardFooter className="flex-col gap-2">
           <p className="text-center text-sm text-muted-foreground">
-            Didn't get a code, or has it expired?{" "}
-            <button
-              type="button"
-              onClick={handleStartOver}
-              className="text-primary underline underline-offset-4"
-            >
-              Request a new one
-            </button>
+            Didn't get a code, or has it expired?
           </p>
+          <button
+            type="button"
+            onClick={handleStartOver}
+            className="text-sm text-primary underline underline-offset-4"
+          >
+            Request a new one
+          </button>
         </CardFooter>
       </AuthShell>
     );
