@@ -14,6 +14,9 @@ import {
   metricValue,
   mistakeResilience,
   overallAverageRallyLength,
+  periodResiliencePercent,
+  periodWinPercent,
+  pickBestWorst,
   rallyLengthSizeBucket,
   scaleToGroupRange,
   squadHeadline,
@@ -316,4 +319,85 @@ test("scaleToGroupRange maps the group's min/max to the 10-90 padded band, not r
 
 test("scaleToGroupRange centers every value at 50 when the group has no spread", () => {
   expect(scaleToGroupRange(50, 50, 50)).toBe(50);
+});
+
+test("pickBestWorst returns the two ends of the entries, ranked by value", () => {
+  const entries = [{ v: 10 }, { v: 30 }, { v: 20 }];
+
+  const { best, worst } = pickBestWorst(entries, (entry) => entry.v);
+
+  expect(best).toEqual({ v: 30 });
+  expect(worst).toEqual({ v: 10 });
+});
+
+test("pickBestWorst excludes entries with a null value entirely", () => {
+  const entries = [{ v: 10 }, { v: null }, { v: 20 }];
+
+  const { best, worst } = pickBestWorst(entries, (entry) => entry.v);
+
+  expect(best).toEqual({ v: 20 });
+  expect(worst).toEqual({ v: 10 });
+});
+
+test("pickBestWorst returns both null when nothing is eligible", () => {
+  const entries = [{ v: null }, { v: null }];
+
+  const { best, worst } = pickBestWorst(entries, (entry) => entry.v);
+
+  expect(best).toBeNull();
+  expect(worst).toBeNull();
+});
+
+// A lone eligible entry (or every eligible entry tied) is `best` only —
+// duplicating it as `worst` too would imply a spread that isn't there.
+test("pickBestWorst never duplicates a single eligible entry as both best and worst", () => {
+  const entries = [{ v: 42 }, { v: null }];
+
+  const { best, worst } = pickBestWorst(entries, (entry) => entry.v);
+
+  expect(best).toEqual({ v: 42 });
+  expect(worst).toBeNull();
+});
+
+test("pickBestWorst never duplicates a tied group as both best and worst", () => {
+  const entries = [{ v: 5 }, { v: 5 }, { v: 5 }];
+
+  const { best, worst } = pickBestWorst(entries, (entry) => entry.v);
+
+  expect(best).toEqual({ v: 5 });
+  expect(worst).toBeNull();
+});
+
+test("periodWinPercent reads wins out of a player's period record", () => {
+  expect(periodWinPercent({ wins: 3, losses: 2 })).toBeCloseTo(60);
+});
+
+test("periodWinPercent is null for a 0-0 record, not a fabricated 0%", () => {
+  expect(periodWinPercent({ wins: 0, losses: 0 })).toBeNull();
+});
+
+test("periodWinPercent is 100 for an all-win record, 0 for an all-loss one", () => {
+  expect(periodWinPercent({ wins: 2, losses: 0 })).toBe(100);
+  expect(periodWinPercent({ wins: 0, losses: 2 })).toBe(0);
+});
+
+test("periodResiliencePercent reads a member's own period error counts as a forced share of total", () => {
+  expect(
+    periodResiliencePercent({ period_forced_errors_suffered: 3, period_unforced_errors: 1 }),
+  ).toBeCloseTo(75);
+});
+
+test("periodResiliencePercent is null when neither count has happened yet", () => {
+  expect(
+    periodResiliencePercent({ period_forced_errors_suffered: 0, period_unforced_errors: 0 }),
+  ).toBeNull();
+});
+
+test("periodResiliencePercent is 100 when every own error was forced, 0 when every one was unforced", () => {
+  expect(
+    periodResiliencePercent({ period_forced_errors_suffered: 4, period_unforced_errors: 0 }),
+  ).toBe(100);
+  expect(
+    periodResiliencePercent({ period_forced_errors_suffered: 0, period_unforced_errors: 4 }),
+  ).toBe(0);
 });

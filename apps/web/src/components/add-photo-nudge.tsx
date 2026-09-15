@@ -38,6 +38,7 @@ export function AddPhotoNudge({ coach }: { coach: CoachRead }) {
           <button
             type="button"
             onClick={() => setPickingPhoto(true)}
+            aria-label="Add a profile photo"
             className="text-xs font-semibold text-primary"
           >
             Add

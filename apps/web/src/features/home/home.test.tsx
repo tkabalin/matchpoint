@@ -1,4 +1,10 @@
-import type { CoachRead, PlayerRead, SquadMemberStats } from "@matchpoint/api-client";
+import type {
+  CoachRead,
+  PlayerRead,
+  RallyStats,
+  ServeStats,
+  SquadMemberStats,
+} from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -99,17 +105,55 @@ function squadMember(
   };
 }
 
-// Deliberately no hard flag and no tracked-stat decline on either — an empty
-// needs-attention result is the legitimate case these two exist to cover.
+const emptyRallyStats: RallyStats = {
+  average_rally_length: { won: null, lost: null },
+  errors_overall: null,
+  errors_under_pressure: null,
+  hero: null,
+  lost: 0,
+  lost_by_shot: [],
+  outcome_mix: [],
+  rally_length: [],
+  shot_frequency: { you: [], opponents: [] },
+  styles: { you: [], opponents: [] },
+  won: 0,
+  won_by_shot: [],
+};
+
+const EMPTY_SERVE_SIDE = {
+  breakdown: [],
+  fault_mode: { first_serve: null, second_serve: null },
+  hero: null,
+  metrics: [],
+  outcome: { first_serve: null, second_serve: null },
+  return_outcome: { first_serve: [], second_serve: [] },
+  trend: [],
+};
+
+const emptyServeStats: ServeStats = { serving: EMPTY_SERVE_SIDE, returning: EMPTY_SERVE_SIDE };
+
+// Distinct on purpose across every ranked axis, so each of the squad
+// snapshot's rows resolves to an unambiguous winner rather than a tie (a tie
+// is real, tested behaviour too, but only the dedicated tie test below needs
+// it). `last5_results` still varies too, since it drives each row's own
+// recent-form dots even though the ranking itself now reads `period_*`.
 const bestFormMember = squadMember({
   player_id: players[0]!.id,
-  period_record: { wins: 9, losses: 1 },
   last5_results: ["win", "win", "win", "win", "win"],
+  period_record: { wins: 5, losses: 0 },
+  period_first_serve_in_percent: 80,
+  period_forced_errors_suffered: 18,
+  period_unforced_errors: 2,
 });
 const worstFormMember = squadMember({
   player_id: players[1]!.id,
-  period_record: { wins: 1, losses: 9 },
   last5_results: ["loss", "loss", "loss", "loss", "win"],
+  // Distinct from flaggedMember's own period_record below (also a losing
+  // record) so the two don't tie for "Worst win %" in tests that stub both.
+  period_record: { wins: 0, losses: 4 },
+  period_first_serve_in_percent: 40,
+  period_forced_errors_suffered: 2,
+  period_unforced_errors: 18,
 });
 const flaggedMember = squadMember({
   player_id: flaggedPlayer.id,
@@ -117,20 +161,70 @@ const flaggedMember = squadMember({
   period_record: { wins: 1, losses: 4 },
 });
 
-/** Routes by pathname rather than returning one canned response for every call:
- * Home now fetches /coaches/me, /players, and /squad/analytics/members, which
- * need different shapes. */
+const EMPTY_STYLE_DETAIL = {
+  wing: { forehand: 0, backhand: 0 },
+  shot_type: [],
+  court_zones: [],
+  unusual_reasons: null,
+};
+
+// Aggression/passivity read from RallyStats, not SquadMemberStats — a
+// forced-heavy `styles.you` reads as aggressive, an unforced-heavy one as
+// passive (aggressionScore's own reasoning in squad-stats.ts).
+const aggressiveRallyStats: RallyStats = {
+  ...emptyRallyStats,
+  styles: {
+    you: [
+      { kind: "forced", label: "Forced (your pressure)", count: 18, detail: EMPTY_STYLE_DETAIL },
+      { kind: "unforced", label: "Unforced", count: 2, detail: EMPTY_STYLE_DETAIL },
+    ],
+    opponents: [],
+  },
+};
+const passiveRallyStats: RallyStats = {
+  ...emptyRallyStats,
+  styles: {
+    you: [
+      { kind: "forced", label: "Forced (your pressure)", count: 2, detail: EMPTY_STYLE_DETAIL },
+      { kind: "unforced", label: "Unforced", count: 18, detail: EMPTY_STYLE_DETAIL },
+    ],
+    opponents: [],
+  },
+};
+
+/** Routes by pathname, matching on a substring rather than the exact string —
+ *  a per-player analytics call (`/analytics/rally`) varies by player id, and
+ *  a squad-wide fan-out (the tendency rows' roster-wide rally fetch, plus
+ *  the Continue-with card's own PlayerCard) hits it once per roster player.
+ *  Same convention as player-list.test.tsx's stubFetchByPath. */
 function stubFetch(routes: Record<string, () => Response>) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
-      const handler = routes[pathname];
+      // Longest matching path wins, not first-in-object-order: "/api/players" is
+      // itself a substring of "/api/players/{id}" and "/api/players/{id}/analytics/rally",
+      // so an insertion-order `.find` let the roster-list route swallow requests
+      // meant for a single player or their rally stats, whichever route happened
+      // to be declared first in a given test's call.
+      const handler = Object.entries(routes)
+        .filter(([path]) => pathname.includes(path))
+        .sort((a, b) => b[0].length - a[0].length)[0]?.[1];
       if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
       return Promise.resolve(handler());
     }),
   );
 }
+
+// Every route below `stubFetch` needs an exact-path entry (for the roster,
+// squad stats, etc.) plus these two fallbacks: Home fans out a rally-stats
+// request per roster player for the aggression/passivity rows, and the
+// Continue-with card (a real PlayerCard) fetches both rally and serve stats
+// for whichever one player it's showing.
+const FALLBACK_ROUTES = {
+  "/analytics/rally": () => Response.json(emptyRallyStats),
+  "/analytics/serve": () => Response.json(emptyServeStats),
+};
 
 function stubAuthenticatedHome() {
   stubFetch({
@@ -138,6 +232,7 @@ function stubAuthenticatedHome() {
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+    ...FALLBACK_ROUTES,
   });
 }
 
@@ -147,30 +242,18 @@ function stubUnauthenticatedHome() {
     "/api/players": () => Response.json([]),
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () => Response.json([]),
+    ...FALLBACK_ROUTES,
   });
 }
-
-const lastViewedMatches = [
-  {
-    id: "3f1c2b4e-0000-4000-8000-00000000ma01",
-    player_id: players[0]!.id,
-    opponent_name: "T. Naidoo",
-    played_on: "2026-08-10",
-    surface: "hard" as const,
-    event: null,
-    scoring_system: "traditional" as const,
-    created_at: "2026-08-11T09:00:00Z",
-    updated_at: "2026-08-11T09:00:00Z",
-  },
-];
 
 function stubAuthenticatedHomeWithLastViewedPlayer() {
   stubFetch({
     "/api/coaches/me": () => Response.json(coach),
     "/api/players": () => Response.json(players),
     [`/api/players/${players[0]!.id}`]: () => Response.json(players[0]),
-    "/api/matches": () => Response.json(lastViewedMatches),
+    "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+    ...FALLBACK_ROUTES,
   });
 }
 
@@ -347,6 +430,7 @@ test("shows no add-photo nudge once the coach has a photo", async () => {
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+    ...FALLBACK_ROUTES,
   });
   await renderHome();
 
@@ -357,7 +441,7 @@ test("shows no results list until the user types", async () => {
   stubAuthenticatedHome();
   await renderHome();
 
-  expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  expect(screen.queryByRole("list", { name: "Search results" })).not.toBeInTheDocument();
 });
 
 test("filters players as the user types", async () => {
@@ -386,16 +470,18 @@ test("renders a bubble with initials for each player", async () => {
   stubAuthenticatedHome();
   await renderHome();
 
-  expect(await screen.findByText("AN")).toBeInTheDocument();
-  expect(screen.getByText("SD")).toBeInTheDocument();
-  expect(screen.getByText("Amahle")).toBeInTheDocument();
-  expect(screen.getByText("Sipho")).toBeInTheDocument();
+  const heading = await screen.findByRole("heading", { name: "My players" });
+  const section = within(heading.closest("section")!);
+  expect(await section.findByText("AN")).toBeInTheDocument();
+  expect(section.getByText("SD")).toBeInTheDocument();
+  expect(section.getByText("Amahle")).toBeInTheDocument();
+  expect(section.getByText("Sipho")).toBeInTheDocument();
 });
 
 // The roster bubble is a direct link now, not a picker sheet — #262 retired the
 // intermediate step for every player row on the app, this one included. Scoped
-// to "My players" specifically: the squad snapshot's own Best/Worst form rows
-// are also links to the same profile and can name the same player.
+// to "My players" specifically: the squad snapshot's own tendency rows are also
+// links to the same profile and can name the same player.
 test("a player bubble links straight to their profile", async () => {
   stubAuthenticatedHome();
   await renderHome();
@@ -440,7 +526,7 @@ test("'Add' opens the add-player sheet directly", async () => {
   const user = userEvent.setup({ delay: null });
   await renderHome();
 
-  await user.click(screen.getByRole("button", { name: "Add" }));
+  await user.click(screen.getByRole("button", { name: "Add a player" }));
 
   expect(await screen.findByRole("heading", { name: "Add a player" })).toBeInTheDocument();
 });
@@ -452,6 +538,10 @@ test("shows no continue-with box when nothing has been viewed yet", async () => 
   expect(screen.queryByRole("heading", { name: "Continue with" })).not.toBeInTheDocument();
 });
 
+// Continue-with is now the real, shared PlayerCard (#225 item 5) — its own
+// behaviour (View stats/Start match, the header being inert, its stat rows) is
+// covered where PlayerCard is tested (player-list.test.tsx). This only checks
+// that Home wires the right player into the right slot.
 test("shows the last-viewed player once one has been viewed", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
@@ -460,26 +550,11 @@ test("shows the last-viewed player once one has been viewed", async () => {
   const heading = await screen.findByRole("heading", { name: "Continue with" });
   const section = within(heading.closest("section")!);
   expect(section.getByText("Amahle Nkosi")).toBeInTheDocument();
-  expect(section.getByText("AN")).toBeInTheDocument();
-  expect(await section.findByText(/Last viewed just now · vs T\. Naidoo/)).toBeInTheDocument();
-  expect(section.getByRole("link", { name: "View full stats" })).toBeInTheDocument();
+  expect(section.getByRole("link", { name: /View stats/ })).toBeInTheDocument();
+  expect(section.getByRole("link", { name: /Start match/ })).toBeInTheDocument();
 });
 
-test("'View full stats' opens the last-viewed player's profile", async () => {
-  setLastViewedPlayerId(players[0]!.id);
-  stubAuthenticatedHomeWithLastViewedPlayer();
-  const user = userEvent.setup({ delay: null });
-  await renderHome();
-  await screen.findByRole("heading", { name: "Continue with" });
-
-  await user.click(screen.getByRole("link", { name: "View full stats" }));
-
-  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
-});
-
-// The row itself now goes straight to the same place "View full stats" does —
-// #262 retired the picker sheet this used to raise.
-test("tapping the continue-with player row opens their profile directly", async () => {
+test("'View stats' opens the last-viewed player's profile", async () => {
   setLastViewedPlayerId(players[0]!.id);
   stubAuthenticatedHomeWithLastViewedPlayer();
   const user = userEvent.setup({ delay: null });
@@ -487,40 +562,113 @@ test("tapping the continue-with player row opens their profile directly", async 
   const heading = await screen.findByRole("heading", { name: "Continue with" });
   const section = within(heading.closest("section")!);
 
-  await user.click(section.getByRole("link", { name: /Amahle Nkosi/ }));
+  await user.click(section.getByRole("link", { name: /View stats/ }));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
-test("shows the squad's player count", async () => {
+test("shows the squad's player count, with a matching row of tally icons", async () => {
   stubFetch({
     "/api/coaches/me": () => new Response(null, { status: 401 }),
     "/api/players": () => Response.json(players),
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+    ...FALLBACK_ROUTES,
   });
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
   expect(snapshot.getByText("2")).toBeInTheDocument();
   expect(snapshot.getByText("players")).toBeInTheDocument();
+  expect(snapshot.getByTestId("player-tally").querySelectorAll("svg")).toHaveLength(2);
 });
 
-// bestFormMember/worstFormMember trip neither tier — nothing in either flags,
-// which is itself the point: an empty result is what "nobody needs attention
-// this week" should look like, not a fallback to whichever player is worst.
-test("ranks best and worst form, and shows nothing at all for a legitimate empty needs-attention state", async () => {
-  stubAuthenticatedHome();
+test("caps the player tally at 8 icons and shows the overflow count", async () => {
+  const bigRoster: PlayerRead[] = Array.from({ length: 9 }, (_, index) => ({
+    ...players[0]!,
+    id: `3f1c2b4e-0000-4000-8000-0000000000${String(index).padStart(2, "0")}`,
+    first_name: `Player${index}`,
+  }));
+  stubFetch({
+    "/api/coaches/me": () => new Response(null, { status: 401 }),
+    "/api/players": () => Response.json(bigRoster),
+    "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([]),
+    ...FALLBACK_ROUTES,
+  });
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  expect(snapshot.getByText("Best form")).toBeInTheDocument();
-  expect(snapshot.getByText("Amahle Nkosi")).toBeInTheDocument();
-  expect(snapshot.getByText("Worst form")).toBeInTheDocument();
-  expect(snapshot.getByText("Sipho Dlamini")).toBeInTheDocument();
-  // No placeholder text, no card — matches how AddPhotoNudge/InstallAppNudge
-  // render nothing when there's nothing to say (#205).
-  expect(screen.queryByText("Needs attention")).not.toBeInTheDocument();
+  expect(snapshot.getByText("9")).toBeInTheDocument();
+  expect(snapshot.getByTestId("player-tally").querySelectorAll("svg")).toHaveLength(8);
+  expect(snapshot.getByText("+1")).toBeInTheDocument();
+});
+
+// bestFormMember/worstFormMember are built distinct on every period and
+// aggression axis above, so every row resolves to an unambiguous winner —
+// rows are located by their own scope-labelled caption, not by player name,
+// since one player can (and here, always does) win more than one row.
+test("shows the seven tendency rows with their scope-labelled captions and headline players", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json(players),
+    "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+    [`/api/players/${players[0]!.id}/analytics/rally`]: () => Response.json(aggressiveRallyStats),
+    [`/api/players/${players[1]!.id}/analytics/rally`]: () => Response.json(passiveRallyStats),
+    ...FALLBACK_ROUTES,
+  });
+  await renderHome();
+
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+
+  const row = async (label: string) => {
+    const caption = await snapshot.findByText(label);
+    return within(caption.closest("a")!);
+  };
+
+  expect((await row("Best win %")).getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect((await row("Best win %")).getByText("100%")).toBeInTheDocument();
+  expect((await row("Worst win %")).getByText("Sipho Dlamini")).toBeInTheDocument();
+  expect((await row("Steadiest")).getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect((await row("Most mistakes")).getByText("Sipho Dlamini")).toBeInTheDocument();
+  expect((await row("Most aggressive")).getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect((await row("Most passive")).getByText("Sipho Dlamini")).toBeInTheDocument();
+  expect((await row("Best 1st serve %")).getByText("Amahle Nkosi")).toBeInTheDocument();
+});
+
+// Every stat here comes from the same default squadMember() fixture — a
+// genuine tie, which pickBestWorst resolves to showing only the best side,
+// per squad-stats.ts's own reasoning (a single eligible value isn't a real
+// spread to also call a "worst").
+test("a tied metric shows only the best side, not a duplicated worst", async () => {
+  const tiedA = squadMember({ player_id: players[0]!.id });
+  const tiedB = squadMember({ player_id: players[1]!.id });
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => Response.json(players),
+    "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([tiedA, tiedB]),
+    ...FALLBACK_ROUTES,
+  });
+  await renderHome();
+
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  const mistakesRow = within((await snapshot.findByText("Most mistakes")).closest("div")!);
+  expect(mistakesRow.getByText("Not enough matches logged yet.")).toBeInTheDocument();
+});
+
+test("ranked rows go straight to that row's own player's stats page", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup({ delay: null });
+  await renderHome();
+
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  const caption = await snapshot.findByText("Best win %");
+
+  await user.click(caption.closest("a")!);
+
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
 });
 
 test("shows a dismissible card when a player is flagged", async () => {
@@ -530,6 +678,7 @@ test("shows a dismissible card when a player is flagged", async () => {
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () =>
       Response.json([bestFormMember, worstFormMember, flaggedMember]),
+    ...FALLBACK_ROUTES,
   });
   await renderHome();
 
@@ -548,6 +697,7 @@ test("dismissing the attention card hides it", async () => {
     "/api/matches": () => Response.json([]),
     "/api/squad/analytics/members": () =>
       Response.json([bestFormMember, worstFormMember, flaggedMember]),
+    ...FALLBACK_ROUTES,
   });
   const user = userEvent.setup({ delay: null });
   await renderHome();
@@ -563,25 +713,20 @@ test("dismissing the attention card hides it", async () => {
   ).not.toBeInTheDocument();
 });
 
-test("best/worst form show last-5 and forced:unforced as icon+number pairs, like Continue with", async () => {
-  stubAuthenticatedHome();
+test("the squad snapshot and continue-with headings are large and bold", async () => {
+  setLastViewedPlayerId(players[0]!.id);
+  stubAuthenticatedHomeWithLastViewedPlayer();
   await renderHome();
 
-  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  const bestRow = (await snapshot.findByText("Amahle Nkosi")).closest("a")!;
-  expect(within(bestRow).getByText("Last 5")).toBeInTheDocument();
-  expect(within(bestRow).getByText("Forced : Unforced")).toBeInTheDocument();
-});
-
-test("tapping a squad-snapshot row goes straight to that player's stats page", async () => {
-  stubAuthenticatedHome();
-  const user = userEvent.setup({ delay: null });
-  await renderHome();
-
-  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  await user.click(await snapshot.findByRole("link", { name: /Amahle Nkosi/ }));
-
-  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Squad snapshot" })).toHaveClass(
+    "text-xl",
+    "font-bold",
+  );
+  expect(screen.getByRole("heading", { name: "Continue with" })).toHaveClass(
+    "text-xl",
+    "font-bold",
+  );
+  expect(screen.getByRole("heading", { name: "My players" })).toHaveClass("text-xl", "font-bold");
 });
 
 // Same floating action as the matches page (primary-match-action.tsx's own

@@ -75,16 +75,6 @@ export interface AttentionResult {
   severity: number;
 }
 
-/** One end of the squad's best/worst form ranking. */
-export interface FormRankEntry {
-  playerId: string;
-  /** "W–L" over the player's own `last5_results`. */
-  last5Record: string;
-  /** Null wherever the API's own ratio is — a player with no forced or
-   *  unforced points at all this period, not an absent player. */
-  forcedToUnforcedRatio: number | null;
-}
-
 /** Per-player inputs behind the Squad stats page — built from the real
  *  `SquadMemberStats` payload plus the roster name it doesn't carry.
  *  `matchesLoggedThisPeriod` means the same thing here as on that payload;

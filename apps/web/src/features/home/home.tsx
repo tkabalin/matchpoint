@@ -1,25 +1,30 @@
-import type { PlayerRead } from "@matchpoint/api-client";
+import type { PlayerRead, RallyStats, SquadMemberStats } from "@matchpoint/api-client";
 import {
   getCurrentCoachOptions,
   getPlayerOptions,
   getPlayerOverviewOptions,
-  listMatchesOptions,
+  getRallyStatsOptions,
   listPlayersOptions,
   listSquadMemberStatsOptions,
 } from "@matchpoint/api-client/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import {
+  Anchor,
   ChevronRight,
-  History,
+  CircleAlert,
+  CircleCheck,
+  CircleX,
+  Feather,
+  Flame,
   type LucideIcon,
+  PersonStanding,
   Plus,
   Search,
   Settings,
-  Swords,
+  TriangleAlert,
   TrendingDown,
   TrendingUp,
-  CircleAlert,
   UserRound,
   Users,
   X,
@@ -31,7 +36,9 @@ import { AddPlayerSheet } from "@/components/add-player-sheet";
 import { AppPage } from "@/components/page-shell";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { PlayerCard } from "@/components/player-card";
 import { PrimaryMatchAction } from "@/components/primary-match-action";
+import { ResultDots } from "@/components/result-dots";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -44,19 +51,25 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { InstallAppNudge } from "@/components/install-app-nudge";
-import { pickSquadAttention, rankForm } from "@/lib/analytics/attention";
+import { pickSquadAttention } from "@/lib/analytics/attention";
+import {
+  aggressionScore,
+  periodResiliencePercent,
+  periodWinPercent,
+  pickBestWorst,
+} from "@/lib/analytics/squad-stats";
 import type { AttentionResult } from "@/lib/analytics/types.provisional";
 import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
-import { formatRecord } from "@/lib/format-record";
-import {
-  getLastViewedAt,
-  getLastViewedPlayerId,
-  setLastViewedPlayerId,
-} from "@/lib/last-viewed-player";
-import type { OutcomeName } from "@/lib/palette";
-import { relativeTimeFrom } from "@/lib/relative-time";
+import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
+import { PATTERN_CLASS } from "@/lib/palette";
+import { useInView } from "@/lib/use-in-view";
 import { cn } from "@/lib/utils";
+
+// Past a glance, the exact roster size is already the headline numeral right
+// beside these icons — an unbounded row would break layout for a large squad,
+// so the visual tally caps here regardless of how many players there are.
+const TALLY_CAP = 8;
 
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
@@ -79,15 +92,52 @@ export function Home() {
     `${player.first_name} ${player.last_name}`.toLowerCase().includes(search.toLowerCase()),
   );
   const squadMembers = squadStats ?? [];
-  const formRank = rankForm(squadMembers);
   const attention = pickSquadAttention(squadMembers);
   const findPlayer = (playerId: string) => roster.find((player) => player.id === playerId) ?? null;
+  const findMember = (playerId: string) =>
+    squadMembers.find((member) => member.player_id === playerId);
   // localStorage isn't itself reactive, so dismissing bumps this to force a
   // re-read of isAttentionFlagDismissed on the next render.
   const [, forceAttentionRerender] = useState(0);
   const attentionDismissed = attention
     ? isAttentionFlagDismissed(attention.playerId, attention.tier)
     : false;
+
+  // "Most aggressive"/"most passive" have no last-5-scoped source (only
+  // RallyStats.styles carries the needed opponent's-own-unforced-error split,
+  // and that endpoint has no last-N-matches window) — see
+  // .claude/plans/lets-tackle-issue-225-silly-giraffe.md. Scoped to each
+  // player's whole history instead, same roster-wide fan-out pattern
+  // player-insights-card.tsx already uses.
+  const { ref: tendencyRef, inView: tendencyInView } = useInView<HTMLDivElement>();
+  const rallyResults = useQueries({
+    queries: roster.map((player) => ({
+      ...getRallyStatsOptions({ path: { player_id: player.id } }),
+      enabled: tendencyInView,
+    })),
+  });
+  const rallyStatsById = new Map(
+    roster
+      .map((player, index) => [player.id, rallyResults[index]?.data] as const)
+      .filter((entry): entry is [string, RallyStats] => entry[1] !== undefined),
+  );
+
+  const bestWorstWinPercent = pickBestWorst(squadMembers, (member) =>
+    periodWinPercent(member.period_record),
+  );
+  const bestWorstResilience = pickBestWorst(squadMembers, (member) =>
+    periodResiliencePercent(member),
+  );
+  const bestWorstFirstServe = pickBestWorst(
+    squadMembers,
+    (member) => member.period_first_serve_in_percent,
+  );
+  const membersWithAggression = squadMembers.flatMap((member) => {
+    const rally = rallyStatsById.get(member.player_id);
+    const aggression = rally ? aggressionScore(rally.styles) : null;
+    return aggression === null ? [] : [{ member, aggression }];
+  });
+  const bestWorstAggression = pickBestWorst(membersWithAggression, (entry) => entry.aggression);
 
   return (
     <AppPage>
@@ -175,9 +225,14 @@ export function Home() {
       )}
 
       <section aria-labelledby="squad-snapshot" className="flex flex-col gap-2">
-        <h2 id="squad-snapshot" className="text-lg font-bold">
-          Squad snapshot
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 id="squad-snapshot" className="text-xl font-bold">
+            Squad snapshot
+          </h2>
+          <Link to="/stats" className="text-sm text-primary underline underline-offset-4">
+            See full squad stats
+          </Link>
+        </div>
         <Card>
           <CardContent className="flex flex-col gap-3">
             <div className="flex gap-5">
@@ -189,31 +244,140 @@ export function Home() {
                     {roster.length === 1 ? "player" : "players"}
                   </p>
                 </div>
+                {roster.length > 0 && (
+                  <div
+                    data-testid="player-tally"
+                    className="flex flex-wrap items-center gap-0.5"
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: Math.min(roster.length, TALLY_CAP) }).map((_, index) => (
+                      <PersonStanding
+                        key={index}
+                        className="size-3.5 shrink-0 text-muted-foreground"
+                      />
+                    ))}
+                    {roster.length > TALLY_CAP && (
+                      <span className="text-[0.625rem] font-semibold text-muted-foreground">
+                        +{roster.length - TALLY_CAP}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex flex-col">
+            <div ref={tendencyRef} className="flex flex-col">
               <SquadRow
-                label="Best form"
+                label="Best win %"
                 icon={TrendingUp}
-                tone="win"
-                player={formRank.best ? findPlayer(formRank.best.playerId) : null}
-                detail={null}
-                stats={formRank.best ?? undefined}
+                member={bestWorstWinPercent.best}
+                player={
+                  bestWorstWinPercent.best ? findPlayer(bestWorstWinPercent.best.player_id) : null
+                }
+                value={
+                  bestWorstWinPercent.best
+                    ? periodWinPercent(bestWorstWinPercent.best.period_record)
+                    : null
+                }
                 emptyDetail="Not enough matches logged yet."
               />
               <SquadRow
-                label="Worst form"
+                label="Worst win %"
                 icon={TrendingDown}
-                tone="unforced"
-                player={formRank.worst ? findPlayer(formRank.worst.playerId) : null}
-                detail={null}
-                stats={formRank.worst ?? undefined}
+                member={bestWorstWinPercent.worst}
+                player={
+                  bestWorstWinPercent.worst ? findPlayer(bestWorstWinPercent.worst.player_id) : null
+                }
+                value={
+                  bestWorstWinPercent.worst
+                    ? periodWinPercent(bestWorstWinPercent.worst.period_record)
+                    : null
+                }
+                emptyDetail="Not enough matches logged yet."
+              />
+              <SquadRow
+                label="Steadiest"
+                icon={Anchor}
+                member={bestWorstResilience.best}
+                player={
+                  bestWorstResilience.best ? findPlayer(bestWorstResilience.best.player_id) : null
+                }
+                value={
+                  bestWorstResilience.best
+                    ? periodResiliencePercent(bestWorstResilience.best)
+                    : null
+                }
+                emptyDetail="Not enough matches logged yet."
+              />
+              <SquadRow
+                label="Most mistakes"
+                icon={TriangleAlert}
+                member={bestWorstResilience.worst}
+                player={
+                  bestWorstResilience.worst ? findPlayer(bestWorstResilience.worst.player_id) : null
+                }
+                value={
+                  bestWorstResilience.worst
+                    ? periodResiliencePercent(bestWorstResilience.worst)
+                    : null
+                }
+                emptyDetail="Not enough matches logged yet."
+              />
+              <SquadRow
+                label="Most aggressive"
+                icon={Flame}
+                member={bestWorstAggression.best?.member ?? null}
+                player={
+                  bestWorstAggression.best
+                    ? findPlayer(bestWorstAggression.best.member.player_id)
+                    : null
+                }
+                value={bestWorstAggression.best?.aggression ?? null}
+                emptyDetail="Not enough rally data logged yet."
+              />
+              <SquadRow
+                label="Most passive"
+                icon={Feather}
+                member={bestWorstAggression.worst?.member ?? null}
+                player={
+                  bestWorstAggression.worst
+                    ? findPlayer(bestWorstAggression.worst.member.player_id)
+                    : null
+                }
+                value={bestWorstAggression.worst?.aggression ?? null}
+                emptyDetail="Not enough rally data logged yet."
+              />
+              <SquadRow
+                label="Best 1st serve %"
+                icon={CircleCheck}
+                member={bestWorstFirstServe.best}
+                player={
+                  bestWorstFirstServe.best ? findPlayer(bestWorstFirstServe.best.player_id) : null
+                }
+                value={
+                  bestWorstFirstServe.best
+                    ? bestWorstFirstServe.best.period_first_serve_in_percent
+                    : null
+                }
+                emptyDetail="Not enough matches logged yet."
+              />
+              <SquadRow
+                label="Worst 1st serve %"
+                icon={CircleX}
+                member={bestWorstFirstServe.worst}
+                player={
+                  bestWorstFirstServe.worst ? findPlayer(bestWorstFirstServe.worst.player_id) : null
+                }
+                value={
+                  bestWorstFirstServe.worst
+                    ? bestWorstFirstServe.worst.period_first_serve_in_percent
+                    : null
+                }
                 emptyDetail="Not enough matches logged yet."
               />
             </div>
 
-            {/* A genuine flag to act on, not a ranking like the two rows above —
+            {/* A genuine flag to act on, not a ranking like the rows above —
                 the bordered, dismissible treatment (matching AddPhotoNudge/
                 InstallAppNudge) is what tells them apart, rather than the same
                 plain divider-row style all three used before (#205). Renders
@@ -230,9 +394,21 @@ export function Home() {
               />
             )}
 
-            <p className="text-[0.625rem] leading-relaxed text-muted-foreground">
-              Based on each player&rsquo;s last few matches. &ldquo;Needs attention&rdquo; can flag
-              even your best player if their results have slipped lately.
+            <ul className="list-disc space-y-1 pl-4 text-xs font-semibold text-foreground marker:text-muted-foreground">
+              <li>Win %: wins out of matches played this season.</li>
+              <li>
+                Steadiest and Most mistakes: share of a player&rsquo;s own errors caused by the
+                opponent, not themselves. Higher means steadier.
+              </li>
+              <li>
+                Most aggressive and Most passive: share of the opponent&rsquo;s errors forced by
+                pressure, not handed over free. Higher means more aggressive.
+              </li>
+              <li>1st serve %: share of first serves landing in play.</li>
+            </ul>
+            <p className="text-[0.625rem] text-muted-foreground">
+              &ldquo;Needs attention&rdquo; can still flag even your best player if their results
+              have slipped lately.
             </p>
           </CardContent>
         </Card>
@@ -240,14 +416,14 @@ export function Home() {
 
       {lastViewedPlayer && (
         <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-bold">Continue with</h2>
-          <ContinueWithCard player={lastViewedPlayer} />
+          <h2 className="text-xl font-bold">Continue with</h2>
+          <PlayerCard player={lastViewedPlayer} member={findMember(lastViewedPlayer.id)} />
         </section>
       )}
 
       <section className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-bold">My players</h2>
+          <h2 className="text-xl font-bold">My players</h2>
           <Link to="/players" className="text-sm text-primary underline underline-offset-4">
             See all
           </Link>
@@ -263,6 +439,7 @@ export function Home() {
           <button
             type="button"
             onClick={() => setAdding(true)}
+            aria-label="Add a player"
             className="flex shrink-0 flex-col items-center gap-1"
           >
             <span className="flex size-16 items-center justify-center rounded-sm border border-dashed text-muted-foreground">
@@ -279,59 +456,48 @@ export function Home() {
   );
 }
 
-/** Text color per outcome tone, for a row's icon — the icon's own shape is
- *  already what tells "Best form" apart from "Needs attention" at a glance
- *  (the large-and-unique-icon rule this row follows, same as the player
- *  stats screens), so color here reinforces rather than carries the meaning
- *  alone, and needs no swatch halo of its own. */
-const TONE_ICON_CLASS: Record<OutcomeName, string> = {
-  win: "text-outcome-win",
-  unforced: "text-outcome-unforced",
-  forced: "text-outcome-forced",
-};
-
-/** One row of the squad snapshot (best form / worst form / needs attention).
- *  Renders as a plain, non-interactive line in its own muted tone when there's
- *  no player to show — an empty result here (nobody eligible, nobody flagged)
- *  is a legitimate outcome the row should say plainly, not paper over.
+/** One row of the squad snapshot's eight tendency rankings. Renders as a
+ *  plain, muted line when there's no eligible player for this metric yet —
+ *  an empty result here (nobody with enough data) is a legitimate outcome the
+ *  row should say plainly, not paper over.
  *
- *  Goes straight to the player's stats page, not the view/start-match sheet —
- *  a coach tapping a ranked row already wants the numbers behind that ranking,
- *  not a choice between viewing and starting a match. */
+ *  The label is the row's own heading, not a caption — a coach scanning this
+ *  card needs to know what each row measures before the player's name means
+ *  anything, so it's sized and coloured as the headline text it is, per
+ *  `.claude/rules/web-stat-cards.md`'s "never text-muted-foreground on a
+ *  headline label" rule (this row used to break it).
+ *
+ *  Goes straight to the player's stats page, matching every other tappable
+ *  row here — a coach tapping a ranked row already wants the numbers behind
+ *  that ranking (#225 item 6). */
 function SquadRow({
   label,
   icon: Icon,
-  tone,
+  member,
   player,
-  detail,
-  stats,
+  value,
   emptyDetail,
 }: {
   label: string;
   /** Large and distinct per row — no two rows on this card, or elsewhere on
    *  the home screen, share an icon for a different meaning. */
   icon: LucideIcon;
-  tone: OutcomeName;
+  member: SquadMemberStats | null;
   player: PlayerRead | null;
-  /** Plain caption text — used by rows without a `stats` pair (Needs attention). */
-  detail: string | null;
-  /** Last-5 record and forced:unforced ratio, shown as the same icon+number
-   *  pair "Continue with" uses, not folded into a single line of text. Ratio
-   *  is null wherever the API's own is — no forced or unforced points at
-   *  all this period. */
-  stats?: { last5Record: string; forcedToUnforcedRatio: number | null };
+  /** The 0–100 share that earned this player the row. Null renders the empty
+   *  state rather than a fabricated figure. */
+  value: number | null;
   emptyDetail: string;
 }) {
-  const icon = <Icon className={cn("size-7 shrink-0", TONE_ICON_CLASS[tone])} aria-hidden="true" />;
+  const icon = <Icon className="size-6 shrink-0 text-primary" aria-hidden="true" />;
+  const display = value === null ? null : `${Math.round(value)}%`;
 
-  if (!player || (!detail && !stats)) {
+  if (!player || !member || value === null) {
     return (
       <div className="flex items-center gap-2.5 border-t py-2.5 first:border-t-0 first:pt-0">
         {icon}
         <div className="min-w-0 flex-1">
-          <p className="text-[0.5625rem] font-bold tracking-wide text-muted-foreground uppercase">
-            {label}
-          </p>
+          <p className="text-sm font-bold tracking-wide text-foreground uppercase">{label}</p>
           <p className="text-xs text-muted-foreground">{emptyDetail}</p>
         </div>
       </div>
@@ -346,39 +512,20 @@ function SquadRow({
       className="flex w-full items-center gap-2.5 border-t py-2.5 text-left first:border-t-0 first:pt-0"
     >
       {icon}
+      <PlayerAvatar player={player} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="text-[0.5625rem] font-bold tracking-wide text-muted-foreground uppercase">
-          {label}
-        </p>
+        <p className="text-sm font-bold tracking-wide text-foreground uppercase">{label}</p>
         <p className="truncate text-sm font-semibold">{`${player.first_name} ${player.last_name}`}</p>
-        {stats ? (
-          <div className="mt-1 flex gap-6">
-            <div className="flex items-center gap-2">
-              <History className="size-7 shrink-0 text-primary" aria-hidden="true" />
-              <div>
-                <p className="text-xl font-bold tabular-nums">{stats.last5Record}</p>
-                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                  Last 5
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
-              <div>
-                <p className="text-xl font-bold tabular-nums">
-                  {stats.forcedToUnforcedRatio === null
-                    ? "—"
-                    : stats.forcedToUnforcedRatio.toFixed(1)}
-                </p>
-                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                  Forced : Unforced
-                </p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">{detail}</p>
-        )}
+        <ResultDots results={member.last5_results} className="mt-1" />
+      </div>
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <p className="text-base font-bold tabular-nums">{display}</p>
+        {/* A small fixed-width bar, not a full-width one — this is a relative
+         *  sense of proportion at a glance, not a chart in its own right, so
+         *  it shouldn't compete with the row's name/value for width. */}
+        <div className="h-1.5 w-10 overflow-hidden rounded-sm bg-muted" aria-hidden="true">
+          <div className={cn("h-full", PATTERN_CLASS.indigo)} style={{ width: `${value}%` }} />
+        </div>
       </div>
       <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
     </Link>
@@ -416,8 +563,8 @@ function AttentionCard({
       >
         <ItemMedia>
           {/* CircleAlert, not TriangleAlert — TriangleAlert already means "unforced
-              error" point-ender style (rally-tab.tsx), per
-              .claude/rules/web-icons.md's canonical registry. */}
+              error" point-ender style (rally-tab.tsx) and Home's own "most mistakes"
+              row above, per .claude/rules/web-icons.md's canonical registry. */}
           <CircleAlert className="size-5 text-outcome-forced" aria-hidden="true" />
         </ItemMedia>
         <ItemContent>
@@ -438,103 +585,6 @@ function AttentionCard({
         <X className="size-4" />
       </Button>
     </div>
-  );
-}
-
-function recordFrom(results: readonly ("win" | "loss")[]): string {
-  const wins = results.filter((result) => result === "win").length;
-  return formatRecord(wins, results.length - wins);
-}
-
-function ContinueWithCard({ player }: { player: PlayerRead }) {
-  const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
-  const { data: matches } = useQuery(listMatchesOptions({ query: { player_id: player.id } }));
-
-  const lastMatch = matches?.[0];
-  const lastViewedAt = getLastViewedAt();
-  const last5 = overview?.recent_results.slice(-5) ?? [];
-
-  return (
-    <Card>
-      <CardContent className="flex flex-col gap-3">
-        {/* Same destination as "View full stats" below — a coach already
-            reading this card by name has already decided to look, so the
-            whole header goes there directly rather than through a picker. */}
-        <Item
-          className="min-w-0 p-0"
-          render={
-            <Link
-              to="/players/$playerId"
-              params={{ playerId: player.id }}
-              onClick={() => setLastViewedPlayerId(player.id)}
-            />
-          }
-        >
-          <ItemMedia>
-            <PlayerAvatar player={player} />
-          </ItemMedia>
-          <ItemContent>
-            <ItemTitle>{`${player.first_name} ${player.last_name}`}</ItemTitle>
-            <p className="text-xs text-muted-foreground">
-              {lastViewedAt !== null && `Last viewed ${relativeTimeFrom(lastViewedAt)}`}
-              {lastViewedAt !== null && lastMatch && " · "}
-              {lastMatch && `vs ${lastMatch.opponent_name ?? "unknown"}`}
-            </p>
-          </ItemContent>
-          <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        </Item>
-
-        {last5.length > 0 && (
-          <div className="flex gap-1">
-            {last5.map((result, index) => (
-              <span
-                key={index}
-                role="img"
-                aria-label={result === "win" ? "Won" : "Lost"}
-                className={cn(
-                  "size-2.5 shrink-0 rounded-full",
-                  result === "win" ? "bg-outcome-win" : "border border-muted-foreground",
-                )}
-              />
-            ))}
-          </div>
-        )}
-
-        {overview && (
-          <div className="flex gap-6">
-            <div className="flex items-center gap-2">
-              <History className="size-7 shrink-0 text-primary" aria-hidden="true" />
-              <div>
-                <p className="text-xl font-bold tabular-nums">{recordFrom(last5)}</p>
-                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                  Last 5
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Swords className="size-7 shrink-0 text-primary" aria-hidden="true" />
-              <div>
-                <p className="text-xl font-bold tabular-nums">
-                  {overview.forced_to_unforced ? overview.forced_to_unforced.value.toFixed(1) : "—"}
-                </p>
-                <p className="text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                  Forced : Unforced
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <Link
-          to="/players/$playerId"
-          params={{ playerId: player.id }}
-          onClick={() => setLastViewedPlayerId(player.id)}
-          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
-        >
-          View full stats
-        </Link>
-      </CardContent>
-    </Card>
   );
 }
 

@@ -1,18 +1,17 @@
 import type { SquadMemberStats, TrackedStat } from "@matchpoint/api-client";
 
-import type { AttentionResult, FormRankEntry, MatchOutcome } from "./types.provisional";
-import { formatRecord } from "@/lib/format-record";
+import type { AttentionResult } from "./types.provisional";
 
 /**
- * The home screen's "needs attention" decision, and the best/worst form
- * ranking that sits alongside it in the squad snapshot.
+ * The home screen's "needs attention" decision.
  *
  * Two tiers, checked in order, exactly one flag surfaced per player:
  *
  * Tier 1 — hard flags. A losing streak of `LOSING_STREAK_THRESHOLD` or more,
- * or no match logged in `STALE_DATA_DAYS`+. These are operational, not
- * statistical: a coach needs to know about them regardless of how any number
- * is trending, so they short-circuit Tier 2 entirely.
+ * or no match ever logged. These are operational, not statistical: a coach
+ * needs to know about them regardless of how any number is trending, so they
+ * short-circuit Tier 2 entirely. Elapsed days alone no longer hard-flags —
+ * a quiet fortnight isn't itself a problem, only ever logging nothing is.
  *
  * Tier 2 — only checked when Tier 1 didn't fire. For each tracked stat,
  * compute a z-score against the player's *own* rolling average — never the
@@ -41,13 +40,8 @@ import { formatRecord } from "@/lib/format-record";
  */
 
 export const LOSING_STREAK_THRESHOLD = 3;
-export const STALE_DATA_DAYS = 14;
 
 export const DECLINE_Z_THRESHOLD = 1.5;
-
-/** Below this many matches this period, a form ranking would be swung by a
- *  single result — not enough sample to call it a rank. */
-export const MIN_MATCHES_FOR_FORM_RANK = 3;
 
 function hardFlagReason(member: SquadMemberStats): string | null {
   if (
@@ -57,13 +51,10 @@ function hardFlagReason(member: SquadMemberStats): string | null {
   ) {
     return `${member.current_streak.length}-match losing streak`;
   }
-  // Distinct from the stale-data message below: null means this player has
-  // never logged a match at all, not that their data has gone quiet.
+  // null means this player has never logged a match at all, distinct from a
+  // recent player simply having gone quiet for a while (no longer flagged).
   if (member.days_since_last_match === null) {
     return "No matches logged yet";
-  }
-  if (member.days_since_last_match >= STALE_DATA_DAYS) {
-    return "No matches logged in 14+ days";
   }
   return null;
 }
@@ -125,48 +116,4 @@ export function pickSquadAttention(members: SquadMemberStats[]): AttentionResult
   }
 
   return winner?.result ?? null;
-}
-
-function recordFrom(results: MatchOutcome[]): string {
-  const wins = results.filter((result) => result === "win").length;
-  return formatRecord(wins, results.length - wins);
-}
-
-function winRate(record: { wins: number; losses: number }): number {
-  const total = record.wins + record.losses;
-  return total === 0 ? 0 : record.wins / total;
-}
-
-function toFormRankEntry(member: SquadMemberStats): FormRankEntry {
-  return {
-    playerId: member.player_id,
-    last5Record: recordFrom(member.last5_results),
-    forcedToUnforcedRatio: member.period_forced_to_unforced_ratio,
-  };
-}
-
-/** Best/worst current form across the squad, ranked by this period's actual
- *  win rate among players with `MIN_MATCHES_FOR_FORM_RANK`+ matches logged
- *  this period. Not the forced:unforced ratio shown beside the name — ranking
- *  by one number while displaying another let "Worst form" show a better W–L
- *  record than "Best form". */
-export function rankForm(members: SquadMemberStats[]): {
-  best: FormRankEntry | null;
-  worst: FormRankEntry | null;
-} {
-  const eligible = members.filter(
-    (member) => member.matches_logged_this_period >= MIN_MATCHES_FOR_FORM_RANK,
-  );
-  if (eligible.length === 0) return { best: null, worst: null };
-
-  const sorted = [...eligible].sort((a, b) => winRate(b.period_record) - winRate(a.period_record));
-  const bestMember = sorted[0]!;
-  const worstMember = sorted[sorted.length - 1]!;
-
-  return {
-    best: toFormRankEntry(bestMember),
-    // A single eligible player is both the best and worst performer, which
-    // isn't a real comparison — show them once, as best, rather than twice.
-    worst: bestMember === worstMember ? null : toFormRankEntry(worstMember),
-  };
 }

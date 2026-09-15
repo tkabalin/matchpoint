@@ -25,21 +25,18 @@ export function PrimaryMatchAction({ className }: { className?: string }) {
       <Link
         to="/new-match/$playerId"
         params={{ playerId: summary.trackedPlayerId }}
-        aria-label="Resume match in progress"
-        className={cn(buttonVariants({ size: "icon" }), FAB_POSITION, className)}
+        className={cn(buttonVariants({ size: "lg" }), FAB_POSITION, className)}
       >
-        <Play className="size-6" />
+        <Play className="size-5" />
+        Resume match in progress
       </Link>
     );
   }
 
   return (
-    <Link
-      to="/new-match"
-      aria-label="Start a match"
-      className={cn(buttonVariants({ size: "icon" }), FAB_POSITION, className)}
-    >
-      <Plus className="size-6" />
+    <Link to="/new-match" className={cn(buttonVariants({ size: "lg" }), FAB_POSITION, className)}>
+      <Plus className="size-5" />
+      Start a match
     </Link>
   );
 }

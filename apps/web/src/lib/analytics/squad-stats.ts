@@ -3,6 +3,7 @@ import type {
   PointEnderStyle,
   PointEnderStyles,
   RallyStats,
+  SquadMemberStats,
   SquadTrendPoint,
 } from "@matchpoint/api-client";
 import { CircleCheck, type LucideIcon, Swords, Trophy } from "lucide-react";
@@ -265,4 +266,54 @@ export function scaleToGroupRange(value: number, min: number, max: number): numb
   if (min === max) return 50;
   const share = (value - min) / (max - min);
   return POSITION_PADDING + share * (100 - 2 * POSITION_PADDING);
+}
+
+/** The two ends of a squad ranked by one metric. Entries whose `value` is
+ *  null are excluded entirely, matching every other ranking on this page:
+ *  nothing to rank without a computable number. A lone eligible entry (or
+ *  every eligible entry tied) comes back as `best` only, never duplicated as
+ *  `worst` too, so a squad of one doesn't imply a spread that isn't there. */
+export function pickBestWorst<T>(
+  entries: T[],
+  value: (entry: T) => number | null,
+): { best: T | null; worst: T | null } {
+  const eligible = entries.filter((entry) => value(entry) !== null);
+  if (eligible.length === 0) return { best: null, worst: null };
+  const sorted = [...eligible].sort((a, b) => value(b)! - value(a)!);
+  const best = sorted[0]!;
+  const worst = sorted[sorted.length - 1]!;
+  // Value equality, not object identity: a genuine tie across two different
+  // players is exactly as much "no real spread" as a single eligible entry
+  // compared against itself.
+  return { best, worst: value(best) === value(worst) ? null : worst };
+}
+
+/** Win percent over a player's own current-period record — the same shape as
+ *  `winPercent` above, but null instead of 0 when nobody's played a match
+ *  this period yet: `pickBestWorst` needs to tell "genuinely 0%" apart from
+ *  "no data", which the Squad stats leaderboard `winPercent` feeds never has
+ *  to (every leaderboard row is already a player with a real record). Every
+ *  Home ranking reads this period-wide record rather than a fixed last-N
+ *  window, so a squad with nobody on a 5-match streak yet still ranks
+ *  meaningfully instead of the rows going empty. */
+export function periodWinPercent(
+  record: Pick<SquadMemberStats["period_record"], "wins" | "losses">,
+): number | null {
+  const total = record.wins + record.losses;
+  return total === 0 ? null : (record.wins / total) * 100;
+}
+
+/** Forced errors suffered / (forced errors suffered + unforced errors) × 100,
+ *  over a player's own current period — the same "share of total" shape
+ *  `mistakeResilience` above has, scoped to `period_forced_errors_suffered`/
+ *  `period_unforced_errors` rather than a player's whole history.
+ *  `forced_errors_suffered` is forced upon this player by the opponent;
+ *  `unforced_errors` is this player's own free mistakes, so a high share
+ *  means most of their errors were the opponent's doing rather than their
+ *  own — steady, not sloppy. Null when neither has happened this period. */
+export function periodResiliencePercent(
+  member: Pick<SquadMemberStats, "period_forced_errors_suffered" | "period_unforced_errors">,
+): number | null {
+  const total = member.period_forced_errors_suffered + member.period_unforced_errors;
+  return total === 0 ? null : (member.period_forced_errors_suffered / total) * 100;
 }

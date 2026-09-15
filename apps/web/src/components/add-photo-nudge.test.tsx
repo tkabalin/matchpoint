@@ -80,7 +80,7 @@ test("choosing a photo uploads it and closes the picker", async () => {
   const user = userEvent.setup({ delay: null });
   renderNudge();
 
-  await user.click(screen.getByRole("button", { name: "Add" }));
+  await user.click(screen.getByRole("button", { name: "Add a profile photo" }));
   await user.click(await screen.findByRole("button", { name: "Choose photo" }));
   const file = new File(["x"], "photo.jpg", { type: "image/jpeg" });
   const input = document.querySelector('input[type="file"]') as HTMLInputElement;

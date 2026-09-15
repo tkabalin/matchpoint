@@ -7,6 +7,7 @@ import { AppPage, PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { cn } from "@/lib/utils";
 
 import { PlayerList } from "./player-list";
 import { RedeemTransferCodeSheet } from "./redeem-transfer-code-sheet";
@@ -55,7 +56,7 @@ export function PlayersPage() {
         size="icon"
         aria-label="Add player"
         onClick={() => setAdding(true)}
-        className={FAB_POSITION}
+        className={cn(FAB_POSITION, "size-12 rounded-full")}
       >
         <Plus className="size-6" />
       </Button>

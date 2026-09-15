@@ -1,7 +1,7 @@
 import type { SquadMemberStats } from "@matchpoint/api-client";
 import { expect, test } from "vitest";
 
-import { attentionFor, pickSquadAttention, rankForm } from "./attention";
+import { attentionFor, pickSquadAttention } from "./attention";
 
 function member(overrides: Partial<SquadMemberStats> = {}): SquadMemberStats {
   return {
@@ -65,24 +65,20 @@ test("a losing streak below the threshold does not fire", () => {
   expect(attentionFor(notFlagged)).toBeNull();
 });
 
-test("Tier 1 fires on stale data at 14+ days, even mid win-streak", () => {
-  const flagged = member({
+test("Tier 1 no longer hard-flags on elapsed days alone, even well past two weeks", () => {
+  const notFlagged = member({
     current_streak: { outcome: "win", length: 4 },
-    days_since_last_match: 14,
+    days_since_last_match: 30,
   });
 
-  const result = attentionFor(flagged);
-
-  expect(result?.reason).toBe("No matches logged in 14+ days");
-  expect(result?.severity).toBe(Infinity);
+  expect(attentionFor(notFlagged)).toBeNull();
 });
 
-// Distinct from the stale-data message above: a player who has never once
-// logged a match isn't "gone quiet", they've never started.
-test("Tier 1 states a player has never logged a match, distinctly from stale data", () => {
+test("Tier 1 states a player has never logged a match", () => {
   const flagged = member({ days_since_last_match: null });
 
   expect(attentionFor(flagged)?.reason).toBe("No matches logged yet");
+  expect(attentionFor(flagged)?.severity).toBe(Infinity);
 });
 
 // The old gate compared `matches_logged_this_period` (a calendar-year count
@@ -289,68 +285,4 @@ test("ties break by recency, most recent match wins", () => {
 
 test("nobody flagged is a legitimate result, not a fallback to the least-bad player", () => {
   expect(pickSquadAttention([member(), member({ player_id: "player-2" })])).toBeNull();
-});
-
-test("rankForm excludes players below the minimum sample for a fair ranking", () => {
-  const tooFew = member({ player_id: "too-few", matches_logged_this_period: 2 });
-  const eligible = member({ player_id: "eligible", matches_logged_this_period: 3 });
-
-  const { best, worst } = rankForm([tooFew, eligible]);
-
-  expect(best?.playerId).toBe("eligible");
-  expect(worst).toBeNull();
-});
-
-// The forced:unforced ratio below is deliberately inverted from the win rate
-// — "top" has the worst ratio and "bottom" has the best — to prove the
-// ranking follows `period_record`, not the ratio shown beside each name.
-// Ranking by the ratio while displaying the record let "Worst form" show a
-// numerically better W–L than "Best form" (the bug this fixes).
-test("rankForm ranks by this period's win rate, not the forced:unforced ratio", () => {
-  const top = member({
-    player_id: "top",
-    period_record: { wins: 5, losses: 0 },
-    period_forced_to_unforced_ratio: 0.5,
-    last5_results: ["win", "win", "win"],
-  });
-  const middle = member({ player_id: "middle", period_record: { wins: 3, losses: 3 } });
-  const bottom = member({
-    player_id: "bottom",
-    period_record: { wins: 0, losses: 5 },
-    period_forced_to_unforced_ratio: 2.4,
-    last5_results: ["loss", "loss"],
-  });
-
-  const { best, worst } = rankForm([middle, top, bottom]);
-
-  expect(best).toEqual({ playerId: "top", last5Record: "3W – 0L", forcedToUnforcedRatio: 0.5 });
-  expect(worst).toEqual({ playerId: "bottom", last5Record: "0W – 2L", forcedToUnforcedRatio: 2.4 });
-});
-
-test("rankForm passes through a null forced:unforced ratio rather than crashing", () => {
-  const player = member({ period_forced_to_unforced_ratio: null });
-
-  const { best } = rankForm([player]);
-
-  expect(best).toEqual({
-    playerId: "player-1",
-    last5Record: "4W – 1L",
-    forcedToUnforcedRatio: null,
-  });
-});
-
-test("rankForm shows a single eligible player once, not as both best and worst", () => {
-  const onlyOne = member({ player_id: "solo" });
-
-  const { best, worst } = rankForm([onlyOne]);
-
-  expect(best?.playerId).toBe("solo");
-  expect(worst).toBeNull();
-});
-
-test("rankForm returns nulls when nobody has enough matches logged", () => {
-  const { best, worst } = rankForm([member({ matches_logged_this_period: 1 })]);
-
-  expect(best).toBeNull();
-  expect(worst).toBeNull();
 });

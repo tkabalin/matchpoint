@@ -6,12 +6,11 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
+import { PlayerCard } from "@/components/player-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getErrorStatus } from "@/lib/error-status";
-
-import { PlayerCard } from "./player-card";
 
 /**
  * The roster, read through the generated client, grouped by surname initial.
