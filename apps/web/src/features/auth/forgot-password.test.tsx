@@ -327,15 +327,24 @@ test("sends one verify-reset-code however impatiently Verify is clicked", async 
   expect(await screen.findByLabelText("New password")).toBeInTheDocument();
 });
 
-test("requesting a new code from the OTP step returns to the email step with the email preserved", async () => {
+test("starting over from the OTP step returns to the email step with the email preserved", async () => {
   const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+  await user.click(screen.getByRole("button", { name: "Start over" }));
 
   expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
   expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
+});
+
+test("links back to sign in from the OTP step", async () => {
+  const user = userEvent.setup({ delay: null });
+  await goToOtpStep(user);
+
+  await user.click(screen.getByRole("link", { name: "Back to sign in" }));
+
+  expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
 async function goToPasswordStep(user: ReturnType<typeof userEvent.setup>) {
