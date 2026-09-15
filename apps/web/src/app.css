@@ -309,6 +309,11 @@
   }
   html {
     @apply font-sans;
+    /* Reserve the scrollbar's gutter whether or not this page needs one. The
+       document is what scrolls, so a tab tall enough to need a scrollbar took
+       ~15px off the viewport that a short one didn't, jumping the centred logo
+       in the header sideways on every tab change. */
+    scrollbar-gutter: stable;
   }
   /* A single overflowing descendant, anywhere in the tree, can otherwise push
      the whole page into horizontal scroll — on mobile WebKit that also
