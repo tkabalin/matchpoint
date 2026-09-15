@@ -164,6 +164,9 @@ export function SyncStatus({ coachId }: { coachId: string }) {
   const online = useOnlineStatus();
   const [detailOpen, setDetailOpen] = useState(false);
 
+  // Rendered at the right of a screen's heading row, beside a title that never shrinks,
+  // so on a narrow phone this is what wraps: `min-w-0` lets it shrink at all, and the
+  // badge drops its fixed height and nowrap for the same reason.
   if (failed > 0) {
     return (
       <>
@@ -172,11 +175,11 @@ export function SyncStatus({ coachId }: { coachId: string }) {
           onClick={() => {
             setDetailOpen(true);
           }}
-          className="self-start"
+          className="min-w-0 text-right"
         >
-          <Badge variant="destructive">
-            <CloudAlert className="size-3" aria-hidden="true" />
-            {failed === 1 ? "1 point failed" : `${String(failed)} points failed`}
+          <Badge variant="destructive" className="h-auto min-h-5 whitespace-normal">
+            <CloudAlert className="size-3 shrink-0" aria-hidden="true" />
+            {failed === 1 ? "1 point failed to sync" : `${String(failed)} points failed to sync`}
           </Badge>
         </button>
         <FailedDetailSheet coachId={coachId} open={detailOpen} onOpenChange={setDetailOpen} />
@@ -186,7 +189,7 @@ export function SyncStatus({ coachId }: { coachId: string }) {
 
   if (!online) {
     return (
-      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5 text-right text-xs text-muted-foreground">
         <WifiOff className="size-3.5 shrink-0" aria-hidden="true" />
         {pending > 0
           ? `Offline — ${String(pending)} ${pending === 1 ? "point" : "points"} will sync when reconnected`
@@ -197,7 +200,7 @@ export function SyncStatus({ coachId }: { coachId: string }) {
 
   if (pending > 0) {
     return (
-      <Badge variant="secondary" className="self-start">
+      <Badge variant="secondary" className="min-w-0">
         <RefreshCw className="size-3" aria-hidden="true" />
         {pending === 1 ? "1 syncing" : `${String(pending)} syncing`}
       </Badge>

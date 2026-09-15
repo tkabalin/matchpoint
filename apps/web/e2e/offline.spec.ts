@@ -345,7 +345,7 @@ test.describe("drain behaviour", () => {
     // the whole coach's queue, not just the one match on screen (#115).
     await openCapture(page, keptPlayerId);
     await tapOutMatch(page, "Another opponent", []);
-    await page.getByText("1 point failed").click();
+    await page.getByText("1 point failed to sync").click();
     await expect(page.getByText("Unknown player_id")).toBeVisible();
 
     await page.getByRole("button", { name: "Retry" }).click();

@@ -9,6 +9,7 @@
 
 import { RotateCcw, Spade } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -49,10 +50,13 @@ export function ServeScreen({
   step,
   draft,
   onAction,
+  syncStatus,
 }: {
   step: Extract<CaptureStep, { name: "SERVE" }>;
   draft: PointDraft;
   onAction: (action: CaptureAction) => void;
+  // Sits at the right of the heading row, wrapping rather than pushing into the title.
+  syncStatus?: ReactNode;
 }) {
   // A let leaves the flow exactly where it was, so the only thing to show for it is a
   // message this screen owns; every other tap moves the step and re-derives the line.
@@ -143,13 +147,16 @@ export function ServeScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-3xl font-semibold tracking-[-0.02em]">
-            {step.number === 1 ? "1st Serve" : "2nd Serve"}
-          </h1>
-          <Badge variant="ghost" className="bg-accent text-primary">
-            {live === "DEUCE" ? "Deuce court" : "Ad court"}
-          </Badge>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex shrink-0 items-baseline gap-2.5">
+            <h1 className="text-3xl font-semibold tracking-[-0.02em]">
+              {step.number === 1 ? "1st Serve" : "2nd Serve"}
+            </h1>
+            <Badge variant="ghost" className="bg-accent text-primary">
+              {live === "DEUCE" ? "Deuce court" : "Ad court"}
+            </Badge>
+          </div>
+          {syncStatus}
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground" role="status">
           {status}

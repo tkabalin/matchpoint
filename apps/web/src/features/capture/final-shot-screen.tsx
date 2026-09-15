@@ -30,7 +30,7 @@ import {
   Rainbow,
   TrendingUp,
 } from "lucide-react";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -75,10 +75,13 @@ const HEADER_HEIGHT_FRACTION = 0.12;
 export function FinalShotScreen({
   zoomTo,
   onAction,
+  syncStatus,
 }: {
   /** The region the final ball landed in — see court-geometry.ts's own comment. */
   zoomTo: CourtRegion;
   onAction: (action: CaptureAction) => void;
+  // Sits at the right of the heading row, wrapping rather than pushing into the title.
+  syncStatus?: ReactNode;
 }) {
   // Set once, by whichever exit fires first — onAction itself waits for the zoom this
   // triggers (CourtDiagram animates its own zoom whenever zoomTo changes) rather than
@@ -114,7 +117,10 @@ export function FinalShotScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
-        <h1 className="text-3xl font-semibold tracking-[-0.02em]">Final shot</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="shrink-0 text-3xl font-semibold tracking-[-0.02em]">Final shot</h1>
+          {syncStatus}
+        </div>
         <p className="mt-1.5 text-sm text-muted-foreground">Pick the shot that ended the point</p>
       </div>
 

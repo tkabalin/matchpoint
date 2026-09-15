@@ -14,6 +14,7 @@
 
 import { RotateCcw } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -39,10 +40,13 @@ export function FinalBallScreen({
   trackedPlayerName,
   opponentName,
   onAction,
+  syncStatus,
 }: {
   trackedPlayerName: string;
   opponentName: string;
   onAction: (action: CaptureAction) => void;
+  // Sits at the right of the heading row, wrapping rather than pushing into the title.
+  syncStatus?: ReactNode;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
   const [pending, setPending] = useState(false);
@@ -70,7 +74,10 @@ export function FinalBallScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
-        <h1 className="text-3xl font-semibold tracking-[-0.02em]">Final ball</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="shrink-0 text-3xl font-semibold tracking-[-0.02em]">Final ball</h1>
+          {syncStatus}
+        </div>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Tap where the last good ball finished
         </p>

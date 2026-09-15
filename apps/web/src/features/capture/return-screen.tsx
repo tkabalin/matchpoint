@@ -10,6 +10,7 @@
 
 import { BicepsFlexed, CircleX, RotateCcw, Spade } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,9 +27,12 @@ import type { FailureMode } from "./point";
 export function ReturnScreen({
   step,
   onAction,
+  syncStatus,
 }: {
   step: Extract<CaptureStep, { name: "SERVE" }>;
   onAction: (action: CaptureAction) => void;
+  // Sits at the right of the heading row, wrapping rather than pushing into the title.
+  syncStatus?: ReactNode;
 }) {
   // Where the return missed, held while the coach says whether it was forced. Null
   // whenever no follow-up is pending.
@@ -105,11 +109,14 @@ export function ReturnScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-3xl font-semibold tracking-[-0.02em]">Return</h1>
-          <Badge variant="ghost" className="bg-accent text-primary">
-            Only safe area
-          </Badge>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex shrink-0 items-baseline gap-2.5">
+            <h1 className="text-3xl font-semibold tracking-[-0.02em]">Return</h1>
+            <Badge variant="ghost" className="bg-accent text-primary">
+              Only safe area
+            </Badge>
+          </div>
+          {syncStatus}
         </div>
         <p className="mt-1.5 text-sm text-muted-foreground" role="status">
           {status}

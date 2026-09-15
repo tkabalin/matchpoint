@@ -15,6 +15,7 @@
  */
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -37,10 +38,13 @@ const BUCKET_LABELS: { bucket: RallyBucket; label: string }[] = [
 export function RallyLengthScreen({
   zoomTo,
   onAction,
+  syncStatus,
 }: {
   /** The region the final ball just landed in — see court-geometry.ts's own comment. */
   zoomTo: CourtRegion;
   onAction: (action: CaptureAction) => void;
+  // Sits at the right of the heading row, wrapping rather than pushing into the title.
+  syncStatus?: ReactNode;
 }) {
   // Starts full-court (matching the frame this screen replaces) and zooms in a beat
   // after mounting, rather than snapping straight to `zoomTo` — see this file's doc
@@ -63,7 +67,10 @@ export function RallyLengthScreen({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
-        <h1 className="text-3xl font-semibold tracking-[-0.02em]">Rally length</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="shrink-0 text-3xl font-semibold tracking-[-0.02em]">Rally length</h1>
+          {syncStatus}
+        </div>
         <p className="mt-1.5 text-sm text-muted-foreground">How many shots were played</p>
       </div>
 

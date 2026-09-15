@@ -586,6 +586,10 @@ export function LiveMatch({
             }
           : onExit;
 
+  // Each screen seats this at the right of its own heading row, so it sits inline with
+  // the title rather than as a band of its own between the header and the court.
+  const syncStatus = <SyncStatus coachId={coachId} />;
+
   return (
     // `display: contents` because custom properties inherit down the DOM tree rather
     // than the box tree: the surface reaches every court below without this wrapper
@@ -611,13 +615,11 @@ export function LiveMatch({
         }}
       />
 
-      <SyncStatus coachId={coachId} />
-
       {step.name === "SERVE" &&
         (draft.server === "TRACKED" ? (
-          <ServeScreen step={step} draft={draft} onAction={dispatch} />
+          <ServeScreen step={step} draft={draft} onAction={dispatch} syncStatus={syncStatus} />
         ) : (
-          <ReturnScreen step={step} onAction={dispatch} />
+          <ReturnScreen step={step} onAction={dispatch} syncStatus={syncStatus} />
         ))}
 
       {step.name === "BALL_LOCATION" && (
@@ -625,10 +627,13 @@ export function LiveMatch({
           trackedPlayerName={playerName}
           opponentName={opponentName}
           onAction={dispatch}
+          syncStatus={syncStatus}
         />
       )}
 
-      {step.name === "RALLY_LENGTH" && <RallyLengthScreen zoomTo={zoomTo!} onAction={dispatch} />}
+      {step.name === "RALLY_LENGTH" && (
+        <RallyLengthScreen zoomTo={zoomTo!} onAction={dispatch} syncStatus={syncStatus} />
+      )}
 
       {step.name === "ENDING" && (
         <EndingScreen
@@ -637,10 +642,13 @@ export function LiveMatch({
           trackedPlayerName={playerName}
           opponentName={opponentName}
           onAction={dispatch}
+          syncStatus={syncStatus}
         />
       )}
 
-      {step.name === "SHOT_DETAIL" && <FinalShotScreen zoomTo={zoomTo!} onAction={dispatch} />}
+      {step.name === "SHOT_DETAIL" && (
+        <FinalShotScreen zoomTo={zoomTo!} onAction={dispatch} syncStatus={syncStatus} />
+      )}
 
       {(step.name === "UNUSUAL_OUTCOME" || step.name === "UNUSUAL_REASON") && (
         <UnusualPointSheet
