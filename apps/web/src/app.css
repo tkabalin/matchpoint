@@ -265,6 +265,10 @@
   background-color: var(--color-outcome-forced);
   background-image: radial-gradient(rgb(0 0 0 / 0.45) 3px, transparent 3.5px);
   background-size: 14px 14px;
+  /* Centered so a box shorter than the tile still shows a dot's widest
+     cross-section, not the top-left corner's crescent (home.tsx's roster
+     form band, at h-1.5, is well under the 14px tile height). */
+  background-position: center;
 }
 
 @utility pattern-unforced {

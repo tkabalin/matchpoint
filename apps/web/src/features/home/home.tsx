@@ -662,7 +662,7 @@ function RosterTile({ player }: { player: PlayerRead }) {
       className="flex shrink-0 flex-col items-center gap-1"
     >
       <PlayerAvatar player={player} size="xl" />
-      <span className={cn("h-0.5 w-16 rounded-sm", tone)} aria-hidden="true" />
+      <span className={cn("h-1.5 w-16 rounded-sm", tone)} aria-hidden="true" />
       <span className="text-xs">{player.first_name}</span>
     </Link>
   );
