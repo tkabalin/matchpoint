@@ -11,6 +11,17 @@ paths:
 - New tokens (colours, spacing, fonts) go in `@theme` and are used via the generated utilities.
   Don't hardcode hex values in `className`.
 
+## The hover cursor is a base rule, not a per-component class
+
+- `app.css`'s `button:not(:disabled) { cursor: pointer }` covers every button in the app, including
+  the bare ones a feature builds itself and the ones Base UI renders inside `Toggle`, `Tabs` and
+  `SelectTrigger`. Don't add `cursor-pointer` to a new button or to a `components/ui/` base class:
+  it's already there, and a per-component copy is what let this drift in the first place (only
+  `Button` had it, so roughly thirty other buttons showed the arrow).
+- A component that genuinely wants a different cursor still says so with a utility, which wins over
+  the base layer: `disabled:cursor-not-allowed`, `SelectItem`'s `cursor-default` (a select option
+  follows the native menu convention, not the trigger's).
+
 ## The page itself must never scroll horizontally
 
 - Only a component's own explicitly-built strip (`overflow-x-auto` on a specific, narrow container —
