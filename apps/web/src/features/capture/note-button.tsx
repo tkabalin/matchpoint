@@ -5,7 +5,9 @@
  * Voice-first where the browser can transcribe live: tap to start, and a panel drops
  * down from the header with a text field that fills in as the coach speaks, plus the
  * Cancel and Save pair that ends it. The button itself becomes that same Save, since a
- * thumb already on it shouldn't have to travel. The field stays plain-text editable
+ * thumb already on it shouldn't have to travel; it keeps the speech-bubble icon while
+ * it does, which is what marks it as still the note control, and its label says what
+ * the tap now does. The field stays plain-text editable
  * throughout, so a coach can correct a mis-heard word and have their edit, not the raw
  * transcript, become the note. That panel is a plain absolutely-positioned block
  * anchored under `MatchHeader` (its `relative` root), not the shared `Sheet`: a modal
@@ -28,7 +30,7 @@
  * error, transcript so far pre-filled and left for the coach to save or cancel by hand.
  */
 
-import { MessageCircle, Save } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import { type Ref, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -339,7 +341,7 @@ export function NoteButton({
           phase === "listening" && "bg-recording text-recording-foreground hover:bg-recording/90",
         )}
       >
-        {phase === "idle" ? <MessageCircle className="size-5" /> : <Save className="size-5" />}
+        <MessageCircle className="size-5" />
       </Button>
 
       {phase !== "idle" && (
@@ -352,7 +354,10 @@ export function NoteButton({
           onKeyDown={(event) => {
             if (event.key === "Escape") cancelDictation();
           }}
-          className="absolute inset-x-0 top-full z-30 mt-1 rounded-sm border border-border bg-popover p-3 text-popover-foreground shadow-xl"
+          // Above z-30: the court below draws its serve marker and player labels at
+          // that level, and being later in the DOM they would otherwise sit on top of
+          // a panel this one overlaps by design.
+          className="absolute inset-x-0 top-full z-40 mt-1 rounded-sm border border-border bg-popover p-3 text-popover-foreground shadow-xl"
         >
           <p role="status" className="mb-2 text-sm font-medium text-muted-foreground">
             {phase === "listening"
