@@ -90,7 +90,10 @@ export function PlayerInsightsCard({
     })),
   });
 
-  const isPending = inView && results.some((result) => result.isPending);
+  // Not yet observed counts as pending, not as answered: the queries are gated on
+  // `inView`, so until the observer fires there is no data and no request either,
+  // and the empty state below would claim there is nothing to plot.
+  const isPending = !inView || results.some((result) => result.isPending);
   const rallyStatsById = new Map(
     players
       .map((player, index) => [player.id, results[index]?.data] as const)
