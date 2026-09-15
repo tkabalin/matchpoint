@@ -35,7 +35,7 @@ Expected CSV files, read from /tmp inside the container:
   coaches.csv:  email,display_name
   players.csv:  coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
   matches.csv:  coach_email,player_first_name,player_last_name,opponent_name,played_on,
-                surface,event,scoring_system,result,match_key
+                surface,event,scoring_system,result,result_reason,match_key
   points.csv:   coach_email,match_key,sequence,server,won,court_side,serve1_outcome,
                 serve1_fault_mode,serve2_outcome,serve2_fault_mode,
                 return_outcome,end_reason,unusual_reason,note,wing,shot_type,ball_in,
@@ -52,6 +52,7 @@ Expected CSV files, read from /tmp inside the container:
 - scoring_system: traditional | mens_grand_slam | no_ad_scoring |
   match_tiebreak_10_points | short_sets | pro_set | legacy (blank = unset)
 - result: win | loss (blank = unset)
+- result_reason: completed | retirement | walkover | default (blank = unset)
 - match_key: an arbitrary label, unique per coach (blank = this match has no points).
   It exists only to join points.csv to a match here; it is never stored, so a match
   created without points never needs one.
@@ -114,6 +115,7 @@ from matchpoint_api.models import (
     Gender,
     Match,
     MatchResult,
+    MatchResultReason,
     MatchSide,
     Player,
     Point,
@@ -302,6 +304,9 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                 ScoringSystem(v) if (v := _blank_to_none(row["scoring_system"])) else None
             )
             result = MatchResult(v) if (v := _blank_to_none(row["result"])) else None
+            result_reason = (
+                MatchResultReason(v) if (v := _blank_to_none(row["result_reason"])) else None
+            )
         except ValueError as exc:
             raise ValueError(f"matches.csv line {line_number}: {exc}") from exc
         opponent_name = _blank_to_none(row["opponent_name"])
@@ -322,6 +327,7 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         match.surface = surface
         match.scoring_system = scoring_system
         match.result = result
+        match.result_reason = result_reason
         match_by_identity[identity] = match
         if match_key := _blank_to_none(row["match_key"]):
             match_by_key[(row["coach_email"].lower(), match_key)] = match

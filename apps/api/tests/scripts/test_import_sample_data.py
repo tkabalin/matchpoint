@@ -23,6 +23,7 @@ from matchpoint_api.models import (
     Gender,
     Match,
     MatchResult,
+    MatchResultReason,
     MatchSet,
     MatchSide,
     Player,
@@ -101,6 +102,7 @@ def match_row(**overrides: str) -> dict[str, str]:
         "event": "",
         "scoring_system": "",
         "result": "",
+        "result_reason": "",
         "match_key": "m1",
     } | overrides
 
@@ -306,6 +308,7 @@ def test_a_match_row_links_to_its_player_and_carries_its_columns(
                 event="Club Champs",
                 scoring_system="short_sets",
                 result="win",
+                result_reason="retirement",
             )
         ],
     )
@@ -321,6 +324,7 @@ def test_a_match_row_links_to_its_player_and_carries_its_columns(
     assert match.event == "Club Champs"
     assert match.scoring_system is ScoringSystem.SHORT_SETS
     assert match.result is MatchResult.WIN
+    assert match.result_reason is MatchResultReason.RETIREMENT
 
 
 def test_a_matchs_blank_columns_land_as_null(db_session: Session, tmp_path: Path) -> None:
@@ -334,6 +338,7 @@ def test_a_matchs_blank_columns_land_as_null(db_session: Session, tmp_path: Path
     assert match.event is None
     assert match.scoring_system is None
     assert match.result is None
+    assert match.result_reason is None
 
 
 def test_a_match_row_with_no_played_on_names_its_line(db_session: Session, tmp_path: Path) -> None:
@@ -697,7 +702,7 @@ def test_a_re_run_refreshes_a_corrected_player_and_match(
     _write_dataset(
         tmp_path,
         players=[player_row(dominant_hand="left", notes="Left-handed after all.")],
-        matches=[match_row(surface="grass", result="loss")],
+        matches=[match_row(surface="grass", result="loss", result_reason="walkover")],
     )
     run_import(db_session, tmp_path, STUB_HASH)
 
@@ -707,6 +712,7 @@ def test_a_re_run_refreshes_a_corrected_player_and_match(
     assert player.notes == "Left-handed after all."
     assert match.surface is Surface.GRASS
     assert match.result is MatchResult.LOSS
+    assert match.result_reason is MatchResultReason.WALKOVER
 
 
 def test_a_re_run_rehashes_the_coaches_it_reused(db_session: Session, tmp_path: Path) -> None:

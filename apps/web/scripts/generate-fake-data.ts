@@ -1107,6 +1107,7 @@ const IMPORT_MATCH_COLUMNS = [
   "event",
   "scoring_system",
   "result",
+  "result_reason",
   "match_key",
 ];
 
@@ -1304,6 +1305,7 @@ writeFileSync(
         "",
         generated.match.scoringSystem,
         generated.outcome.trackedPlayerWon ? "win" : "loss",
+        generated.outcome.reason,
         generated.points.length === 0 ? "" : generated.match.matchId,
       ];
     }),

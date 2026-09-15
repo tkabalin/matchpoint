@@ -66,7 +66,7 @@ coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
 ## `matches.csv`
 
 ```
-coach_email,player_first_name,player_last_name,opponent_name,played_on,surface,event,scoring_system,result,match_key
+coach_email,player_first_name,player_last_name,opponent_name,played_on,surface,event,scoring_system,result,result_reason,match_key
 ```
 
 - `(coach_email, player_first_name, player_last_name)` must match a `players.csv` row
@@ -78,6 +78,8 @@ coach_email,player_first_name,player_last_name,opponent_name,played_on,surface,e
 - `scoring_system`: `traditional` \| `mens_grand_slam` \| `no_ad_scoring` \|
   `match_tiebreak_10_points` \| `short_sets` \| `pro_set` \| `legacy`, blank = unset.
 - `result`: `win` \| `loss` from the tracked player's side, blank = unset.
+- `result_reason`: `completed` \| `retirement` \| `walkover` \| `default`, how the
+  match reached that result, blank = unset.
 - `opponent_name`, `event`: free text, blank = unset.
 - `match_key`: any label, unique per coach, used only to join `points.csv` rows to
   this match — it's never stored. Leave it blank for a match with no points. A UUID,
