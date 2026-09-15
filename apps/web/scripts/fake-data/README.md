@@ -15,6 +15,14 @@ A `capture-data.json` sits here too after a run, holding the same data in the ma
 nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as
 the device stores them. It is gitignored for its size.
 
+## The roster
+
+Each coach's 12 players cycle through the same 12 archetypes (`players.csv`'s
+`archetype` column), so every squad has its all-court leader, its lefty big server, its pusher
+and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and
+the temperament reaches the points: an aggressive player ends rallies early, at the net, and
+hands over more unforced errors; a passive one lobs, drops and grinds.
+
 ## Reading a point
 
 A point's score fields (`won`, `server`, `court_side`, and the nine `context` stamps) are always
@@ -22,7 +30,7 @@ set. An empty observation field almost always means the field does not apply to 
 that the coach missed something: `wing` and `shot_type` are blank on every unforced error (the
 flow doesn't ask which stroke produced a miss), on aces, double faults and unusual points, and
 on a missed return, which `return_outcome` already places. The one genuine gap is a forced
-ending whose shot went unrecorded: 693 points, 7% of the 10,177 with no `wing`.
+ending whose shot went unrecorded: 1,928 points, 6% of the 32,576 with no `wing`.
 
 Everything else capture may leave unseen — the serve, the ending, the final ball — is a column
 `PointCreate` takes non-null, and a game skipped behind a score checkpoint is a game with no
@@ -41,5 +49,5 @@ import prints when it finishes.
 ## Regenerating
 
 ```sh
-pnpm --filter @matchpoint/web gen-fake-data -- --seed 13 --players 12 --matches 120
+pnpm --filter @matchpoint/web gen-fake-data -- --seed 13 --players 36 --matches 360
 ```

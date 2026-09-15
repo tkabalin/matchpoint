@@ -1,13 +1,37 @@
-player_id,first_name,last_name,username,date_of_birth,dominant_hand,gender,coach_id,notes
-552ac5df-9018-43d9-bcee-0eb110c25261,Liam,Khumalo,liam.khumalo55,2001-12-27,right,female,95100015-8dac-4428-9991-a6a51b615004,
-c6f82ac4-d594-4bf2-bbd9-12aa2b0dd942,Kagiso,de Villiers,kagiso.devilliers79,2002-11-26,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Rushes between points when behind.
-b643953f-7ec5-4dd0-994b-0903942a5374,Daniel,Adams,daniel.adams16,2002-04-23,right,other,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,
-fdf160ef-8da0-4b5a-8e88-c369e1381f97,Hannah,Naidoo,hannah.naidoo11,2001-02-24,right,other,95100015-8dac-4428-9991-a6a51b615004,Rushes between points when behind.
-1fb7bc75-3216-4b70-8e6d-5867b24acee1,Yusuf,Dlamini,yusuf.dlamini97,2003-05-14,right,female,e5b354b0-8136-4124-b12c-214efc260c23,
-94887155-f5cc-492b-a002-68d87a579d09,Chloe,Fourie,chloe.fourie94,2002-05-09,left,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Rushes between points when behind.
-a50af7e7-891f-4cea-ab28-48c82e5af653,Emma,Adams,emma.adams41,2009-06-03,right,male,95100015-8dac-4428-9991-a6a51b615004,
-27c1afb3-6d2e-4a3a-b5d6-0718fcab9b3c,Aisha,Khumalo,aisha.khumalo10,2003-09-18,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Second serve is the weak link — sits up on big points.
-31206876-ce9e-4341-83fe-113c55d65338,Yusuf,Nkosi,yusuf.nkosi87,2001-09-01,right,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Best mover in the squad; wins the long ones.
-e1c9d26d-80bf-4ddc-86b3-2285f72a1b35,Hannah,van Wyk,hannah.vanwyk61,2008-02-16,right,female,95100015-8dac-4428-9991-a6a51b615004,Net game is well ahead of the baseline game.
-81572184-0dce-4d12-8441-cf4c809d5a85,Jonas,Molefe,jonas.molefe82,2000-09-07,right,female,e5b354b0-8136-4124-b12c-214efc260c23,Best mover in the squad; wins the long ones.
-90d9154a-d8ac-49b3-988d-5b7ca63739bf,Sarah,Petersen,sarah.petersen95,2009-01-23,right,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Best mover in the squad; wins the long ones.
+player_id,first_name,last_name,username,date_of_birth,dominant_hand,gender,coach_id,notes,archetype
+552ac5df-9018-43d9-bcee-0eb110c25261,Liam,Khumalo,liam.khumalo55,2001-12-27,right,other,95100015-8dac-4428-9991-a6a51b615004,"Squad's benchmark. Nothing to fix, plenty to sharpen.",all-court leader
+2dc6f82a-c4d5-494b-b2cb-d912aa2b0dd9,Liam,Steyn,liam.steyn36,2007-02-22,right,female,e5b354b0-8136-4124-b12c-214efc260c23,"Squad's benchmark. Nothing to fix, plenty to sharpen.",all-court leader
+8e27b643-953f-47ec-9dd0-694b0903942a,Kagiso,van Wyk,kagiso.vanwyk41,2000-03-13,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,"Squad's benchmark. Nothing to fix, plenty to sharpen.",all-court leader
+12531efd-f160-4ef8-ba0b-5a3e88c369e1,Sarah,Molefe,sarah.molefe31,2001-07-04,left,other,95100015-8dac-4428-9991-a6a51b615004,Serve wins some matches on its own. Second serve is the tell.,lefty big server
+47df7245-1fb7-4bc7-9321-6b700e6d5867,Naledi,Nkosi,naledi.nkosi71,2003-03-08,left,female,e5b354b0-8136-4124-b12c-214efc260c23,Serve wins some matches on its own. Second serve is the tell.,lefty big server
+80897645-3794-4887-855f-5cc92bb00268,Zanele,Nkosi,zanele.nkosi85,2009-07-13,left,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Serve wins some matches on its own. Second serve is the tell.,lefty big server
+17b8766c-adc1-4a50-af7e-7891fcea9b28,Naledi,Fourie,naledi.fourie32,2003-07-22,right,female,95100015-8dac-4428-9991-a6a51b615004,Best mover in the squad; wins the long ones.,grinder
+1c4f4e49-0515-4592-9c1a-fb36d2ea3af5,Hannah,Naidoo,hannah.naidoo85,2004-05-02,right,female,e5b354b0-8136-4124-b12c-214efc260c23,Best mover in the squad; wins the long ones.,grinder
+0bad2426-383d-4672-b312-06876ce9e341,Priya,Chikwanda,priya.chikwanda16,2002-03-27,right,other,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Best mover in the squad; wins the long ones.,grinder
+38db0fc5-c9f3-4706-8a9e-1c9d26d80bfd,Lerato,Abrahams,lerato.abrahams85,2004-10-03,right,male,95100015-8dac-4428-9991-a6a51b615004,Net game is well ahead of the baseline game.,net rusher
+359294aa-f988-486c-b108-15721840dced,Liam,Louw,liam.louw16,2000-02-07,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Net game is well ahead of the baseline game.,net rusher
+5a85db3f-757b-4ed7-9e1c-990d9154ad8a,Priya,Mokoena,priya.mokoena77,2007-07-20,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Net game is well ahead of the baseline game.,net rusher
+3739bff1-dfe4-41a1-bb1b-f232b7eae57e,Zanele,de Villiers,zanele.devilliers85,2007-11-18,left,female,95100015-8dac-4428-9991-a6a51b615004,"Never misses, never hurts anyone. Needs a finishing shot.",steady baseliner
+822bb9e7-9c6f-4628-8729-7d926257509c,Sarah,Abrahams,sarah.abrahams29,2001-06-08,left,female,e5b354b0-8136-4124-b12c-214efc260c23,"Never misses, never hurts anyone. Needs a finishing shot.",steady baseliner
+9536d9d7-f70c-4a13-adbf-cbc10dca6abd,Chloe,van Wyk,chloe.vanwyk47,2010-05-23,left,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,"Never misses, never hurts anyone. Needs a finishing shot.",steady baseliner
+d370d68b-a484-4570-979f-3efa061e750d,Chloe,de Villiers,chloe.devilliers66,2009-12-08,right,female,95100015-8dac-4428-9991-a6a51b615004,"Strong forehand, avoids the backhand under pressure.",streaky hitter
+7627571e-03ce-434d-9ae5-3fb2024555aa,Jonas,Mahlangu,jonas.mahlangu84,2006-12-15,right,female,e5b354b0-8136-4124-b12c-214efc260c23,"Strong forehand, avoids the backhand under pressure.",streaky hitter
+aea313bd-8136-44a6-9ee9-996956035d19,Nomsa,van Wyk,nomsa.vanwyk44,2002-07-25,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,"Strong forehand, avoids the backhand under pressure.",streaky hitter
+e75b385e-cb5a-4b37-bce3-cffb20996a2b,Naledi,Molefe,naledi.molefe50,2004-11-17,right,male,95100015-8dac-4428-9991-a6a51b615004,,counterpuncher
+10bfea61-2044-4136-81fa-2603e90982b3,Daniel,Adams,daniel.adams80,2004-10-22,right,female,e5b354b0-8136-4124-b12c-214efc260c23,,counterpuncher
+81bcf2f4-89e3-4ca5-84f8-325ce6917501,Zanele,Louw,zanele.louw10,2008-05-14,right,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,,counterpuncher
+362f87fd-4021-4405-8dfc-fbe9e7957543,Naledi,Ferreira,naledi.ferreira55,2006-05-24,left,female,95100015-8dac-4428-9991-a6a51b615004,Hits harder than anyone here and misses more than anyone here.,raw power
+7faa2012-87cc-4acb-a3ef-766703af0780,Ravi,Dlamini,ravi.dlamini55,2009-08-07,left,female,e5b354b0-8136-4124-b12c-214efc260c23,Hits harder than anyone here and misses more than anyone here.,raw power
+15161bd0-960a-4370-b594-99c41ccc62b4,Naledi,Petersen,naledi.petersen23,2008-08-07,left,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Hits harder than anyone here and misses more than anyone here.,raw power
+e0047ce0-8559-4333-8443-db9fc7e4bbaf,Tendai,Molefe,tendai.molefe98,2008-07-06,right,female,95100015-8dac-4428-9991-a6a51b615004,Rushes between points when behind.,pusher
+471202ea-1245-48f1-861f-54ddadb2b6e9,Kagiso,Reddy,kagiso.reddy93,2007-11-23,right,male,e5b354b0-8136-4124-b12c-214efc260c23,Rushes between points when behind.,pusher
+ef34281f-0614-42de-a178-775b6aed871a,Nomsa,Botha,nomsa.botha51,2008-05-26,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Rushes between points when behind.,pusher
+688f20e2-debf-422e-b0a4-176f991d09ff,Liam,Sithole,liam.sithole64,2006-06-04,right,other,95100015-8dac-4428-9991-a6a51b615004,Started in July. Every match is a first.,improver
+90dae184-05b7-402b-8ff0-ea8e09d615a7,Thabo,Ferreira,thabo.ferreira41,2007-01-17,right,female,e5b354b0-8136-4124-b12c-214efc260c23,Started in July. Every match is a first.,improver
+e87602dd-ed45-46af-86d1-207b5ee74884,Aisha,van Wyk,aisha.vanwyk93,2005-11-14,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,Started in July. Every match is a first.,improver
+c06fd0d6-ca28-42b8-a733-3fb133f110e3,Lerato,Adams,lerato.adams65,2003-03-16,right,male,95100015-8dac-4428-9991-a6a51b615004,"Second serve is the weak link, sits up on big points.",serve-reliant
+cf61cb54-a01a-4267-8cf9-06f1190066b3,Hannah,de Villiers,hannah.devilliers36,2011-10-04,right,male,e5b354b0-8136-4124-b12c-214efc260c23,"Second serve is the weak link, sits up on big points.",serve-reliant
+69e3dce4-2ba3-4105-b89d-a78e9b08a04f,Marco,Abrahams,marco.abrahams70,2009-02-15,right,male,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,"Second serve is the weak link, sits up on big points.",serve-reliant
+20f9db09-5923-4a72-94c2-1080c74b8170,Yusuf,Louw,yusuf.louw10,2001-08-03,left,male,95100015-8dac-4428-9991-a6a51b615004,,lefty scrambler
+96d3faaa-fb9e-41bb-a5ee-a5d6f8d10435,Lerato,Molefe,lerato.molefe57,2009-06-16,left,female,e5b354b0-8136-4124-b12c-214efc260c23,,lefty scrambler
+971bb821-60ae-48fc-8553-82b6f2baaec7,Hannah,Mokoena,hannah.mokoena96,2009-07-01,left,female,2bdf56be-abbe-48c8-b4a3-4a611c1ec5ee,,lefty scrambler

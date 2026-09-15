@@ -66,8 +66,8 @@ function flag(name: string, fallback: string): string {
 // 13 rather than any other: the squad lands at 61 wins of 120 with no unbeaten and no
 // winless player, so the ranking screens have a spread to rank on.
 const SEED = Number(flag("seed", "13"));
-const PLAYER_COUNT = Number(flag("players", "12"));
-const MATCH_COUNT = Number(flag("matches", "120"));
+const PLAYER_COUNT = Number(flag("players", "36"));
+const MATCH_COUNT = Number(flag("matches", "360"));
 const OUT_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../..",
@@ -179,7 +179,8 @@ interface RosterPlayer {
   created_at: string;
   updated_at: string;
   has_transfer_code: boolean;
-  /** Not an API field — the generator's own knob, kept so a run can be explained. */
+  /** Not API fields — the generator's own knobs, kept so a run can be explained. */
+  archetype: string;
   skill: Skill;
 }
 
@@ -229,15 +230,145 @@ const LAST_NAMES = [
   "Sithole",
 ];
 
-const PLAYER_NOTES = [
-  "Strong forehand, avoids the backhand under pressure.",
-  "Second serve is the weak link — sits up on big points.",
-  "Best mover in the squad; wins the long ones.",
-  "Rushes between points when behind.",
-  "Net game is well ahead of the baseline game.",
-  null,
-  null,
+type Tier = "strong" | "middling" | "weak";
+type Temperament = "aggressive" | "balanced" | "passive";
+type ServeStyle = "big" | "steady";
+
+/**
+ * A stereotype a coach would recognise, and the knobs it sets. Each coach's roster
+ * cycles through the list in order, so every squad holds the same spread: a player to
+ * beat, one to worry about, a lefty, a net rusher, a pusher. The note is the coach's own
+ * one-line read of them, so the profile page agrees with the numbers underneath.
+ */
+interface Archetype {
+  label: string;
+  tier: Tier;
+  temperament: Temperament;
+  serve: ServeStyle;
+  hand: "right" | "left";
+  note: string | null;
+}
+
+const ARCHETYPES: readonly Archetype[] = [
+  {
+    label: "all-court leader",
+    tier: "strong",
+    temperament: "balanced",
+    serve: "steady",
+    hand: "right",
+    note: "Squad's benchmark. Nothing to fix, plenty to sharpen.",
+  },
+  {
+    label: "lefty big server",
+    tier: "strong",
+    temperament: "aggressive",
+    serve: "big",
+    hand: "left",
+    note: "Serve wins some matches on its own. Second serve is the tell.",
+  },
+  {
+    label: "grinder",
+    tier: "strong",
+    temperament: "passive",
+    serve: "steady",
+    hand: "right",
+    note: "Best mover in the squad; wins the long ones.",
+  },
+  {
+    label: "net rusher",
+    tier: "middling",
+    temperament: "aggressive",
+    serve: "big",
+    hand: "right",
+    note: "Net game is well ahead of the baseline game.",
+  },
+  {
+    label: "steady baseliner",
+    tier: "middling",
+    temperament: "passive",
+    serve: "steady",
+    hand: "left",
+    note: "Never misses, never hurts anyone. Needs a finishing shot.",
+  },
+  {
+    label: "streaky hitter",
+    tier: "middling",
+    temperament: "aggressive",
+    serve: "steady",
+    hand: "right",
+    note: "Strong forehand, avoids the backhand under pressure.",
+  },
+  {
+    label: "counterpuncher",
+    tier: "middling",
+    temperament: "balanced",
+    serve: "steady",
+    hand: "right",
+    note: null,
+  },
+  {
+    label: "raw power",
+    tier: "weak",
+    temperament: "aggressive",
+    serve: "big",
+    hand: "left",
+    note: "Hits harder than anyone here and misses more than anyone here.",
+  },
+  {
+    label: "pusher",
+    tier: "weak",
+    temperament: "passive",
+    serve: "steady",
+    hand: "right",
+    note: "Rushes between points when behind.",
+  },
+  {
+    label: "improver",
+    tier: "weak",
+    temperament: "balanced",
+    serve: "steady",
+    hand: "right",
+    note: "Started in July. Every match is a first.",
+  },
+  {
+    label: "serve-reliant",
+    tier: "middling",
+    temperament: "balanced",
+    serve: "big",
+    hand: "right",
+    note: "Second serve is the weak link, sits up on big points.",
+  },
+  {
+    label: "lefty scrambler",
+    tier: "weak",
+    temperament: "passive",
+    serve: "big",
+    hand: "left",
+    note: null,
+  },
 ];
+
+const RALLY_BY_TIER: Record<Tier, readonly [number, number]> = {
+  strong: [0.62, 0.78],
+  middling: [0.45, 0.6],
+  weak: [0.28, 0.42],
+};
+
+const AGGRESSION_BY_TEMPERAMENT: Record<Temperament, readonly [number, number]> = {
+  aggressive: [0.7, 0.9],
+  balanced: [0.4, 0.6],
+  passive: [0.1, 0.3],
+};
+
+// A big server trades first serves in for aces; a steady one lands them and wins few
+// points outright off them.
+const SERVE_BY_STYLE: Record<
+  ServeStyle,
+  Record<"firstServeIn" | "secondServeIn" | "aceRate", readonly [number, number]>
+> = {
+  big: { firstServeIn: [0.5, 0.58], secondServeIn: [0.83, 0.9], aceRate: [0.1, 0.16] },
+  steady: { firstServeIn: [0.66, 0.74], secondServeIn: [0.92, 0.97], aceRate: [0.02, 0.05] },
+};
 
 interface DemoCoach {
   id: string;
@@ -263,13 +394,15 @@ function emailOf(player: RosterPlayer): string {
   return COACH_BY_ID.get(player.coach_id)!.email;
 }
 
-function makeSkill(): Skill {
+/** The archetype's ranges, with room inside each so two of a kind still differ. */
+function skillFor(archetype: Archetype): Skill {
+  const serve = SERVE_BY_STYLE[archetype.serve];
   return {
-    rally: between(0.3, 0.75),
-    firstServeIn: between(0.52, 0.7),
-    secondServeIn: between(0.85, 0.96),
-    aceRate: between(0.02, 0.12),
-    aggression: between(0.25, 0.8),
+    rally: between(...RALLY_BY_TIER[archetype.tier]),
+    firstServeIn: between(...serve.firstServeIn),
+    secondServeIn: between(...serve.secondServeIn),
+    aceRate: between(...serve.aceRate),
+    aggression: between(...AGGRESSION_BY_TEMPERAMENT[archetype.temperament]),
   };
 }
 
@@ -284,6 +417,9 @@ function makeRoster(count: number): RosterPlayer[] {
     used.add(name);
     const birthYear = 2000 + Math.floor(rng() * 12);
     const created = new Date(2025, 7, 1 + Math.floor(rng() * 30));
+    // Coaches are dealt round-robin below, so the nth player of any coach is the nth
+    // archetype: every roster covers the same spread.
+    const archetype = ARCHETYPES[Math.floor(players.length / COACHES.length) % ARCHETYPES.length]!;
     players.push({
       id: uuid(),
       first_name: first,
@@ -294,20 +430,21 @@ function makeRoster(count: number): RosterPlayer[] {
       date_of_birth: isoDate(
         new Date(birthYear, Math.floor(rng() * 12), 1 + Math.floor(rng() * 27)),
       ),
-      dominant_hand: chance(0.15) ? "left" : "right",
+      dominant_hand: archetype.hand,
       gender: weighted([
         ["male", 5],
         ["female", 5],
         ["other", 1],
       ] as const),
-      notes: pick(PLAYER_NOTES),
+      notes: archetype.note,
       // Round-robin rather than random, so no coach draws an empty roster.
       coach_id: COACHES[players.length % COACHES.length]!.id,
       photo_url: null,
       created_at: created.toISOString(),
       updated_at: created.toISOString(),
       has_transfer_code: chance(0.2),
-      skill: makeSkill(),
+      archetype: archetype.label,
+      skill: skillFor(archetype),
     });
   }
   return players;
@@ -427,12 +564,15 @@ const COACH_NOTES = [
 
 // --- One point ---------------------------------------------------------------------
 
-const SHOT_TYPES_BY_AGGRESSION: readonly (readonly [ShotType, number])[] = [
-  ["DRIVE", 62],
-  ["VOLLEY", 20],
-  ["DROPSHOT", 10],
-  ["LOB", 8],
-];
+/** An aggressive player finishes at the net; a passive one lobs and drops. */
+function shotType(aggression: number): ShotType {
+  return weighted([
+    ["DRIVE", 60],
+    ["VOLLEY", 6 + aggression * 30],
+    ["DROPSHOT", 16 - aggression * 12],
+    ["LOB", 14 - aggression * 12],
+  ] as const);
+}
 
 const UNUSUAL_REASONS: readonly (readonly [UnusualReason, number])[] = [
   ["NET_TOUCH", 4],
@@ -452,12 +592,13 @@ function failureMode(): FailureMode {
   ] as const);
 }
 
-function rallyBucket(): RallyBucket {
+/** From both players' temperaments together: two aggressive players end points early. */
+function rallyBucket(aggression: number): RallyBucket {
   return weighted([
-    ["B1", 44],
+    ["B1", 30 + aggression * 30],
     ["B2", 30],
-    ["B3", 16],
-    ["B4", 10],
+    ["B3", 24 - aggression * 16],
+    ["B4", 16 - aggression * 12],
   ] as const);
 }
 
@@ -583,11 +724,17 @@ function capturePoint(
   // screen without a location is "didn't see" the ending — which is the ending the API
   // cannot store, so a location is always tapped here.
   act({ type: "TAP_BALL_LOCATION", won, ballIn: true, location: courtZone() });
-  act({ type: "TAP_RALLY_LENGTH", bucket: rallyBucket() });
+  act({
+    type: "TAP_RALLY_LENGTH",
+    bucket: rallyBucket((tracked.aggression + opponent.aggression) / 2),
+  });
 
-  // Longer rallies end in a mistake more often than a ball nobody could reach.
+  // An aggressive winner forces more endings; an aggressive loser hands more over.
   const winnerAggression = won ? tracked.aggression : opponent.aggression;
-  const endReason = chance(0.34 + winnerAggression * 0.3) ? "FORCED" : "MISTAKE";
+  const loserAggression = won ? opponent.aggression : tracked.aggression;
+  const endReason = chance(0.42 + winnerAggression * 0.3 - loserAggression * 0.2)
+    ? "FORCED"
+    : "MISTAKE";
   act({ type: "TAP_ENDING", endReason });
 
   if (endReason === "FORCED") {
@@ -595,7 +742,7 @@ function capturePoint(
       act({ type: "TAP_DIDNT_SEE" });
     } else {
       const wing: Wing = chance(0.62) ? "FOREHAND" : "BACKHAND";
-      act({ type: "TAP_SHOT_DETAIL", wing, shotType: weighted(SHOT_TYPES_BY_AGGRESSION) });
+      act({ type: "TAP_SHOT_DETAIL", wing, shotType: shotType(winnerAggression) });
     }
   }
 
@@ -1244,6 +1391,7 @@ writeFileSync(
       "gender",
       "coach_id",
       "notes",
+      "archetype",
     ],
     players.map((player) => [
       player.id,
@@ -1255,6 +1403,7 @@ writeFileSync(
       player.gender,
       player.coach_id,
       player.notes,
+      player.archetype,
     ]),
   ),
 );
@@ -1361,6 +1510,14 @@ writeFileSync(
     "A `capture-data.json` sits here too after a run, holding the same data in the match log's own",
     "nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as",
     "the device stores them. It is gitignored for its size.",
+    "",
+    "## The roster",
+    "",
+    `Each coach's ${String(Math.ceil(PLAYER_COUNT / COACHES.length))} players cycle through the same ${String(ARCHETYPES.length)} archetypes (\`players.csv\`'s`,
+    "`archetype` column), so every squad has its all-court leader, its lefty big server, its pusher",
+    "and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and",
+    "the temperament reaches the points: an aggressive player ends rallies early, at the net, and",
+    "hands over more unforced errors; a passive one lobs, drops and grinds.",
     "",
     "## Reading a point",
     "",
