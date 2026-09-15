@@ -383,6 +383,22 @@ test("Edit opens the sheet pre-filled with the player's current values", async (
   expect(screen.getByLabelText("Date of birth")).toHaveValue("2008-04-12");
 });
 
+// A second way in, beside the details card's pencil: tapping a person's picture to
+// edit them is what every other app does with one.
+test("tapping the header photo opens the same edit sheet", async () => {
+  stubFetch({
+    [`/api/players/${player.id}`]: () => Response.json(player),
+    "/api/matches": () => Response.json([]),
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderPlayerProfile();
+  await screen.findByRole("heading", { name: "Amahle Nkosi" });
+
+  await user.click(screen.getByRole("button", { name: "Edit Amahle Nkosi" }));
+
+  expect(await screen.findByRole("heading", { name: "Edit Amahle" })).toBeInTheDocument();
+});
+
 test("saving Edit PATCHes only the field that changed", async () => {
   const patches: string[] = [];
   stubFetch({

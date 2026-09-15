@@ -108,7 +108,23 @@ export function PlayerProfile() {
             <ArrowLeft />
           </button>
         }
-        trailing={<PlayerAvatar player={player} size="sm" />}
+        trailing={
+          // The photo is the second way into the edit sheet, beside the details
+          // card's own pencil: tapping a person's picture to edit them is the
+          // convention everywhere else. No camera badge, though. That signifier
+          // means "change photo" throughout the app, and this opens the whole
+          // player, not the picker. Sized to match the back button opposite it.
+          <button
+            type="button"
+            aria-label={`Edit ${playerName}`}
+            onClick={() => {
+              setEditing(true);
+            }}
+            className="flex size-8 shrink-0 items-center justify-center"
+          >
+            <PlayerAvatar player={player} size="sm" />
+          </button>
+        }
       />
 
       {/* The single most frequent action on this page (Pareto's/Fitts's laws)
