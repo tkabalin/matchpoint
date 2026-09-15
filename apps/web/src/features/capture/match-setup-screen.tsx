@@ -216,11 +216,7 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabelRow
-            htmlFor="scoring-system"
-            required={false}
-            className="text-sm text-muted-foreground"
-          >
+          <FieldLabelRow htmlFor="scoring-system" className="text-sm text-muted-foreground">
             Scoring system
           </FieldLabelRow>
           <Select
@@ -245,11 +241,7 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabelRow
-            htmlFor="court-type"
-            required={false}
-            className="text-sm text-muted-foreground"
-          >
+          <FieldLabelRow htmlFor="court-type" className="text-sm text-muted-foreground">
             Court type
           </FieldLabelRow>
           <Select
@@ -289,9 +281,7 @@ export function MatchSetupScreen({
         </Field>
 
         <Field>
-          <FieldLabelRow required={false} className="text-sm text-muted-foreground">
-            First serve
-          </FieldLabelRow>
+          <FieldLabelRow className="text-sm text-muted-foreground">First serve</FieldLabelRow>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "Player", value: true },

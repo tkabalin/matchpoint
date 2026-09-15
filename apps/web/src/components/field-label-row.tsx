@@ -5,9 +5,10 @@ import { FieldLabel } from "@/components/ui/field";
  *
  * Every field of a form carries one rather than only the required ones: a coach
  * filling in a player or a match shouldn't have to infer from an unmarked label
- * whether leaving it blank will cost them the submit. A field that already holds
- * a default (dominant hand, scoring system) counts as optional here — it is
- * answered, and can be left alone.
+ * whether leaving it blank will cost them the submit. Leave `required` unset only
+ * for a field where that distinction genuinely doesn't apply — one whose default
+ * value already reads as "nothing chosen" (court type's "Unspecified"), so
+ * calling it required or optional would both be misleading.
  *
  * The note sits outside the `<label>` on purpose, so it stays out of the input's
  * accessible name: "First name" is what a screen reader should announce for the
@@ -20,7 +21,7 @@ export function FieldLabelRow({
   children,
 }: {
   htmlFor?: string;
-  required: boolean;
+  required?: boolean;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -29,9 +30,11 @@ export function FieldLabelRow({
       <FieldLabel htmlFor={htmlFor} className={className}>
         {children}
       </FieldLabel>
-      <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">
-        ({required ? "required" : "optional"})
-      </span>
+      {required !== undefined && (
+        <span aria-hidden="true" className="text-xs font-normal text-muted-foreground">
+          ({required ? "required" : "optional"})
+        </span>
+      )}
     </div>
   );
 }
