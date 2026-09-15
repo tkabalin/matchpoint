@@ -25,20 +25,28 @@ import { getDeviceId } from "@/lib/device-id";
 
 const ZERO_COUNTS: OutboxCounts = { pending: 0, failed: 0 };
 
+// Each capture screen seats this in its own heading row, so the indicator unmounts
+// and remounts on every step of a point. `liveQuery`'s first emission is a round
+// trip to IndexedDB, and starting from zero each time blinks the badge off and back
+// on at every tap; the last value this coach saw is what it starts from instead.
+const lastCounts = new Map<string, OutboxCounts>();
+
 /** A `useSyncExternalStore` bridge over `watchCounts`, the same shape as
  * `useInProgressSummary` in `features/capture/resume.ts`. */
 function useOutboxCounts(coachId: string): OutboxCounts {
-  const stateRef = useRef<OutboxCounts>(ZERO_COUNTS);
+  const stateRef = useRef<OutboxCounts>(lastCounts.get(coachId) ?? ZERO_COUNTS);
 
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
       const subscription = watchCounts(coachId).subscribe({
         next: (counts) => {
           stateRef.current = counts;
+          lastCounts.set(coachId, counts);
           onStoreChange();
         },
         error: () => {
           stateRef.current = ZERO_COUNTS;
+          lastCounts.delete(coachId);
           onStoreChange();
         },
       });
