@@ -167,8 +167,12 @@ function renderCard(players: PlayerRead[] = roster) {
 async function renderLoadedCard(players: PlayerRead[] = roster) {
   renderCard(players);
   await screen.findByText("Player insights");
-  await vi.waitFor(() =>
-    expect(document.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument(),
+  // vi.waitFor ignores test-setup.ts's asyncUtilTimeout and keeps vitest's own one
+  // second, well under what a starved runner takes to settle four queries, so both
+  // polls in this file state the suite's budget at the call site (docs/testing.md).
+  await vi.waitFor(
+    () => expect(document.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument(),
+    { timeout: 5_000 },
   );
 }
 
@@ -193,8 +197,9 @@ test("shows a loading skeleton, then the real grid", async () => {
 
   renderCard();
 
-  await vi.waitFor(() =>
-    expect(document.querySelector('[data-slot="skeleton"]')).toBeInTheDocument(),
+  await vi.waitFor(
+    () => expect(document.querySelector('[data-slot="skeleton"]')).toBeInTheDocument(),
+    { timeout: 5_000 },
   );
   release();
   await screen.findByRole("link", { name: "Alex Chen's player insights" });
