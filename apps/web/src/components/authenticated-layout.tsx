@@ -1,4 +1,4 @@
-import { Outlet } from "@tanstack/react-router";
+import { Link, Outlet } from "@tanstack/react-router";
 
 import { Logo } from "@/components/logo";
 
@@ -9,8 +9,12 @@ import { Logo } from "@/components/logo";
  * "every page" without depending on each screen remembering to include it. `sticky`
  * rather than `fixed`: it occupies real space in the flow, so nothing below it
  * needs compensating padding the way `BottomNav`'s `fixed` placement does.
+ *
+ * `home` is a prop rather than something resolved here: the same chrome serves a
+ * coach and a player, whose home screens differ (see `nav-tabs.ts`), and the route
+ * that already knows which principal it guards is the honest place to say which.
  */
-export function AuthenticatedLayout() {
+export function AuthenticatedLayout({ home }: { home: "/home" | "/me" }) {
   return (
     // Grid + `h-dvh`, not flex + `min-h-dvh`: capture's court diagram sizes itself off a
     // `container-type: size` box several flex layers down, and that container query
@@ -30,7 +34,9 @@ export function AuthenticatedLayout() {
     // by the global overflow-x:hidden backstop rather than visibly breaking anything.
     <div className="grid h-dvh grid-cols-1 grid-rows-[auto_1fr]">
       <header className="sticky top-0 z-40 flex justify-center border-b bg-background py-2">
-        <Logo size="compact" />
+        <Link to={home} aria-label="MatchPoint home" className="flex">
+          <Logo size="compact" />
+        </Link>
       </header>
       <div className="min-h-0">
         <Outlet />

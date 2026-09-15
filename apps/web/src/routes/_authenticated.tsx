@@ -39,5 +39,5 @@ export const Route = createFileRoute("/_authenticated")({
       }
     }
   },
-  component: AuthenticatedLayout,
+  component: () => <AuthenticatedLayout home="/home" />,
 });
