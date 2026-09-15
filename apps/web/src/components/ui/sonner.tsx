@@ -34,6 +34,13 @@ const Toaster = ({ ...props }: ToasterProps) => {
       toastOptions={{
         classNames: {
           toast: "cn-toast",
+          // Every info toast today is a one-line tip with no action of its own — see
+          // match-header.tsx and note-button.tsx's own "press and hold" nudges — so it
+          // has nothing to be tapped for. Without this it still sits in the pointer-event
+          // path of whatever renders under it, which on a narrow viewport can be a
+          // dialog's own button (a stuck "press and hold" toast blocked the Undo
+          // confirmation's button on mobile WebKit in e2e).
+          info: "pointer-events-none",
         },
       }}
       {...props}
