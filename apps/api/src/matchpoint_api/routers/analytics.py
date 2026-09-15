@@ -8,7 +8,7 @@ from statistics import fmean, pstdev
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Row, and_, distinct, func, select, tuple_
+from sqlalchemy import Row, and_, distinct, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach, CurrentPrincipal
@@ -1789,10 +1789,21 @@ def _trend_first_monday(
     so today stands in for that too. Nothing the API accepts writes one, but the
     sample-data importer builds rows straight from a CSV, and one mistyped year would
     otherwise carry the whole window past every real match and blank the chart.
+
+    Only a match carrying a result or at least one point anchors the window (#285): the
+    record reads the result, and the other two metrics read points whether or not the
+    match was ever decided. An abandoned capture carries neither, so the window ends on
+    the last match that does, and on today only where the roster has no such match.
     """
     today = date.today()
+    contributes = or_(
+        Match.result.is_not(None),
+        select(Point.id).where(Point.match_id == Match.id).exists(),
+    )
     latest = db.scalar(
-        select(func.max(Match.played_on)).where(Match.player_id.in_(roster), *_on_surface(surface))
+        select(func.max(Match.played_on)).where(
+            Match.player_id.in_(roster), contributes, *_on_surface(surface)
+        )
     )
     anchor = min(latest or today, today)
     return anchor - timedelta(days=anchor.weekday(), weeks=SQUAD_TREND_WEEKS - 1)

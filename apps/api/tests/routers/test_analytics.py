@@ -3226,6 +3226,48 @@ def test_squad_trend_leaves_an_unresulted_week_null(
     assert _values(client, "record") == [None] * 6
 
 
+def test_squad_trend_does_not_anchor_on_an_abandoned_match(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A capture started and never finished cannot open a window of its own (#285).
+
+    The match this week has no result and no points, so every week it would anchor is
+    a week it puts nothing in. The window ends on the win eight weeks back instead,
+    which is the last week the roster actually decided anything.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=THIS_MONDAY - timedelta(weeks=8),
+        result=MatchResult.WIN,
+    )
+    make_match(db_session, player_id=player.id, played_on=_in_week(5))
+
+    assert _values(client, "record") == [None, None, None, None, None, 100]
+
+
+def test_squad_trend_anchors_on_a_match_with_points_and_no_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A match being captured right now still anchors, on its points (#285).
+
+    Only the record reads `result`; the ratio and the first-serve percentage read
+    logged points, so a match still in progress has figures to contribute. Anchoring
+    on the decided win eight weeks back would close the window before them.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    make_match(
+        db_session,
+        player_id=player.id,
+        played_on=THIS_MONDAY - timedelta(weeks=8),
+        result=MatchResult.WIN,
+    )
+    _captured_match(db_session, player.id, _in_week(5), forced=4, mistake=2)
+
+    assert _values(client, "forced_to_unforced") == [None, None, None, None, None, 2.0]
+
+
 def test_squad_trend_pools_the_roster_and_nobody_elses(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
