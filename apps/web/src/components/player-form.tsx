@@ -103,6 +103,10 @@ export function PlayerFormFields({
           aria-label="Dominant hand"
           value={values.hand}
           onValueChange={(value) => onChange("hand", value)}
+          // The one optional choice here, so pressing the picked side again clears
+          // it: a coach who picked a hand by mistake has no other way back to the
+          // unknown state this field started in.
+          deselectable
           options={[
             { value: "right", label: "Right" },
             { value: "left", label: "Left" },

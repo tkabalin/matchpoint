@@ -45,14 +45,14 @@ const player: PlayerRead = {
   updated_at: "2026-08-11T09:00:00Z",
 };
 
-function stubFetch(routes: Record<string, () => Response | Promise<Response>>) {
+function stubFetch(routes: Record<string, (input: Request) => Response | Promise<Response>>) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
       const handler = routes[`${input.method} ${pathname}`];
       if (!handler) throw new Error(`Unstubbed fetch: ${input.method} ${pathname}`);
-      return Promise.resolve(handler());
+      return Promise.resolve(handler(input));
     }),
   );
 }
@@ -332,6 +332,28 @@ test("a refused save keeps the sheet open and shows the server's reason", async 
 
   expect(await screen.findByText("That username is taken")).toBeInTheDocument();
   expect(screen.getByLabelText("First name")).toHaveValue("Amahlé");
+});
+
+// Dominant hand is this form's one optional choice, and the only way back to the
+// unknown state it starts in is pressing the picked side again.
+test("pressing the picked dominant hand again clears it, and the save sends null", async () => {
+  const saved: Record<string, unknown>[] = [];
+  stubFetch({
+    [`PATCH /api/players/${player.id}`]: async (input) => {
+      saved.push(JSON.parse(await input.text()) as Record<string, unknown>);
+      return Response.json({ ...player, dominant_hand: null });
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderSheet();
+
+  await user.click(screen.getByRole("button", { name: "Right" }));
+  expect(screen.getByRole("button", { name: "Right" })).toHaveAttribute("aria-pressed", "false");
+
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+  await vi.waitFor(() => expect(saved).toHaveLength(1));
+  expect(saved[0]!.dominant_hand).toBeNull();
 });
 
 // The photo hook's failure paths surface as an Alert here, and nothing made either

@@ -16,6 +16,7 @@ export function SegmentedControl<T extends string>({
   value,
   onValueChange,
   options,
+  deselectable,
   className,
   ...props
 }: {
@@ -24,6 +25,10 @@ export function SegmentedControl<T extends string>({
   /** `icon`, when given, must be a distinct symbol per option — two options
    *  sharing an icon defeats the point of having one. */
   options: { value: T; label: string; icon?: LucideIcon }[];
+  /** Lets the active item be pressed again to clear the choice, for an optional
+   *  field whose unpicked state is `""`. Typed so only a value union that
+   *  actually includes `""` can ask for it. */
+  deselectable?: "" extends T ? boolean : never;
   className?: string;
   "aria-label"?: string;
 }) {
@@ -32,12 +37,14 @@ export function SegmentedControl<T extends string>({
       variant="outline"
       spacing={0}
       value={[value]}
-      // Base UI clears the array when the active item is pressed again; a segmented
-      // control has no "none" state, so an empty change is ignored rather than
-      // leaving the group with nothing selected.
+      // Base UI clears the array when the active item is pressed again. For a
+      // required choice that would leave the group with nothing selected, so the
+      // empty change is ignored; `deselectable` is how an optional one opts into
+      // it, taking the press back to its own unpicked "" state.
       onValueChange={(next: unknown[]) => {
         const selected = next[0] as T | undefined;
         if (selected !== undefined) onValueChange(selected);
+        else if (deselectable) onValueChange("" as T);
       }}
       className={cn("w-full", className)}
       {...props}
