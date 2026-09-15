@@ -135,6 +135,8 @@ get any one wrong and the whole row is rejected:
   `court_side` being the box it had to land in, and an opponent's placement is out of
   scope.
 - **Double fault.** Both serves faulted exactly when `end_reason` is `double_fault`.
+- **Ace.** A serve recorded as an `ace` exactly when `end_reason` is `ace`: an ace is
+  what ended the point, so neither half stands without the other.
 - **Return outcome.** Set only when `server` is `opponent` (it describes the tracked
   player's return of the opponent's serve, so it's never set on a point the tracked
   player served), and only when `serve1_outcome` is also set: a return can't be

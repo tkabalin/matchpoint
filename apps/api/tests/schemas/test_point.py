@@ -107,6 +107,18 @@ def test_the_default_shape_round_trips() -> None:
             {"serve1_outcome": "ace", "end_reason": "ace"} | NO_CONTACT,
             id="ace",
         ),
+        pytest.param(
+            SECOND_SERVE | {"serve2_outcome": "ace", "end_reason": "ace"} | NO_CONTACT,
+            id="ace on a second serve",
+        ),
+        # The rule is about the ending, not about whose serve produced it, so it holds
+        # on the far more common ace: the one the tracked player received.
+        pytest.param(
+            OPPONENT_SERVE
+            | {"serve1_outcome": "ace", "end_reason": "ace", "won": False}
+            | NO_CONTACT,
+            id="the tracked player aced",
+        ),
         pytest.param(OPPONENT_SERVE | {"return_outcome": "in"}, id="opponent serve returned in"),
         pytest.param(
             OPPONENT_SERVE | {"return_outcome": "net", "won": False} | NO_CONTACT,
@@ -214,6 +226,20 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
         pytest.param(
             {"end_reason": "double_fault"} | NO_CONTACT,
             id="the double-fault ending without both serves faulted",
+        ),
+        # The ace biconditional, which capture enforces both ways round too: a serve
+        # recorded as an ace is what ended the point, and nothing else is.
+        pytest.param(
+            {"serve1_outcome": "ace"} | NO_CONTACT,
+            id="an aced serve without the ace ending",
+        ),
+        pytest.param(
+            SECOND_SERVE | {"serve2_outcome": "ace"} | NO_CONTACT,
+            id="an aced second serve without the ace ending",
+        ),
+        pytest.param(
+            {"end_reason": "ace"} | NO_CONTACT,
+            id="the ace ending with no serve recorded as an ace",
         ),
         pytest.param({"return_outcome": "in"}, id="a return on the tracked player's own serve"),
         pytest.param({"unusual_reason": "net_touch"}, id="an unusual reason on an ordinary point"),

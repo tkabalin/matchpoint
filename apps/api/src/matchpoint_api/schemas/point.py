@@ -129,6 +129,12 @@ class PointCreate(RequestModel):
         )
         if both_faulted != (self.end_reason is EndReason.DOUBLE_FAULT):
             raise ValueError("both serves faulted exactly when end_reason is double_fault")
+        # The ace twin of the rule above, and capture's own (`point.ts`): a serve
+        # recorded as an ace is the ending, so neither half can stand alone. Only one
+        # attempt can carry it, a second serve following a fault and nothing else.
+        aced = ServeOutcome.ACE in (self.serve1_outcome, self.serve2_outcome)
+        if aced != (self.end_reason is EndReason.ACE):
+            raise ValueError("a serve is an ace exactly when end_reason is ace")
         return self
 
     @model_validator(mode="after")
