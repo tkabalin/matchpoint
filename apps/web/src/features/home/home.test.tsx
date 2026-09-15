@@ -622,10 +622,7 @@ test("shows the seven tendency rows with their scope-labelled captions and headl
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
 
-  const row = async (label: string) => {
-    const caption = await snapshot.findByText(label);
-    return within(caption.closest("a")!);
-  };
+  const row = async (label: string) => within(await snapshot.findByTestId(label));
 
   expect((await row("Best win %")).getByText("Amahle Nkosi")).toBeInTheDocument();
   expect((await row("Best win %")).getByText("100%")).toBeInTheDocument();
@@ -654,7 +651,7 @@ test("a tied metric shows only the best side, not a duplicated worst", async () 
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  const mistakesRow = within((await snapshot.findByText("Most mistakes")).closest("div")!);
+  const mistakesRow = within(await snapshot.findByTestId("Most mistakes"));
   expect(mistakesRow.getByText("Not enough matches logged yet.")).toBeInTheDocument();
 });
 
@@ -664,11 +661,28 @@ test("ranked rows go straight to that row's own player's stats page", async () =
   await renderHome();
 
   const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
-  const caption = await snapshot.findByText("Best win %");
+  const row = within(await snapshot.findByTestId("Best win %"));
 
-  await user.click(caption.closest("a")!);
+  await user.click(row.getByRole("link"));
 
   expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+});
+
+test("tapping a row's info icon explains what that stat measures", async () => {
+  stubAuthenticatedHome();
+  const user = userEvent.setup({ delay: null });
+  await renderHome();
+
+  const snapshot = within(await screen.findByRole("region", { name: "Squad snapshot" }));
+  const row = within(await snapshot.findByTestId("Steadiest"));
+
+  await user.click(row.getByRole("button", { name: "Explain Steadiest" }));
+
+  expect(
+    await screen.findByText(
+      "Share of a player's own errors caused by the opponent, not themselves. Higher means steadier.",
+    ),
+  ).toBeInTheDocument();
 });
 
 test("shows a dismissible card when a player is flagged", async () => {

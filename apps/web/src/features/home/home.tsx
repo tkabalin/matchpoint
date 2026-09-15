@@ -17,6 +17,7 @@ import {
   CircleX,
   Feather,
   Flame,
+  Info,
   type LucideIcon,
   PersonStanding,
   Plus,
@@ -50,6 +51,7 @@ import {
   ItemMedia,
   ItemTitle,
 } from "@/components/ui/item";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { InstallAppNudge } from "@/components/install-app-nudge";
 import { pickSquadAttention } from "@/lib/analytics/attention";
 import {
@@ -270,6 +272,7 @@ export function Home() {
               <SquadRow
                 label="Best win %"
                 icon={TrendingUp}
+                info={WIN_PERCENT_INFO}
                 member={bestWorstWinPercent.best}
                 player={
                   bestWorstWinPercent.best ? findPlayer(bestWorstWinPercent.best.player_id) : null
@@ -284,6 +287,7 @@ export function Home() {
               <SquadRow
                 label="Worst win %"
                 icon={TrendingDown}
+                info={WIN_PERCENT_INFO}
                 member={bestWorstWinPercent.worst}
                 player={
                   bestWorstWinPercent.worst ? findPlayer(bestWorstWinPercent.worst.player_id) : null
@@ -298,6 +302,7 @@ export function Home() {
               <SquadRow
                 label="Steadiest"
                 icon={Anchor}
+                info={RESILIENCE_INFO}
                 member={bestWorstResilience.best}
                 player={
                   bestWorstResilience.best ? findPlayer(bestWorstResilience.best.player_id) : null
@@ -312,6 +317,7 @@ export function Home() {
               <SquadRow
                 label="Most mistakes"
                 icon={TriangleAlert}
+                info={RESILIENCE_INFO}
                 member={bestWorstResilience.worst}
                 player={
                   bestWorstResilience.worst ? findPlayer(bestWorstResilience.worst.player_id) : null
@@ -326,6 +332,7 @@ export function Home() {
               <SquadRow
                 label="Most aggressive"
                 icon={Flame}
+                info={AGGRESSION_INFO}
                 member={bestWorstAggression.best?.member ?? null}
                 player={
                   bestWorstAggression.best
@@ -338,6 +345,7 @@ export function Home() {
               <SquadRow
                 label="Most passive"
                 icon={Feather}
+                info={AGGRESSION_INFO}
                 member={bestWorstAggression.worst?.member ?? null}
                 player={
                   bestWorstAggression.worst
@@ -350,6 +358,7 @@ export function Home() {
               <SquadRow
                 label="Best 1st serve %"
                 icon={CircleCheck}
+                info={FIRST_SERVE_INFO}
                 member={bestWorstFirstServe.best}
                 player={
                   bestWorstFirstServe.best ? findPlayer(bestWorstFirstServe.best.player_id) : null
@@ -364,6 +373,7 @@ export function Home() {
               <SquadRow
                 label="Worst 1st serve %"
                 icon={CircleX}
+                info={FIRST_SERVE_INFO}
                 member={bestWorstFirstServe.worst}
                 player={
                   bestWorstFirstServe.worst ? findPlayer(bestWorstFirstServe.worst.player_id) : null
@@ -393,19 +403,6 @@ export function Home() {
                 }}
               />
             )}
-
-            <ul className="list-disc space-y-1 pl-4 text-xs font-semibold text-foreground marker:text-muted-foreground">
-              <li>Win %: wins out of matches played this season.</li>
-              <li>
-                Steadiest and Most mistakes: share of a player&rsquo;s own errors caused by the
-                opponent, not themselves. Higher means steadier.
-              </li>
-              <li>
-                Most aggressive and Most passive: share of the opponent&rsquo;s errors forced by
-                pressure, not handed over free. Higher means more aggressive.
-              </li>
-              <li>1st serve %: share of first serves landing in play.</li>
-            </ul>
           </CardContent>
         </Card>
       </section>
@@ -452,6 +449,15 @@ export function Home() {
   );
 }
 
+// Squad-snapshot rows share these four explanations pairwise (best/worst is
+// one metric, so both ends of a pair get the same text).
+const WIN_PERCENT_INFO = "Wins out of matches played this season.";
+const RESILIENCE_INFO =
+  "Share of a player's own errors caused by the opponent, not themselves. Higher means steadier.";
+const AGGRESSION_INFO =
+  "Share of the opponent's errors forced by pressure, not handed over free. Higher means more aggressive.";
+const FIRST_SERVE_INFO = "Share of first serves landing in play.";
+
 /** One row of the squad snapshot's eight tendency rankings. Renders as a
  *  plain, muted line when there's no eligible player for this metric yet —
  *  an empty result here (nobody with enough data) is a legitimate outcome the
@@ -465,10 +471,13 @@ export function Home() {
  *
  *  Goes straight to the player's stats page, matching every other tappable
  *  row here — a coach tapping a ranked row already wants the numbers behind
- *  that ranking (#225 item 6). */
+ *  that ranking (#225 item 6). The info-popover trigger is a true sibling of
+ *  the row's own `Link`, never nested or overlaid on it — see
+ *  `match-card.tsx`'s own note on why an overlay-link is the wrong tool here. */
 function SquadRow({
   label,
   icon: Icon,
+  info,
   member,
   player,
   value,
@@ -478,6 +487,9 @@ function SquadRow({
   /** Large and distinct per row — no two rows on this card, or elsewhere on
    *  the home screen, share an icon for a different meaning. */
   icon: LucideIcon;
+  /** What this row measures, shown in a tap-triggered popover — this app is
+   *  touch-first, so the affordance is a tap, not a hover-only tooltip. */
+  info: string;
   member: SquadMemberStats | null;
   player: PlayerRead | null;
   /** The 0–100 share that earned this player the row. Null renders the empty
@@ -487,44 +499,87 @@ function SquadRow({
 }) {
   const icon = <Icon className="size-6 shrink-0 text-primary" aria-hidden="true" />;
   const display = value === null ? null : `${Math.round(value)}%`;
+  const infoTrigger = (
+    <Popover>
+      <PopoverTrigger
+        render={<Button variant="ghost" size="icon-xs" className="text-muted-foreground" />}
+        aria-label={`Explain ${label}`}
+      >
+        <Info className="size-3.5" aria-hidden="true" />
+      </PopoverTrigger>
+      <PopoverContent className="w-64 text-sm" side="left">
+        {info}
+      </PopoverContent>
+    </Popover>
+  );
+
+  const labelText = (
+    <p className="text-sm font-bold tracking-wide text-foreground uppercase">{label}</p>
+  );
 
   if (!player || !member || value === null) {
     return (
-      <div className="flex items-center gap-2.5 border-t py-2.5 first:border-t-0 first:pt-0">
+      <div
+        data-testid={label}
+        className="flex items-center gap-2.5 border-t py-2.5 first:border-t-0 first:pt-0"
+      >
         {icon}
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold tracking-wide text-foreground uppercase">{label}</p>
+          <div className="flex items-center gap-1">
+            {labelText}
+            {infoTrigger}
+          </div>
           <p className="text-xs text-muted-foreground">{emptyDetail}</p>
         </div>
       </div>
     );
   }
 
+  // The info button has to sit beside the label it explains, not at the row's
+  // edge next to the navigate-away chevron, yet it can't live inside the
+  // `Link`'s <a>. So the row is a grid and the `Link` is `display: contents`:
+  // its children become the grid's cells directly, and the button is a true
+  // sibling dropped into the spare cell after the label. `has-*` restores the
+  // focus ring an <a> without a box of its own can no longer draw.
   return (
-    <Link
-      to="/players/$playerId"
-      params={{ playerId: player.id }}
-      onClick={() => setLastViewedPlayerId(player.id)}
-      className="flex w-full items-center gap-2.5 border-t py-2.5 text-left first:border-t-0 first:pt-0"
+    <div
+      data-testid={label}
+      className="grid grid-cols-[auto_auto_auto_1fr_auto_auto] items-center gap-x-2.5 border-t py-2.5 first:border-t-0 first:pt-0 has-[a:focus-visible]:ring-3 has-[a:focus-visible]:ring-ring/30"
     >
-      {icon}
-      <PlayerAvatar player={player} size="sm" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold tracking-wide text-foreground uppercase">{label}</p>
-        <p className="truncate text-sm font-semibold">{`${player.first_name} ${player.last_name}`}</p>
-        <ResultDots results={member.last5_results} className="mt-1" />
-      </div>
-      <div className="flex shrink-0 flex-col items-end gap-1">
-        <p className="text-base font-bold tabular-nums">{display}</p>
-        {/* A small fixed-width bar, not a full-width one — this is a relative
-         *  sense of proportion at a glance, not a chart in its own right, so
-         *  it shouldn't compete with the row's name/value for width. */}
-        <div className="h-1.5 w-10 overflow-hidden rounded-sm bg-muted" aria-hidden="true">
-          <div className={cn("h-full", PATTERN_CLASS.indigo)} style={{ width: `${value}%` }} />
+      <Link
+        to="/players/$playerId"
+        params={{ playerId: player.id }}
+        onClick={() => setLastViewedPlayerId(player.id)}
+        className="contents"
+      >
+        <span className="col-start-1 row-span-3 row-start-1">{icon}</span>
+        <span className="col-start-2 row-span-3 row-start-1">
+          <PlayerAvatar player={player} size="sm" />
+        </span>
+        <span className="col-start-3 row-start-1">{labelText}</span>
+        <p className="col-span-2 col-start-3 row-start-2 min-w-0 truncate text-sm font-semibold">
+          {`${player.first_name} ${player.last_name}`}
+        </p>
+        <ResultDots
+          results={member.last5_results}
+          className="col-span-2 col-start-3 row-start-3 mt-1"
+        />
+        <div className="col-start-5 row-span-3 row-start-1 flex flex-col items-end gap-1">
+          <p className="text-base font-bold tabular-nums">{display}</p>
+          {/* A small fixed-width bar, not a full-width one — this is a relative
+           *  sense of proportion at a glance, not a chart in its own right, so
+           *  it shouldn't compete with the row's name/value for width. */}
+          <div className="h-1.5 w-10 overflow-hidden rounded-sm bg-muted" aria-hidden="true">
+            <div className={cn("h-full", PATTERN_CLASS.indigo)} style={{ width: `${value}%` }} />
+          </div>
         </div>
-      </div>
-      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-    </Link>
+        <ChevronRight
+          className="col-start-6 row-span-3 row-start-1 size-3.5 text-muted-foreground"
+          aria-hidden="true"
+        />
+      </Link>
+      <span className="col-start-4 row-start-1 -ml-1.5 justify-self-start">{infoTrigger}</span>
+    </div>
   );
 }
 
