@@ -69,8 +69,17 @@ mid-saturation tones (vermillion an orange-red, violet a rose-pink), and side by
 as small swatches, icons, or thin marks rather than large patterned fills — they read as confusably
 similar, particularly for a colorblind viewer relying on warmth/saturation over exact hue.
 Vermillion is outcome-exclusive already (see below), so this mostly means: don't reach for violet on
-a screen that also shows an unforced-error color anywhere in view. Prefer yellow or indigo alongside
-an outcome-colored element instead.
+a screen that also shows an unforced-error color anywhere in view.
+
+**Indigo next to vermillion has the same problem, but only at small/tight scale.** The Serve tab's
+outcome bars originally paired vermillion (fault) with indigo (ace) as two adjacent segments in one
+thin stack, and that combination was reported back as still hard to tell apart in practice — despite
+indigo sitting comfortably far from vermillion elsewhere in the app (e.g. the surface record card's
+loss count next to a clay panel). The difference is scale and adjacency: a small swatch, icon, or
+thin bar segment sitting directly against a vermillion one loses the separation a larger or more
+separated indigo fill keeps. Reach for **yellow** first whenever a new categorical color has to sit
+immediately next to vermillion in a tightly-packed bar, legend, or swatch group — indigo is still
+fine as a categorical color generally, just not as vermillion's direct neighbour at that scale.
 
 ### Pattern rule
 
@@ -175,6 +184,71 @@ categorical distinction on the dashboard that isn't a point outcome.
   (solid / dashed / dotted) as this rule's line-shaped equivalent. The Spread histogram this page
   used to have is gone (removed as not useful enough to keep); don't reintroduce an SVG `<pattern>`
   fill for a bar chart on this page without a real caller for it again.
+- **Serve/Rally toggle** (`serve-rally-toggle.tsx`) — not a categorical chart, so it isn't governed
+  by the safe non-outcome set above: this is nav blue's own documented role, "active tabs," applied
+  literally. Deliberately not built on the shared `SegmentedControl`, whose active state is a muted
+  gray everywhere else it's used (surface, format, trend window) — this one switch needed a louder,
+  obviously-interactive active state without changing that shared default for every other toggle.
+- **Serve tab — outcome bars ("Your serve" and "Return of opponent serve")** — win (in), unforced
+  (fault or error) and **sky** for ace (see "Serve/Rally — sky" below). Both indigo and yellow were
+  tried here first and reported too close to vermillion's "fault" segment sitting right next to it
+  in this thin bar — treat "no vermillion next to indigo or yellow in a tightly-packed bar/legend"
+  as a real constraint alongside the existing vermillion/violet one, not a one-off fix. Violet is
+  off the table outright (vermillion/violet must never share a view).
+- **Serve tab — fault-mode courts** (`fault-mode-court.tsx`) — majority-vs-not, not a seventh
+  category: whichever fault mode (net/long/wide) has the largest share, plus any other within 10
+  points of it, carries vermillion with its usual diagonal-band pattern (the same "the one to
+  address" reasoning as an unforced error elsewhere on the dashboard). Everything else is a flat,
+  unpatterned **light indigo** — `color-mix(in oklch, #2E1A47 42%, white)`, indigo's light-mode hex
+  specifically rather than the `--color-cat-indigo` token, since the court itself is always
+  literally white regardless of app theme (like the surface record card's own mask) and mixing the
+  already-lightened dark-mode indigo would wash out further against a background that never darkens
+  with it. No pattern on the minority fill: it is a de-emphasised "not the one to look at" rather
+  than a second competing category, so it doesn't need the categorical palette's usual
+  pattern-redundancy treatment. Blue is off the table for the same cross-page reason as the outcome
+  bars above.
+- **Serve/Rally — sky.** A scoped **8th categorical color**, not one of the documented seven above,
+  shared by exactly two swatches: the Serve tab's Ace segment and the Rally tab's wing-split
+  Backhand segment (Forehand stays yellow there). Both started as separate problems — Ace tried
+  indigo then yellow next to vermillion's "fault," Backhand tried indigo next to Forehand's yellow —
+  and both failed for the same underlying reason (too close to a neighbour at this small a swatch
+  scale), so rather than searching for a third and fourth new color, sky is the one common-ground
+  color used in both places. The exact hue requested is **#00E5FF** (186°) — used exactly in dark
+  mode, where it measures 12.82:1 against the background. Light mode uses **#0093A3**, the same 186°
+  hue darkened until it clears the 3:1 floor against white (3.68:1): #00E5FF itself measures only
+  1.54:1 there, the same class of failure yellow's and indigo's own light-mode tokens were already
+  fixed for, not a stylistic downgrade of the requested color. Distinct from nav's own primary blue
+  (a separate token, a separate meaning) and reachable here specifically because neither of Ace's or
+  Backhand's screens puts this swatch pixel-adjacent to actual nav chrome. Violet and true nav-blue
+  reuse are still off the table for the usual reasons (vermillion visible on both cards; nav blue
+  means brand/interactive everywhere, categorical color nowhere). Its pattern is thick, widely
+  spaced vertical white columns (24px tile, 8px column, generous negative space) — the same
+  vertical-band motif family as win-green's own pattern, deliberately a much wider tile so the two
+  stay apart by scale. This is a scoped exception for these two swatches, not a general 8th addition
+  to the categorical palette — don't reach for sky as a first choice elsewhere without hitting the
+  same dead end these two did.
+- **Rally tab — "Final ball: where it landed"** (`final-ball-court.tsx`) — outcome-themed
+  majority-vs-not, not the continuous single-hue heat gradient this chart used before: whichever
+  in-court zone(s) hold the largest share, plus any other within 10 points of it, carry the outcome
+  color for whichever side the open style drill is scoped to — win-green for a style scoped to
+  points the tracked player won, vermillion for one scoped to points they lost, each with its own
+  established pattern (vertical bands / diagonal bands) rather than a fresh one. Everything else is
+  the same flat, unpatterned light indigo `fault-mode-court.tsx` uses for its own non-majority fill
+  — a de-emphasised "not the one to look at," not a second competing category. Net, long and wide no
+  longer appear on this chart at all (that breakdown moved to the Serve tab's own fault-mode
+  courts), so `--chart-1`'s old non-categorical gradient role here is gone with them.
+- **Player profile — surface record card ("Substrate Cross-Section")** — four textured panels, one
+  per surface, each its own `pattern-surface-*` utility (`app.css`): nav blue for hard and carpet,
+  indigo for clay, yellow for grass. Blue is safe here at all (the bottom nav is hidden on this
+  page, `nav={false}`) but still only 3 safe colors remain for 4 surfaces, since violet is off the
+  table — the card's own loss count sits above every panel in vermillion, and vermillion + violet
+  must never share a view. Hard and carpet share blue instead, told apart by texture alone (flat vs.
+  cross-hatched) plus each panel's own icon and label, the same "pattern carries it, not color
+  alone" reasoning the rest of this file already leans on. A genuinely new axis from the categorical
+  palette above, not a reuse of it — never let a surface default to an outcome color
+  (win/forced/unforced) even where hard's own texture is flat solid. The win rate itself is a plain
+  white mask scaling up from each panel's own bottom edge, not a pattern fill, so it needs no
+  categorical color of its own.
 
 ## Light/dark mode background rule
 
@@ -213,11 +287,14 @@ against the dark background) can still read as "hard to see" as a 2px line despi
 contrast check on its own — thin strokes lose effective contrast that a filled swatch of the same
 color doesn't, and the halo is what recovers it.
 
-**No two lines drawn together may share both stroke width and stroke style.** Whenever a visual
-shows two or more line strokes at once (two arcs, two trend lines, two chart series drawn as lines),
-each one needs a genuinely different combination of thickness and dash pattern (solid, dashed,
+**No two lines drawn together may share stroke width or stroke style.** Whenever a visual shows two
+or more line strokes at once (two arcs, two trend lines, two chart series drawn as lines), each one
+needs a genuinely different thickness **and** a genuinely different dash pattern (solid, dashed,
 dotted — not just a different color), the same non-color-channel requirement the pattern rule
-already applies to filled swatches, extended to strokes specifically. Reusing the same thickness and
+already applies to filled swatches, extended to strokes specifically. Matching on either channel
+alone still isn't enough — two lines both solid at different widths, or both the same width in
+different dash patterns, still read as "the same kind of line, just resized/recolored" at a glance;
+only varying both together reads unambiguously as two distinct lines. Reusing the same thickness and
 the same solid/dashed/dotted style for two lines and separating them by hue alone fails a colorblind
 viewer exactly the way an unpatterned swatch does. Example: `player-card.tsx`'s rally-length
 flight-path arcs — Won is solid and thicker, Lost is dashed and thinner, on top of their
