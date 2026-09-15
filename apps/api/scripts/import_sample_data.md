@@ -17,6 +17,7 @@ container, the demo password). This covers *constructing valid rows*.
 | `players.csv` | yes       | player                                                               |
 | `matches.csv` | yes       | match                                                                 |
 | `points.csv`  | optional  | captured point — omit the file entirely for a match with no points |
+| `photos/`     | optional  | the files `photo` cells name; any folder works, the cell is the path |
 
 Re-running the importer on an edited version of the same files is safe: rows are
 recognised by natural key (coach by email, player by coach+first+last name, match by
@@ -25,8 +26,8 @@ duplicated.
 
 A **regenerated** season is not an edited one. The generator draws each match's date and
 opponent from its RNG stream, so a fresh run shares almost no match natural key with the
-last, and importing it over the old season leaves both in place, roughly 240 matches
-where 120 were wanted. Clear the old one first with `purge_sample_data.sql`, which takes
+last, and importing it over the old season leaves both in place, roughly 720 matches
+where 360 were wanted. Clear the old one first with `purge_sample_data.sql`, which takes
 the coach emails from the `coaches.csv` about to be imported:
 
 ```sh
@@ -41,17 +42,22 @@ and players stay for the import to reuse, so each player keeps the username they
 ## `coaches.csv`
 
 ```
-email,display_name
+email,display_name,photo
 ```
 
 One row per coach. `email` is lowercased on write, so casing in the file doesn't
 matter. There's no password column: every imported coach shares one generated
 password, printed by the script when it finishes — see its docstring.
 
+- `photo`: a JPEG, PNG or WebP, as a path relative to the CSV directory (e.g.
+  `photos/coach-1.webp`), blank = no photo. It goes through the same normaliser an
+  upload does, so any size or orientation is fine. A coach that already has a photo
+  keeps it on a second import.
+
 ## `players.csv`
 
 ```
-coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
+coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes,photo
 ```
 
 - `coach_email` joins to a row in `coaches.csv`.
@@ -61,6 +67,7 @@ coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
 - `dominant_hand`: `right` \| `left`, blank = unset.
 - `gender`: `male` \| `female` \| `other`, blank = unset.
 - `notes`: free text, blank = unset.
+- `photo`: as on `coaches.csv`.
 - Don't invent a `username` — the importer mints one from the name.
 
 ## `matches.csv`

@@ -40,6 +40,7 @@ from matchpoint_api.models import (
 from matchpoint_api.usernames import username_prefix
 from scripts import import_sample_data
 from scripts.import_sample_data import _blank_to_none, _parse_bool, _parse_date, run_import
+from tests.conftest import image_bytes, stored_photos
 
 # The literal-hash idiom from tests/factories.py: a real Argon2 hash costs ~100 ms, and
 # nothing here verifies a password.
@@ -76,7 +77,7 @@ def _write_dataset(
 
 
 def coach_row(**overrides: str) -> dict[str, str]:
-    return {"email": COACH_EMAIL, "display_name": "Coach One"} | overrides
+    return {"email": COACH_EMAIL, "display_name": "Coach One", "photo": ""} | overrides
 
 
 def player_row(**overrides: str) -> dict[str, str]:
@@ -88,6 +89,7 @@ def player_row(**overrides: str) -> dict[str, str]:
         "dominant_hand": "",
         "gender": "",
         "notes": "",
+        "photo": "",
     } | overrides
 
 
@@ -256,6 +258,68 @@ def test_a_players_blank_columns_land_as_null(db_session: Session, tmp_path: Pat
     assert player.dominant_hand is None
     assert player.gender is None
     assert player.notes is None
+    assert player.photo_key is None
+
+
+# --- photos -----------------------------------------------------------------------
+
+
+def _write_photo(csv_dir: Path, name: str) -> None:
+    (csv_dir / "photos").mkdir(exist_ok=True)
+    (csv_dir / "photos" / name).write_bytes(image_bytes("JPEG", size=(300, 200)))
+
+
+def test_a_photo_cell_stores_the_file_under_a_key(
+    db_session: Session, tmp_path: Path, media_root: Path
+) -> None:
+    """The cell names a file next to the CSVs; what lands is the store's own WebP."""
+    _write_photo(tmp_path, "one.jpg")
+    _write_dataset(
+        tmp_path,
+        coaches=[coach_row(photo="photos/one.jpg")],
+        players=[player_row(photo="photos/one.jpg")],
+    )
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    coach = db_session.scalars(select(Coach)).one()
+    player = db_session.scalars(select(Player)).one()
+    assert coach.photo_key is not None and player.photo_key is not None
+    assert coach.photo_key != player.photo_key
+    assert {path.stem for path in stored_photos(media_root)} == {coach.photo_key, player.photo_key}
+
+
+def test_a_photo_that_is_not_an_image_fails_the_import(db_session: Session, tmp_path: Path) -> None:
+    (tmp_path / "photos").mkdir()
+    (tmp_path / "photos" / "not.jpg").write_bytes(b"not an image")
+    _write_dataset(tmp_path, players=[player_row(photo="photos/not.jpg")])
+
+    with pytest.raises(import_sample_data.photos.UnusableImage):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_re_run_keeps_the_photo_already_stored(
+    db_session: Session, tmp_path: Path, media_root: Path
+) -> None:
+    """Refreshing a photo would write a file per run and orphan the last; the row's
+    existing one wins, the way its username does."""
+    _write_photo(tmp_path, "one.jpg")
+    _write_dataset(
+        tmp_path,
+        coaches=[coach_row(photo="photos/one.jpg")],
+        players=[player_row(photo="photos/one.jpg")],
+    )
+    run_import(db_session, tmp_path, STUB_HASH)
+    first_keys = (
+        db_session.scalars(select(Coach)).one().photo_key,
+        db_session.scalars(select(Player)).one().photo_key,
+    )
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    assert db_session.scalars(select(Coach)).one().photo_key == first_keys[0]
+    assert db_session.scalars(select(Player)).one().photo_key == first_keys[1]
+    assert len(stored_photos(media_root)) == 2
 
 
 def test_a_player_gets_the_username_the_route_would_mint(

@@ -1,37 +1,37 @@
-coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
-thandi.mokoena@example.com,Liam,Khumalo,2001-12-27,right,other,"Squad's benchmark. Nothing to fix, plenty to sharpen."
-derek.wallace@example.com,Liam,Steyn,2007-02-22,right,female,"Squad's benchmark. Nothing to fix, plenty to sharpen."
-farah.ismail@example.com,Kagiso,van Wyk,2000-03-13,right,male,"Squad's benchmark. Nothing to fix, plenty to sharpen."
-thandi.mokoena@example.com,Sarah,Molefe,2001-07-04,left,other,Serve wins some matches on its own. Second serve is the tell.
-derek.wallace@example.com,Naledi,Nkosi,2003-03-08,left,female,Serve wins some matches on its own. Second serve is the tell.
-farah.ismail@example.com,Zanele,Nkosi,2009-07-13,left,female,Serve wins some matches on its own. Second serve is the tell.
-thandi.mokoena@example.com,Naledi,Fourie,2003-07-22,right,female,Best mover in the squad; wins the long ones.
-derek.wallace@example.com,Hannah,Naidoo,2004-05-02,right,female,Best mover in the squad; wins the long ones.
-farah.ismail@example.com,Priya,Chikwanda,2002-03-27,right,other,Best mover in the squad; wins the long ones.
-thandi.mokoena@example.com,Lerato,Abrahams,2004-10-03,right,male,Net game is well ahead of the baseline game.
-derek.wallace@example.com,Liam,Louw,2000-02-07,right,male,Net game is well ahead of the baseline game.
-farah.ismail@example.com,Priya,Mokoena,2007-07-20,right,male,Net game is well ahead of the baseline game.
-thandi.mokoena@example.com,Zanele,de Villiers,2007-11-18,left,female,"Never misses, never hurts anyone. Needs a finishing shot."
-derek.wallace@example.com,Sarah,Abrahams,2001-06-08,left,female,"Never misses, never hurts anyone. Needs a finishing shot."
-farah.ismail@example.com,Chloe,van Wyk,2010-05-23,left,female,"Never misses, never hurts anyone. Needs a finishing shot."
-thandi.mokoena@example.com,Chloe,de Villiers,2009-12-08,right,female,"Strong forehand, avoids the backhand under pressure."
-derek.wallace@example.com,Jonas,Mahlangu,2006-12-15,right,female,"Strong forehand, avoids the backhand under pressure."
-farah.ismail@example.com,Nomsa,van Wyk,2002-07-25,right,male,"Strong forehand, avoids the backhand under pressure."
-thandi.mokoena@example.com,Naledi,Molefe,2004-11-17,right,male,
-derek.wallace@example.com,Daniel,Adams,2004-10-22,right,female,
-farah.ismail@example.com,Zanele,Louw,2008-05-14,right,female,
-thandi.mokoena@example.com,Naledi,Ferreira,2006-05-24,left,female,Hits harder than anyone here and misses more than anyone here.
-derek.wallace@example.com,Ravi,Dlamini,2009-08-07,left,female,Hits harder than anyone here and misses more than anyone here.
-farah.ismail@example.com,Naledi,Petersen,2008-08-07,left,male,Hits harder than anyone here and misses more than anyone here.
-thandi.mokoena@example.com,Tendai,Molefe,2008-07-06,right,female,Rushes between points when behind.
-derek.wallace@example.com,Kagiso,Reddy,2007-11-23,right,male,Rushes between points when behind.
-farah.ismail@example.com,Nomsa,Botha,2008-05-26,right,male,Rushes between points when behind.
-thandi.mokoena@example.com,Liam,Sithole,2006-06-04,right,other,Started in July. Every match is a first.
-derek.wallace@example.com,Thabo,Ferreira,2007-01-17,right,female,Started in July. Every match is a first.
-farah.ismail@example.com,Aisha,van Wyk,2005-11-14,right,male,Started in July. Every match is a first.
-thandi.mokoena@example.com,Lerato,Adams,2003-03-16,right,male,"Second serve is the weak link, sits up on big points."
-derek.wallace@example.com,Hannah,de Villiers,2011-10-04,right,male,"Second serve is the weak link, sits up on big points."
-farah.ismail@example.com,Marco,Abrahams,2009-02-15,right,male,"Second serve is the weak link, sits up on big points."
-thandi.mokoena@example.com,Yusuf,Louw,2001-08-03,left,male,
-derek.wallace@example.com,Lerato,Molefe,2009-06-16,left,female,
-farah.ismail@example.com,Hannah,Mokoena,2009-07-01,left,female,
+coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes,photo
+thandi.mokoena@example.com,Liam,Khumalo,2001-12-27,right,male,"Squad's benchmark. Nothing to fix, plenty to sharpen.",photos/player-01.webp
+derek.wallace@example.com,Liam,Steyn,2007-02-22,right,male,"Squad's benchmark. Nothing to fix, plenty to sharpen.",photos/player-02.webp
+farah.ismail@example.com,Kagiso,van Wyk,2000-03-13,right,male,"Squad's benchmark. Nothing to fix, plenty to sharpen.",photos/player-03.webp
+thandi.mokoena@example.com,Sarah,Molefe,2001-07-04,left,female,Serve wins some matches on its own. Second serve is the tell.,photos/player-04.webp
+derek.wallace@example.com,Naledi,Nkosi,2003-03-08,left,female,Serve wins some matches on its own. Second serve is the tell.,photos/player-05.webp
+farah.ismail@example.com,Zanele,Nkosi,2009-07-13,left,female,Serve wins some matches on its own. Second serve is the tell.,photos/player-06.webp
+thandi.mokoena@example.com,Naledi,Fourie,2003-07-22,right,female,Best mover in the squad; wins the long ones.,photos/player-07.webp
+derek.wallace@example.com,Hannah,Naidoo,2004-05-02,right,female,Best mover in the squad; wins the long ones.,photos/player-08.webp
+farah.ismail@example.com,Priya,Chikwanda,2002-03-27,right,female,Best mover in the squad; wins the long ones.,photos/player-09.webp
+thandi.mokoena@example.com,Lerato,Abrahams,2004-10-03,right,female,Net game is well ahead of the baseline game.,photos/player-10.webp
+derek.wallace@example.com,Liam,Louw,2000-02-07,right,male,Net game is well ahead of the baseline game.,photos/player-11.webp
+farah.ismail@example.com,Priya,Mokoena,2007-07-20,right,female,Net game is well ahead of the baseline game.,photos/player-12.webp
+thandi.mokoena@example.com,Zanele,de Villiers,2007-11-18,left,female,"Never misses, never hurts anyone. Needs a finishing shot.",photos/player-13.webp
+derek.wallace@example.com,Sarah,Abrahams,2001-06-08,left,female,"Never misses, never hurts anyone. Needs a finishing shot.",photos/player-14.webp
+farah.ismail@example.com,Chloe,van Wyk,2010-05-23,left,female,"Never misses, never hurts anyone. Needs a finishing shot.",photos/player-15.webp
+thandi.mokoena@example.com,Chloe,de Villiers,2009-12-08,right,female,"Strong forehand, avoids the backhand under pressure.",photos/player-16.webp
+derek.wallace@example.com,Jonas,Mahlangu,2006-12-15,right,male,"Strong forehand, avoids the backhand under pressure.",photos/player-17.webp
+farah.ismail@example.com,Nomsa,van Wyk,2002-07-25,right,other,"Strong forehand, avoids the backhand under pressure.",photos/player-18.webp
+thandi.mokoena@example.com,Naledi,Molefe,2004-11-17,right,female,,photos/player-19.webp
+derek.wallace@example.com,Daniel,Adams,2004-10-22,right,male,,photos/player-20.webp
+farah.ismail@example.com,Zanele,Louw,2008-05-14,right,female,,photos/player-21.webp
+thandi.mokoena@example.com,Naledi,Ferreira,2006-05-24,left,female,Hits harder than anyone here and misses more than anyone here.,photos/player-22.webp
+derek.wallace@example.com,Ravi,Dlamini,2009-08-07,left,male,Hits harder than anyone here and misses more than anyone here.,photos/player-23.webp
+farah.ismail@example.com,Naledi,Petersen,2008-08-07,left,female,Hits harder than anyone here and misses more than anyone here.,photos/player-24.webp
+thandi.mokoena@example.com,Tendai,Molefe,2008-07-06,right,male,Rushes between points when behind.,photos/player-25.webp
+derek.wallace@example.com,Kagiso,Reddy,2007-11-23,right,other,Rushes between points when behind.,photos/player-26.webp
+farah.ismail@example.com,Nomsa,Botha,2008-05-26,right,female,Rushes between points when behind.,photos/player-27.webp
+thandi.mokoena@example.com,Liam,Sithole,2006-06-04,right,male,Started in July. Every match is a first.,photos/player-28.webp
+derek.wallace@example.com,Thabo,Ferreira,2007-01-17,right,male,Started in July. Every match is a first.,photos/player-29.webp
+farah.ismail@example.com,Aisha,van Wyk,2005-11-14,right,female,Started in July. Every match is a first.,photos/player-30.webp
+thandi.mokoena@example.com,Lerato,Adams,2003-03-16,right,female,"Second serve is the weak link, sits up on big points.",photos/player-31.webp
+derek.wallace@example.com,Hannah,de Villiers,2011-10-04,right,other,"Second serve is the weak link, sits up on big points.",photos/player-32.webp
+farah.ismail@example.com,Marco,Abrahams,2009-02-15,right,other,"Second serve is the weak link, sits up on big points.",photos/player-33.webp
+thandi.mokoena@example.com,Yusuf,Louw,2001-08-03,left,male,,photos/player-34.webp
+derek.wallace@example.com,Lerato,Molefe,2009-06-16,left,female,,photos/player-35.webp
+farah.ismail@example.com,Hannah,Mokoena,2009-07-01,left,female,,photos/player-36.webp

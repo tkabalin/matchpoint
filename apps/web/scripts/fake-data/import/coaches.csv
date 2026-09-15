@@ -1,4 +1,4 @@
-email,display_name
-thandi.mokoena@example.com,Thandi Mokoena
-derek.wallace@example.com,Derek Wallace
-farah.ismail@example.com,Farah Ismail
+email,display_name,photo
+thandi.mokoena@example.com,Thandi Mokoena,photos/coach-01.webp
+derek.wallace@example.com,Derek Wallace,photos/coach-02.webp
+farah.ismail@example.com,Farah Ismail,photos/coach-03.webp

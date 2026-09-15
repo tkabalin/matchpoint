@@ -9,7 +9,7 @@ the same files.
 | `players.csv` | The roster. |
 | `matches.csv` | One row per match, with the derived scoreline. |
 | `points.csv` | One row per captured point, every field flattened. |
-| `import/` | The same season in the four files the API's import script reads. |
+| `import/` | The same season in the four files the API's import script reads, plus `photos/`. |
 
 A `capture-data.json` sits here too after a run, holding the same data in the match log's own
 nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as
@@ -22,6 +22,12 @@ Each coach's 12 players cycle through the same 12 archetypes (`players.csv`'s
 and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and
 the temperament reaches the points: an aggressive player ends rallies early, at the net, and
 hands over more unforced errors; a passive one lobs, drops and grinds.
+
+`import/photos/` holds a face for every player and coach, named for the row it belongs to
+(`player-07.webp` is the seventh row of `import/players.csv`). They are the one thing here the
+seed does not regenerate: each was fetched once from thispersondoesnotexist.com, picked by
+hand to fit the row's gender and age, and committed. A roster larger than the set runs out
+of photos rather than naming files the importer cannot find.
 
 ## Reading a point
 

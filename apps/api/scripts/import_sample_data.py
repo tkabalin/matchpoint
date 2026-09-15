@@ -18,12 +18,13 @@ Running this against prod:
        docker compose -f /opt/matchpoint/compose.yml exec -T postgres \\
            pg_dump -U matchpoint matchpoint > backup-before-import.sql
   2. From apps/web/scripts/fake-data/import/, scp coaches.csv, players.csv, matches.csv,
-     and points.csv if there is one, to the VPS, then copy each into the api container
-     (compose has no volume mount for arbitrary host files):
+     points.csv if there is one, and the photos/ folder, to the VPS, then copy each into
+     the api container (compose has no volume mount for arbitrary host files):
        docker compose -f /opt/matchpoint/compose.yml cp coaches.csv api:/tmp/coaches.csv
        docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
        docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv
        docker compose -f /opt/matchpoint/compose.yml cp points.csv api:/tmp/points.csv
+       docker compose -f /opt/matchpoint/compose.yml cp photos api:/tmp/photos
   3. If this is replacing a season already imported there, clear it first with
      purge_sample_data.sql; see the paragraph on regenerated seasons below.
   4. Run the script with the container's own Python and environment:
@@ -32,8 +33,9 @@ Running this against prod:
 
 Expected CSV files, read from /tmp inside the container:
 
-  coaches.csv:  email,display_name
-  players.csv:  coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
+  coaches.csv:  email,display_name,photo
+  players.csv:  coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes,
+                photo
   matches.csv:  coach_email,player_first_name,player_last_name,opponent_name,played_on,
                 surface,event,scoring_system,result,result_reason,match_key
   points.csv:   coach_email,match_key,sequence,server,won,court_side,serve1_outcome,
@@ -56,6 +58,9 @@ Expected CSV files, read from /tmp inside the container:
 - match_key: an arbitrary label, unique per coach (blank = this match has no points).
   It exists only to join points.csv to a match here; it is never stored, so a match
   created without points never needs one.
+- photo: a JPEG, PNG or WebP file, as a path relative to the CSV directory (blank = no
+  photo). Stored through the same normaliser an upload goes through, so the file on
+  disk is the usual 512px square WebP whatever was supplied.
 
 - players.csv/matches.csv link back to coaches.csv by coach_email; matches.csv links to
   players.csv by (coach_email, player_first_name, player_last_name) — there's no id
@@ -79,10 +84,11 @@ by its natural key — a coach by email, a player by (coach, first_name, last_na
 match by (player, played_on, opponent_name, event), a point by (match, sequence) — and
 everything past that key is refreshed from the CSV, which is what makes a correction
 land. A match cannot be recognised by its match_key, since that is never stored, which
-is why those four columns have to tell one of a player's matches from another. Two things
-are deliberately not refreshed: a player keeps the username minted on its first import,
-being what that player signs in with, and a point already stored is left as it is rather
-than rewritten, the rule the ingest route follows for a repeated point.
+is why those four columns have to tell one of a player's matches from another. Three
+things are deliberately not refreshed: a player keeps the username minted on its first
+import, being what that player signs in with; a coach or player that already has a photo
+keeps it, so a re-run writes no second file; and a point already stored is left as it is
+rather than rewritten, the rule the ingest route follows for a repeated point.
 
 What re-running does not do is replace a regenerated season. The generator draws each
 match's date and opponent from its RNG stream, so a fresh run shares almost none of the
@@ -103,6 +109,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
+from matchpoint_api import photos
 from matchpoint_api.db import session_factory
 from matchpoint_api.match_sets import recompute_match_sets
 from matchpoint_api.models import (
@@ -194,6 +201,18 @@ def _parse_bool(value: str) -> bool:
     raise ValueError(f"expected a boolean value, got {value!r}")
 
 
+def _store_photo(csv_dir: Path, cell: str) -> str | None:
+    """The key a CSV row's photo is stored under, or None for a blank cell.
+
+    Written to disk here and now, before the caller's commit: an import that fails
+    afterwards strands the files, which photos.py's own ordering note accepts as the
+    cheap side of that trade.
+    """
+    if (name := _blank_to_none(cell)) is None:
+        return None
+    return photos.store((csv_dir / name).read_bytes())
+
+
 def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
     """Import every CSV in csv_dir, reporting what it wrote.
 
@@ -225,6 +244,8 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         # every imported coach, which would be false for the ones already there.
         coach.display_name = row["display_name"]
         coach.password_hash = password_hash
+        if coach.photo_key is None:
+            coach.photo_key = _store_photo(csv_dir, row["photo"])
         coach_by_email[email] = coach
     db.flush()
 
@@ -265,6 +286,8 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         player.dominant_hand = dominant_hand
         player.gender = gender
         player.notes = notes
+        if player.photo_key is None:
+            player.photo_key = _store_photo(csv_dir, row["photo"])
         player_by_identity[identity] = player
         player_by_key[(coach.email.lower(), player.first_name, player.last_name)] = player
     db.flush()

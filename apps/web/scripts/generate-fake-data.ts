@@ -20,7 +20,7 @@
  *      --matches 120 --out apps/web/scripts/fake-data]
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,6 +73,8 @@ const OUT_DIR = resolve(
   "../../..",
   flag("out", "apps/web/scripts/fake-data"),
 );
+
+const IMPORT_DIR = resolve(OUT_DIR, "import");
 
 // The season the matches are spread over, oldest first.
 const SEASON_START = new Date(2025, 8, 6);
@@ -184,27 +186,29 @@ interface RosterPlayer {
   skill: Skill;
 }
 
-const FIRST_NAMES = [
-  "Thabo",
-  "Aisha",
-  "Liam",
-  "Nomsa",
-  "Ravi",
-  "Chloe",
-  "Sipho",
-  "Hannah",
-  "Yusuf",
-  "Zanele",
-  "Daniel",
-  "Priya",
-  "Kagiso",
-  "Emma",
-  "Tendai",
-  "Jonas",
-  "Lerato",
-  "Sarah",
-  "Marco",
-  "Naledi",
+// Each name carries the gender it usually reads as, so a player's profile, gender field
+// and photo agree; the roster still draws a few "other" players across every name.
+const FIRST_NAMES: readonly (readonly [string, "male" | "female"])[] = [
+  ["Thabo", "male"],
+  ["Aisha", "female"],
+  ["Liam", "male"],
+  ["Nomsa", "female"],
+  ["Ravi", "male"],
+  ["Chloe", "female"],
+  ["Sipho", "male"],
+  ["Hannah", "female"],
+  ["Yusuf", "male"],
+  ["Zanele", "female"],
+  ["Daniel", "male"],
+  ["Priya", "female"],
+  ["Kagiso", "male"],
+  ["Emma", "female"],
+  ["Tendai", "male"],
+  ["Jonas", "male"],
+  ["Lerato", "female"],
+  ["Sarah", "female"],
+  ["Marco", "male"],
+  ["Naledi", "female"],
 ];
 
 const LAST_NAMES = [
@@ -410,7 +414,7 @@ function makeRoster(count: number): RosterPlayer[] {
   const players: RosterPlayer[] = [];
   const used = new Set<string>();
   while (players.length < count) {
-    const first = pick(FIRST_NAMES);
+    const [first, usualGender] = pick(FIRST_NAMES);
     const last = pick(LAST_NAMES);
     const name = `${first} ${last}`;
     if (used.has(name)) continue;
@@ -431,11 +435,7 @@ function makeRoster(count: number): RosterPlayer[] {
         new Date(birthYear, Math.floor(rng() * 12), 1 + Math.floor(rng() * 27)),
       ),
       dominant_hand: archetype.hand,
-      gender: weighted([
-        ["male", 5],
-        ["female", 5],
-        ["other", 1],
-      ] as const),
+      gender: chance(1 / 11) ? "other" : usualGender,
       notes: archetype.note,
       // Round-robin rather than random, so no coach draws an empty roster.
       coach_id: COACHES[players.length % COACHES.length]!.id,
@@ -1234,6 +1234,18 @@ function toApiPoint(payload: ReturnType<Point["toJSON"]>): ApiPoint {
   };
 }
 
+/**
+ * The face committed for the nth player or coach, as the importer's cell names it, or
+ * blank when none has been. The photos are not generated: they were fetched once from
+ * thispersondoesnotexist.com, chosen to fit each row's gender and age, and committed
+ * under `photos/` (see the README). So a roster larger than the set of faces simply runs
+ * out of photos, rather than naming files the importer cannot find.
+ */
+function photoCell(kind: "player" | "coach", index: number): string {
+  const name = `photos/${kind}-${String(index + 1).padStart(2, "0")}.webp`;
+  return existsSync(resolve(IMPORT_DIR, name)) ? name : "";
+}
+
 const IMPORT_PLAYER_COLUMNS = [
   "coach_email",
   "first_name",
@@ -1242,6 +1254,7 @@ const IMPORT_PLAYER_COLUMNS = [
   "dominant_hand",
   "gender",
   "notes",
+  "photo",
 ];
 
 const IMPORT_MATCH_COLUMNS = [
@@ -1408,14 +1421,13 @@ writeFileSync(
   ),
 );
 
-const IMPORT_DIR = resolve(OUT_DIR, "import");
 mkdirSync(IMPORT_DIR, { recursive: true });
 
 writeFileSync(
   resolve(IMPORT_DIR, "coaches.csv"),
   csv(
-    ["email", "display_name"],
-    COACHES.map((coach) => [coach.email, coach.displayName]),
+    ["email", "display_name", "photo"],
+    COACHES.map((coach, index) => [coach.email, coach.displayName, photoCell("coach", index)]),
   ),
 );
 
@@ -1423,7 +1435,7 @@ writeFileSync(
   resolve(IMPORT_DIR, "players.csv"),
   csv(
     IMPORT_PLAYER_COLUMNS,
-    players.map((player) => [
+    players.map((player, index) => [
       emailOf(player),
       player.first_name,
       player.last_name,
@@ -1431,6 +1443,7 @@ writeFileSync(
       player.dominant_hand,
       player.gender,
       player.notes,
+      photoCell("player", index),
     ]),
   ),
 );
@@ -1505,7 +1518,7 @@ writeFileSync(
     "| `players.csv` | The roster. |",
     "| `matches.csv` | One row per match, with the derived scoreline. |",
     "| `points.csv` | One row per captured point, every field flattened. |",
-    "| `import/` | The same season in the four files the API's import script reads. |",
+    "| `import/` | The same season in the four files the API's import script reads, plus `photos/`. |",
     "",
     "A `capture-data.json` sits here too after a run, holding the same data in the match log's own",
     "nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as",
@@ -1518,6 +1531,12 @@ writeFileSync(
     "and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and",
     "the temperament reaches the points: an aggressive player ends rallies early, at the net, and",
     "hands over more unforced errors; a passive one lobs, drops and grinds.",
+    "",
+    "`import/photos/` holds a face for every player and coach, named for the row it belongs to",
+    "(`player-07.webp` is the seventh row of `import/players.csv`). They are the one thing here the",
+    "seed does not regenerate: each was fetched once from thispersondoesnotexist.com, picked by",
+    "hand to fit the row's gender and age, and committed. A roster larger than the set runs out",
+    "of photos rather than naming files the importer cannot find.",
     "",
     "## Reading a point",
     "",
