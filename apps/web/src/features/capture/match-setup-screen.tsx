@@ -1,11 +1,11 @@
 /**
  * The match setup screen — what a match needs before its first point.
  *
- * Everything here is a field on `Match`, with two exceptions: the time is shown for
- * the coach's confirmation only, since `playedOn` is a calendar date and stores no
- * time of day on purpose (see match.ts); and `previousOpponents`, which only backs the
- * Opponent field's suggestions and is never itself sent anywhere. Which player the
- * match is for is settled before this screen, so it names them rather than asking.
+ * Everything here is a field on `Match`, with two exceptions: the date is shown for
+ * the coach's confirmation only, since the `playedOn` that reaches the match is stamped
+ * at creation rather than taken from here; and `previousOpponents`, which only backs the
+ * Opponent field's suggestions and is never itself sent anywhere. Which player the match
+ * is for is settled before this screen, so it names them rather than asking.
  */
 
 import { ArrowLeft, ChevronDown } from "lucide-react";
@@ -88,10 +88,9 @@ export function MatchSetupScreen({
     initial?.surfaceType ?? defaultSurfaceType,
   );
   const [playerServesFirst, setPlayerServesFirst] = useState(initial?.playerServesFirst ?? true);
-  // Frozen at mount: this is when the coach sat down, not when React last rendered.
-  const [startedAt] = useState(() =>
-    new Date().toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }),
-  );
+  // The date the match will be filed under, mirroring the `playedOn` its creation
+  // stamps. A clock time is not recorded anywhere, so the header does not claim one.
+  const playedOn = new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
   const matchingOpponents = useMemo(() => {
     const query = opponentName.trim().toLowerCase();
@@ -128,7 +127,7 @@ export function MatchSetupScreen({
       <div className="flex flex-col gap-[18px] px-0.5 pt-7">
         <div className="flex h-11 items-center justify-between rounded-lg border border-input px-3 text-sm">
           <span className="text-muted-foreground">{playerName}</span>
-          <span className="font-medium tabular-nums">{startedAt}</span>
+          <span className="font-medium tabular-nums">{playedOn}</span>
         </div>
 
         <Field>
@@ -314,7 +313,9 @@ export function MatchSetupScreen({
         </Field>
       </div>
 
-      <div className="flex-1" />
+      {/* Pushes the action to the bottom, but keeps a gap when the viewport is too
+          short for the spacer to grow. */}
+      <div className="min-h-6 flex-1" />
 
       <Button
         disabled={!ready}
