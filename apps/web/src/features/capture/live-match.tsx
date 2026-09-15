@@ -42,6 +42,7 @@ import { MatchHeader } from "./match-header";
 import { MatchSetupScreen } from "./match-setup-screen";
 import type { MatchSetupConfig } from "./match-setup-screen";
 import { isMatchOver, retireMatch, startNextPoint, undoLast } from "./match-flow";
+import type { NoteHandle } from "./note-button";
 import type { Server } from "./point";
 import { RallyLengthScreen } from "./rally-length-screen";
 import { ResultScreen } from "./result-screen";
@@ -138,6 +139,11 @@ export function LiveMatch({
   // can run twice in one pass, and render needs a reactive copy to read.
   const finishedRef = useRef(false);
   const [finished, setFinished] = useState(false);
+  // Reaches into the header's note button for a dictation still in progress, so the
+  // words a coach was speaking land on the point they were describing rather than the
+  // one after it. A pull, not a prop the button pushes: only this side knows when a
+  // draft stops being a draft.
+  const noteRef = useRef<NoteHandle>(null);
 
   const board = useMemo(() => (match === null ? null : foldScore(match, events)), [match, events]);
 
@@ -295,6 +301,10 @@ export function LiveMatch({
 
     const won = next.draft.won ?? false;
     const context = contextFor(match, board, next.draft.server, won);
+    // A dictation still open belongs to the point it was spoken over, not the next one,
+    // so the boundary takes it rather than waiting for a Save that would land it late.
+    const pendingNote = noteRef.current?.takePending() ?? "";
+    if (pendingNote !== "") next = transition(next, { type: "ADD_NOTE", text: pendingNote });
     const point = commitDraft(next.draft, crypto.randomUUID(), Date.now(), context);
     const nextEvents = [...events, point];
     queueEvent(match, point, nextSequence + 1);
@@ -613,6 +623,7 @@ export function LiveMatch({
         onAddNote={(text) => {
           dispatch({ type: "ADD_NOTE", text });
         }}
+        noteRef={noteRef}
       />
 
       {step.name === "SERVE" &&

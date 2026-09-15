@@ -22,7 +22,7 @@
  */
 
 import { ArrowLeft, SkipForward } from "lucide-react";
-import { useState } from "react";
+import { type Ref, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -30,7 +30,7 @@ import { hasSeenHoldTip, markHoldTipSeen } from "@/lib/hold-tip";
 import { cn } from "@/lib/utils";
 
 import type { Match } from "./match";
-import { NoteButton } from "./note-button";
+import { NoteButton, type NoteHandle } from "./note-button";
 import type { Server } from "./point";
 import { scoreboardFor } from "./score";
 import type { Scoreboard } from "./score";
@@ -80,6 +80,7 @@ export function MatchHeader({
   onSkipPoint,
   onEditScore,
   onAddNote,
+  noteRef,
 }: {
   match: Match;
   board: Scoreboard;
@@ -97,6 +98,9 @@ export function MatchHeader({
   onSkipPoint: (won: boolean) => void;
   onEditScore: () => void;
   onAddNote: (text: string) => void;
+  // How the flow takes an unfinished dictation at a point boundary, so the words land
+  // on the point they describe. Forwarded straight through; the header never reads it.
+  noteRef?: Ref<NoteHandle>;
 }) {
   const [askingWinner, setAskingWinner] = useState(false);
   // Drives the back button's own fill bar — purely visual, so it stays a plain flag
@@ -261,7 +265,7 @@ export function MatchHeader({
       </div>
 
       <div className="flex items-center gap-1">
-        <NoteButton onAddNote={onAddNote} />
+        <NoteButton onAddNote={onAddNote} ref={noteRef} />
 
         <Button
           variant="ghost"

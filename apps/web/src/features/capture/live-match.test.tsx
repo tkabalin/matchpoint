@@ -1,6 +1,6 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
 import { outboxDb } from "@/features/outbox/db";
@@ -55,6 +55,56 @@ async function renderMatch() {
     expect(screen.getAllByRole("heading").length).toBeGreaterThan(0);
   });
   return { ...view, onExit, onGoHome, onViewResults, user: userEvent.setup({ delay: null }) };
+}
+
+/**
+ * Only what a dictation running across a point boundary needs: words arriving, and a
+ * stop that either ends the session at once or still owes a final result. The fuller
+ * stand-in, with the error and constructor-throw paths, lives in note-button.test.tsx.
+ */
+class FakeSpeechRecognition {
+  continuous = false;
+  interimResults = false;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null =
+    null;
+  onerror: (() => void) | null = null;
+  onend: (() => void) | null = null;
+  pendingFinalTranscript = "";
+  start = vi.fn();
+  stop = vi.fn(() => {
+    if (this.pendingFinalTranscript !== "") return;
+    this.onend?.();
+  });
+  flushAfterStop() {
+    this.onresult?.({ results: [[{ transcript: this.pendingFinalTranscript }]] });
+    this.onend?.();
+  }
+}
+
+function installFakeSpeechRecognition({ finalResult = "" } = {}) {
+  const instances: FakeSpeechRecognition[] = [];
+  (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = class extends (
+    FakeSpeechRecognition
+  ) {
+    constructor() {
+      super();
+      this.pendingFinalTranscript = finalResult;
+      instances.push(this);
+    }
+  };
+  return instances;
+}
+
+afterEach(() => {
+  delete (window as unknown as { SpeechRecognition?: unknown }).SpeechRecognition;
+});
+
+/** The note queued with the point this call appended, if that call was a point at all. */
+function queuedPointNote(call: number) {
+  const row = vi.mocked(append).mock.calls.map((c) => c[0])[call];
+  return row === undefined || row.kind !== "point"
+    ? undefined
+    : (row.payload as { note: string | null }).note;
 }
 
 /** Holds past HOLD_MS and lets go, the gesture that reaches a button's hold action. */
@@ -822,4 +872,48 @@ test("retiring after points were played still queues the outcome, as its own row
     kind: "matchOutcome",
     payload: { reason: "retirement", trackedPlayerWon: false },
   });
+});
+
+test("a dictation still running when the point ends lands on that point, not the next", async () => {
+  const instances = installFakeSpeechRecognition();
+  const { user } = await renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "chasing the drop shot" }]] });
+  });
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(2);
+  });
+  expect(queuedPointNote(1)).toBe("chasing the drop shot");
+  // The panel stays, so a coach mid-thought can see what happened and carry on.
+  expect(screen.getByText("Stopped listening. Save or cancel.")).toBeVisible();
+  expect(screen.getByPlaceholderText("Speak or type")).toHaveValue("");
+});
+
+test("a Save still in flight when the point ends doesn't carry the note to the next point", async () => {
+  const instances = installFakeSpeechRecognition({ finalResult: "reaching on the backhand" });
+  const { user } = await renderMatch();
+  await startMatch(user);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    instances[0]?.onresult?.({ results: [[{ transcript: "reaching" }]] });
+  });
+  // Tapped Save, then the point ended before the service handed back its last words.
+  await user.click(screen.getByRole("button", { name: "Save note" }));
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+  act(() => {
+    instances[0]?.flushAfterStop();
+  });
+  await user.click(screen.getByRole("button", { name: "Ace" }));
+
+  await waitFor(() => {
+    expect(vi.mocked(append)).toHaveBeenCalledTimes(3);
+  });
+  expect(queuedPointNote(1)).toBe("reaching");
+  expect(queuedPointNote(2)).toBeNull();
 });

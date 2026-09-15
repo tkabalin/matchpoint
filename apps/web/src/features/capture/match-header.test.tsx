@@ -260,7 +260,7 @@ test("tapping the note button opens the text sheet where the browser can't trans
 
   await user.click(screen.getByRole("button", { name: "Add a note" }));
   await user.type(screen.getByPlaceholderText("What happened?"), "favoring the backhand today");
-  await user.click(screen.getByRole("button", { name: "Add note" }));
+  await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(onAddNote).toHaveBeenCalledWith("favoring the backhand today");
 });
