@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { UnforcedIcon } from "@/components/unforced-icon";
 
 import type { CaptureAction, CaptureStep } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels } from "./court-diagram";
 import type { CourtTapZone } from "./court-diagram";
 import type { FailureMode } from "./point";
 
@@ -26,10 +26,14 @@ import type { FailureMode } from "./point";
 // the court side, and the second-serve line comes from the step alone.
 export function ReturnScreen({
   step,
+  trackedPlayerName,
+  opponentName,
   onAction,
   syncStatus,
 }: {
   step: Extract<CaptureStep, { name: "SERVE" }>;
+  trackedPlayerName: string;
+  opponentName: string;
   onAction: (action: CaptureAction) => void;
   // Sits at the right of the heading row, wrapping rather than pushing into the title.
   syncStatus?: ReactNode;
@@ -128,7 +132,9 @@ export function ReturnScreen({
         netLabel="Net"
         className="min-h-0 flex-1"
         onPendingChange={setPending}
-      />
+      >
+        <CourtPlayerLabels trackedPlayerName={trackedPlayerName} opponentName={opponentName} />
+      </CourtDiagram>
 
       <div className={COURT_ACTIONS}>
         <Button

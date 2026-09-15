@@ -628,9 +628,22 @@ export function LiveMatch({
 
       {step.name === "SERVE" &&
         (draft.server === "TRACKED" ? (
-          <ServeScreen step={step} draft={draft} onAction={dispatch} syncStatus={syncStatus} />
+          <ServeScreen
+            step={step}
+            draft={draft}
+            trackedPlayerName={playerName}
+            opponentName={opponentName}
+            onAction={dispatch}
+            syncStatus={syncStatus}
+          />
         ) : (
-          <ReturnScreen step={step} onAction={dispatch} syncStatus={syncStatus} />
+          <ReturnScreen
+            step={step}
+            trackedPlayerName={playerName}
+            opponentName={opponentName}
+            onAction={dispatch}
+            syncStatus={syncStatus}
+          />
         ))}
 
       {step.name === "BALL_LOCATION" && (

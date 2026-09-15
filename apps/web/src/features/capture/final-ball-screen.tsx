@@ -17,10 +17,9 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels } from "./court-diagram";
 import { finalBallZoneRegion, toCourtBox } from "./court-geometry";
 import type { CourtDepth, CourtSide } from "./point";
 import { WinnerSheet } from "./winner-sheet";
@@ -84,19 +83,7 @@ export function FinalBallScreen({
       </div>
 
       <CourtDiagram zones={zones} onPendingChange={setPending} className="min-h-0 flex-1">
-        {/* Whose half is whose, chipped on each baseline so the coach never has to
-            remember the convention mid-match. Same chip as the shot screen's wing labels. */}
-        {HALVES.map(({ won }) => (
-          <span
-            key={won ? "far" : "near"}
-            className={cn(
-              "pointer-events-none absolute left-1/2 z-30 flex h-5 -translate-x-1/2 items-center rounded-md bg-white/95 px-3 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]",
-              won ? "top-[1.5%]" : "bottom-[1.5%]",
-            )}
-          >
-            {won ? opponentName : trackedPlayerName}
-          </span>
-        ))}
+        <CourtPlayerLabels trackedPlayerName={trackedPlayerName} opponentName={opponentName} />
       </CourtDiagram>
 
       <div className={COURT_ACTIONS}>

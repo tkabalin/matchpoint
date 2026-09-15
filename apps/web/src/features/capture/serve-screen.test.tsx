@@ -22,6 +22,8 @@ function renderServe(options: { step?: typeof SERVE_1; draft?: PointDraft } = {}
     <ServeScreen
       step={options.step ?? SERVE_1}
       draft={options.draft ?? draftFor()}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
       onAction={onAction}
     />,
   );
@@ -34,6 +36,13 @@ test("titles the attempt and names the court the point is played from", () => {
   expect(screen.getByRole("heading", { name: "1st Serve" })).toBeVisible();
   expect(screen.getByText("Ad court")).toBeVisible();
   expect(screen.getByRole("status")).toHaveTextContent("Tap where the serve landed");
+});
+
+test("chips whose half is whose on the court", () => {
+  renderServe();
+
+  expect(screen.getByText("Okoye")).toBeVisible();
+  expect(screen.getByText("Rivera")).toBeVisible();
 });
 
 test("a tap in the live service box records a serve in, with no placement", async () => {

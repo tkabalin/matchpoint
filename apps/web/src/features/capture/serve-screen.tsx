@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels } from "./court-diagram";
 import type { CourtBox, CourtTapZone } from "./court-diagram";
 import type { CourtSide, FailureMode, ServeAttempt } from "./point";
 
@@ -49,11 +49,15 @@ function faultReason(location: ServeAttempt["location"]): string {
 export function ServeScreen({
   step,
   draft,
+  trackedPlayerName,
+  opponentName,
   onAction,
   syncStatus,
 }: {
   step: Extract<CaptureStep, { name: "SERVE" }>;
   draft: PointDraft;
+  trackedPlayerName: string;
+  opponentName: string;
   onAction: (action: CaptureAction) => void;
   // Sits at the right of the heading row, wrapping rather than pushing into the title.
   syncStatus?: ReactNode;
@@ -168,7 +172,9 @@ export function ServeScreen({
         netLabel="Net"
         className="min-h-0 flex-1"
         onPendingChange={setPending}
-      />
+      >
+        <CourtPlayerLabels trackedPlayerName={trackedPlayerName} opponentName={opponentName} />
+      </CourtDiagram>
 
       <div className={COURT_ACTIONS}>
         <Button

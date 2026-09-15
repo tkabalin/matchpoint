@@ -12,7 +12,14 @@ const SERVE_2: Extract<CaptureStep, { name: "SERVE" }> = { name: "SERVE", number
 
 function renderReturn(options: { step?: typeof SERVE_1 } = {}) {
   const onAction = vi.fn<(action: CaptureAction) => void>();
-  render(<ReturnScreen step={options.step ?? SERVE_1} onAction={onAction} />);
+  render(
+    <ReturnScreen
+      step={options.step ?? SERVE_1}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onAction={onAction}
+    />,
+  );
   return { onAction, user: userEvent.setup({ delay: null }) };
 }
 
@@ -22,6 +29,13 @@ test("asks where the return landed", () => {
   expect(screen.getByRole("heading", { name: "Return" })).toBeVisible();
   expect(screen.getByText("Only safe area")).toBeVisible();
   expect(screen.getByRole("status")).toHaveTextContent("Tap where the return landed");
+});
+
+test("chips whose half is whose on the court", () => {
+  renderReturn();
+
+  expect(screen.getByText("Okoye")).toBeVisible();
+  expect(screen.getByText("Rivera")).toBeVisible();
 });
 
 test("a return into the safe area goes straight to the rally", async () => {

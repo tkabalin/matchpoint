@@ -173,6 +173,36 @@ export function ZoomedCard({
 }
 
 /**
+ * The near/far player-name chips over a full-court `CourtDiagram` — final ball, serve
+ * and return all draw the same two labels, opponent always on the far half and our
+ * player always on the near one (see final-ball-screen.tsx's own comment on why that
+ * convention never flips). Pass as `CourtDiagram`'s `children`.
+ */
+export function CourtPlayerLabels({
+  trackedPlayerName,
+  opponentName,
+}: {
+  trackedPlayerName: string;
+  opponentName: string;
+}) {
+  return (
+    <>
+      {(["far", "near"] as const).map((side) => (
+        <span
+          key={side}
+          className={cn(
+            "pointer-events-none absolute left-1/2 z-30 flex h-5 -translate-x-1/2 items-center rounded-md bg-white/95 px-3 text-[11px] font-semibold tracking-[0.08em] text-chart-5 uppercase shadow-[0_1px_6px_rgb(0_0_0/0.2)]",
+            side === "far" ? "top-[1.5%]" : "bottom-[1.5%]",
+          )}
+        >
+          {side === "far" ? opponentName : trackedPlayerName}
+        </span>
+      ))}
+    </>
+  );
+}
+
+/**
  * `zones` are stacked in the order given, so a caller listing a wide gutter after the
  * service box it borders wins the overlap. `netLabel` chips the net band ("Net" while
  * the net is itself a tap target, "Rally length" where the band divides two choices);
