@@ -17,16 +17,8 @@ import { readOutboxRows } from "./outbox";
  * Whether a finished match's result reaches the server.
  *
  * capture.spec.ts covers the cheap end of this on every device; these are the
- * expensive and the failing cases, so they run in one project. Neither depends on
- * a viewport: what decides them is `flushMatch` in features/sync/drain.ts.
- *
- * ---------------------------------------------------------------------------
- * IF YOU ARE HERE BECAUSE CI WENT RED WITH "Expected to fail, but passed":
- * that is the intended signal, not a broken test. #269 is now fixed. The only
- * change to make is to DELETE the `test.fail(...)` call in the test named in the
- * failure. Do not skip it, delete it, rewrite it, weaken its assertions, or
- * widen its timeouts — they are what prove the fix actually works.
- * ---------------------------------------------------------------------------
+ * expensive and the corrected-match cases, so they run in one project. Neither
+ * depends on a viewport: what decides them is `flushMatch` in features/sync/drain.ts.
  */
 test.use({ storageState: COACH_STORAGE_STATE });
 
@@ -63,16 +55,11 @@ test("a match played to completion lands with its winner", async ({ page }) => {
 });
 
 /**
- * #269: a match the coach corrected never has its result synced.
- *
- * `checkpoint` and `eventDelete` rows have no endpoint to go to, so the drain
- * leaves them pending, and `flushMatch` only sends the outcome PATCH when every
- * one of a match's rows is sendable. One undo, or one score correction, therefore
- * fences that match's result out of the server permanently, while its points
- * still land and still feed the serve and rally figures.
- *
- * Marked `test.fail()` rather than left unwritten: it documents the defect, costs
- * a few seconds a run, and turns red the moment #269 removes the gate.
+ * #269, now fixed and guarded here: a match the coach corrected still lands its
+ * result. An undo queues an `eventDelete` row and a score correction a
+ * `checkpoint` one, and while neither had an endpoint to drain to, `flushMatch`
+ * held the outcome PATCH back behind them and fenced that match's result out of
+ * the server for good, its points landing all the while.
  */
 const CORRECTIONS = [
   {
@@ -104,9 +91,8 @@ for (const correction of CORRECTIONS) {
     // correction left the screen.
     await endMatchAs(page, /Retirement/, "Tracked");
 
-    // The points are unaffected by the gate, so they are what says the drain ran
-    // at all; waiting on the outbox instead would be waiting on a state the fix
-    // changes, and this spec has to keep failing for its own reason until then.
+    // The points were unaffected by the old gate, so they are what says the drain
+    // ran at all, independently of the outcome this spec is actually here for.
     const matchId = await matchIdNamed(page, marker);
     await expect.poll(() => pointsOf(page, matchId), { timeout: 20_000 }).not.toHaveLength(0);
 

@@ -104,9 +104,8 @@ so it gets a layer split of its own rather than one level covering it:
 
 A spec for behaviour that is filed as broken is marked `test.fail()` and written as though the
 defect were already fixed. The run stays green while the defect stands, and the spec turns red the
-moment someone fixes it, which is when its assertions become the thing worth checking. Two of the
-capture specs pin the outcome that a corrected match never syncs (#269), and the squad stats one
-pins a failed read rendering as a skeleton (#274).
+moment someone fixes it, which is when its assertions become the thing worth checking. The squad
+stats spec pins a failed read rendering as a skeleton (#274).
 
 This is only for a defect that has an issue, and every use names it in the reason argument. It is
 never a way to park a flaky or half-finished spec: a flaky spec is a bug in the spec, and a
