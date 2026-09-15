@@ -8,6 +8,15 @@
 /* Tailwind v4 is configured here, in CSS — there is no tailwind.config.js.
    Design tokens go in @theme as the design system lands. */
 @theme {
+  /* The fixed bottom nav's own height, and the one place it is written down: the
+     nav sets it, the floating action offsets above it and the page column pads
+     below it, so a device with a home indicator moves all three together. The
+     literal is the border-top, pt-2 and the nav link's own content (a 20px icon,
+     gap-0.5, and a 10px label on the inherited 1.5 line-height); the safe-area term
+     is what used to be missing from everything except the nav itself, which is how
+     the plus button ended up touching it. */
+  --spacing-nav: calc(2.875rem + max(0.5rem, env(safe-area-inset-bottom)));
+
   --color-court: oklch(0.55 0.13 160);
 
   /* What the court is actually made of, not a category: a coach recognises a clay

@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { Play, Plus } from "lucide-react";
 
+import { FAB_POSITION } from "@/components/fab-position";
 import { buttonVariants } from "@/components/ui/button";
 import { useInProgressSummary } from "@/features/capture/resume";
 import { getRecordedOwner } from "@/lib/local-data";
@@ -19,18 +20,13 @@ import { cn } from "@/lib/utils";
 export function PrimaryMatchAction({ className }: { className?: string }) {
   const summary = useInProgressSummary(getRecordedOwner());
 
-  const position =
-    // Tracks the page column's right edge rather than the viewport's, so it stays
-    // beside the content once the screen is wider than the column.
-    "fixed right-[max(1rem,calc(50%-13rem))] bottom-20 z-40 size-12 rounded-full shadow-lg";
-
   if (summary !== null) {
     return (
       <Link
         to="/new-match/$playerId"
         params={{ playerId: summary.trackedPlayerId }}
         aria-label="Resume match in progress"
-        className={cn(buttonVariants({ size: "icon" }), position, className)}
+        className={cn(buttonVariants({ size: "icon" }), FAB_POSITION, className)}
       >
         <Play className="size-6" />
       </Link>
@@ -41,7 +37,7 @@ export function PrimaryMatchAction({ className }: { className?: string }) {
     <Link
       to="/new-match"
       aria-label="Start a match"
-      className={cn(buttonVariants({ size: "icon" }), position, className)}
+      className={cn(buttonVariants({ size: "icon" }), FAB_POSITION, className)}
     >
       <Plus className="size-6" />
     </Link>

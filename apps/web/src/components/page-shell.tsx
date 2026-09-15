@@ -35,7 +35,7 @@ export function AppPage({
       <div
         className={cn(
           "mx-auto flex w-full max-w-md flex-col gap-3 px-4 pt-4",
-          nav ? "pb-24" : "pb-8",
+          nav ? "pb-[calc(var(--spacing-nav)+2rem)]" : "pb-8",
           className,
         )}
       >

@@ -2,6 +2,7 @@ import { ChevronRight, KeyRound, Plus, Search } from "lucide-react";
 import { useState } from "react";
 
 import { AddPlayerSheet } from "@/components/add-player-sheet";
+import { FAB_POSITION } from "@/components/fab-position";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -54,7 +55,7 @@ export function PlayersPage() {
         size="icon"
         aria-label="Add player"
         onClick={() => setAdding(true)}
-        className="fixed right-[max(1rem,calc(50%-13rem))] bottom-20 z-40 size-12 rounded-full shadow-lg"
+        className={FAB_POSITION}
       >
         <Plus className="size-6" />
       </Button>
