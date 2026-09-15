@@ -213,10 +213,10 @@ is null while a set is in flight.
 
 `points` is one row per point, in the order the client assigned via `sequence`. A row is never
 rewritten: the client appends, or deletes the newest one when the coach undoes it. There is no
-timestamp (client clocks are unreliable) and no foreign key to a set or game: `match_sets` is
-derived from `set_number`/`game_number` via group-by. The `is_*`/`in_tiebreak` booleans are stamped
-by the client's scoring engine and never recomputed server-side, since that logic already lives in
-the client for offline use.
+timestamp (see the conventions below) and no foreign key to a set or game: `match_sets` is derived
+from `set_number`/`game_number` via group-by. The `is_*`/`in_tiebreak` booleans are stamped by the
+client's scoring engine and never recomputed server-side, since that logic already lives in the
+client for offline use.
 
 `score_checkpoints` is the coach's own word on the score. Capture's score editor records what the
 board says now, whether to correct a mis-tap or to catch up on games nobody watched, and the client
@@ -284,6 +284,12 @@ match under active capture is refused unless the holding device itself is deleti
 
 **Photos are files, not bytes.** `photo_key` names a re-encoded image outside the database. An image
 column would bloat every query and leave nothing for a client to cache by URL.
+
+**Two capture fields stop at the device.** A captured point carries the moment it was tapped, and a
+checkpoint's snapshot carries the score inside the game in progress; the API stores neither. A match
+is ordered by `sequence`, and a second ordering off client clocks could only disagree with it; the
+in-game score is the board part-way through a game, which nothing stored is keyed on and no
+analytics query asks for.
 
 **No pagination.** At club scale, collections are tens of rows. A page size would cost every caller
 the work of reassembling a list.
