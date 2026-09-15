@@ -15,7 +15,7 @@ function InputOTP({
     <OTPInput
       data-slot="input-otp"
       containerClassName={cn(
-        "cn-input-otp flex items-center has-disabled:opacity-50",
+        "cn-input-otp flex w-full items-center justify-center has-disabled:opacity-50",
         containerClassName,
       )}
       spellCheck={false}
@@ -25,14 +25,19 @@ function InputOTP({
   );
 }
 
+// Separate boxes with a real gap between them, rather than one segmented bar: a code
+// is read and typed digit by digit, and welded together they read as a single field.
+// The group draws no outline of its own now, so the invalid and focus treatments below
+// belong to each box.
+//
+// Six boxes plus five gaps is wider than the auth card's content box on any phone under
+// ~412px, and `Card` clips (`overflow-hidden`), so the row has to be able to shrink:
+// `min-w-0` here and on each slot, against the full-width container above (.claude/rules/web.md).
 function InputOTPGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="input-otp-group"
-      className={cn(
-        "flex items-center rounded-sm has-aria-invalid:border-destructive has-aria-invalid:ring-3 has-aria-invalid:ring-destructive/20 dark:has-aria-invalid:ring-destructive/40",
-        className,
-      )}
+      className={cn("flex min-w-0 items-center justify-center gap-2", className)}
       {...props}
     />
   );
@@ -53,7 +58,7 @@ function InputOTPSlot({
       data-slot="input-otp-slot"
       data-active={isActive}
       className={cn(
-        "relative flex size-9 items-center justify-center border-y border-r border-input bg-input/50 text-sm transition-all outline-none first:rounded-l-sm first:border-l last:rounded-r-sm aria-invalid:border-destructive data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-3 data-[active=true]:ring-ring/30 data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40",
+        "relative flex size-11 min-w-0 items-center justify-center rounded-sm border border-input bg-input/50 text-base transition-all outline-none aria-invalid:border-destructive data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-3 data-[active=true]:ring-ring/30 data-[active=true]:aria-invalid:ring-destructive/20 dark:data-[active=true]:aria-invalid:ring-destructive/40",
         className,
       )}
       {...props}
