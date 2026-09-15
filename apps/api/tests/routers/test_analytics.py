@@ -25,15 +25,18 @@ from matchpoint_api.models import (
     Player,
     RallyBucket,
     ReturnOutcome,
+    ScoringSystem,
     ServeOutcome,
     ShotType,
     Surface,
     UnusualReason,
     Wing,
 )
+from matchpoint_api.routers.analytics import _MAX_SETS
 from tests.factories import (
     make_coach,
     make_match,
+    make_match_set,
     make_player,
     make_point,
     sign_in,
@@ -929,6 +932,7 @@ def test_rally_is_empty_before_any_points(
         "shot_frequency": {"you": [], "opponents": []},
         "rally_length": [],
         "average_rally_length": {"won": None, "lost": None},
+        "trend": [],
     }
 
 
@@ -1179,6 +1183,237 @@ def test_rally_length_average_is_null_for_a_side_that_bucketed_nothing(
     body = _get(client, player.id, "rally")
 
     assert body["average_rally_length"] == {"won": 4.0, "lost": None}
+
+
+# --- rally trend (#294) ---
+
+
+def test_every_scoring_system_has_a_set_count() -> None:
+    """The set-count table covers the enum, which nothing else checks.
+
+    The capture engine's twin (`maxSetsFor`) fails to compile on a member it has no
+    case for. Python answers a missing key with a KeyError at request time instead,
+    taking the whole rally tab down for that player, so this stands in for it.
+    """
+    assert set(_MAX_SETS) == set(ScoringSystem)
+
+
+# The four ranges, in the order a bucket's rank indexes them, so a trend assertion
+# names the label the API pairs with the rank it asserts.
+BUCKET_LABELS = ("1-2 shots", "3-5 shots", "6-10 shots", "11+ shots")
+
+
+def _bucketed_match(
+    db_session: Session,
+    player_id: uuid.UUID,
+    buckets: list[RallyBucket],
+    **overrides: Any,
+) -> Match:
+    """One match holding a point per bucket named, and nothing else the trend reads."""
+    match = make_match(db_session, player_id=player_id, **overrides)
+    for sequence, bucket in enumerate(buckets):
+        make_point(db_session, match_id=match.id, sequence=sequence, rally_length_bucket=bucket)
+    return match
+
+
+def _bar(rank: int, **overrides: Any) -> dict[str, Any]:
+    """One expected trend bar, its defaults the facts an unfinished match has none of."""
+    return {
+        "match": "M1",
+        "rally_bucket_rank": rank,
+        "rally_bucket_label": BUCKET_LABELS[rank - 1],
+        "result": None,
+        "went_the_distance": None,
+    } | overrides
+
+
+def test_rally_trend_runs_oldest_to_most_recent(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Three matches on consecutive days: a short one, a middling one, a grind.
+
+    None of them records a result or a scoring system, which is what the two null
+    fields say: the bar has a height, and nothing yet to colour or flag it with.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    for day, buckets in enumerate(
+        [[RallyBucket.B1], [RallyBucket.B2, RallyBucket.B2], [RallyBucket.B4]], start=1
+    ):
+        _bucketed_match(db_session, player.id, buckets, played_on=date(THIS_YEAR, 7, day))
+
+    body = _get(client, player.id, "rally")
+
+    assert body["trend"] == [
+        _bar(1),
+        _bar(2, match="M2"),
+        _bar(4, match="M3"),
+    ]
+
+
+def test_rally_trend_rounds_a_half_up_to_the_longer_bucket(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """One point in each of the two middle buckets, averaging exactly 2.5."""
+    player = make_player(db_session, coach_id=coach.id)
+    _bucketed_match(db_session, player.id, [RallyBucket.B2, RallyBucket.B3])
+
+    body = _get(client, player.id, "rally")
+
+    assert body["trend"] == [_bar(3)]
+
+
+def test_rally_trend_leaves_out_a_match_that_bucketed_nothing(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Two matches, and only the older one recorded a rally length."""
+    player = make_player(db_session, coach_id=coach.id)
+    _bucketed_match(db_session, player.id, [RallyBucket.B3], played_on=date(THIS_YEAR, 7, 1))
+    unbucketed = make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 2))
+    make_point(db_session, match_id=unbucketed.id, sequence=0)
+
+    body = _get(client, player.id, "rally")
+
+    # M1 and not M2: a match with no height to plot is absent rather than at zero,
+    # so the labels number the bars that exist.
+    assert body["trend"] == [_bar(3)]
+
+
+def test_rally_trend_keeps_only_the_most_recent_matches(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Seven matches, the oldest the only grind among six short ones."""
+    player = make_player(db_session, coach_id=coach.id)
+    _bucketed_match(db_session, player.id, [RallyBucket.B4], played_on=date(THIS_YEAR, 7, 1))
+    for day in range(2, 8):
+        _bucketed_match(db_session, player.id, [RallyBucket.B1], played_on=date(THIS_YEAR, 7, day))
+
+    body = _get(client, player.id, "rally")
+
+    assert body["trend"] == [_bar(1, match=f"M{position}") for position in range(1, 7)]
+
+
+def test_rally_trend_carries_each_matchs_own_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A win, then a loss, then a match nobody has recorded the result of."""
+    player = make_player(db_session, coach_id=coach.id)
+    for day, result in enumerate([MatchResult.WIN, MatchResult.LOSS, None], start=1):
+        _bucketed_match(
+            db_session,
+            player.id,
+            [RallyBucket.B2],
+            played_on=date(THIS_YEAR, 7, day),
+            result=result,
+        )
+
+    body = _get(client, player.id, "rally")
+
+    assert [bar["result"] for bar in body["trend"]] == ["win", "loss", None]
+
+
+def test_rally_trend_flags_a_match_that_reached_its_deciding_set(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A best-of-three taken to a third set, against one settled in two."""
+    player = make_player(db_session, coach_id=coach.id)
+    for day, sets in enumerate([3, 2], start=1):
+        match = _bucketed_match(
+            db_session,
+            player.id,
+            [RallyBucket.B2],
+            played_on=date(THIS_YEAR, 7, day),
+            scoring_system=ScoringSystem.TRADITIONAL,
+        )
+        for set_number in range(1, sets + 1):
+            make_match_set(db_session, match_id=match.id, set_number=set_number)
+
+    body = _get(client, player.id, "rally")
+
+    assert [bar["went_the_distance"] for bar in body["trend"]] == [True, False]
+
+
+def test_rally_trend_flag_follows_the_systems_own_set_count(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The same three sets under two systems: a decider in one, an interval in the other."""
+    player = make_player(db_session, coach_id=coach.id)
+    systems = [ScoringSystem.TRADITIONAL, ScoringSystem.MENS_GRAND_SLAM]
+    for day, system in enumerate(systems, start=1):
+        match = _bucketed_match(
+            db_session,
+            player.id,
+            [RallyBucket.B2],
+            played_on=date(THIS_YEAR, 7, day),
+            scoring_system=system,
+        )
+        for set_number in (1, 2, 3):
+            make_match_set(db_session, match_id=match.id, set_number=set_number)
+
+    body = _get(client, player.id, "rally")
+
+    # Three sets decides a best-of-three and is only halfway through a best-of-five.
+    assert [bar["went_the_distance"] for bar in body["trend"]] == [True, False]
+
+
+def test_rally_trend_has_no_flag_for_a_single_set_format(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A pro set is the whole match, so there is no deciding set for it to reach."""
+    player = make_player(db_session, coach_id=coach.id)
+    match = _bucketed_match(
+        db_session, player.id, [RallyBucket.B2], scoring_system=ScoringSystem.PRO_SET
+    )
+    make_match_set(db_session, match_id=match.id, set_number=1)
+
+    body = _get(client, player.id, "rally")
+
+    assert body["trend"] == [_bar(2)]
+
+
+def test_rally_trend_has_no_flag_before_a_set_board_is_derived(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A scoring system on its own says nothing about how far the match got."""
+    player = make_player(db_session, coach_id=coach.id)
+    _bucketed_match(
+        db_session, player.id, [RallyBucket.B2], scoring_system=ScoringSystem.TRADITIONAL
+    )
+
+    body = _get(client, player.id, "rally")
+
+    assert body["trend"] == [_bar(2)]
+
+
+def test_rally_trend_describes_the_whole_match_under_a_set_filter(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """A short first set inside a match that went to three and was won.
+
+    The bar's height is the scoped points, since that is the figure the filter is
+    there to narrow; the colour and the flag are the match's own and stay put.
+    """
+    player = make_player(db_session, coach_id=coach.id)
+    match = _bucketed_match(
+        db_session,
+        player.id,
+        [],
+        scoring_system=ScoringSystem.TRADITIONAL,
+        result=MatchResult.WIN,
+    )
+    make_point(db_session, match_id=match.id, sequence=0, rally_length_bucket=RallyBucket.B1)
+    make_point(
+        db_session,
+        match_id=match.id,
+        sequence=1,
+        set_number=3,
+        rally_length_bucket=RallyBucket.B4,
+    )
+    for set_number in (1, 2, 3):
+        make_match_set(db_session, match_id=match.id, set_number=set_number)
+
+    body = _get(client, player.id, "rally?set_number=1")
+
+    assert body["trend"] == [_bar(1, result="win", went_the_distance=True)]
 
 
 def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -2214,11 +2449,15 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
 def test_match_rally_stats_leave_the_players_other_matches_out(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """A forced win in one match and an unforced loss in the other."""
+    """A short forced win in one match and a long unforced loss in the other.
+
+    Each point carries a rally length, since the trend runs a query of its own and
+    would otherwise stay player-wide while the tallies beside it narrowed.
+    """
     player = make_player(db_session, coach_id=coach.id)
     scoped = make_match(db_session, player_id=player.id)
     other = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=scoped.id, sequence=0)
+    make_point(db_session, match_id=scoped.id, sequence=0, rally_length_bucket=RallyBucket.B1)
     make_point(
         db_session,
         match_id=other.id,
@@ -2227,6 +2466,7 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
         end_reason=EndReason.MISTAKE,
         wing=Wing.BACKHAND,
         shot_type=ShotType.LOB,
+        rally_length_bucket=RallyBucket.B4,
     )
 
     body = _get_match(client, scoped.id, "rally")
@@ -2240,7 +2480,9 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert body["errors_overall"]["sample_size"] == "n=1"
     assert [style["count"] for style in body["styles"]["you"]] == [1, 0, 0]
     assert [style["count"] for style in body["styles"]["opponents"]] == [0, 0, 0]
+    assert body["trend"] == [_bar(1)]
     player_wide = _get(client, player.id, "rally")
+    assert player_wide["trend"] == [_bar(1), _bar(4, match="M2")]
     assert len(player_wide["lost_by_shot"]) == 1
     assert (player_wide["won"], player_wide["lost"]) == (1, 1)
     assert player_wide["errors_overall"]["sample_size"] == "n=2"

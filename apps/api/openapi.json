@@ -2641,6 +2641,13 @@
           "styles": {
             "$ref": "#/components/schemas/PointEnderStyles"
           },
+          "trend": {
+            "items": {
+              "$ref": "#/components/schemas/RallyTrendPoint"
+            },
+            "title": "Trend",
+            "type": "array"
+          },
           "won": {
             "title": "Won",
             "type": "integer"
@@ -2665,9 +2672,57 @@
           "errors_overall",
           "shot_frequency",
           "rally_length",
-          "average_rally_length"
+          "average_rally_length",
+          "trend"
         ],
         "title": "RallyStats",
+        "type": "object"
+      },
+      "RallyTrendPoint": {
+        "description": "One match's typical rally length, as a bar on the rally tab's per-match trend (#294).",
+        "properties": {
+          "match": {
+            "title": "Match",
+            "type": "string"
+          },
+          "rally_bucket_label": {
+            "title": "Rally Bucket Label",
+            "type": "string"
+          },
+          "rally_bucket_rank": {
+            "title": "Rally Bucket Rank",
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "went_the_distance": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Went The Distance"
+          }
+        },
+        "required": [
+          "match",
+          "rally_bucket_rank",
+          "rally_bucket_label",
+          "result",
+          "went_the_distance"
+        ],
+        "title": "RallyTrendPoint",
         "type": "object"
       },
       "RedeemTransferCodeRequest": {

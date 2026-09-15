@@ -73,6 +73,7 @@ const DEFAULT_RALLY_STATS: RallyStats = {
   outcome_mix: [],
   rally_length: [],
   average_rally_length: { won: null, lost: null },
+  trend: [],
   shot_frequency: { you: [], opponents: [] },
   styles: {
     you: [

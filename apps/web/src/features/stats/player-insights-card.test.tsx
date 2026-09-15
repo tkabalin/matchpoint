@@ -37,6 +37,7 @@ const EMPTY_DETAIL = { court_zones: [], shot_type: [], unusual_reasons: null, wi
 function rallyStats(overrides: Partial<RallyStats> = {}): RallyStats {
   return {
     average_rally_length: { won: null, lost: null },
+    trend: [],
     errors_overall: null,
     errors_under_pressure: null,
     hero: null,

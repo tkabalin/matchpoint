@@ -107,6 +107,7 @@ function squadMember(
 
 const emptyRallyStats: RallyStats = {
   average_rally_length: { won: null, lost: null },
+  trend: [],
   errors_overall: null,
   errors_under_pressure: null,
   hero: null,

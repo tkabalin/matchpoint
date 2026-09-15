@@ -579,6 +579,19 @@ export const zRallyLengthBucket = z.object({
 });
 
 /**
+ * RallyTrendPoint
+ *
+ * One match's typical rally length, as a bar on the rally tab's per-match trend (#294).
+ */
+export const zRallyTrendPoint = z.object({
+    match: z.string(),
+    rally_bucket_label: z.string(),
+    rally_bucket_rank: z.int(),
+    result: zMatchResult.nullable(),
+    went_the_distance: z.boolean().nullable()
+});
+
+/**
  * RedeemTransferCodeRequest
  */
 export const zRedeemTransferCodeRequest = z.object({
@@ -1217,6 +1230,7 @@ export const zRallyStats = z.object({
     rally_length: z.array(zRallyLengthBucket),
     shot_frequency: zShotFrequencySides,
     styles: zPointEnderStyles,
+    trend: z.array(zRallyTrendPoint),
     won: z.int(),
     won_by_shot: z.array(zBreakdownRow)
 });

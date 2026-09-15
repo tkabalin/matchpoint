@@ -1348,6 +1348,10 @@ export type RallyStats = {
     shot_frequency: ShotFrequencySides;
     styles: PointEnderStyles;
     /**
+     * Trend
+     */
+    trend: Array<RallyTrendPoint>;
+    /**
      * Won
      */
     won: number;
@@ -1355,6 +1359,31 @@ export type RallyStats = {
      * Won By Shot
      */
     won_by_shot: Array<BreakdownRow>;
+};
+
+/**
+ * RallyTrendPoint
+ *
+ * One match's typical rally length, as a bar on the rally tab's per-match trend (#294).
+ */
+export type RallyTrendPoint = {
+    /**
+     * Match
+     */
+    match: string;
+    /**
+     * Rally Bucket Label
+     */
+    rally_bucket_label: string;
+    /**
+     * Rally Bucket Rank
+     */
+    rally_bucket_rank: number;
+    result: MatchResult | null;
+    /**
+     * Went The Distance
+     */
+    went_the_distance: boolean | null;
 };
 
 /**

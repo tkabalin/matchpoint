@@ -18,11 +18,13 @@ from matchpoint_api.models import (
     FailureMode,
     Match,
     MatchResult,
+    MatchSet,
     MatchSide,
     Player,
     Point,
     RallyBucket,
     ReturnOutcome,
+    ScoringSystem,
     ServeOutcome,
     ShotType,
     Surface,
@@ -51,6 +53,7 @@ from matchpoint_api.schemas.analytics import (
     RallyLengthAverages,
     RallyLengthBucket,
     RallyStats,
+    RallyTrendPoint,
     ReturnOutcomeSplit,
     ServeOutcomeShares,
     ServeOutcomeSplit,
@@ -114,11 +117,24 @@ squad_router = APIRouter(
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-# Five is the deepest set number any system in docs/scoring-systems.md reaches, the
-# men's Grand Slam format being best-of-five; every other system decides in three or
-# fewer. Ingest stores whatever set the client stamps, so this bound is the filter's
-# own and not a claim about what the table holds.
-MAX_SET_NUMBER = 5
+# How many sets each scoring system can run to, this API's own copy of the capture
+# engine's `maxSetsFor` (`apps/web/src/features/capture/state.ts`), resolved from the
+# table in docs/scoring-systems.md. A pro set is one long set that is the whole match,
+# so its 1 is also what marks the one format with no deciding set to reach.
+_MAX_SETS = {
+    ScoringSystem.TRADITIONAL: 3,
+    ScoringSystem.MENS_GRAND_SLAM: 5,
+    ScoringSystem.NO_AD_SCORING: 3,
+    ScoringSystem.MATCH_TIEBREAK_10_POINTS: 3,
+    ScoringSystem.SHORT_SETS: 3,
+    ScoringSystem.PRO_SET: 1,
+    ScoringSystem.LEGACY: 3,
+}
+
+# The deepest set number any of them reaches, the men's Grand Slam format being
+# best-of-five. Ingest stores whatever set the client stamps, so this bound is the
+# filter's own and not a claim about what the table holds.
+MAX_SET_NUMBER = max(_MAX_SETS.values())
 
 SetFilter = Annotated[
     int | None, Query(ge=1, le=MAX_SET_NUMBER, description="Count only points from this set.")
@@ -156,10 +172,11 @@ RATIO_CAP = 3.0
 FORCED_UNFORCED_LABEL = "Forced : Unforced ratio"
 FIRST_SERVE_IN_LABEL = "1st serve in %"
 
-# How many matches the serve trend line carries. Six because the chart draws its
-# match labels at 9px on a phone, and a longer season would crowd them into each
-# other rather than say anything more about recent form.
-SERVE_TREND_MATCHES = 6
+# How many matches a per-match trend line carries, the serve tab's and the rally
+# tab's alike. Six because either chart draws its match labels at 9px on a phone, and
+# a longer season would crowd them into each other rather than say anything more
+# about recent form.
+TREND_MATCHES = 6
 
 # The baseline a squad-snapshot tracked stat's latest value is judged against: the ten
 # matches before it. Wide enough that one match cannot set the deviation on its own,
@@ -239,6 +256,9 @@ _RALLY_LENGTH_MIDPOINT = {
     RallyBucket.B3: 8.0,
     RallyBucket.B4: 13.0,
 }
+
+# The buckets shortest first, which is the rank a trend bar is drawn at: b1 is 1.
+_RALLY_BUCKETS = tuple(RallyBucket)
 
 
 def _percent(
@@ -877,7 +897,7 @@ def _returns_by_serve(
 
 def _trend_points(rows_newest_first: Sequence[Row[Any]]) -> list[ServeTrendPoint]:
     """One side's most recent matches as trend points, relabelled oldest first."""
-    window = list(reversed(rows_newest_first[:SERVE_TREND_MATCHES]))
+    window = list(reversed(rows_newest_first[:TREND_MATCHES]))
     return [
         ServeTrendPoint(
             match=f"M{position}",
@@ -1282,6 +1302,103 @@ def _rally_length_averages(counts: Row[Any]) -> RallyLengthAverages:
     return RallyLengthAverages(won=_mean_shots(won), lost=_mean_shots(lost))
 
 
+def _average_bucket(counts: Row[Any]) -> int:
+    """Which bucket a match's points average to, as the rank 1 to 4 a bar is drawn at.
+
+    Integer arithmetic so an exact half rounds up rather than to even as `round` does:
+    a handful of points lands on a half often, and banker's rounding would draw one
+    such match a level below the next for no reason a coach could see. The denominator
+    cannot be zero, a row existing only because a point was bucketed.
+    """
+    tallies = [getattr(counts, f"rally_{bucket.value}") for bucket in _RALLY_BUCKETS]
+    weighted = sum(rank * count for rank, count in enumerate(tallies, start=1))
+    points = sum(tallies)
+    return (2 * weighted + points) // (2 * points)
+
+
+def _went_the_distance(
+    scoring_system: ScoringSystem | None, deepest_set: int | None
+) -> bool | None:
+    """Whether a match reached the last set its format allows, where that can be told.
+
+    Null rather than false wherever the question has no answer: an unrecorded scoring
+    system says nothing about how many sets were playable, a match with no derived set
+    board says nothing about how far it got, and a pro set is a single set that is the
+    whole match, so there is no deciding set for it to have reached.
+    """
+    if scoring_system is None or deepest_set is None:
+        return None
+    max_sets = _MAX_SETS[scoring_system]
+    if max_sets == 1:
+        return None
+    return deepest_set >= max_sets
+
+
+def _deepest_sets(db: Session, match_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """How far into its sets each of these matches got, from the derived set board.
+
+    The board rather than the points, which is what `docs/data-model.md` keeps that
+    cache for: a set the coach declared on a score checkpoint and captured nothing in
+    is still a set the match reached.
+    """
+    rows = db.execute(
+        select(MatchSet.match_id, func.max(MatchSet.set_number).label("deepest"))
+        .where(MatchSet.match_id.in_(match_ids))
+        .group_by(MatchSet.match_id)
+    )
+    return {row.match_id: row.deepest for row in rows}
+
+
+def _rally_trend(db: Session, player_id: uuid.UUID, scope: PointScope) -> list[RallyTrendPoint]:
+    """The recent matches' typical rally length, one entry each and oldest first (#294).
+
+    Only bucketed points count, so a match that recorded no bucket has no height to
+    plot and no entry, as a match whose serves went unwatched has none on the serve
+    trend. The result and the deciding-set flag describe the whole match rather than
+    the scoped points: a tab narrowed to one set still colours its bars by who won.
+    """
+    statement = (
+        select(
+            Match.id,
+            Match.result,
+            Match.scoring_system,
+            *(
+                func.count()
+                .filter(Point.rally_length_bucket == bucket)
+                .label(f"rally_{bucket.value}")
+                for bucket in _RALLY_BUCKETS
+            ),
+        )
+        .select_from(Point)
+        .join(Match, Point.match_id == Match.id)
+        .where(
+            Match.player_id == player_id,
+            Point.rally_length_bucket.is_not(None),
+            *scope.conditions(),
+        )
+        .group_by(Match.id, Match.result, Match.scoring_system, Match.played_on, Match.created_at)
+        .order_by(Match.played_on.desc(), Match.created_at.desc())
+        .limit(TREND_MATCHES)
+    )
+    newest_first = list(db.execute(statement))
+    if not newest_first:
+        return []
+    deepest = _deepest_sets(db, [row.id for row in newest_first])
+    trend: list[RallyTrendPoint] = []
+    for position, row in enumerate(reversed(newest_first), start=1):
+        rank = _average_bucket(row)
+        trend.append(
+            RallyTrendPoint(
+                match=f"M{position}",
+                rally_bucket_rank=rank,
+                rally_bucket_label=_RALLY_LENGTH_LABEL[_RALLY_BUCKETS[rank - 1]],
+                result=row.result,
+                went_the_distance=_went_the_distance(row.scoring_system, deepest.get(row.id)),
+            )
+        )
+    return trend
+
+
 def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallyStats:
     """The rally tab over whichever of the player's matches the caller scoped to."""
     counts = _point_counts(db, player_id, scope)
@@ -1306,6 +1423,7 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
         shot_frequency=shot_frequency,
         rally_length=_rally_length(counts),
         average_rally_length=_rally_length_averages(counts),
+        trend=_rally_trend(db, player_id, scope),
     )
 
 

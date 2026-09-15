@@ -325,6 +325,28 @@ class RallyLengthAverages(BaseModel):
     lost: float | None
 
 
+class RallyTrendPoint(BaseModel):
+    """One match's typical rally length, as a bar on the rally tab's per-match trend (#294)."""
+
+    # A short axis label: "M1" is the oldest match in the series, as the serve trend's is.
+    match: str
+    # Which of the four buckets this match's bucketed points average to, 1 through 4.
+    # Rounded to a bucket rather than left as a mean number of shots: four levels are
+    # what capture records, so a bar sits on one of them rather than between two. Named
+    # for the rank and not the bucket, since `RallyBucket` is the b1-to-b4 label beside it.
+    rally_bucket_rank: int
+    # The shot range that bucket stands for, so a bar can name it without the client
+    # keeping a second copy of the ranges the capture screen defines.
+    rally_bucket_label: str
+    # The tracked player's own result, which is what colours the bar. Null in a match
+    # nobody has recorded a result for, where the bar still has a height to draw.
+    result: MatchResult | None
+    # Whether the match reached the last set its scoring system allows. Null where the
+    # question has no answer: an unrecorded scoring system, a set board not yet derived,
+    # or a single-set format, which has no deciding set to reach.
+    went_the_distance: bool | None
+
+
 class RallyStats(BaseModel):
     """The rally tab: how points end once the ball is in play.
 
@@ -350,6 +372,10 @@ class RallyStats(BaseModel):
     # The same buckets read as one number per outcome, each side null until a point
     # it covers carries a bucket.
     average_rally_length: RallyLengthAverages
+    # One entry per recent match that bucketed a point, oldest first and at most the
+    # six the serve trend carries. A match that bucketed nothing has no height to draw
+    # and so no entry; a match-scoped request carries at most one.
+    trend: list[RallyTrendPoint]
 
 
 class TrackedStatKey(enum.StrEnum):
