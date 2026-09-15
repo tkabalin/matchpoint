@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { Toaster } from "@/components/ui/sonner";
 
-import { NoteButton } from "./note-button";
+import { NoteButton, type NoteHandle } from "./note-button";
 import { NOTE_MAX_LENGTH } from "./point";
 
 /** Holds past HOLD_MS and lets go, the gesture that reaches the typed-note sheet. */
@@ -458,6 +458,44 @@ test("Save stays available before any speech arrives, and goes once the mic is o
   });
 
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+});
+
+// A point boundary takes the dictation and leaves the panel up, so the words a coach
+// adds to it afterwards have no session left to commit them — the field itself does.
+test("a note typed after a point boundary took the dictation still saves", async () => {
+  installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  const onAddNote = vi.fn();
+  const handle: { current: NoteHandle | null } = { current: null };
+  render(<NoteButton onAddNote={onAddNote} ref={handle} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    handle.current?.takePending();
+  });
+  await user.type(screen.getByPlaceholderText("Speak or type"), "and again on the return");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(onAddNote).toHaveBeenCalledWith("and again on the return");
+  expect(screen.queryByPlaceholderText("Speak or type")).not.toBeInTheDocument();
+});
+
+test("the button saves a note typed after a point boundary, rather than recording afresh", async () => {
+  const instances = installFakeSpeechRecognition();
+  const user = userEvent.setup({ delay: null });
+  const onAddNote = vi.fn();
+  const handle: { current: NoteHandle | null } = { current: null };
+  render(<NoteButton onAddNote={onAddNote} ref={handle} />);
+
+  await user.click(screen.getByRole("button", { name: "Add a note" }));
+  act(() => {
+    handle.current?.takePending();
+  });
+  await user.type(screen.getByPlaceholderText("Speak or type"), "and again on the return");
+  await user.click(screen.getByRole("button", { name: "Save note" }));
+
+  expect(onAddNote).toHaveBeenCalledWith("and again on the return");
+  expect(instances).toHaveLength(1);
 });
 
 test("cancelling a dictation adds nothing and stands the button down", async () => {

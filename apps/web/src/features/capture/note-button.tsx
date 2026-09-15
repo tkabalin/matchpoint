@@ -143,6 +143,26 @@ export function NoteButton({
     setPhase("idle");
   }
 
+  // Save, wherever it is tapped. The session commits it while there still is one; once
+  // a point boundary has taken the dictation the panel stays up with no session behind
+  // it, so anything the coach types in afterwards is committed from the field itself
+  // rather than dropped by a Save with nothing left to call.
+  function saveDictation() {
+    const session = sessionRef.current;
+    if (session !== null) {
+      session.finish();
+      return;
+    }
+    const text = draftTextRef.current.trim();
+    if (text.length > 0) {
+      onAddNoteRef.current(text);
+      toast.success("Note saved");
+    }
+    editedRef.current = false;
+    setDraft("");
+    setPhase("idle");
+  }
+
   // The point being described is the one the words belong to, so the flow takes them at
   // the boundary rather than letting a later Save land them on the next point. The
   // session ends rather than carrying on: its transcript accumulates across results, so
@@ -295,10 +315,12 @@ export function NoteButton({
           // Read before the session branch, or a hold that saved a recording would
           // leave the flag set for the next activation to open the sheet with.
           const held = consumeHold();
-          // The session, not the phase: a tap landing between stop() and `end` must
-          // reach the session that is mid-commit rather than start a second one over it.
-          if (sessionRef.current !== null) {
-            sessionRef.current.finish();
+          // The panel, not the session: a tap landing between stop() and `end` must
+          // reach the session that is mid-commit rather than start a second one over
+          // it, and one after a point boundary took the dictation must save what is
+          // left in the field rather than clear it by starting afresh.
+          if (phase !== "idle") {
+            saveDictation();
             return;
           }
           if (held) {
@@ -358,9 +380,7 @@ export function NoteButton({
                 words, so an empty field now can be a full note by the time it commits. */}
             <Button
               disabled={phase === "stopped" && draftText.trim().length === 0}
-              onClick={() => {
-                sessionRef.current?.finish();
-              }}
+              onClick={saveDictation}
               className="h-10 text-base"
             >
               Save
