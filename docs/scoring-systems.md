@@ -1,10 +1,12 @@
 # Scoring systems
 
-`matches.scoring_system` names a format and nothing more — the database stores the label, never
-interprets it (see `docs/data-model.md`). What each name actually implies is the client's job,
-resolved in `apps/web/src/features/capture/state.ts` (`isAdScoringFor`, `maxSetsFor`,
-`setRulesFor`). This table is that resolution's source of truth: confirmed with the coach/product
-owner, referenced by `state.ts`'s own doc comments rather than restated inline.
+`matches.scoring_system` names a format and nothing more: the database stores the label, never
+interprets it (see `docs/data-model.md`). What each name actually implies is resolved by whichever
+side needs it. The capture client resolves all of it, being the side that scores a match
+(`apps/web/src/features/capture/state.ts`: `isAdScoringFor`, `maxSetsFor`, `setRulesFor`); the API
+resolves the set count alone, to say whether a match reached its deciding set
+(`routers/analytics.py`). This table is the source of truth for both: confirmed with the
+coach/product owner, referenced by their own doc comments rather than restated inline.
 
 | System                                       | Game scoring                                                                         | Set win condition                                                                 | Match decider                                                             | Differs from default in                                                                                                                                                                    |
 | -------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

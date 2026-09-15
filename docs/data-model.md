@@ -204,7 +204,8 @@ expiry the device must renew. The device id is not a foreign key to `coach_sessi
 session can rotate under a live capture (password change, fresh login) without ending it.
 
 `scoring_system` names the system the match was played under. What each name implies belongs to the
-client that scores the match; the database stores the label and never interprets it.
+code that reads it, the capture client and analytics alike (see `docs/scoring-systems.md`); the
+database stores the label and never interprets it.
 
 `match_sets` is a server-derived cache, not client-sent data. A set's score is the board the newest
 score checkpoint declared, plus a group-by over the points after it, recomputed at the end of each
