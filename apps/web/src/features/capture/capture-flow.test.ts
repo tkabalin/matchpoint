@@ -614,4 +614,47 @@ describe("action validity guards", () => {
       /not valid on step/,
     );
   });
+
+  const onBallLocation = () => transition(startTracked(), { type: "TAP_SERVE_IN" });
+  const onUnusualOutcome = () => transition(onBallLocation(), { type: "TAP_UNUSUAL" });
+  const onUnusualReason = () =>
+    transition(onUnusualOutcome(), { type: "TAP_UNUSUAL_OUTCOME", won: true });
+  const onRallyLength = () =>
+    transition(onBallLocation(), {
+      type: "TAP_BALL_LOCATION",
+      won: true,
+      ballIn: true,
+      location: COURT_ZONE,
+    });
+  const onEnding = () => transition(onRallyLength(), { type: "TAP_RALLY_LENGTH", bucket: "B2" });
+  const onShotDetail = () => transition(onEnding(), { type: "TAP_ENDING", endReason: "FORCED" });
+
+  test.each([
+    ["BALL_LOCATION", onBallLocation],
+    ["UNUSUAL_OUTCOME", onUnusualOutcome],
+    ["UNUSUAL_REASON", onUnusualReason],
+    ["RALLY_LENGTH", onRallyLength],
+    ["ENDING", onEnding],
+    ["SHOT_DETAIL", onShotDetail],
+  ] as const)("rejects an action that doesn't belong on %s", (stepName, buildState) => {
+    const state = buildState();
+    expect(state.step).toEqual({ name: stepName });
+    expect(() => transition(state, { type: "TAP_SERVE_IN" })).toThrow(/not valid on step/);
+  });
+
+  test("rejects any action once the point has reached READY — a double tap on a dying screen", () => {
+    const state = transition(onShotDetail(), {
+      type: "TAP_SHOT_DETAIL",
+      wing: "FOREHAND",
+      shotType: "DRIVE",
+    });
+    expect(state.step).toEqual({ name: "READY" });
+    expect(() => transition(state, { type: "TAP_SERVE_IN" })).toThrow(/not valid on step/);
+  });
+
+  test("rejects any action once the point has been discarded to ABORTED", () => {
+    const state = transition(startTracked(), { type: "UNDO" });
+    expect(state.step).toEqual({ name: "ABORTED" });
+    expect(() => transition(state, { type: "TAP_SERVE_IN" })).toThrow(/not valid on step/);
+  });
 });

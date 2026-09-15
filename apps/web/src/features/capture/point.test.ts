@@ -159,6 +159,18 @@ describe("Point.create structural validation", () => {
       ).toThrow();
     });
 
+    test("rejects a serve entry that isn't even an object", () => {
+      expect(() => Point.create(pointData({ serves: ["not an object"] }))).toThrow(
+        /is not a valid ServeAttempt/,
+      );
+    });
+
+    test("rejects a serve entry whose number is outside 1 or 2", () => {
+      expect(() =>
+        Point.create(pointData({ serves: [{ number: 3, outcome: "IN", location: null }] })),
+      ).toThrow(/is not a valid ServeAttempt/);
+    });
+
     test("rejects a non-null location on an OPPONENT serve", () => {
       expect(() =>
         Point.create(
@@ -331,6 +343,12 @@ describe("Point.create structural validation", () => {
         expect(point.ballLocation).toBeNull();
       },
     );
+
+    test("rejects a returnOutcome with no observed serve to attach it to", () => {
+      expect(() => Point.create(returnErrorData({ serves: [], returnOutcome: "NET" }))).toThrow(
+        /returnOutcome requires an observed serve/,
+      );
+    });
   });
 
   test("rejects a non-boolean won", () => {
@@ -436,6 +454,18 @@ describe("Point.create structural validation", () => {
         /wing and shotType must be null/,
       );
     });
+
+    test("rejects an unknown wing", () => {
+      expect(() => Point.create(pointData({ wing: "SIDEARM", shotType: "DRIVE" }))).toThrow(
+        /invalid wing/,
+      );
+    });
+
+    test("rejects an unknown shotType", () => {
+      expect(() => Point.create(pointData({ wing: "FOREHAND", shotType: "SMASH" }))).toThrow(
+        /invalid shotType/,
+      );
+    });
   });
 
   describe("ballIn / ballLocation", () => {
@@ -482,6 +512,12 @@ describe("Point.create structural validation", () => {
       expect(() =>
         Point.create(pointData({ ballIn: null, ballLocation: { half: "AD", depth: "SHORT" } })),
       ).toThrow(/ballLocation must be null/);
+    });
+
+    test("rejects a ballIn that isn't a boolean or null", () => {
+      expect(() => Point.create(pointData({ ballIn: "yes" }))).toThrow(
+        /ballIn must be a boolean or null/,
+      );
     });
 
     test.each(["ACE", "DOUBLE_FAULT", "UNUSUAL"] as const)(

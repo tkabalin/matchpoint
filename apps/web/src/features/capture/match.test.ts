@@ -128,6 +128,52 @@ describe("createMatch", () => {
   });
 });
 
+describe("Match.create input validation", () => {
+  test.each(["not an object", null])("rejects input that is %s, not an object", (input) => {
+    expect(() => Match.create(input)).toThrow(/match data must be an object/);
+  });
+});
+
+describe("Match.create matchId validation", () => {
+  test.each([null, ""])("rejects a matchId of %s", (matchId) => {
+    expect(() =>
+      Match.create({
+        matchId,
+        playedOn: PLAYED_ON,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        opponentName: null,
+        scoringSystem: "traditional",
+        firstServer: TRACKED_ID,
+        surfaceType: "hard",
+      }),
+    ).toThrow(/match id must be a non-empty string/);
+  });
+});
+
+describe("Match.create trackedPlayerId / opponentId validation", () => {
+  test.each([
+    ["trackedPlayerId", null],
+    ["trackedPlayerId", ""],
+    ["opponentId", null],
+    ["opponentId", ""],
+  ] as const)("rejects a %s of %s", (field, value) => {
+    expect(() =>
+      Match.create({
+        matchId: "match-1",
+        playedOn: PLAYED_ON,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        opponentName: null,
+        scoringSystem: "traditional",
+        firstServer: TRACKED_ID,
+        surfaceType: "hard",
+        [field]: value,
+      }),
+    ).toThrow(new RegExp(`${field} must be a non-empty string`));
+  });
+});
+
 describe("Match.create opponentName validation", () => {
   test("rejects an empty opponentName", () => {
     expect(() =>
@@ -228,6 +274,22 @@ describe("outcomeOverride", () => {
       expect(match.outcomeOverride).toEqual({ reason, winner: TRACKED_ID });
     },
   );
+
+  test("Match.create rejects an outcomeOverride that isn't an object, e.g. a bare string", () => {
+    expect(() =>
+      Match.create({
+        matchId: "match-1",
+        playedOn: PLAYED_ON,
+        trackedPlayerId: TRACKED_ID,
+        opponentId: OPPONENT_ID,
+        opponentName: null,
+        scoringSystem: "traditional",
+        firstServer: TRACKED_ID,
+        surfaceType: "hard",
+        outcomeOverride: "retirement",
+      }),
+    ).toThrow(/outcomeOverride must be an object/);
+  });
 
   test("Match.create rejects an unknown reason", () => {
     expect(() =>
