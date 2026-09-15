@@ -557,7 +557,7 @@ function SquadRow({
           <PlayerAvatar player={player} size="sm" />
         </span>
         <span className="col-start-3 row-start-1">{labelText}</span>
-        <p className="col-span-2 col-start-3 row-start-2 min-w-0 truncate text-sm font-semibold">
+        <p className="col-span-2 col-start-3 row-start-2 min-w-0 truncate text-sm font-medium">
           {`${player.first_name} ${player.last_name}`}
         </p>
         <ResultDots
