@@ -1,23 +1,22 @@
 import { getPlayerOptions, listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link, getRouteApi, useRouter } from "@tanstack/react-router";
-import { ArrowLeft, CircleDot, NotebookPen, Play, Repeat2 } from "lucide-react";
+import { ArrowLeft, Play } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerLoadError } from "@/components/player-load-error";
 import { RallyTab } from "@/components/rally-tab";
-import { SegmentedControl } from "@/components/segmented-control";
+import { ServeRallyToggle } from "@/components/serve-rally-toggle";
 import { ServeTab } from "@/components/serve-tab";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StatsFilters } from "@/lib/analytics/types.provisional";
 import { cn } from "@/lib/utils";
 
 import { EditPlayerSheet } from "./edit-player-sheet";
 import { PlayerDetailsCard } from "./player-details-card";
-import { PlayerNotesSheet } from "./player-notes-sheet";
 import { PlayerRecordCard } from "./player-record-card";
 import { PlayerSurfaceRecordCard } from "./player-surface-record-card";
 import { StatsScopePanel } from "./stats-scope-panel";
@@ -38,7 +37,6 @@ export function PlayerProfile() {
   const navigate = routeApi.useNavigate();
   const [tab, setTab] = useState<Tab>("serve");
   const [editing, setEditing] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
   const {
     data: player,
     isPending,
@@ -143,7 +141,11 @@ export function PlayerProfile() {
 
       <StatsScopePanel playerId={playerId} filters={filters} onApply={setFilters} />
 
-      <div className="grid grid-cols-2 items-stretch gap-3">
+      {/* Stacked, not side by side — the details card now carries the full
+          notes list inline, which grows however tall it needs to and no
+          longer fits a shared-height 2-column row with the record card. */}
+      <div className="flex flex-col gap-3">
+        <PlayerDetailsCard player={player} onEdit={() => setEditing(true)} />
         <PlayerRecordCard
           playerId={playerId}
           opponentKey={filters.opponentKey}
@@ -151,7 +153,6 @@ export function PlayerProfile() {
           surface={filters.surface}
           onOpponentNotFound={handleOpponentNotFound}
         />
-        <PlayerDetailsCard player={player} onEdit={() => setEditing(true)} />
       </div>
 
       {/* Standing, not scoped by the panel above — shows every surface at
@@ -159,17 +160,7 @@ export function PlayerProfile() {
           one via the scope panel's own surface chip (#225). */}
       <PlayerSurfaceRecordCard playerId={playerId} />
 
-      {/* Matches the mockup's own Serve/Rally toggle exactly — a bordered
-          segmented pill, not the app's usual underline tabs. */}
-      <SegmentedControl
-        aria-label="Serve or rally"
-        value={tab}
-        onValueChange={setTab}
-        options={[
-          { value: "serve", label: "Serve", icon: CircleDot },
-          { value: "rally", label: "Rally", icon: Repeat2 },
-        ]}
-      />
+      <ServeRallyToggle value={tab} onValueChange={setTab} />
 
       <div className="mt-4">
         {tab === "serve" ? (
@@ -192,13 +183,6 @@ export function PlayerProfile() {
           />
         )}
       </div>
-
-      <Button type="button" variant="outline" className="w-full" onClick={() => setNotesOpen(true)}>
-        <NotebookPen />
-        Notes
-      </Button>
-
-      <PlayerNotesSheet playerId={playerId} open={notesOpen} onOpenChange={setNotesOpen} />
     </AppPage>
   );
 }

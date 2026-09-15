@@ -67,15 +67,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("shows the all-time win/loss record, no season row", async () => {
+test("shows the all-time win/loss record as wins and losses, no season row", async () => {
   stubFetch();
   renderCard();
 
   expect(await screen.findByText("Win/loss record")).toBeInTheDocument();
   expect(screen.getByText("All-time")).toBeInTheDocument();
-  expect(screen.getByText("52W – 28L")).toBeInTheDocument();
+  expect(screen.getByText("52")).toBeInTheDocument();
+  expect(screen.getByText("28")).toBeInTheDocument();
   expect(screen.queryByText("Season")).not.toBeInTheDocument();
-  expect(screen.queryByText("14W – 6L")).not.toBeInTheDocument();
+  expect(screen.queryByText("14")).not.toBeInTheDocument();
 });
 
 test("shows recent form in the same card", async () => {
@@ -83,7 +84,6 @@ test("shows recent form in the same card", async () => {
   renderCard();
 
   expect(await screen.findByText("Recent form · last 5")).toBeInTheDocument();
-  expect(screen.getByText("4W – 1L")).toBeInTheDocument();
 });
 
 // `aria-label` on a bare `<span>` isn't announced by most screen readers — no

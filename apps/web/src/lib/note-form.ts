@@ -4,7 +4,7 @@ import { recordedOnError, todayIso } from "@/lib/note-date";
 
 // Mirrored from the spec's LongText constraint (`schemas/types.py`), which the
 // generated client types but does not enforce — same hand-mirroring caveat
-// `player-form.ts`'s own PLAYER_NOTES_MAX carries.
+// `lib/date-of-birth.ts` carries for its own field.
 export const NOTE_BODY_MAX = 2000;
 
 // Declaration order matters: the server canonicalises `focus_areas` to this exact

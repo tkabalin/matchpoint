@@ -56,10 +56,12 @@ test("shows a win/loss row per surface actually played, newest enum order", asyn
 
   expect(await screen.findByText("Performance by surface")).toBeInTheDocument();
   expect(screen.getByText("Hard")).toBeInTheDocument();
-  expect(screen.getByText("1W – 1L")).toBeInTheDocument();
   expect(screen.getByText("Clay")).toBeInTheDocument();
-  expect(screen.getByText("1W – 0L")).toBeInTheDocument();
   expect(screen.queryByText("Grass")).not.toBeInTheDocument();
+  // Hard: 1 win, 1 loss. Clay: 1 win, 0 losses — each count rendered
+  // separately next to its own tick/cross icon, not a combined "1W – 1L" string.
+  expect(screen.getAllByText("1")).toHaveLength(3);
+  expect(screen.getByText("0")).toBeInTheDocument();
 });
 
 // A match can carry a surface before it carries a result (in progress), or a

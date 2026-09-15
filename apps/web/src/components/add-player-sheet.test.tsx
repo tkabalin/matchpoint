@@ -196,9 +196,8 @@ test("a photo-upload failure still creates the player and reaches the reveal ste
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });
 
-// Hand and notes are the two fields no other test fills, and notes carries a trim: an
-// untouched box has to reach the API as null, not as an empty string.
-test("hand and notes reach the request, and an untouched notes box sends null", async () => {
+// Hand is the one field no other test fills.
+test("dominant hand reaches the request", async () => {
   const created: Record<string, unknown>[] = [];
   stubFetch({
     "POST /api/players": async (input) => {
@@ -212,13 +211,60 @@ test("hand and notes reach the request, and an untouched notes box sends null", 
 
   await fillRequiredFields(user);
   await user.click(screen.getByRole("button", { name: "Left" }));
-  await user.type(screen.getByLabelText("Notes"), "Prefers early sessions");
   await user.click(screen.getByRole("button", { name: "Add player" }));
 
   await vi.waitFor(() => expect(created).toHaveLength(1));
   expect(created[0]!.dominant_hand).toBe("left");
-  expect(created[0]!.notes).toBe("Prefers early sessions");
+  expect(created[0]).not.toHaveProperty("notes");
   expect(zCreatePlayerBody.safeParse(created[0]).success).toBe(true);
+});
+
+// A typed creation note seeds the same dated notes list `PlayerDetailsCard` manages,
+// a separate request from player creation itself, and only sent at all once the
+// coach actually typed something.
+test("a typed creation note seeds the player's notes list", async () => {
+  const notesCreated: Record<string, unknown>[] = [];
+  stubFetch({
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      return playerCreatedResponse(body);
+    },
+    [`POST /api/players/${NEW_PLAYER_ID}/notes`]: async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      notesCreated.push(body);
+      return Response.json(
+        { id: "note-1", player_id: NEW_PLAYER_ID, focus_areas: [], ...body },
+        { status: 201 },
+      );
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  renderSheet();
+
+  await fillRequiredFields(user);
+  await user.type(screen.getByLabelText("Notes"), "Prefers early sessions");
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  await vi.waitFor(() => expect(notesCreated).toHaveLength(1));
+  expect(notesCreated[0]!.body).toBe("Prefers early sessions");
+});
+
+test("leaving the creation note blank sends no notes request at all", async () => {
+  stubFetch({
+    "POST /api/players": async (input) => {
+      const body = JSON.parse(await input.text()) as Record<string, unknown>;
+      return playerCreatedResponse(body);
+    },
+  });
+  const user = userEvent.setup({ delay: null });
+  renderSheet();
+
+  await fillRequiredFields(user);
+  await user.click(screen.getByRole("button", { name: "Add player" }));
+
+  // The stub throws on any unlisted route, so reaching the reveal step at all
+  // is proof no notes request was attempted.
+  expect(await screen.findByText(/sign-in details/)).toBeInTheDocument();
 });
 
 test("a refused creation keeps the sheet open and shows the server's reason", async () => {

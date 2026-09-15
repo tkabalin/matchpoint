@@ -2,14 +2,8 @@ import { FieldLabelRow } from "@/components/field-label-row";
 import { SegmentedControl } from "@/components/segmented-control";
 import { Field, FieldError, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { earliestDateOfBirthIso, todayIso } from "@/lib/date-of-birth";
-import {
-  PLAYER_NAME_MAX,
-  PLAYER_NOTES_MAX,
-  type PlayerFormValues,
-  validatePlayerForm,
-} from "@/lib/player-form";
+import { PLAYER_NAME_MAX, type PlayerFormValues, validatePlayerForm } from "@/lib/player-form";
 
 /**
  * The field set shared by `AddPlayerSheet` and `EditPlayerSheet` — same fields, same
@@ -111,19 +105,6 @@ export function PlayerFormFields({
             { value: "right", label: "Right" },
             { value: "left", label: "Left" },
           ]}
-        />
-      </Field>
-
-      <Field>
-        <FieldLabelRow htmlFor="player-notes" required={false}>
-          Notes
-        </FieldLabelRow>
-        <Textarea
-          id="player-notes"
-          maxLength={PLAYER_NOTES_MAX}
-          value={values.notes}
-          onChange={(event) => onChange("notes", event.target.value)}
-          placeholder="Anything worth remembering before the first session"
         />
       </Field>
     </FieldGroup>

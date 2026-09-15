@@ -20,6 +20,16 @@ export const SURFACE_ICON: Record<Surface, LucideIcon> = {
   carpet: Rows3,
 };
 
+/** One high-contrast texture per surface (`app.css`'s own `pattern-surface-*`
+ *  utilities) — `PlayerSurfaceRecordCard`'s "Substrate Cross-Section" panels,
+ *  the one place a surface is a background fill rather than an icon. */
+export const SURFACE_PATTERN_CLASS: Record<Surface, string> = {
+  hard: "pattern-surface-hard",
+  clay: "pattern-surface-clay",
+  grass: "pattern-surface-grass",
+  carpet: "pattern-surface-carpet",
+};
+
 // "Women's Grand Slam" isn't its own entry — docs/scoring-systems.md records it as
 // identical to Traditional in every rule, so Traditional's own label covers both.
 export const SCORING_SYSTEM_LABEL: Record<ScoringSystem, string> = {

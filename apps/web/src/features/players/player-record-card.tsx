@@ -1,16 +1,14 @@
 import { getPlayerOverviewOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { History } from "lucide-react";
+import { CircleCheck, CircleX, Trophy } from "lucide-react";
 import { useEffect } from "react";
 
-import { OutcomeStack } from "@/components/outcome-swatch";
+import { ResultDots } from "@/components/result-dots";
 import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SurfaceFilter } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
-import { formatRecord } from "@/lib/format-record";
-import { cn } from "@/lib/utils";
 
 /** All-time win/loss plus recent form, in one card: the two pieces of the old
  *  Overview tab that read as a single "how are they doing" question, so they
@@ -72,50 +70,34 @@ export function PlayerRecordCard({
   const { wins, losses } = data.all_time_record;
 
   return (
-    <StatCard title="Win/loss record" className="h-full">
-      <div className="flex justify-between text-xs">
-        <span>All-time</span>
-        <span className="tabular-nums">{formatRecord(wins, losses)}</span>
+    <StatCard>
+      {/* Trophy plus tick/cross counts in the outcome colors: the same
+       *  headline win/loss treatment squad-headline-card.tsx's own "Win
+       *  record" stat uses, per .claude/rules/web-icons.md. */}
+      <div className="flex items-center gap-2">
+        <Trophy className="size-6 shrink-0 text-primary" aria-hidden="true" />
+        <h3 className="text-base font-bold text-foreground">Win/loss record</h3>
       </div>
-      <OutcomeStack
-        className="mt-1"
-        segments={[
-          { pattern: "win", weight: wins, label: `${wins} won` },
-          { pattern: "unforced", weight: losses, label: `${losses} lost` },
-        ]}
-      />
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">All-time</span>
+        <span className="flex items-center gap-2 text-sm font-bold tabular-nums">
+          <span className="flex items-center gap-1 text-outcome-win">
+            <CircleCheck className="size-4" aria-hidden="true" />
+            {wins}
+          </span>
+          <span className="flex items-center gap-1 text-outcome-unforced">
+            <CircleX className="size-4" aria-hidden="true" />
+            {losses}
+          </span>
+        </span>
+      </div>
 
       {data.recent_results.length > 0 && (
-        <div className="mt-1 flex flex-col gap-1.5 border-t pt-2">
-          <div className="flex items-center gap-2">
-            {/* History, not Activity — matches home.tsx's own "Last 5" icon for the
-                same "recent form" concept, per .claude/rules/web-icons.md. */}
-            <History className="size-6 shrink-0 text-primary" aria-hidden="true" />
-            <span className="text-xs font-semibold text-muted-foreground">
-              {`Recent form · last ${data.recent_results.length}${opponentName ? ` vs ${opponentName}` : ""}`}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex flex-1 gap-1">
-              {data.recent_results.map((result, index) => (
-                <span
-                  key={index}
-                  role="img"
-                  aria-label={result === "win" ? "Won" : "Lost"}
-                  className={cn(
-                    "size-2.5 shrink-0 rounded-full",
-                    result === "win" ? "bg-outcome-win" : "border border-muted-foreground",
-                  )}
-                />
-              ))}
-            </div>
-            <span className="shrink-0 text-xs font-bold tabular-nums">
-              {formatRecord(
-                data.recent_results.filter((result) => result === "win").length,
-                data.recent_results.filter((result) => result !== "win").length,
-              )}
-            </span>
-          </div>
+        <div className="flex flex-col gap-1.5 border-t pt-2">
+          <ResultDots
+            results={data.recent_results}
+            label={`Recent form · last ${data.recent_results.length}${opponentName ? ` vs ${opponentName}` : ""}`}
+          />
         </div>
       )}
     </StatCard>

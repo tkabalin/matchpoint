@@ -11,7 +11,7 @@ const player: PlayerRead = {
   date_of_birth: "2008-04-12",
   dominant_hand: "right",
   gender: "female",
-  notes: "Strong two-handed backhand.",
+  notes: null,
   coach_id: "3f1c2b4e-0000-4000-8000-0000000000c1",
   has_transfer_code: false,
   photo_url: null,
@@ -26,7 +26,6 @@ test("playerFormValuesFrom maps every field, falling back for nullable ones", ()
     dateOfBirth: "2008-04-12",
     gender: "female",
     hand: "right",
-    notes: "Strong two-handed backhand.",
   });
 
   expect(
@@ -35,7 +34,6 @@ test("playerFormValuesFrom maps every field, falling back for nullable ones", ()
       date_of_birth: null,
       dominant_hand: null,
       gender: null,
-      notes: null,
     }),
   ).toEqual({
     firstName: "Amahle",
@@ -43,7 +41,6 @@ test("playerFormValuesFrom maps every field, falling back for nullable ones", ()
     dateOfBirth: "",
     gender: "",
     hand: "",
-    notes: "",
   });
 });
 
@@ -68,17 +65,11 @@ test("buildPlayerUpdateBody includes only the fields that changed", () => {
   expect(buildPlayerUpdateBody(player, values)).toEqual({ first_name: "Amahle-Jane" });
 });
 
-test("buildPlayerUpdateBody trims names and notes before comparing and sending", () => {
+test("buildPlayerUpdateBody trims names before comparing and sending", () => {
   const values = { ...playerFormValuesFrom(player), firstName: "  Amahle  " };
 
   // Trimmed value equals the original, so this is a no-op change — not "  Amahle  ".
   expect(buildPlayerUpdateBody(player, values)).toEqual({});
-});
-
-test("buildPlayerUpdateBody sends null for notes cleared back to empty", () => {
-  const values = { ...playerFormValuesFrom(player), notes: "   " };
-
-  expect(buildPlayerUpdateBody(player, values)).toEqual({ notes: null });
 });
 
 test("buildPlayerUpdateBody sends null for dominant hand cleared back to unpicked", () => {

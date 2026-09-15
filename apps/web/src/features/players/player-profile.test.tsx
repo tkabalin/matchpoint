@@ -115,6 +115,7 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
     [`/api/players/${player.id}/analytics/serve`]: () => Response.json(DEFAULT_SERVE_STATS),
     [`/api/players/${player.id}/analytics/rally`]: () => Response.json(DEFAULT_RALLY_STATS),
     [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
+    [`/api/players/${player.id}/notes`]: () => Response.json([]),
   };
   vi.stubGlobal(
     "fetch",
@@ -304,7 +305,7 @@ test("links to the match setup screen", async () => {
   expect(await screen.findByRole("heading", { name: "New match" })).toBeInTheDocument();
 });
 
-test("shows the all-time record and player details side by side", async () => {
+test("shows player details above the all-time record, stacked", async () => {
   stubFetch({
     [`/api/players/${player.id}`]: () => Response.json(player),
     "/api/matches": () => Response.json([]),
@@ -312,27 +313,17 @@ test("shows the all-time record and player details side by side", async () => {
   await renderPlayerProfile();
   await screen.findByRole("heading", { name: "Amahle Nkosi" });
 
+  expect(await screen.findByText("Player details")).toBeInTheDocument();
+  expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
   expect(await screen.findByText("Win/loss record")).toBeInTheDocument();
   expect(screen.getByText("All-time")).toBeInTheDocument();
-  expect(screen.getByText("Player details")).toBeInTheDocument();
-  expect(screen.getByText("Apr 12, 2008")).toBeInTheDocument();
-  expect(screen.getByText("Strong two-handed backhand.")).toBeInTheDocument();
-});
 
-test("the Notes button opens the notes sheet", async () => {
-  stubFetch({
-    [`/api/players/${player.id}`]: () => Response.json(player),
-    "/api/matches": () => Response.json([]),
-  });
-  const user = userEvent.setup({ delay: null });
-  await renderPlayerProfile();
-  await screen.findByRole("heading", { name: "Amahle Nkosi" });
-
-  expect(screen.queryByRole("heading", { name: "Notes" })).not.toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "Notes" }));
-
-  expect(await screen.findByRole("heading", { name: "Notes" })).toBeInTheDocument();
+  const details = screen
+    .getByText("Player details")
+    .compareDocumentPosition(screen.getByText("Win/loss record"));
+  // Bit 4 (DOCUMENT_POSITION_FOLLOWING) means "Win/loss record" comes after
+  // "Player details" in the document, i.e. details renders first.
+  expect(details & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 test("opens on the Serve tab by default, with the scope panel and recent form above it", async () => {

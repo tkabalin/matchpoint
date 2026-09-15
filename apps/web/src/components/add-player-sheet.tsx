@@ -1,17 +1,22 @@
 import type { PlayerCreatedRead } from "@matchpoint/api-client";
-import { createPlayer, uploadPlayerPhoto } from "@matchpoint/api-client";
+import { createPlayer, createPlayerNote, uploadPlayerPhoto } from "@matchpoint/api-client";
 import { listPlayersQueryKey } from "@matchpoint/api-client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { CopyCodeField } from "@/components/copy-code-field";
+import { FieldLabelRow } from "@/components/field-label-row";
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PhotoPickerSheet } from "@/components/photo-picker-sheet";
 import { PlayerFormFields } from "@/components/player-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { downscaleImage } from "@/lib/downscale-image";
+import { NOTE_BODY_MAX } from "@/lib/note-form";
+import { todayIso } from "@/lib/note-date";
 import { parseErrorMessage } from "@/lib/parse-error";
 import { BLANK_PLAYER_FORM, type PlayerFormValues, validatePlayerForm } from "@/lib/player-form";
 
@@ -41,6 +46,9 @@ export function AddPlayerSheet({
   const queryClient = useQueryClient();
   const [step, setStep] = useState<Step>("form");
   const [values, setValues] = useState<PlayerFormValues>(BLANK_PLAYER_FORM);
+  // Not a `Player` field — seeds the first entry of the same dated notes list
+  // `PlayerDetailsCard` manages, rather than the old standalone `notes` string.
+  const [creationNote, setCreationNote] = useState("");
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickingPhoto, setPickingPhoto] = useState(false);
@@ -69,6 +77,7 @@ export function AddPlayerSheet({
   function reset() {
     setStep("form");
     setValues(BLANK_PLAYER_FORM);
+    setCreationNote("");
     setShowErrors(false);
     setError(null);
     setCredentials(null);
@@ -91,17 +100,26 @@ export function AddPlayerSheet({
           // Narrowed by `isValid` before this runs, so the empty member is gone.
           gender: values.gender as Exclude<PlayerFormValues["gender"], "">,
           dominant_hand: values.hand === "" ? null : values.hand,
-          notes: values.notes.trim() === "" ? null : values.notes.trim(),
         },
       });
       if (createError) throw createError;
-      // The player is created either way — a photo failure here (network blip, rate
-      // limit) is silently dropped rather than undoing or blocking the add. The
-      // coach can set it afterward from Edit player, which has the same picker.
+      // The player is created either way — a photo or note failure here (network
+      // blip, rate limit) is silently dropped rather than undoing or blocking the
+      // add. The coach can add either afterward from the player's own page.
       if (pendingPhoto) {
         try {
           const downscaled = await downscaleImage(pendingPhoto);
           await uploadPlayerPhoto({ path: { player_id: data.id }, body: { file: downscaled } });
+        } catch {
+          // Deliberately swallowed — see comment above.
+        }
+      }
+      if (creationNote.trim() !== "") {
+        try {
+          await createPlayerNote({
+            path: { player_id: data.id },
+            body: { body: creationNote.trim(), recorded_on: todayIso(), focus_areas: [] },
+          });
         } catch {
           // Deliberately swallowed — see comment above.
         }
@@ -169,6 +187,22 @@ export function AddPlayerSheet({
                 }}
               >
                 <PlayerFormFields values={values} onChange={update} showErrors={showErrors} />
+
+                {/* Not a `PlayerFormFields` field: it seeds the first entry of the
+                    unified notes list (`PlayerDetailsCard`) rather than a `Player`
+                    attribute, so it lives here rather than in the shared field set. */}
+                <Field>
+                  <FieldLabelRow htmlFor="player-creation-note" required={false}>
+                    Notes
+                  </FieldLabelRow>
+                  <Textarea
+                    id="player-creation-note"
+                    maxLength={NOTE_BODY_MAX}
+                    value={creationNote}
+                    onChange={(event) => setCreationNote(event.target.value)}
+                    placeholder="Anything worth remembering before the first session"
+                  />
+                </Field>
 
                 {error && (
                   <Alert variant="destructive">

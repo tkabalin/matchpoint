@@ -1,14 +1,13 @@
 import { getCurrentPlayerOptions, listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { getRouteApi } from "@tanstack/react-router";
-import { CircleDot, Repeat2 } from "lucide-react";
 import { useState } from "react";
 
 import { PLAYER_TABS } from "@/components/nav-tabs";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { RallyTab } from "@/components/rally-tab";
-import { SegmentedControl } from "@/components/segmented-control";
+import { ServeRallyToggle } from "@/components/serve-rally-toggle";
 import { ServeTab } from "@/components/serve-tab";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { StatsFilters } from "@/lib/analytics/types.provisional";
@@ -75,7 +74,9 @@ export function PlayerSelfView() {
 
       <StatsScopePanel playerId={player.id} filters={filters} onApply={setFilters} />
 
-      <div className="grid grid-cols-2 items-stretch gap-3">
+      {/* Stacked, matching player-profile.tsx's own coach-facing layout. */}
+      <div className="flex flex-col gap-3">
+        <PlayerDetailsCard player={player} />
         <PlayerRecordCard
           playerId={player.id}
           opponentKey={filters.opponentKey}
@@ -83,20 +84,11 @@ export function PlayerSelfView() {
           surface={filters.surface}
           onOpponentNotFound={handleOpponentNotFound}
         />
-        <PlayerDetailsCard player={player} />
       </div>
 
       <PlayerSurfaceRecordCard playerId={player.id} />
 
-      <SegmentedControl
-        aria-label="Serve or rally"
-        value={tab}
-        onValueChange={setTab}
-        options={[
-          { value: "serve", label: "Serve", icon: CircleDot },
-          { value: "rally", label: "Rally", icon: Repeat2 },
-        ]}
-      />
+      <ServeRallyToggle value={tab} onValueChange={setTab} />
 
       <div className="mt-4">
         {tab === "serve" ? (

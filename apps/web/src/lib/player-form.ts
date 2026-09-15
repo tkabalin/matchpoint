@@ -12,7 +12,6 @@ export type HandChoice = Hand | "";
 // Mirrored from the spec's maxLength, which the generated client types but does not
 // enforce — the same hand-mirroring caveat sign-up.tsx already carries.
 export const PLAYER_NAME_MAX = 100;
-export const PLAYER_NOTES_MAX = 2000;
 
 export type PlayerFormValues = {
   firstName: string;
@@ -20,7 +19,6 @@ export type PlayerFormValues = {
   dateOfBirth: string;
   gender: GenderChoice;
   hand: HandChoice;
-  notes: string;
 };
 
 export const BLANK_PLAYER_FORM: PlayerFormValues = {
@@ -29,7 +27,6 @@ export const BLANK_PLAYER_FORM: PlayerFormValues = {
   dateOfBirth: "",
   gender: "",
   hand: "",
-  notes: "",
 };
 
 /** The values an existing player's record maps to when opening it for editing. */
@@ -40,7 +37,6 @@ export function playerFormValuesFrom(player: PlayerRead): PlayerFormValues {
     dateOfBirth: player.date_of_birth ?? "",
     gender: player.gender ?? "",
     hand: player.dominant_hand ?? "",
-    notes: player.notes ?? "",
   };
 }
 
@@ -69,7 +65,6 @@ export function buildPlayerUpdateBody(
 
   const firstName = values.firstName.trim();
   const lastName = values.lastName.trim();
-  const notes = values.notes.trim() === "" ? null : values.notes.trim();
   const gender = values.gender === "" ? null : values.gender;
   const hand = values.hand === "" ? null : values.hand;
 
@@ -79,7 +74,6 @@ export function buildPlayerUpdateBody(
     body.date_of_birth = values.dateOfBirth;
   if (gender !== original.gender) body.gender = gender;
   if (hand !== original.dominant_hand) body.dominant_hand = hand;
-  if (notes !== original.notes) body.notes = notes;
 
   return body;
 }
