@@ -15,8 +15,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 /**
  * Which player the match is for, asked before the setup form.
  *
- * Match setup already knows how to prefill from a player, so starting from the
- * match list (where no player is in hand yet) needs this step first.
+ * Match setup is always for one player (`/new-match/$playerId`), so starting from
+ * the match list, where no player is in hand yet, needs this step first.
  */
 export function StartMatch() {
   const router = useRouter();
@@ -103,7 +103,7 @@ export function StartMatch() {
       )}
 
       <p className="mt-auto text-xs text-muted-foreground">
-        Tap a player to prefill match setup, or search for someone new.
+        Tap a player to set up their match. Not listed? Add them in Players first.
       </p>
     </AppPage>
   );
