@@ -406,10 +406,6 @@ export function Home() {
               </li>
               <li>1st serve %: share of first serves landing in play.</li>
             </ul>
-            <p className="text-[0.625rem] text-muted-foreground">
-              &ldquo;Needs attention&rdquo; can still flag even your best player if their results
-              have slipped lately.
-            </p>
           </CardContent>
         </Card>
       </section>
