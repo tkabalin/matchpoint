@@ -15,13 +15,23 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { buttonVariants } from "@/components/ui/button";
-import { Item, ItemContent, ItemGroup, ItemSeparator, ItemTitle } from "@/components/ui/item";
-import { Separator } from "@/components/ui/separator";
+import { Item, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 
 import { DeleteAccountSheet } from "./delete-account-sheet";
 import { SignOutAction } from "./sign-out-action";
 
 type RevokeStep = "closed" | "confirm" | "success";
+
+/** Names a group of rows, reusing the small-caps list label `player-list.tsx` and
+ * `start-match.tsx` already use. `aria-labelledby` carries the name onto the
+ * `ItemGroup`'s own `role="list"`, so the grouping is announced, not just drawn. */
+function SectionLabel({ id, children }: { id: string; children: string }) {
+  return (
+    <h2 id={id} className="mt-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+      {children}
+    </h2>
+  );
+}
 
 /**
  * Account & Security (#178, wireframe 1c). Change password now leaves Settings
@@ -32,6 +42,9 @@ type RevokeStep = "closed" | "confirm" | "success";
  * confirm dialog, not a bare `Link`, so it reads the same as Sign Out beside it —
  * one tile style for every row in this group, not "the one that happens to
  * navigate" standing out.
+ *
+ * Each group carries a heading rather than an anonymous rule between chunks, so
+ * the boundaries say what they separate (Hick's Law, `web-principles.md`).
  */
 export function SettingsAccount() {
   const navigate = useNavigate();
@@ -72,7 +85,8 @@ export function SettingsAccount() {
         }
       />
 
-      <ItemGroup>
+      <SectionLabel id="account-password">Password</SectionLabel>
+      <ItemGroup aria-labelledby="account-password">
         <Item
           variant="outline"
           render={<button type="button" onClick={() => setConfirmingPasswordChange(true)} />}
@@ -83,9 +97,8 @@ export function SettingsAccount() {
         </Item>
       </ItemGroup>
 
-      <Separator />
-
-      <ItemGroup>
+      <SectionLabel id="account-sessions">Sessions</SectionLabel>
+      <ItemGroup aria-labelledby="account-sessions">
         <SignOutAction
           trigger={(openConfirm) => (
             <Item variant="outline" render={<button type="button" onClick={openConfirm} />}>
@@ -97,32 +110,32 @@ export function SettingsAccount() {
         />
 
         {/* A plain sign-out and "sign out everywhere else" sitting flush against each
-            other with no divider is exactly the mis-tap risk web-principles.md's
-            Fitts's Law section calls out by name — this internal separator is the fix,
-            not relocating either action out of Account & Security. */}
-        <ItemSeparator />
-
+            other is the mis-tap risk web-principles.md's Fitts's Law section calls out
+            by name. The extra gap and the lighter title are the fix, not a rule between
+            them and not relocating either action out of Account & Security. */}
         <Item
           variant="outline"
+          className="mt-2"
           render={<button type="button" onClick={() => setRevokeStep("confirm")} />}
         >
           <ItemContent>
-            <ItemTitle>Sign out of all other sessions</ItemTitle>
+            <ItemTitle className="text-muted-foreground">Sign out of all other sessions</ItemTitle>
           </ItemContent>
         </Item>
         {revokeError && <p className="text-sm text-destructive">{revokeError}</p>}
       </ItemGroup>
 
-      <Separator />
-
-      <Item
-        variant="outline"
-        render={<button type="button" onClick={() => setDeletingAccount(true)} />}
-      >
-        <ItemContent>
-          <ItemTitle className="text-destructive">Delete account</ItemTitle>
-        </ItemContent>
-      </Item>
+      <SectionLabel id="account-danger">Danger zone</SectionLabel>
+      <ItemGroup aria-labelledby="account-danger">
+        <Item
+          variant="outline"
+          render={<button type="button" onClick={() => setDeletingAccount(true)} />}
+        >
+          <ItemContent>
+            <ItemTitle className="text-destructive">Delete account</ItemTitle>
+          </ItemContent>
+        </Item>
+      </ItemGroup>
 
       <AlertDialog open={confirmingPasswordChange} onOpenChange={setConfirmingPasswordChange}>
         <AlertDialogContent>

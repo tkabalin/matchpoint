@@ -45,16 +45,17 @@ tradeoff explicitly rather than silently picking a side.
 - Destructive or irreversible actions (delete account, sign out of all sessions) get smaller
   targets, lighter visual weight, and a confirmation step scaled to severity (a plain confirm for
   "sign out all sessions"; confirm + typed verification for "delete account"). They should never sit
-  directly adjacent to a similarly-worded safe action with no divider between them (e.g. "Sign out"
-  vs "Sign out all sessions") — that adjacency with no separation is the failure mode to avoid, not
-  a detail to gloss over.
+  flush against a similarly-worded safe action (e.g. "Sign out" vs "Sign out all sessions") — that
+  adjacency with no separation is the failure mode to avoid, not a detail to gloss over.
 - Do this separation within the same functional group, not by physically relocating an item to a
   different part of the page. Exiling "Sign out" to its own section at the bottom of the screen to
   protect it from "Sign out all sessions" breaks Jakob's Law (users expect all session/account
   actions in one place — Google, Slack, Notion all do this) without actually fixing the mis-tap
-  risk. Use an internal divider and graduated visual weight/confirmation friction inside Account &
-  Security instead: routine actions plain and easy, escalating actions behind more friction, most
-  severe action lightest in weight but heaviest in confirmation.
+  risk. Separate them inside Account & Security instead, with extra distance between the two rows
+  and graduated visual weight/confirmation friction: routine actions plain and easy, escalating
+  actions behind more friction, most severe action lightest in weight but heaviest in confirmation.
+  Distance is the variable this law is actually about, so widen the gap rather than drawing a rule
+  between them — a divider line between two rows that already sit in a headed group reads as noise.
 - Don't shrink or crowd a frequently-used control for aesthetic symmetry.
 
 ## 5. Miller's Law — chunk into groups of ~5–7 (comfortably 3–5 for touch UI)

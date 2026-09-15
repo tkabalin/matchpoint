@@ -7,7 +7,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -72,6 +72,21 @@ test("links back to settings", async () => {
   await user.click(screen.getByRole("link", { name: "Back to settings" }));
 
   expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+});
+
+test("groups every action under a named section", async () => {
+  await renderSettingsAccount();
+
+  const password = screen.getByRole("list", { name: "Password" });
+  const sessions = screen.getByRole("list", { name: "Sessions" });
+  const danger = screen.getByRole("list", { name: "Danger zone" });
+
+  expect(within(password).getByRole("button", { name: "Change password" })).toBeInTheDocument();
+  expect(within(sessions).getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
+  expect(
+    within(sessions).getByRole("button", { name: "Sign out of all other sessions" }),
+  ).toBeInTheDocument();
+  expect(within(danger).getByRole("button", { name: "Delete account" })).toBeInTheDocument();
 });
 
 test("change password asks for confirmation before leaving Settings", async () => {
