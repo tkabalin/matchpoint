@@ -175,7 +175,7 @@ export function ResultScreen({
           Home
         </Button>
         <Button onClick={onViewResults} className="h-14 text-base">
-          Match results
+          Match statistics
         </Button>
       </div>
       <Button variant="ghost" onClick={onFinish} className="mt-2 h-11 w-full text-sm">

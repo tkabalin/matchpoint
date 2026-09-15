@@ -127,6 +127,6 @@ test("offers the way home and the way to the match's own results", async () => {
   await user.click(screen.getByRole("button", { name: "Home" }));
   expect(onHome).toHaveBeenCalledTimes(1);
 
-  await user.click(screen.getByRole("button", { name: "Match results" }));
+  await user.click(screen.getByRole("button", { name: "Match statistics" }));
   expect(onViewResults).toHaveBeenCalledTimes(1);
 });
