@@ -25,6 +25,7 @@ function makeMatch(overrides: Partial<MatchRead> = {}): MatchRead {
     opponent_name: null,
     event: null,
     result: null,
+    result_reason: null,
     scoring_system: null,
     surface: null,
     created_at: "2026-08-01T00:00:00Z",

@@ -646,6 +646,16 @@
               }
             ]
           },
+          "result_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResultReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scoring_system": {
             "anyOf": [
               {
@@ -771,6 +781,16 @@
               }
             ]
           },
+          "result_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResultReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "scoring_system": {
             "anyOf": [
               {
@@ -806,6 +826,7 @@
           "event",
           "scoring_system",
           "result",
+          "result_reason",
           "created_at",
           "updated_at"
         ],
@@ -819,6 +840,17 @@
           "loss"
         ],
         "title": "MatchResult",
+        "type": "string"
+      },
+      "MatchResultReason": {
+        "description": "How the match reached its result.",
+        "enum": [
+          "completed",
+          "retirement",
+          "walkover",
+          "default"
+        ],
+        "title": "MatchResultReason",
         "type": "string"
       },
       "MatchSetRead": {
@@ -927,6 +959,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/MatchResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "result_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MatchResultReason"
               },
               {
                 "type": "null"

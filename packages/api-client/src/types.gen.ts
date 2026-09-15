@@ -385,6 +385,7 @@ export type MatchCreate = {
      */
     player_id: string;
     result?: MatchResult | null;
+    result_reason?: MatchResultReason | null;
     scoring_system?: ScoringSystem | null;
     surface?: Surface | null;
 };
@@ -446,6 +447,7 @@ export type MatchRead = {
      */
     player_id: string;
     result: MatchResult | null;
+    result_reason: MatchResultReason | null;
     scoring_system: ScoringSystem | null;
     surface: Surface | null;
     /**
@@ -460,6 +462,13 @@ export type MatchRead = {
  * Whether the tracked player won, from their side and never the opponent's.
  */
 export type MatchResult = 'win' | 'loss';
+
+/**
+ * MatchResultReason
+ *
+ * How the match reached its result.
+ */
+export type MatchResultReason = 'completed' | 'retirement' | 'walkover' | 'default';
 
 /**
  * MatchSetRead
@@ -522,6 +531,7 @@ export type MatchUpdate = {
      */
     played_on?: string;
     result?: MatchResult | null;
+    result_reason?: MatchResultReason | null;
     scoring_system?: ScoringSystem | null;
     surface?: Surface | null;
 };

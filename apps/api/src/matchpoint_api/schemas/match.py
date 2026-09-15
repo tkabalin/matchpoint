@@ -4,7 +4,13 @@ from typing import Annotated
 
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from matchpoint_api.models import MatchResult, MatchSide, ScoringSystem, Surface
+from matchpoint_api.models import (
+    MatchResult,
+    MatchResultReason,
+    MatchSide,
+    ScoringSystem,
+    Surface,
+)
 from matchpoint_api.schemas.types import UNSET, RequestModel, ShortText, UpdateModel
 
 # Room to back-fill a season or two of matches, while still bracketing a wrong
@@ -67,6 +73,8 @@ class MatchCreate(RequestModel):
     scoring_system: ScoringSystem | None = None
     # Settable at creation because back-filled matches arrive with the result known.
     result: MatchResult | None = None
+    # How the match ended, which a back-filled one may know as well as its result.
+    result_reason: MatchResultReason | None = None
 
 
 # player_id is absent on purpose: a match reaches its owner through its player, so a
@@ -79,6 +87,10 @@ class MatchUpdate(UpdateModel):
     event: ShortText | None = None
     scoring_system: ScoringSystem | None = None
     result: MatchResult | None = None
+    # Not frozen by completion the way result and scoring_system are: it describes the
+    # ending rather than signalling it, so a mis-tapped reason corrects like a typo'd
+    # opponent name.
+    result_reason: MatchResultReason | None = None
 
 
 class MatchCaptureClaim(RequestModel):
@@ -139,5 +151,6 @@ class MatchRead(BaseModel):
     event: str | None
     scoring_system: ScoringSystem | None
     result: MatchResult | None
+    result_reason: MatchResultReason | None
     created_at: datetime
     updated_at: datetime

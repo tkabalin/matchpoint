@@ -46,6 +46,20 @@ class MatchResult(enum.StrEnum):
     LOSS = "loss"
 
 
+# COMPLETED is a member rather than the absence of one: null already means no reason was
+# recorded, which is what a back-filled match carries, and reading "finished normally"
+# off that would make a gap into a claim. The values are the web capture model's own
+# outcome reasons, so neither side needs a translation table. Docstring kept to one line
+# for the reason given on ScoringSystem.
+class MatchResultReason(enum.StrEnum):
+    """How the match reached its result."""
+
+    COMPLETED = "completed"
+    RETIREMENT = "retirement"
+    WALKOVER = "walkover"
+    DEFAULT = "default"
+
+
 class Match(Base):
     """Match metadata only — score/set/point structure belongs to the scoring engine work."""
 
@@ -77,6 +91,12 @@ class Match(Base):
     # many matches will only ever have a result. Null until recorded; the scoring
     # engine can set it at match end once point capture exists.
     result: Mapped[MatchResult | None] = mapped_column(str_enum(MatchResult, "result"))
+    # How the match got there: played out, or ended early by a retirement, a walkover or
+    # a default. Null where nothing said, which is a match still in progress or one
+    # back-filled from a result alone.
+    result_reason: Mapped[MatchResultReason | None] = mapped_column(
+        str_enum(MatchResultReason, "result_reason")
+    )
     # Which device is capturing this match, and when its claim lapses. Capture is
     # single-writer per match (#127), so a second device is refused while a live claim
     # stands; both columns are null when the match is free. The id is the client's own

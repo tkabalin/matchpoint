@@ -23,6 +23,7 @@ const match: MatchRead = {
   event: null,
   scoring_system: "traditional",
   result: "win",
+  result_reason: null,
   created_at: "2026-08-11T09:00:00Z",
   updated_at: "2026-08-11T09:00:00Z",
 };

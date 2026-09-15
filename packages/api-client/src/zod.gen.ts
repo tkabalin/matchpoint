@@ -243,6 +243,18 @@ export const zCurrentStreak = z.object({
 });
 
 /**
+ * MatchResultReason
+ *
+ * How the match reached its result.
+ */
+export const zMatchResultReason = z.enum([
+    'completed',
+    'retirement',
+    'walkover',
+    'default'
+]);
+
+/**
  * MatchSide
  *
  * One side of a match, the coach's tracked player or their opponent.
@@ -864,6 +876,7 @@ export const zMatchCreate = z.object({
     played_on: z.iso.date(),
     player_id: z.uuid(),
     result: zMatchResult.nullish(),
+    result_reason: zMatchResultReason.nullish(),
     scoring_system: zScoringSystem.nullish(),
     surface: zSurface.nullish()
 });
@@ -879,6 +892,7 @@ export const zMatchRead = z.object({
     played_on: z.iso.date(),
     player_id: z.uuid(),
     result: zMatchResult.nullable(),
+    result_reason: zMatchResultReason.nullable(),
     scoring_system: zScoringSystem.nullable(),
     surface: zSurface.nullable(),
     updated_at: z.iso.datetime()
@@ -892,6 +906,7 @@ export const zMatchUpdate = z.object({
     opponent_name: z.string().min(1).max(100).nullish(),
     played_on: z.iso.date().optional(),
     result: zMatchResult.nullish(),
+    result_reason: zMatchResultReason.nullish(),
     scoring_system: zScoringSystem.nullish(),
     surface: zSurface.nullish()
 });

@@ -236,6 +236,7 @@ function matchCreated(body: unknown): Response {
       event: create.event ?? null,
       scoring_system: create.scoring_system ?? null,
       result: null,
+      result_reason: null,
       created_at: "2026-08-20T10:00:00Z",
       updated_at: "2026-08-20T10:00:00Z",
     }),
@@ -649,7 +650,10 @@ describe("match outcome", () => {
       { method: "POST", pathname: "/matches" },
       { method: "PATCH", pathname: `/matches/${MATCH_A}` },
     ]);
-    expect(zMatchUpdate.parse(requests[1]!.body)).toEqual({ result: "win" });
+    expect(zMatchUpdate.parse(requests[1]!.body)).toEqual({
+      result: "win",
+      result_reason: "retirement",
+    });
     expect(await readByMatch(MATCH_A)).toEqual([]);
     expect(result).toEqual({
       acknowledged: 2,
@@ -667,7 +671,10 @@ describe("match outcome", () => {
     await drain();
 
     expect(requests.map((request) => request.pathname)).toEqual([`/matches/${MATCH_A}`]);
-    expect(zMatchUpdate.parse(requests[0]!.body)).toEqual({ result: "loss" });
+    expect(zMatchUpdate.parse(requests[0]!.body)).toEqual({
+      result: "loss",
+      result_reason: "retirement",
+    });
   });
 
   // The outcome and the points are independent requests either way: a batch this

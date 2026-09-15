@@ -15,21 +15,27 @@ describe("toMatchOutcomeUpdate", () => {
   test("maps the tracked player winning to a win result", () => {
     expect(toMatchOutcomeUpdate({ reason: "walkover", trackedPlayerWon: true })).toEqual({
       result: "win",
+      result_reason: "walkover",
     });
   });
 
   test("maps the tracked player losing to a loss result", () => {
     expect(toMatchOutcomeUpdate({ reason: "default", trackedPlayerWon: false })).toEqual({
       result: "loss",
+      result_reason: "default",
     });
   });
 
-  // The reason is carried for a future field (docs/scratch/database-changes-needed.md) but
-  // MatchResult has no home for it yet, so today's mapping drops it.
-  test("does not send the reason — the API has nowhere to put it yet", () => {
-    const body = toMatchOutcomeUpdate({ reason: "retirement", trackedPlayerWon: true });
-    expect(body).not.toHaveProperty("reason");
-  });
+  // The four capture reasons are the API enum member for member, "completed" included:
+  // a match played out to its end says so rather than leaving the column null.
+  test.each(["retirement", "walkover", "default", "completed"])(
+    "sends %s as the result reason",
+    (reason) => {
+      const body = toMatchOutcomeUpdate({ reason, trackedPlayerWon: true });
+      expect(body.result_reason).toBe(reason);
+      expect(() => zMatchUpdate.parse(body)).not.toThrow();
+    },
+  );
 
   test.each([
     ["not an object", "nonsense"],

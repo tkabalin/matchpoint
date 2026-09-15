@@ -6,7 +6,14 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import DataError, IntegrityError
 from sqlalchemy.orm import Session
 
-from matchpoint_api.models import Match, MatchResult, Player, ScoringSystem, Surface
+from matchpoint_api.models import (
+    Match,
+    MatchResult,
+    MatchResultReason,
+    Player,
+    ScoringSystem,
+    Surface,
+)
 from tests.factories import make_match, make_player
 
 
@@ -21,6 +28,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
         event="Roland-Garros",
         scoring_system=ScoringSystem.TRADITIONAL,
         result=MatchResult.WIN,
+        result_reason=MatchResultReason.RETIREMENT,
     )
     db_session.commit()
 
@@ -33,6 +41,7 @@ def test_match_round_trips_with_player(db_session: Session) -> None:
     assert saved.event == "Roland-Garros"
     assert saved.scoring_system is ScoringSystem.TRADITIONAL
     assert saved.result is MatchResult.WIN
+    assert saved.result_reason is MatchResultReason.RETIREMENT
     assert isinstance(saved.id, uuid.UUID)
     assert saved.created_at is not None
     assert saved.updated_at is not None
@@ -51,6 +60,7 @@ def test_only_the_player_and_date_are_required(db_session: Session) -> None:
     assert saved.event is None
     assert saved.scoring_system is None
     assert saved.result is None
+    assert saved.result_reason is None
     # A new match is free to capture: the claim is written by the capture route, never
     # at creation.
     assert saved.capture_claim_device_id is None
@@ -102,9 +112,10 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
         text(
             "INSERT INTO matches "
             "(id, player_id, played_on, opponent_name, surface, scoring_system, result, "
-            "capture_claim_device_id, capture_claim_expires_at) "
+            "result_reason, capture_claim_device_id, capture_claim_expires_at) "
             "VALUES (:id, :player_id, :played_on, :opponent_name, :surface, "
-            ":scoring_system, :result, :capture_claim_device_id, :capture_claim_expires_at)"
+            ":scoring_system, :result, :result_reason, :capture_claim_device_id, "
+            ":capture_claim_expires_at)"
         ),
         {
             "id": uuid.uuid4(),
@@ -114,6 +125,7 @@ def _insert_raw_match(session: Session, **columns: object) -> None:
             "surface": None,
             "scoring_system": None,
             "result": None,
+            "result_reason": None,
             "capture_claim_device_id": None,
             "capture_claim_expires_at": None,
             **columns,
@@ -151,6 +163,21 @@ def test_database_rejects_result_outside_the_enum(db_session: Session) -> None:
     the one a bad payload would most plausibly carry."""
     with pytest.raises(IntegrityError):
         _insert_raw_match(db_session, result="draw")
+
+
+def test_database_rejects_a_result_reason_outside_the_enum(db_session: Session) -> None:
+    """Nine characters, inside the column's VARCHAR(10), so the CHECK answers rather
+    than the width. "abandoned" is the plausible fifth ending a client might invent,
+    and the enum has no member for it: an abandoned match has no result to explain."""
+    with pytest.raises(IntegrityError):
+        _insert_raw_match(db_session, result_reason="abandoned")
+
+
+@pytest.mark.parametrize("member", [m.value for m in MatchResultReason])
+def test_database_accepts_every_result_reason(db_session: Session, member: str) -> None:
+    """The revision spells the four members out by hand, and Alembic compares a CHECK
+    by name and never by condition, so a value mistyped there fails nothing but this."""
+    _insert_raw_match(db_session, result_reason=member)
 
 
 def test_database_rejects_free_text_over_the_column_width(db_session: Session) -> None:

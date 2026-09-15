@@ -17,6 +17,7 @@ from matchpoint_api.models import (
     DeletedMatch,
     Match,
     MatchResult,
+    MatchResultReason,
     MatchSet,
     MatchSide,
     Player,
@@ -83,6 +84,7 @@ def test_create_match_persists_and_returns_row(
             "event": "Roland-Garros",
             "scoring_system": "short_sets",
             "result": "win",
+            "result_reason": "retirement",
         },
     )
 
@@ -95,10 +97,12 @@ def test_create_match_persists_and_returns_row(
     assert body["event"] == "Roland-Garros"
     assert body["scoring_system"] == "short_sets"
     assert body["result"] == "win"
+    assert body["result_reason"] == "retirement"
 
     saved = db_session.get(Match, uuid.UUID(body["id"]))
     assert saved is not None
     assert saved.played_on == date(2026, 8, 1)
+    assert saved.result_reason is MatchResultReason.RETIREMENT
 
 
 def test_create_match_with_only_the_required_fields(
@@ -117,6 +121,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["event"] is None
     assert body["scoring_system"] is None
     assert body["result"] is None
+    assert body["result_reason"] is None
 
 
 @pytest.mark.usefixtures("coach")
@@ -941,6 +946,49 @@ def test_update_match_records_a_result(
     saved = db_session.get(Match, match.id)
     assert saved is not None
     assert saved.result is MatchResult.WIN
+
+
+def test_update_match_records_how_the_match_ended_beside_the_result(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The finish the capture client sends: the result and the reason in one patch,
+    "completed" being the reason a match played out to its end carries."""
+    match = make_match(db_session, player_id=make_player(db_session, coach_id=coach.id).id)
+    db_session.commit()
+
+    response = client.patch(
+        f"/matches/{match.id}", json={"result": "win", "result_reason": "completed"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["result_reason"] == "completed"
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.result_reason is MatchResultReason.COMPLETED
+
+
+def test_update_match_can_correct_a_completed_matchs_result_reason(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """The reason is not one of the two fields completion freezes: it describes the
+    ending rather than signalling it, so a mis-tapped one corrects like a typo'd
+    opponent name, changing no statistic the match is counted in."""
+    match = make_match(
+        db_session,
+        player_id=make_player(db_session, coach_id=coach.id).id,
+        result=MatchResult.WIN,
+        result_reason=MatchResultReason.RETIREMENT,
+    )
+    db_session.commit()
+
+    response = client.patch(f"/matches/{match.id}", json={"result_reason": "walkover"})
+
+    assert response.status_code == 200
+
+    saved = db_session.get(Match, match.id)
+    assert saved is not None
+    assert saved.result_reason is MatchResultReason.WALKOVER
 
 
 def test_update_match_edits_the_metadata_of_a_completed_match(

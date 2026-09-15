@@ -118,6 +118,7 @@ erDiagram
         varchar(100) event "nullable: tournament or fixture"
         varchar(24) scoring_system "nullable: traditional, mens_grand_slam, no_ad_scoring, match_tiebreak_10_points, short_sets, pro_set, legacy"
         varchar(4) result "nullable: win, loss"
+        varchar(10) result_reason "nullable: completed, retirement, walkover, default; null where the ending was never recorded"
         uuid capture_claim_device_id "nullable: the device capturing this match"
         timestamptz capture_claim_expires_at "nullable: when that claim lapses"
         timestamptz created_at
@@ -190,10 +191,12 @@ erDiagram
 
 A match carries metadata only. Point-level data is captured against a match rather than stored on
 it. `result` is the exception: capture is optional, so a match can carry an outcome with no point
-data to compute it from. A match is in progress while `result` is null, and complete once one is
-recorded. Completion freezes `result` and `scoring_system`, and only those two: the result is the
-completion signal itself, and the scoring system is the rulebook the client scored the points under,
-so changing it relabels a match already played. The descriptive fields stay editable afterwards, so
+data to compute it from. `result_reason` is how it got there, and `completed` is a member of it
+rather than the reading of a null: null means nobody recorded an ending, which is what a back-filled
+match carries. A match is in progress while `result` is null, and complete once one is recorded.
+Completion freezes `result` and `scoring_system`, and only those two: the result is the completion
+signal itself, and the scoring system is the rulebook the client scored the points under, so
+changing it relabels a match already played. The descriptive fields stay editable afterwards, so
 correcting a typo'd opponent name does not cost the match and its points.
 
 The `capture_claim_` columns enforce single-writer capture: one device at a time, with a lapsing
