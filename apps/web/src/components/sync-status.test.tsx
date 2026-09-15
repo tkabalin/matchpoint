@@ -107,35 +107,46 @@ test("shows the failed count, taking priority over a pending one", async () => {
   expect(screen.queryByText(/syncing/)).not.toBeInTheDocument();
 });
 
-test("opening the failed badge lists grouped rejection reasons", async () => {
-  await append(pointEntry("p1"));
-  await append(pointEntry("p2"));
-  await append(pointEntry("p3"));
-  await markFailed(["p1", "p2"], REFUSED);
-  await markFailed(["p3"], { status: 409, message: "Match is completed" });
-
-  const user = userEvent.setup();
-  render(<SyncStatus coachId={COACH_ID} />);
-  await user.click(await screen.findByText("3 points failed to sync"));
-
-  expect(await screen.findByText("Unknown player_id")).toBeInTheDocument();
-  expect(screen.getByText("Match is completed")).toBeInTheDocument();
-  // Grouped: two rows shared the same reason, so it reads as one line with a count
-  // of 2 rather than twice.
-  expect(screen.getAllByText("2")).toHaveLength(1);
-});
-
-test("Retry returns the failed rows to pending and runs the drain", async () => {
+test("tapping the failed badge returns the rows to pending and runs the drain", async () => {
   await append(pointEntry("p1"));
   await markFailed(["p1"], REFUSED);
 
   const user = userEvent.setup();
   render(<SyncStatus coachId={COACH_ID} />);
-  await user.click(await screen.findByText("1 point failed to sync"));
-  await user.click(await screen.findByRole("button", { name: "Retry" }));
+  await user.click(await screen.findByRole("button", { name: "1 point failed to sync" }));
 
   await waitFor(() => expect(drainOutbox).toHaveBeenCalledWith(COACH_ID, expect.any(String)));
   const [row] = await readPending(COACH_ID);
   expect(row?.id).toBe("p1");
   expect(row?.failure).toBeUndefined();
+});
+
+test("the badge keeps its count and spins until the retry's drain has finished", async () => {
+  await append(pointEntry("p1"));
+  await append(pointEntry("p2"));
+  await markFailed(["p1", "p2"], REFUSED);
+  let finishDrain = () => {};
+  drainOutbox.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishDrain = () => {
+        resolve({ acknowledged: 2, discarded: 0, parked: 0, unauthorized: false, skipped: false });
+      };
+    }),
+  );
+
+  const user = userEvent.setup();
+  render(<SyncStatus coachId={COACH_ID} />);
+  const badge = await screen.findByRole("button", { name: "2 points failed to sync" });
+  await user.click(badge);
+
+  // The rows are pending again by now, but the badge must not flip to "syncing"
+  // under the coach's thumb: it holds the tapped count and spins instead.
+  await waitFor(() => expect(badge).toHaveAttribute("aria-busy", "true"));
+  expect(badge).toBeDisabled();
+  expect(badge).toHaveTextContent("2 points failed to sync");
+  expect(screen.queryByText(/syncing/)).not.toBeInTheDocument();
+
+  finishDrain();
+  await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
+  expect(await screen.findByText("2 syncing")).toBeInTheDocument();
 });

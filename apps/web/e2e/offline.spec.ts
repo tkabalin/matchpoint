@@ -345,10 +345,7 @@ test.describe("drain behaviour", () => {
     // the whole coach's queue, not just the one match on screen (#115).
     await openCapture(page, keptPlayerId);
     await tapOutMatch(page, "Another opponent", []);
-    await page.getByText("1 point failed to sync").click();
-    await expect(page.getByText("Unknown player_id")).toBeVisible();
-
-    await page.getByRole("button", { name: "Retry" }).click();
+    await page.getByRole("button", { name: "1 point failed to sync" }).click();
 
     // The deleted player is still gone, so the retry re-parks with the same
     // reason — this proves the control exists and re-attempts, not that this
