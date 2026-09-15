@@ -52,13 +52,17 @@ const RALLY_STATS: RallyStats = {
         },
       },
       {
+        // Realistic unforced shape: capture skips the shot-detail screen for
+        // an unforced error entirely (`capture-flow.ts`), so wing and shot
+        // type are always empty here — only the final-ball zone (captured on
+        // an earlier step) can carry real data.
         kind: "unforced",
         label: "Unforced (their free error)",
         count: 2,
         detail: {
-          wing: { forehand: 1, backhand: 1 },
+          wing: { forehand: 0, backhand: 0 },
           shot_type: [],
-          court_zones: [],
+          court_zones: [{ zone: "Net", count: 2 }],
           unusual_reasons: null,
         },
       },
@@ -187,21 +191,39 @@ test("tapping a different style card swaps the drill", async () => {
   expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
 });
 
-test("switching You won / They won leaves the drill closed", async () => {
+// Unforced errors never carry a wing or shot type at all (capture skips that
+// screen for them) — so those two sections are omitted outright, headings
+// included, rather than shown with an empty-state placeholder underneath.
+// Final ball can still have real data for an unforced error and keeps showing.
+test("Unforced's drill omits Wing and Shot type entirely, but still shows Final ball", async () => {
+  const user = userEvent.setup({ delay: null });
+  renderTab();
+  await screen.findByText("Point enders");
+
+  await user.click(screen.getByRole("button", { name: /^Unforced/ }));
+
+  expect(await screen.findByText("Final ball: where it landed")).toBeInTheDocument();
+  expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
+  expect(screen.queryByText("No setup shot recorded.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Shot type")).not.toBeInTheDocument();
+  expect(screen.queryByText("No shot type recorded.")).not.toBeInTheDocument();
+});
+
+test("switching You won / You lost leaves the drill closed", async () => {
   const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 
   expect(screen.getByText("Forced")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: /^They won/ }));
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
 
   expect(screen.getByRole("button", { name: /^Forced/ })).toBeInTheDocument();
   expect(screen.queryByText("Final ball: where it landed")).not.toBeInTheDocument();
 });
 
 // `openStyle` used to survive the toggle: opening Forced under "You won" then
-// switching to "They won" silently re-resolved the same open card against
+// switching to "You lost" silently re-resolved the same open card against
 // the opponent's data, with no change to the heading that told a coach so.
 test("switching sides while a drill is open closes it, rather than silently swapping its data", async () => {
   const user = userEvent.setup({ delay: null });
@@ -210,31 +232,42 @@ test("switching sides while a drill is open closes it, rather than silently swap
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
   await screen.findByText("Wing: setup shot");
 
-  await user.click(screen.getByRole("button", { name: /^They won/ }));
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
 
   expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
   expect(screen.queryByText("Final ball: where it landed")).not.toBeInTheDocument();
 });
 
-test("switching sides changes the radar's title between Your and Their", async () => {
+// The heading no longer names a side ("Your"/"Their") — the Won/Lost toggle
+// above it already says whose winning shot is being described.
+test("the winning-shot heading stays the same across the Won/Lost toggle", async () => {
   const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
 
-  expect(screen.getByText("Your shot shape: wing × type")).toBeInTheDocument();
+  expect(screen.getByText("Winning shot")).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: /^They won/ }));
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
 
-  expect(await screen.findByText("Their shot shape: wing × type")).toBeInTheDocument();
+  expect(screen.getByText("Winning shot")).toBeInTheDocument();
 });
 
-test("the Forced/Unforced explanation defines them by pressure, not ball placement", async () => {
+// `styles[wonSide]` describes the side that *didn't* win those points' own
+// error, so the label names the opposite side from the toggle: "You won"
+// shows the opponent's forced/unforced (their errors gave you the point),
+// "You lost" shows your own.
+test("the forced:unforced stat names the opposite side from the Won/Lost toggle, and updates with it", async () => {
+  const user = userEvent.setup({ delay: null });
   renderTab();
+  await screen.findByText("Point enders");
 
-  expect(
-    await screen.findByText(/Forced means your shot put the opponent under real pressure/),
-  ).toBeInTheDocument();
-  expect(screen.queryByText(/landed in or out/)).not.toBeInTheDocument();
+  expect(screen.getByText("Opponent forced : unforced")).toBeInTheDocument();
+  expect(screen.getByText("2 | 2")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
+
+  expect(screen.getByText("Your forced : Unforced")).toBeInTheDocument();
+  expect(screen.getByText("2 | 1")).toBeInTheDocument();
 });
 
 test("shows the rally-length distribution, uncaptioned in the middle", async () => {

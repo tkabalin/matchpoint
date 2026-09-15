@@ -23,7 +23,7 @@ const AXIS_ICON: Record<string, LucideIcon> = {
   Lob: Rainbow,
 };
 
-const ICON_SIZE = 24;
+const ICON_SIZE = 32;
 
 interface AxisTickProps {
   x?: number;
@@ -53,12 +53,16 @@ function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
   // moment it landed on a lower-left/lower-right axis rather than top/bottom.
   // Centring halves the worst-case one-directional reach.
   const textAnchor = "middle";
-  const iconX = x + unitX * 16;
-  const iconY = y + unitY * 16;
-  // Only axes pointing downward get pushed further out — Volley (pointing up)
-  // already had clean separation from its icon; the extra room was only ever
-  // needed for Lob/Drop shot, where the label sat close enough to overlap.
-  const labelOffset = unitY > 0 ? 42 : 30;
+  const iconDistance = 18;
+  const iconX = x + unitX * iconDistance;
+  const iconY = y + unitY * iconDistance;
+  // Derived from the icon's own footprint rather than a hand-tuned constant per
+  // direction: the label starts past the icon's outer edge (half its size) plus
+  // a fixed clear gap, so raising ICON_SIZE can't silently reopen the overlap
+  // this was fixed for ("the text is covered by the icon" — every axis, not
+  // just the ones a previous pass happened to leave enough room for).
+  const labelGap = 14;
+  const labelOffset = iconDistance + ICON_SIZE / 2 + labelGap;
   const labelX = x + unitX * labelOffset;
   const labelY = y + unitY * labelOffset;
 
@@ -148,7 +152,7 @@ export function ShotRadar({
       <RadarChart
         data={data}
         outerRadius="52%"
-        margin={{ top: 24, bottom: 30, left: 50, right: 50 }}
+        margin={{ top: 32, bottom: 38, left: 56, right: 56 }}
       >
         <PolarGrid />
         <PolarAngleAxis dataKey="shot" tick={<AxisTick />} />

@@ -24,11 +24,11 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { BreakdownBars } from "@/components/breakdown-bars";
 import { LegibleXTick, LegibleYTick } from "@/components/chart-ticks";
+import { ForcedUnforcedBalance } from "@/components/forced-unforced-balance";
 import { OutcomeStack } from "@/components/outcome-swatch";
 import { SegmentedControl } from "@/components/segmented-control";
 import { ShotRadar } from "@/components/shot-radar";
 import { StatCard } from "@/components/stat-card";
-import { StatHero } from "@/components/stat-hero";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,7 +38,7 @@ import { getErrorStatus } from "@/lib/error-status";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
-import { CourtHeatmap } from "./court-heatmap";
+import { FinalBallCourt } from "./final-ball-court";
 
 type WonSide = "you" | "opponents";
 
@@ -53,18 +53,6 @@ const SHOT_TYPE_ICON: Record<string, typeof TrendingUp> = {
   Volley: ChevronUp,
   Dropshot: ChevronDown,
   Lob: Rainbow,
-};
-
-/**
- * The explainer paragraph under the radar. No API field carries this — it's
- * the clearest statement of forced/unforced semantics on the tab, so it lives
- * here as a client constant rather than being dropped once the fixture that
- * used to hold it (`fixtures.ts`) goes away.
- */
-const PLACEMENT_NOTE: Record<WonSide, string> = {
-  you: "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means your shot put the opponent under real pressure and their error (or your winner) followed from that; unforced means they missed a routine ball with no real pressure on it.",
-  opponents:
-    "Wing and shot type describe the setup shot: the winner's last shot that landed in. Forced means their shot put you under real pressure and your error (or their winner) followed from that; unforced means you missed a routine ball with no real pressure on it.",
 };
 
 export function RallyTab({
@@ -125,7 +113,7 @@ export function RallyTab({
   const opponentNotFound =
     matchId === undefined && opponentKey !== null && getErrorStatus(error) === 404;
   // Starts closed, and stays closed on its own: nothing auto-opens on load or
-  // on switching You won/They won, only a tap on a style card opens its own
+  // on switching You won/You lost, only a tap on a style card opens its own
   // drill, and tapping that same card again closes it.
   const [openStyle, setOpenStyle] = useState<string | null>(null);
 
@@ -149,18 +137,22 @@ export function RallyTab({
   const styles = data.styles[wonSide];
 
   const shotFrequency = data.shot_frequency[wonSide];
-  const placementNote = PLACEMENT_NOTE[wonSide];
   const openedStyle = styles.find((style) => style.kind === openStyle) ?? null;
-  // Null exactly when no rally-ending point has been recorded at all in this
-  // scope — a brand-new player, or a filter combination nothing matches.
-  const heroValue = data.hero ? (data.hero.display ?? data.hero.value.toFixed(2)) : "—";
+  // `styles[wonSide]` describes whoever *didn't* win these points' own error:
+  // "you won" styles are the opponent's forced/unforced errors (or your
+  // winner) that gave you the point, and "you lost" styles are your own — so
+  // the label names the opposite side from whichever the toggle currently
+  // reads, not the toggle's own side.
+  const forcedCount = styles.find((style) => style.kind === "forced")?.count ?? 0;
+  const unforcedCount = styles.find((style) => style.kind === "unforced")?.count ?? 0;
+  const forcedUnforcedLabel =
+    wonSide === "you" ? "Opponent forced : unforced" : "Your forced : Unforced";
 
   return (
     <div className="flex flex-col gap-3">
       <RallyLengthCard buckets={data.rally_length} />
 
       <StatCard title="Point enders">
-        <StatHero icon={Swords} value={heroValue} label="Forced : Unforced ratio" />
         <OutcomeStack
           segments={[
             { pattern: "win", weight: data.won, label: `${data.won} won` },
@@ -191,14 +183,30 @@ export function RallyTab({
           }}
           options={[
             { value: "you", label: `You won (${data.won})`, icon: CircleCheck },
-            { value: "opponents", label: `They won (${data.lost})`, icon: CircleX },
+            { value: "opponents", label: `You lost (${data.lost})`, icon: CircleX },
           ]}
         />
 
+        {/* Same shape as `player-card.tsx`'s own "Your forced : unforced" row
+            (`StatRow` + `ForcedUnforcedBalance`) — a levelling-tool needle,
+            not a proportion bar, per `.claude/rules/web-color.md`'s dashboard
+            color roles. Reacts to the toggle above rather than a fixed side,
+            unlike the player card's own always-"you" version. */}
+        <div className="flex items-center gap-2.5">
+          <Swords className="size-6 shrink-0 text-foreground" aria-hidden="true" />
+          <div className="flex-1">
+            <div className="flex justify-between text-sm font-bold text-foreground">
+              <span>{forcedUnforcedLabel}</span>
+              <span className="tabular-nums">
+                {forcedCount} | {unforcedCount}
+              </span>
+            </div>
+            <ForcedUnforcedBalance forced={forcedCount} unforced={unforcedCount} />
+          </div>
+        </div>
+
         <div>
-          <p className="mb-2 text-sm font-bold">
-            {wonSide === "you" ? "Your" : "Their"} shot shape: wing × type
-          </p>
+          <p className="mb-2 text-sm font-bold">Winning shot</p>
           <ShotRadar
             className="mx-auto aspect-square w-full max-w-80"
             series={[
@@ -215,13 +223,9 @@ export function RallyTab({
           />
         </div>
 
-        <p className="rounded-sm bg-muted p-2.5 text-[0.6875rem] leading-relaxed text-muted-foreground">
-          {placementNote}
-        </p>
-
         <div>
-          <p className="mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-            Forced · Unforced · Unusual: tap to expand, tap again to collapse
+          <p className="mb-2 text-sm font-bold text-foreground">
+            Error insight: tap to expand, tap again to collapse
           </p>
           <div className="grid grid-cols-3 gap-2">
             {styles.map((style) => (
@@ -235,7 +239,7 @@ export function RallyTab({
           </div>
         </div>
 
-        {openedStyle && <StyleDrill style={openedStyle} flipCourt={wonSide === "you"} />}
+        {openedStyle && <StyleDrill style={openedStyle} wonSide={wonSide} />}
       </StatCard>
     </div>
   );
@@ -355,7 +359,7 @@ function NothingToBreakDown({ count }: { count: number }) {
   );
 }
 
-function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: boolean }) {
+function StyleDrill({ style, wonSide }: { style: PointEnderStyle; wonSide: WonSide }) {
   const {
     wing,
     shot_type: shotType,
@@ -392,13 +396,24 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
 
   return (
     <div className="border-t pt-3">
-      <p className="mb-2 text-base font-bold text-foreground">Wing: setup shot</p>
-      {wingTotal > 0 ? (
+      {/* Unforced errors never carry a wing or shot type at all — capture skips
+          that screen entirely for them (see `capture-flow.ts`'s own comment:
+          "an unforced error skips the shot"), not a gap in what was recorded.
+          So these two sections are omitted outright rather than shown empty;
+          Final ball still can have data for an unforced error (its landing
+          zone is captured on an earlier step), so it keeps its own fallback. */}
+      {wingTotal > 0 && (
         <>
+          <p className="mb-2 text-base font-bold text-foreground">Wing: setup shot</p>
           <OutcomeStack
             segments={[
               { pattern: "yellow", weight: wing.forehand, label: `Forehand ${wing.forehand}` },
-              { pattern: "violet", weight: wing.backhand, label: `Backhand ${wing.backhand}` },
+              // Sky, the same scoped 8th categorical color the Serve tab's
+              // Ace segment uses (.claude/rules/web-color.md's "Serve/Rally —
+              // sky" entry) — indigo, tried here first, was too close to
+              // yellow to tell apart, and sky is the common ground between
+              // this and Ace's own failed colors rather than a third new one.
+              { pattern: "sky", weight: wing.backhand, label: `Backhand ${wing.backhand}` },
             ]}
           />
           <div className="flex gap-4">
@@ -413,31 +428,38 @@ function StyleDrill({ style, flipCourt }: { style: PointEnderStyle; flipCourt: b
             <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
               <ArrowBigLeftDash
                 className="size-6"
-                style={{ color: PATTERN_VAR.violet }}
+                style={{ color: PATTERN_VAR.sky }}
                 aria-hidden="true"
               />
               Backhand {wing.backhand}
             </span>
           </div>
         </>
-      ) : (
-        <p className="text-xs text-muted-foreground">No setup shot recorded.</p>
       )}
 
-      <p className="mt-3 mb-2 text-base font-bold text-foreground">Shot type</p>
-      {shotType.length > 0 ? (
-        <BreakdownBars
-          rows={shotType}
-          pattern="indigo"
-          icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
-        />
-      ) : (
-        <p className="text-xs text-muted-foreground">No shot type recorded.</p>
+      {shotType.length > 0 && (
+        <>
+          <p className={cn("mb-2 text-base font-bold text-foreground", wingTotal > 0 && "mt-3")}>
+            Shot type
+          </p>
+          <BreakdownBars
+            rows={shotType}
+            pattern="indigo"
+            icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
+          />
+        </>
       )}
 
-      <p className="mt-3 mb-2 text-base font-bold text-foreground">Final ball: where it landed</p>
+      <p
+        className={cn(
+          "mb-2 text-base font-bold text-foreground",
+          (wingTotal > 0 || shotType.length > 0) && "mt-3",
+        )}
+      >
+        Final ball: where it landed
+      </p>
       {courtZones.length > 0 ? (
-        <CourtHeatmap zones={courtZones} flip={flipCourt} />
+        <FinalBallCourt zones={courtZones} wonSide={wonSide} flip={wonSide === "you"} />
       ) : (
         <p className="text-xs text-muted-foreground">No final ball recorded.</p>
       )}
