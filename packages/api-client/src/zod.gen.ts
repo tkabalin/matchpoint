@@ -877,7 +877,7 @@ export const zMatchCreate = z.object({
     player_id: z.uuid(),
     result: zMatchResult.nullish(),
     result_reason: zMatchResultReason.nullish(),
-    scoring_system: zScoringSystem.nullish(),
+    scoring_system: zScoringSystem,
     surface: zSurface.nullish()
 });
 

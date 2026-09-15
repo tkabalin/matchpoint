@@ -17,7 +17,11 @@ from matchpoint_api.schemas.match import MAX_PAST_YEARS, MatchCreate, MatchUpdat
 
 PLAYER_ID = "3f8c1a2e-0b4d-4c7e-9a51-2d6f8b0e4c13"
 MATCH_ID = "6b2e9d41-7c05-4f38-b0a9-1e5c3a7d82f6"
-REQUIRED: dict[str, Any] = {"player_id": PLAYER_ID, "played_on": "2026-08-01"}
+REQUIRED: dict[str, Any] = {
+    "player_id": PLAYER_ID,
+    "played_on": "2026-08-01",
+    "scoring_system": "traditional",
+}
 
 # The two free-text fields carry the same ShortText annotation, and each one is a
 # separate declaration that could lose it — so the boundaries are checked on both.
@@ -28,7 +32,7 @@ def _match(**overrides: Any) -> MatchCreate:
     return MatchCreate.model_validate(REQUIRED | overrides)
 
 
-def test_only_the_player_and_date_are_required() -> None:
+def test_only_the_player_date_and_scoring_system_are_required() -> None:
     match = _match()
 
     assert match.played_on == date(2026, 8, 1)
@@ -36,9 +40,21 @@ def test_only_the_player_and_date_are_required() -> None:
     assert match.opponent_name is None
     assert match.surface is None
     assert match.event is None
-    assert match.scoring_system is None
+    assert match.scoring_system is ScoringSystem.TRADITIONAL
     assert match.result is None
     assert match.result_reason is None
+
+
+def test_rejects_a_missing_scoring_system() -> None:
+    """Unlike the DB column, which stays nullable for #228's fill-in-later flow —
+    every client reaching this route already knows the system, so create requires it."""
+    with pytest.raises(ValidationError):
+        MatchCreate.model_validate({"player_id": PLAYER_ID, "played_on": "2026-08-01"})
+
+
+def test_rejects_a_null_scoring_system() -> None:
+    with pytest.raises(ValidationError):
+        _match(scoring_system=None)
 
 
 # --- id ---------------------------------------------------------------------

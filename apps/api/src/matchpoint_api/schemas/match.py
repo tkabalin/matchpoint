@@ -70,7 +70,12 @@ class MatchCreate(RequestModel):
     played_on: PlayedOn
     surface: Surface | None = None
     event: ShortText | None = None
-    scoring_system: ScoringSystem | None = None
+    # Required at creation even though the column stays nullable (#228's "record now,
+    # tell us the scoring system later" flow still applies to a row already missing
+    # one): every client that reaches this route today already knows which system a
+    # match is played under, so a create with none is a caller bug rather than a
+    # coach genuinely undecided.
+    scoring_system: ScoringSystem
     # Settable at creation because back-filled matches arrive with the result known.
     result: MatchResult | None = None
     # How the match ended, which a back-filled one may know as well as its result.

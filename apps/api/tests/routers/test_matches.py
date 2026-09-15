@@ -111,7 +111,12 @@ def test_create_match_with_only_the_required_fields(
     player = make_player(db_session, coach_id=coach.id)
 
     response = client.post(
-        "/matches", json={"player_id": str(player.id), "played_on": "2026-08-01"}
+        "/matches",
+        json={
+            "player_id": str(player.id),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 201
@@ -119,7 +124,7 @@ def test_create_match_with_only_the_required_fields(
     assert body["opponent_name"] is None
     assert body["surface"] is None
     assert body["event"] is None
-    assert body["scoring_system"] is None
+    assert body["scoring_system"] == "traditional"
     assert body["result"] is None
     assert body["result_reason"] is None
 
@@ -130,7 +135,11 @@ def test_create_match_rejects_unknown_player(client: TestClient, db_session: Ses
     detail is a list, and the generated TypeScript client unpacks it as one."""
     response = client.post(
         "/matches",
-        json={"player_id": str(uuid.uuid4()), "played_on": "2026-08-01"},
+        json={
+            "player_id": str(uuid.uuid4()),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 404
@@ -148,7 +157,11 @@ def test_create_match_against_another_coachs_player_is_404(
 
     response = client.post(
         "/matches",
-        json={"player_id": str(other_player.id), "played_on": "2026-08-01"},
+        json={
+            "player_id": str(other_player.id),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 404
@@ -163,7 +176,12 @@ def test_create_match_for_a_transferred_player_is_404(
     names a player they no longer own. The coach did not ask to lose it, and the status
     is what tells the sync layer to show it rather than destroy it."""
     player = make_player(db_session, coach_id=coach.id)
-    body = {"id": str(uuid.uuid4()), "player_id": str(player.id), "played_on": "2026-08-01"}
+    body = {
+        "id": str(uuid.uuid4()),
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "scoring_system": "traditional",
+    }
     player.coach_id = make_coach(db_session).id
     db_session.commit()
 
@@ -239,6 +257,7 @@ def test_create_match_accepts_a_played_on_of_today(
         json={
             "player_id": str(make_player(db_session, coach_id=coach.id).id),
             "played_on": today.isoformat(),
+            "scoring_system": "traditional",
         },
     )
 
@@ -268,6 +287,20 @@ def test_create_match_rejects_an_invalid_surface(
     response = client.post(
         "/matches",
         json={"player_id": str(player.id), "played_on": "2026-08-01", "surface": "moon dust"},
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_match_rejects_a_missing_scoring_system(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    response = client.post(
+        "/matches",
+        json={
+            "player_id": str(make_player(db_session, coach_id=coach.id).id),
+            "played_on": "2026-08-01",
+        },
     )
 
     assert response.status_code == 422
@@ -344,6 +377,7 @@ def test_create_match_accepts_free_text_at_the_length_limit(
             "played_on": "2026-08-01",
             "opponent_name": at_limit,
             "event": at_limit,
+            "scoring_system": "traditional",
         },
     )
 
@@ -364,6 +398,7 @@ def test_create_match_strips_surrounding_whitespace(
             "played_on": "2026-08-01",
             "opponent_name": "  Aryna  ",
             "event": "  Roland-Garros  ",
+            "scoring_system": "traditional",
         },
     )
 
@@ -382,7 +417,12 @@ def test_create_match_stores_a_client_supplied_id(
 
     response = client.post(
         "/matches",
-        json={"id": str(match_id), "player_id": str(player.id), "played_on": "2026-08-01"},
+        json={
+            "id": str(match_id),
+            "player_id": str(player.id),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 201
@@ -394,7 +434,11 @@ def test_create_match_mints_a_fresh_id_each_time_none_is_sent(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     player = make_player(db_session, coach_id=coach.id)
-    body = {"player_id": str(player.id), "played_on": "2026-08-01"}
+    body = {
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "scoring_system": "traditional",
+    }
 
     first = client.post("/matches", json=body)
     second = client.post("/matches", json=body)
@@ -415,6 +459,7 @@ def test_create_match_repeated_with_the_same_id_returns_the_stored_match(
         "player_id": str(player.id),
         "played_on": "2026-08-01",
         "opponent_name": "Aryna",
+        "scoring_system": "traditional",
     }
 
     first = client.post("/matches", json=body)
@@ -449,6 +494,7 @@ def test_create_match_repeated_under_another_player_returns_the_stored_match(
             "id": str(stored.id),
             "player_id": str(other_player.id),
             "played_on": "2026-08-01",
+            "scoring_system": "traditional",
         },
     )
 
@@ -467,7 +513,12 @@ def test_create_match_refuses_an_id_the_coach_deleted(
     upsert puts the row straight back. Answered 410 and not 404, so the sync layer can
     destroy the queued row on the one status that says the coach asked for this."""
     player = make_player(db_session, coach_id=coach.id)
-    body = {"id": str(uuid.uuid4()), "player_id": str(player.id), "played_on": "2026-08-01"}
+    body = {
+        "id": str(uuid.uuid4()),
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "scoring_system": "traditional",
+    }
     assert client.post("/matches", json=body).status_code == 201
     assert client.delete(f"/matches/{body['id']}").status_code == 204
 
@@ -488,7 +539,12 @@ def test_create_match_refuses_an_id_a_player_delete_freed(
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     db_session.commit()
-    body = {"id": str(match.id), "player_id": str(player.id), "played_on": "2026-08-01"}
+    body = {
+        "id": str(match.id),
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "scoring_system": "traditional",
+    }
     assert client.delete(f"/players/{player.id}").status_code == 204
 
     response = client.post("/matches", json=body)
@@ -512,7 +568,12 @@ def test_create_match_allows_an_id_whose_delete_has_aged_out(
 
     response = client.post(
         "/matches",
-        json={"id": str(aged.id), "player_id": str(player.id), "played_on": "2026-08-01"},
+        json={
+            "id": str(aged.id),
+            "player_id": str(player.id),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 201
@@ -530,7 +591,12 @@ def test_create_match_with_another_coachs_match_id_is_404(
 
     response = client.post(
         "/matches",
-        json={"id": str(theirs.id), "player_id": str(player.id), "played_on": "2026-08-01"},
+        json={
+            "id": str(theirs.id),
+            "player_id": str(player.id),
+            "played_on": "2026-08-01",
+            "scoring_system": "traditional",
+        },
     )
 
     assert response.status_code == 404
@@ -1391,7 +1457,12 @@ def test_deleting_a_reused_id_starts_its_window_over(
     )
     original_coach_id = aged.coach_id
     db_session.commit()
-    body = {"id": str(aged.id), "player_id": str(player.id), "played_on": "2026-08-01"}
+    body = {
+        "id": str(aged.id),
+        "player_id": str(player.id),
+        "played_on": "2026-08-01",
+        "scoring_system": "traditional",
+    }
 
     assert client.post("/matches", json=body).status_code == 201
     assert client.delete(f"/matches/{aged.id}").status_code == 204

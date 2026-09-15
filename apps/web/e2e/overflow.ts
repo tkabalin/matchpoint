@@ -98,6 +98,7 @@ export async function seedMatchWithMomentumStrip(page: Page): Promise<string> {
     opponent_name: "Wojciech Szczepański-Kowalczyk",
     played_on: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
     surface: "hard",
+    scoring_system: "traditional",
   });
   expect(matchResponse.status()).toBe(201);
   const matchId = ((await matchResponse.json()) as { id: string }).id;

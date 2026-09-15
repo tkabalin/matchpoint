@@ -134,6 +134,7 @@ export async function completeMatchOnServer(page: Page, playerId: string): Promi
     id: matchId,
     player_id: playerId,
     played_on: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    scoring_system: "traditional",
   });
   expect(created.status()).toBe(201);
   const completed = await page.request.patch(`/api/matches/${matchId}`, {

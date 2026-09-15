@@ -386,7 +386,7 @@ export type MatchCreate = {
     player_id: string;
     result?: MatchResult | null;
     result_reason?: MatchResultReason | null;
-    scoring_system?: ScoringSystem | null;
+    scoring_system: ScoringSystem;
     surface?: Surface | null;
 };
 

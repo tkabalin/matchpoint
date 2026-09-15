@@ -32,6 +32,7 @@ async function createClaimedMatch(page: Page, playerId: string): Promise<string>
     id: matchId,
     player_id: playerId,
     played_on: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    scoring_system: "traditional",
   });
   expect(created.status()).toBe(201);
   const claimed = await postJson(page, `/api/matches/${matchId}/capture`, {

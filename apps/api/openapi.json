@@ -657,14 +657,7 @@
             ]
           },
           "scoring_system": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ScoringSystem"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ScoringSystem"
           },
           "surface": {
             "anyOf": [
@@ -679,7 +672,8 @@
         },
         "required": [
           "player_id",
-          "played_on"
+          "played_on",
+          "scoring_system"
         ],
         "title": "MatchCreate",
         "type": "object"
