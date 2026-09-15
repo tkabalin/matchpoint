@@ -3,6 +3,7 @@ import { defineConfig, devices } from "@playwright/test";
 const DESKTOP_ONLY = [
   /offline\.spec\.ts/,
   /capture-sync\.spec\.ts/,
+  /capture-scoring-tiebreak\.spec\.ts/,
   /auth\.spec\.ts/,
   /read-failures\.spec\.ts/,
 ];

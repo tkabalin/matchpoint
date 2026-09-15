@@ -26,10 +26,21 @@ export async function openCapture(page: Page, playerId: string): Promise<void> {
  * Names the opponent and starts the match, leaving the first serve on screen.
  *
  * Opponent is a hand-rolled combobox (see match-setup-screen.tsx), given an
- * explicit role="combobox" rather than "textbox".
+ * explicit role="combobox" rather than "textbox". `scoringSystem` picks a format
+ * off the setup Select (by its SCORING_SYSTEM_LABEL text, e.g. "Short Sets") before
+ * starting; the default format ("Traditional") needs no interaction, so most specs
+ * leave this unset.
  */
-export async function startMatch(page: Page, opponentName: string): Promise<void> {
+export async function startMatch(
+  page: Page,
+  opponentName: string,
+  scoringSystem?: string,
+): Promise<void> {
   await page.getByRole("combobox", { name: "Opponent" }).fill(opponentName);
+  if (scoringSystem !== undefined) {
+    await page.getByRole("combobox", { name: /Scoring system/ }).click();
+    await page.getByRole("option", { name: scoringSystem }).click();
+  }
   await page.getByRole("button", { name: "Start match" }).click();
   await expect(page.getByRole("heading", { name: "1st Serve" })).toBeVisible();
 }
@@ -118,6 +129,17 @@ export async function skipPoint(page: Page, won: boolean): Promise<void> {
     .getByRole("dialog")
     .getByRole("button", { name: won ? /^Win/ : /^Loss/ })
     .click();
+}
+
+/**
+ * Wins (or loses) one whole game love, four skipped points the same way, for a spec
+ * that needs to walk the score through several games without caring about deuce
+ * along the way (e.g. alternating games to reach a tiebreak).
+ */
+export async function winGame(page: Page, won: boolean): Promise<void> {
+  for (let taken = 0; taken < 4; taken += 1) {
+    await skipPoint(page, won);
+  }
 }
 
 /**
