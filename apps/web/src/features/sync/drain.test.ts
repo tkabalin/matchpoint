@@ -1041,6 +1041,22 @@ describe("rows that can never land", () => {
     expect(result.parked).toBe(0);
   });
 
+  test("discards a deleted match's checkpoints alongside its points", async () => {
+    stubTransport((request) =>
+      request.pathname === `/matches/${MATCH_A}/points`
+        ? jsonResponse(410, { detail: "This match was deleted." })
+        : respondOk(request),
+    );
+    await queue(pointEntry("a1", MATCH_A, 0), checkpointEntry("a2", MATCH_A, 1));
+
+    const result = await drain();
+
+    // Left queued, the checkpoint would outlive the match log this discard removes,
+    // and the next sweep could only park it for a deletion the coach chose.
+    expect(await readByMatch(MATCH_A)).toEqual([]);
+    expect(result).toMatchObject({ discarded: 2, parked: 0 });
+  });
+
   test("parks a match whose player the server will not accept", async () => {
     stubTransport((request) => {
       if (request.pathname === "/matches" && zMatchCreate.parse(request.body).id === MATCH_A) {

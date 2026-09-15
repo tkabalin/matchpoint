@@ -266,9 +266,20 @@ async function flushMatch(
         sweep.unauthorized = true;
         return true;
       case "gone":
-        // The match was deleted, which every row behind this batch would hit
-        // too, so they are discarded on the same grouping as a park.
-        await discard(pointRows.slice(start), first.matchId, sweep);
+        // The match was deleted, so every remaining row of its own goes with the
+        // points rather than waiting for a sweep of their own: this discard removes
+        // the match log a checkpoint is mapped against, and a later sweep could then
+        // only park it for a deletion the coach chose.
+        await discard(
+          [
+            ...pointRows.slice(start),
+            ...checkpointRows,
+            ...eventDeleteRows,
+            ...(outcomeRow ? [outcomeRow] : []),
+          ],
+          first.matchId,
+          sweep,
+        );
         return false;
       case "refused":
         // The batch is refused whole, and the refusal is durable state the
