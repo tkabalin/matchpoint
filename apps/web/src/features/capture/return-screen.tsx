@@ -159,6 +159,17 @@ export function ReturnScreen({
           variant="ghost"
           disabled={pending}
           onClick={() => {
+            setLetNotice(null);
+            onAction({ type: "TAP_DIDNT_SEE" });
+          }}
+          className="px-2 text-sm font-semibold text-muted-foreground"
+        >
+          Didn&apos;t see
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={pending}
+          onClick={() => {
             setLetNotice("Let. Replay the point.");
             onAction({ type: "TAP_LET" });
           }}
@@ -166,17 +177,6 @@ export function ReturnScreen({
         >
           <RotateCcw className="size-5" />
           Let
-        </Button>
-        <Button
-          variant="ghost"
-          disabled={pending}
-          onClick={() => {
-            setLetNotice(null);
-            onAction({ type: "TAP_DIDNT_SEE" });
-          }}
-          className="px-2 text-sm font-semibold text-muted-foreground"
-        >
-          Didn&apos;t see
         </Button>
       </div>
 
