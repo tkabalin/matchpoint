@@ -1,10 +1,19 @@
 import type { OpponentSummary } from "@matchpoint/api-client";
 import { listMatchesOptions, listOpponentsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import {
+  Clock,
+  Contact,
+  LandPlot,
+  ChevronDown,
+  Hash,
+  LayoutGrid,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useState } from "react";
 
 import { ChipRow } from "@/components/chip-row";
+import { FilterGroupLabel } from "@/components/filter-group-label";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Item, ItemContent, ItemTitle } from "@/components/ui/item";
@@ -91,7 +100,7 @@ export function StatsScopePanel({
         className="flex items-center gap-3 rounded-sm border bg-card px-3.5 py-2.5 text-left"
       >
         <SlidersHorizontal className="size-6 shrink-0 text-primary" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold">{summaryFor(filters, opponentName)}</span>
+        <span className="flex-1 text-sm font-bold">{summaryFor(filters, opponentName)}</span>
         <ChevronDown
           className={cn(
             "size-3.5 text-muted-foreground transition-transform",
@@ -103,7 +112,9 @@ export function StatsScopePanel({
 
       {open && (
         <div className="rounded-sm border bg-card p-3.5">
-          <ScopeGroupLabel first>Match scope</ScopeGroupLabel>
+          <FilterGroupLabel icon={LayoutGrid} first>
+            Match scope
+          </FilterGroupLabel>
           <ChipRow
             aria-label="Match scope"
             options={SCOPE_OPTIONS}
@@ -119,7 +130,7 @@ export function StatsScopePanel({
 
           {draft.scope === "vs-opponent" && (
             <>
-              <ScopeGroupLabel>Opponent</ScopeGroupLabel>
+              <FilterGroupLabel icon={Contact}>Opponent</FilterGroupLabel>
               <Input
                 placeholder="Search opponents"
                 value={opponentSearch}
@@ -135,7 +146,7 @@ export function StatsScopePanel({
             </>
           )}
 
-          <ScopeGroupLabel>Set</ScopeGroupLabel>
+          <FilterGroupLabel icon={Hash}>Set</FilterGroupLabel>
           <ChipRow
             aria-label="Set"
             scroll
@@ -144,7 +155,7 @@ export function StatsScopePanel({
             onChange={(set) => setDraft({ ...draft, set })}
           />
 
-          <ScopeGroupLabel>Phase</ScopeGroupLabel>
+          <FilterGroupLabel icon={Clock}>Phase</FilterGroupLabel>
           <ChipRow
             aria-label="Phase"
             scroll
@@ -155,7 +166,7 @@ export function StatsScopePanel({
 
           {presentSurfaces.length > 0 && (
             <>
-              <ScopeGroupLabel>Surface</ScopeGroupLabel>
+              <FilterGroupLabel icon={LandPlot}>Surface</FilterGroupLabel>
               <ChipRow<SurfaceFilter>
                 aria-label="Surface"
                 scroll
@@ -192,19 +203,6 @@ export function StatsScopePanel({
         </div>
       )}
     </div>
-  );
-}
-
-function ScopeGroupLabel({ children, first }: { children: string; first?: boolean }) {
-  return (
-    <p
-      className={cn(
-        "mb-1.5 text-[0.625rem] tracking-wide text-muted-foreground uppercase",
-        !first && "mt-3",
-      )}
-    >
-      {children}
-    </p>
   );
 }
 

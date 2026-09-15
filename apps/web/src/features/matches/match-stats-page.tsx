@@ -5,17 +5,18 @@ import {
   ArrowLeft,
   ChevronDown,
   CircleCheck,
-  CircleDot,
   CircleX,
-  Repeat2,
+  Clock,
+  Hash,
   SlidersHorizontal,
 } from "lucide-react";
 import { useState } from "react";
 
 import { ChipRow } from "@/components/chip-row";
+import { FilterGroupLabel } from "@/components/filter-group-label";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { RallyTab } from "@/components/rally-tab";
-import { SegmentedControl } from "@/components/segmented-control";
+import { ServeRallyToggle } from "@/components/serve-rally-toggle";
 import { ServeTab } from "@/components/serve-tab";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
@@ -146,15 +147,7 @@ export function MatchStatsPage({
         onPhaseChange={setPhase}
       />
 
-      <SegmentedControl
-        aria-label="Serve or rally"
-        value={tab}
-        onValueChange={setTab}
-        options={[
-          { value: "serve", label: "Serve", icon: CircleDot },
-          { value: "rally", label: "Rally", icon: Repeat2 },
-        ]}
-      />
+      <ServeRallyToggle value={tab} onValueChange={setTab} />
 
       <div className="mt-4">
         {tab === "serve" ? (
@@ -189,7 +182,7 @@ function MatchStatsFilterPanel({
         className="flex items-center gap-3 rounded-sm border bg-card px-3.5 py-2.5 text-left"
       >
         <SlidersHorizontal className="size-6 shrink-0 text-primary" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold">
+        <span className="flex-1 text-sm font-bold">
           {isActive ? "Narrowed within this match" : "Full match"}
         </span>
         <ChevronDown
@@ -203,9 +196,9 @@ function MatchStatsFilterPanel({
 
       {open && (
         <div className="rounded-sm border bg-card p-3.5">
-          <p className="mb-1.5 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
+          <FilterGroupLabel icon={Hash} first>
             Set
-          </p>
+          </FilterGroupLabel>
           <ChipRow
             aria-label="Set"
             scroll
@@ -214,9 +207,7 @@ function MatchStatsFilterPanel({
             onChange={onSetChange}
           />
 
-          <p className="mt-3 mb-1.5 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-            Phase
-          </p>
+          <FilterGroupLabel icon={Clock}>Phase</FilterGroupLabel>
           <ChipRow
             aria-label="Phase"
             scroll

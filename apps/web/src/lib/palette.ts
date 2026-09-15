@@ -11,7 +11,7 @@
 export type OutcomeName = "win" | "forced" | "unforced";
 
 /** Free for any categorical distinction that isn't an outcome. */
-export type CategoryName = "yellow" | "indigo" | "violet";
+export type CategoryName = "yellow" | "indigo" | "violet" | "sky";
 
 export type PatternName = OutcomeName | CategoryName;
 
@@ -22,6 +22,7 @@ export const PATTERN_CLASS: Record<PatternName, string> = {
   yellow: "pattern-yellow",
   indigo: "pattern-indigo",
   violet: "pattern-violet",
+  sky: "pattern-sky",
 };
 
 /**
@@ -35,6 +36,7 @@ export const PATTERN_TEXT_CLASS: Record<PatternName, string> = {
   yellow: "text-black",
   indigo: "text-white",
   violet: "text-white",
+  sky: "text-white",
 };
 
 /** CSS custom properties for the same colors, for chart libraries that need a raw color. */
@@ -45,6 +47,7 @@ export const PATTERN_VAR: Record<PatternName, string> = {
   yellow: "var(--color-cat-yellow)",
   indigo: "var(--color-cat-indigo)",
   violet: "var(--color-cat-violet)",
+  sky: "var(--color-cat-sky)",
 };
 
 /** SVG pattern-fill URLs for the non-outcome categorical colors, defined by
@@ -55,6 +58,7 @@ export const CATEGORICAL_PATTERN_FILL: Record<CategoryName, string> = {
   yellow: "url(#chart-pattern-yellow)",
   indigo: "url(#chart-pattern-indigo)",
   violet: "url(#chart-pattern-violet)",
+  sky: "url(#chart-pattern-sky)",
 };
 
 /** A hatch/dot fill reads as texture on a filled bar, but is invisible on a
@@ -64,4 +68,5 @@ export const CATEGORICAL_STROKE_DASH: Record<CategoryName, string | undefined> =
   yellow: undefined,
   indigo: "6 3",
   violet: "2 3",
+  sky: "8 3 2 3",
 };

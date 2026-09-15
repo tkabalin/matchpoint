@@ -1,54 +1,30 @@
-import type { BreakdownRow, ServeSideStats } from "@matchpoint/api-client";
+import type {
+  BreakdownRow,
+  FaultModeShares,
+  ReturnOutcomeSplit,
+  ServeOutcomeShares,
+  ServeSideStats,
+} from "@matchpoint/api-client";
 import {
   getMatchServeStatsOptions,
   getServeStatsOptions,
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowLeftRight,
-  ArrowUp,
-  CircleCheck,
-  CircleX,
-  Flag,
-  FlagOff,
-  Grid2x2,
-  ChevronRight,
-  Shield,
-  Target,
-  Spade,
-} from "lucide-react";
+import { CircleCheck, CircleX, Flag, FlagOff, Shield, Spade, Target } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useState } from "react";
-import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import type { CSSProperties } from "react";
+import { useEffect } from "react";
 
-import { BreakdownBars } from "@/components/breakdown-bars";
-import { SegmentedControl } from "@/components/segmented-control";
+import { FaultModeCourt } from "@/components/fault-mode-court";
 import { OutcomeStack } from "@/components/outcome-swatch";
 import { StatCard } from "@/components/stat-card";
-import { StatHero } from "@/components/stat-hero";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toSetNumber } from "@/lib/analytics/filter-options";
 import type { PhaseFilter, SetFilter, SurfaceFilter } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
 import { PATTERN_VAR } from "@/lib/palette";
 import { cn } from "@/lib/utils";
-
-type ServeNumber = "first" | "second";
-
-const FAULT_MODE_ICON: Record<string, typeof Grid2x2> = {
-  Net: Grid2x2,
-  Long: ArrowUp,
-  Wide: ArrowLeftRight,
-  In: CircleCheck,
-};
 
 export function ServeTab({
   playerId,
@@ -128,276 +104,293 @@ export function ServeTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <ServeSideCard
-        title="Your serve"
-        heroIcon={Target}
-        trendTitle="Serve % in"
-        stats={data.serving}
-        drill="fault-mode"
-      />
-      <ServeSideCard
-        title="Their serve"
-        heroIcon={Shield}
-        trendTitle="Their serve % in"
-        stats={data.returning}
-        drill="return-outcome"
-      />
+      <YourServeCard stats={data.serving} />
+      <OpponentServeCard stats={data.returning} />
     </div>
   );
 }
 
-function ServeSideCard({
-  title,
-  heroIcon: HeroIcon,
-  trendTitle,
-  stats,
-  drill,
+function CardHeading({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <Icon className="size-9 shrink-0 text-primary" aria-hidden="true" />
+      <p className="text-base font-bold text-foreground">{title}</p>
+    </div>
+  );
+}
+
+function OutcomeLegendRow({
+  items,
 }: {
-  title: string;
-  /** Distinct per card — serving and returning are different actions and should
-   *  never share a symbol, even though both are "the serve". */
-  heroIcon: LucideIcon;
-  trendTitle: string;
-  stats: ServeSideStats;
-  /** Which drill this card shows when expanded — a caller decision, not one
-   *  inferred from the payload: the serving card's own `return_outcome` is
-   *  always empty (capture records the player's return of the opponent's
-   *  serve and nothing about the opponent's return of theirs), so the two
-   *  drills stay exclusive by construction rather than by checking for data. */
-  drill: "fault-mode" | "return-outcome";
+  items: { icon: LucideIcon; iconClassName?: string; iconStyle?: CSSProperties; text: string }[];
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [serveNumber, setServeNumber] = useState<ServeNumber>("first");
+  return (
+    <div className="mt-1.5 flex flex-wrap gap-4">
+      {items.map((item) => (
+        <span
+          key={item.text}
+          className="flex items-center gap-1.5 text-xs font-bold text-foreground"
+        >
+          <item.icon
+            className={cn("size-5", item.iconClassName)}
+            style={item.iconStyle}
+            aria-hidden="true"
+          />
+          {item.text}
+        </span>
+      ))}
+    </div>
+  );
+}
 
-  // Everything below reads from this one selection — the hero, the stack and
-  // the fault-mode/return-outcome drill all move together when the 1st/2nd
-  // serve toggle changes, rather than only the drill responding to it.
-  const outcome = serveNumber === "first" ? stats.outcome.first_serve : stats.outcome.second_serve;
-  const outcomeTotal = outcome ? outcome.landed + outcome.fault + outcome.ace : 0;
-  const heroLabel = serveNumber === "first" ? "1st serves in" : "2nd serves in";
-  const faultMode =
-    serveNumber === "first" ? stats.fault_mode.first_serve : stats.fault_mode.second_serve;
-  const returnRows =
-    drill === "return-outcome"
-      ? serveNumber === "first"
-        ? stats.return_outcome.first_serve
-        : stats.return_outcome.second_serve
-      : undefined;
-
+function YourServeCard({ stats }: { stats: ServeSideStats }) {
   return (
     <StatCard>
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between"
-      >
-        <span className="text-base font-bold text-foreground">{title}</span>
-        <ChevronRight
-          className={cn(
-            "size-3.5 text-muted-foreground transition-transform",
-            expanded && "rotate-90",
-          )}
-          aria-hidden="true"
-        />
-      </button>
-
-      {/* Value derived from `outcome`, ace-inclusive — an ace is still an "in"
-          serve, so the headline % in has to include it, and computing it from
-          the same numbers the stack below draws is what keeps the two from
-          disagreeing. Both read from the 1st/2nd serve toggle's current
-          selection, not a fixed value that ignores it. A dash where that serve
-          number has not been attempted: zero would read as a measurement. */}
-      <StatHero
-        icon={HeroIcon}
-        value={outcome ? `${outcome.landed + outcome.ace}%` : "—"}
-        label={heroLabel}
+      <CardHeading icon={Target} title="Your serve" />
+      <ServeOutcomeRow icon={Flag} label="1st serve" outcome={stats.outcome.first_serve} />
+      <ServeOutcomeRow icon={FlagOff} label="2nd serve" outcome={stats.outcome.second_serve} />
+      <FaultModeSection
+        first={stats.fault_mode.first_serve}
+        second={stats.fault_mode.second_serve}
       />
-
-      {outcome && outcomeTotal > 0 && (
-        <OutcomeStack
-          segments={[
-            // "In" here means landed in and wasn't an ace — a disjoint third of
-            // the stack, not a superset of the ace segment below it. Together,
-            // in + ace is the headline % in shown above.
-            { pattern: "win", weight: outcome.landed, label: `${outcome.landed}% in` },
-            {
-              pattern: "unforced",
-              weight: outcome.fault,
-              label: `${outcome.fault}% fault`,
-            },
-            { pattern: "violet", weight: outcome.ace, label: `${outcome.ace}% ace` },
-          ]}
-        />
-      )}
-      <div className="flex gap-4">
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <CircleCheck className="size-6 text-outcome-win" aria-hidden="true" />
-          In
-        </span>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <CircleX className="size-6 text-outcome-unforced" aria-hidden="true" />
-          Fault
-        </span>
-        <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-          <Spade className="size-6" style={{ color: PATTERN_VAR.violet }} aria-hidden="true" />
-          Ace
-        </span>
-      </div>
-
-      <ServeTrendChart title={trendTitle} trend={stats.trend} />
-
-      {expanded && (
-        <div className="border-t pt-3">
-          <SegmentedControl
-            aria-label="1st or 2nd serve"
-            value={serveNumber}
-            onValueChange={setServeNumber}
-            options={[
-              { value: "first", label: "1st serve", icon: Flag },
-              { value: "second", label: "2nd serve", icon: FlagOff },
-            ]}
-          />
-          {/* Serving side only. Percentages are of that serve number's *faults*,
-              not of its attempts — said in the caption because the stack directly
-              above is a share of attempts, and two adjacent percentages measuring
-              against different denominators is exactly how a coach misreads
-              "Net 55%" as "55% of my serves hit the net". */}
-          {drill === "fault-mode" && (
-            <>
-              <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                Fault mode · share of faults
-              </p>
-              {faultMode ? (
-                <BreakdownBars
-                  rows={[
-                    { label: "Net", value: faultMode.net, max: 100 },
-                    { label: "Long", value: faultMode.long, max: 100 },
-                    { label: "Wide", value: faultMode.wide, max: 100 },
-                  ]}
-                  pattern="unforced"
-                  icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
-                  unit="%"
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">No faults on this serve yet.</p>
-              )}
-            </>
-          )}
-
-          {returnRows && (
-            <>
-              <p className="mt-3 mb-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-                Your return outcome · share of returns played
-              </p>
-              {returnRows.length > 0 ? (
-                <BreakdownBars
-                  rows={returnRows}
-                  pattern={(row) => (row.label === "In" ? "win" : "unforced")}
-                  icon={(row: BreakdownRow) => FAULT_MODE_ICON[row.label]!}
-                  unit="%"
-                />
-              ) : (
-                <p className="text-xs text-muted-foreground">No returns recorded on this serve.</p>
-              )}
-            </>
-          )}
-        </div>
-      )}
     </StatCard>
   );
 }
 
-function ServeTrendChart({ title, trend }: { title: string; trend: ServeSideStats["trend"] }) {
-  // "% in" everywhere here means the same thing the hero number above means for the
-  // whole sample: the share of serve attempts at that serve number (1st or 2nd)
-  // that landed in play — a fault or a let-replay doesn't count, an ace does. Each
-  // line is that rate for one match, oldest (M1) to most recent, so a coach sees
-  // the trend behind today's headline number, not just its current value.
-  const config = {
-    first_serve_in: { label: "1st serve % in", color: PATTERN_VAR.yellow },
-    second_serve_in: { label: "2nd serve % in", color: PATTERN_VAR.indigo },
-  };
+/** One permanent bar per serve number — no toggle, no drill: both the stack and its
+ *  in/fault/ace percentages are always on screen, since a hidden number "can't be
+ *  determined" at a glance. */
+function ServeOutcomeRow({
+  icon,
+  label,
+  outcome,
+}: {
+  icon: LucideIcon;
+  label: string;
+  outcome: ServeOutcomeShares | null;
+}) {
+  const Icon = icon;
 
-  // A line needs two points to be a line. One match (what a match-scoped request
-  // returns) or none (a side that never served) would otherwise draw axes, a
-  // 0-100 scale and a legend naming both series over an empty plot, since every
-  // Line here is dot={false} and a single datum leaves no visible mark at all.
-  if (trend.length < 2) {
+  if (!outcome) {
     return (
       <div>
-        <p className="mb-1 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-          {title}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {trend.length === 0
-            ? "No matches with a serve recorded yet."
-            : "One match so far, which is not yet a trend."}
-        </p>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+          <Icon className="size-4" aria-hidden="true" />
+          {label}
+        </span>
+        <p className="text-xs text-muted-foreground">No {label.toLowerCase()}s recorded yet.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <p className="mb-1 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-        {title} · share of serve attempts landing in, per match · last {trend.length} matches
-      </p>
-      <ChartContainer config={config} className="aspect-[5/2] w-full">
-        <LineChart data={trend}>
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey="match" tickLine={false} axisLine={false} tick={{ fontSize: 9 }} />
-          <YAxis
-            width={28}
-            domain={[0, 100]}
-            tick={{ fontSize: 9 }}
-            tickFormatter={(value: number) => `${value}%`}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                // Keyed by series (`name` is the line's own dataKey), not by
-                // payload position — a match with no 2nd serve carries a null
-                // `second_serve_in` rather than an absent key, and this used to
-                // mislabel whichever line actually survived as "1st serve".
-                formatter={(value, name) => (
-                  <div className="flex w-full items-center justify-between gap-2">
-                    <span className="text-muted-foreground">
-                      {name === "first_serve_in" ? "1st serve" : "2nd serve"}
-                    </span>
-                    <span className="font-mono font-medium text-foreground tabular-nums">
-                      {value === null ? "—" : `${value}%`}
-                    </span>
-                  </div>
-                )}
-              />
-            }
-          />
-          <ChartLegend content={<ChartLegendContent />} />
-          {/* A background-colored halo pass under each real line (web-color.md's dual-ring
-              halo, the SVG-stroke equivalent): a 2px line loses effective contrast a
-              filled swatch of the same color doesn't, even when the raw color already
-              passes WCAG on its own. legendType/tooltipType "none" keeps the halo out of
-              both, so it never appears as a second series. */}
-          <Line
-            dataKey="first_serve_in"
-            stroke="var(--background)"
-            strokeWidth={4}
-            dot={false}
-            legendType="none"
-            tooltipType="none"
-          />
-          <Line dataKey="first_serve_in" stroke={PATTERN_VAR.yellow} strokeWidth={2} dot={false} />
-          <Line
-            dataKey="second_serve_in"
-            stroke="var(--background)"
-            strokeWidth={4}
-            dot={false}
-            legendType="none"
-            tooltipType="none"
-          />
-          <Line dataKey="second_serve_in" stroke={PATTERN_VAR.indigo} strokeWidth={2} dot={false} />
-        </LineChart>
-      </ChartContainer>
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-1.5 text-sm font-bold text-foreground">
+          <Icon className="size-4" aria-hidden="true" />
+          {label}
+        </span>
+        <span className="text-lg font-bold tabular-nums">{outcome.landed + outcome.ace}% in</span>
+      </div>
+      <OutcomeStack
+        className="mt-1"
+        segments={[
+          { pattern: "win", weight: outcome.landed, label: `${outcome.landed}% in` },
+          { pattern: "unforced", weight: outcome.fault, label: `${outcome.fault}% fault` },
+          // Sky, a scoped 8th categorical color (.claude/rules/web-color.md's
+          // "Serve/Rally — sky" entry) — not the nav's own primary blue, a
+          // separate light-blue-with-white-dots swatch. Both indigo and
+          // yellow were tried here first and reported too close to
+          // vermillion's "fault" segment sitting right next to it in this
+          // thin bar; violet is off the table outright (vermillion/violet
+          // must never share a view).
+          { pattern: "sky", weight: outcome.ace, label: `${outcome.ace}% ace` },
+        ]}
+      />
+      <OutcomeLegendRow
+        items={[
+          { icon: CircleCheck, iconClassName: "text-outcome-win", text: `${outcome.landed}% in` },
+          {
+            icon: CircleX,
+            iconClassName: "text-outcome-unforced",
+            text: `${outcome.fault}% fault`,
+          },
+          { icon: Spade, iconStyle: { color: PATTERN_VAR.sky }, text: `${outcome.ace}% ace` },
+        ]}
+      />
     </div>
   );
+}
+
+function OpponentServeCard({ stats }: { stats: ServeSideStats }) {
+  const split = combinedReturnSplit(stats.return_outcome);
+
+  return (
+    <StatCard>
+      <CardHeading icon={Shield} title="Return of opponent serve" />
+      {split ? (
+        <ReturnSplitRow inPercent={split.inPercent} errorPercent={split.errorPercent} />
+      ) : (
+        <p className="text-xs text-muted-foreground">No returns recorded yet.</p>
+      )}
+      <CombinedFaultModeSection
+        shares={combinedFaultShares(
+          stats.return_outcome.first_serve,
+          stats.return_outcome.second_serve,
+        )}
+      />
+    </StatCard>
+  );
+}
+
+/** The opponent's own serve, from the one side capture actually records: not what
+ *  proportion of it landed in or out (nobody's tracking the opponent's toss), but
+ *  what the tracked player did with it once it arrived — one bar, in vs. error,
+ *  first and second serve combined. */
+function ReturnSplitRow({ inPercent, errorPercent }: { inPercent: number; errorPercent: number }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-bold text-foreground">Your return</span>
+        <span className="text-lg font-bold tabular-nums">{inPercent}% in</span>
+      </div>
+      <OutcomeStack
+        className="mt-1"
+        segments={[
+          { pattern: "win", weight: inPercent, label: `${inPercent}% in` },
+          { pattern: "unforced", weight: errorPercent, label: `${errorPercent}% error` },
+        ]}
+      />
+      <OutcomeLegendRow
+        items={[
+          { icon: CircleCheck, iconClassName: "text-outcome-win", text: `${inPercent}% in` },
+          {
+            icon: CircleX,
+            iconClassName: "text-outcome-unforced",
+            text: `${errorPercent}% error`,
+          },
+        ]}
+      />
+    </div>
+  );
+}
+
+/** Two courts side by side, one serve number each, with a clear rule between them —
+ *  the fault-mode equivalent of the two outcome rows above. "Your serve" only:
+ *  the opponent card shows one court combined across both serve numbers instead
+ *  (`CombinedFaultModeSection`), since there's no separate 1st/2nd outcome row to
+ *  pair each court with on that card the way there is here. */
+function FaultModeSection({
+  first,
+  second,
+}: {
+  first: FaultModeShares | null;
+  second: FaultModeShares | null;
+}) {
+  return (
+    <div className="border-t pt-3">
+      <p className="mb-2 text-sm font-bold text-foreground">Fault breakdown</p>
+      <div className="grid grid-cols-2">
+        <FaultModeColumn icon={Flag} label="1st serve" shares={first} />
+        <FaultModeColumn
+          icon={FlagOff}
+          label="2nd serve"
+          shares={second}
+          className="border-l-2 border-muted-foreground/40 pl-3"
+        />
+      </div>
+    </div>
+  );
+}
+
+function FaultModeColumn({
+  icon: Icon,
+  label,
+  shares,
+  className,
+}: {
+  icon: LucideIcon;
+  label: string;
+  shares: FaultModeShares | null;
+  className?: string;
+}) {
+  return (
+    <div className={cn("flex flex-col items-center gap-1.5", className)}>
+      <span className="flex items-center gap-1 text-xs font-bold text-foreground">
+        <Icon className="size-3.5" aria-hidden="true" />
+        {label}
+      </span>
+      {shares ? (
+        <FaultModeCourt shares={shares} />
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">No faults on this serve yet.</p>
+      )}
+    </div>
+  );
+}
+
+/** The opponent card's own fault-mode section: one court, combined across both
+ *  serve numbers — unlike "Your serve", this card has no per-serve-number
+ *  outcome row for two separate courts to pair with. */
+function CombinedFaultModeSection({ shares }: { shares: FaultModeShares | null }) {
+  return (
+    <div className="border-t pt-3">
+      <p className="mb-2 text-sm font-bold text-foreground">Error breakdown</p>
+      {shares ? (
+        <div className="flex justify-center">
+          <FaultModeCourt shares={shares} />
+        </div>
+      ) : (
+        <p className="text-center text-xs text-muted-foreground">No faults on this serve yet.</p>
+      )}
+    </div>
+  );
+}
+
+function rowValue(rows: BreakdownRow[], label: string): number {
+  return rows.find((row) => row.label === label)?.value ?? 0;
+}
+
+/** Both serve numbers' own "In" share, averaged unweighted. The API rounds each
+ *  serve number's return-outcome percentages independently and exposes no attempt
+ *  counts alongside them to weight a true combine by, so an even split across
+ *  1st/2nd is the closest honest approximation of "returns combined" available
+ *  here — nothing worse than the rounding either side already carries on its own. */
+function combinedReturnSplit(
+  split: ReturnOutcomeSplit,
+): { inPercent: number; errorPercent: number } | null {
+  const inRates = [split.first_serve, split.second_serve]
+    .filter((rows) => rows.length > 0)
+    .map((rows) => rowValue(rows, "In"));
+  if (inRates.length === 0) return null;
+
+  const inPercent = Math.round(inRates.reduce((sum, rate) => sum + rate, 0) / inRates.length);
+  return { inPercent, errorPercent: 100 - inPercent };
+}
+
+/** The tracked player's own return faults, net/long/wide — the same court shape as
+ *  the serving card's own fault mode, just facing the other way (`FaultModeSection`'s
+ *  `flip`), since it's built from the same three landing zones on the same court. */
+function returnFaultShares(rows: BreakdownRow[]): FaultModeShares | null {
+  if (rows.length === 0) return null;
+  return { net: rowValue(rows, "Net"), long: rowValue(rows, "Long"), wide: rowValue(rows, "Wide") };
+}
+
+/** `returnFaultShares` for both serve numbers, summed into one. Each side's three
+ *  values are already its own independent ~100 (renormalised again by
+ *  `FaultModeCourt` regardless), so summing two comparable-scale shares and
+ *  letting that renormalisation take relative proportions is the same
+ *  unweighted-combine approximation `combinedReturnSplit` above already uses —
+ *  there's no per-serve-number attempt count here to weight a true combine by. */
+function combinedFaultShares(
+  first: BreakdownRow[],
+  second: BreakdownRow[],
+): FaultModeShares | null {
+  const firstShares = returnFaultShares(first);
+  const secondShares = returnFaultShares(second);
+  if (!firstShares && !secondShares) return null;
+
+  const a = firstShares ?? { net: 0, long: 0, wide: 0 };
+  const b = secondShares ?? { net: 0, long: 0, wide: 0 };
+  return { net: a.net + b.net, long: a.long + b.long, wide: a.wide + b.wide };
 }

@@ -1,14 +1,12 @@
 import type { ServeStats } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import { expect, test, vi, afterEach } from "vitest";
 
 import { ServeTab } from "./serve-tab";
 
-// The headline % in is `landed + ace`, not the plain "landed" bucket alone —
-// 68 + 8 = 76 on the serving side (serve-tab.test.tsx's own regression case
-// below), 61 + 8 = 69 on the returning side.
+// The opponent card's "In" share combines 1st and 2nd serve return-outcome rows —
+// 74 and 86, averaging to 80 (serve-tab.test.tsx's own regression case below).
 const SERVE_STATS: ServeStats = {
   serving: {
     breakdown: [],
@@ -36,6 +34,9 @@ const SERVE_STATS: ServeStats = {
       first_serve: { landed: 61, fault: 31, ace: 8 },
       second_serve: { landed: 80, fault: 15, ace: 5 },
     },
+    // Always null on the returning side — capture records where the tracked
+    // player's own serve missed and nothing about the opponent's (see
+    // `FaultModeSplit`'s own doc comment in the generated client).
     fault_mode: { first_serve: null, second_serve: null },
     return_outcome: {
       first_serve: [
@@ -58,21 +59,21 @@ const SERVE_STATS: ServeStats = {
   },
 };
 
-function stubFetch() {
+function stubFetch(stats: ServeStats = SERVE_STATS) {
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((input: Request) => {
       const { pathname } = new URL(input.url);
       if (pathname === "/api/players/player-1/analytics/serve") {
-        return Promise.resolve(Response.json(SERVE_STATS));
+        return Promise.resolve(Response.json(stats));
       }
       throw new Error(`Unstubbed fetch: ${pathname}`);
     }),
   );
 }
 
-function renderTab() {
-  stubFetch();
+function renderTab(stats?: ServeStats) {
+  stubFetch(stats);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={queryClient}>
@@ -85,109 +86,129 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("both serve cards render, headline and stack visible, drills collapsed", async () => {
+test("both serve cards render under their new titles", async () => {
   renderTab();
 
   expect(await screen.findByText("Your serve")).toBeInTheDocument();
-  expect(screen.getByText("Their serve")).toBeInTheDocument();
-  expect(screen.getAllByText("1st serves in")).toHaveLength(2);
-  expect(screen.queryByText(/Fault mode/)).not.toBeInTheDocument();
+  expect(screen.getByText("Return of opponent serve")).toBeInTheDocument();
+  expect(screen.queryByText("Their serve")).not.toBeInTheDocument();
 });
 
-// The headline used to reuse `stats.hero.value` directly (68%), which double
-// counted against the ace segment drawn right below it — the true in rate
-// (in + ace) is 76%. Locks the fix in so the two numbers can't drift apart
-// again without a test noticing.
-test("the headline % in includes aces, not just the plain-in outcome bucket", async () => {
+// Both permanent, no toggle to switch between them and no drill to open first.
+test("Your serve shows a 1st serve bar directly above a 2nd serve bar, with visible percentages", async () => {
   renderTab();
+  const card = (await screen.findByText("Your serve")).closest(".flex.flex-col") as HTMLElement;
+  const scope = within(card);
 
-  expect(await screen.findByText("76%")).toBeInTheDocument();
-  expect(screen.getByText("69%")).toBeInTheDocument();
+  // "1st serve"/"2nd serve" each appear twice on this card: once as the
+  // outcome row's own label, once again labelling that serve number's
+  // fault-mode court further down.
+  expect(scope.getAllByText("1st serve")).toHaveLength(2);
+  expect(scope.getAllByText("2nd serve")).toHaveLength(2);
+  // landed + ace: 68 + 8, and 85 + 3.
+  expect(scope.getByText("76% in")).toBeInTheDocument();
+  expect(scope.getByText("88% in")).toBeInTheDocument();
+  expect(scope.getByText("24% fault")).toBeInTheDocument();
+  expect(scope.getByText("8% ace")).toBeInTheDocument();
 });
 
-test("tapping a card's header opens its own drill without affecting the other card", async () => {
-  const user = userEvent.setup({ delay: null });
-  renderTab();
-  await screen.findByText("Your serve");
-
-  await user.click(screen.getByText("Your serve"));
-
-  expect(await screen.findByText(/Fault mode/)).toBeInTheDocument();
-  expect(screen.queryByText(/Your return outcome/)).not.toBeInTheDocument();
-});
-
-// The returning card can never have a fault mode — capture records where the
-// tracked player's own serve missed and nothing about the opponent's — so it
-// shows the return-outcome drill instead, never both.
-test("both cards' drills can be open at the same time, each showing its own drill", async () => {
-  const user = userEvent.setup({ delay: null });
+test("the 1st serve row appears before the 2nd serve row in the document", async () => {
   renderTab();
   await screen.findByText("Your serve");
 
-  await user.click(screen.getByText("Your serve"));
-  await user.click(screen.getByText("Their serve"));
-
-  expect(await screen.findByText(/Fault mode/)).toBeInTheDocument();
-  expect(screen.getByText(/Your return outcome/)).toBeInTheDocument();
-  expect(screen.queryByText(/Their fault mode/)).not.toBeInTheDocument();
+  // "76% in" / "88% in" are each unique to their own outcome row's headline
+  // number, unlike the "1st serve"/"2nd serve" labels which also repeat on
+  // the fault-mode courts further down the same card.
+  const first = screen.getByText("76% in");
+  const second = screen.getByText("88% in");
+  expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
-test("their serve's drill shows your return outcome, not a fault mode", async () => {
-  const user = userEvent.setup({ delay: null });
-  renderTab();
-  await screen.findByText("Their serve");
-
-  await user.click(screen.getByText("Their serve"));
-
-  expect(await screen.findByText(/Your return outcome/)).toBeInTheDocument();
-  expect(screen.queryByText(/Fault mode/)).not.toBeInTheDocument();
-});
-
-test("switching 1st/2nd serve changes the fault-mode numbers shown", async () => {
-  const user = userEvent.setup({ delay: null });
-  renderTab();
-  await screen.findByText("Your serve");
-  await user.click(screen.getByText("Your serve"));
-  await screen.findByText(/Fault mode/);
-
-  expect(screen.getByText("55%")).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "2nd serve" }));
-
-  expect(screen.getByText("38%")).toBeInTheDocument();
-  expect(screen.queryByText("55%")).not.toBeInTheDocument();
-});
-
-// The hero and outcome stack used to stay frozen on the 1st-serve numbers no
-// matter what the toggle said, so a coach reading "2nd serve" fault mode saw
-// it sitting under a headline that was still describing the 1st serve.
-test("switching 1st/2nd serve also updates the headline and outcome stack above it", async () => {
-  const user = userEvent.setup({ delay: null });
-  renderTab();
-  await screen.findByText("Your serve");
-  await user.click(screen.getByText("Your serve"));
-  await screen.findByText(/Fault mode/);
-
-  expect(screen.getAllByText("1st serves in")).toHaveLength(2);
-  expect(screen.getByText("76%")).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "2nd serve" }));
-
-  expect(screen.getByText("2nd serves in")).toBeInTheDocument();
-  expect(screen.getByText("88%")).toBeInTheDocument();
-  expect(screen.queryByText("76%")).not.toBeInTheDocument();
-});
-
-// Guards the jsdom chart harness itself, not just this chart. recharts'
-// ResponsiveContainer keeps its initial size only while ResizeObserver is undefined, so
-// the no-op stub `test-setup.ts` used to install left every chart in the suite measuring
-// 0×0 and rendering null. Nothing failed — the charts were simply absent, and the axis
-// formatter asserted on here had never once run.
-test("each side's trend chart draws, with its y axis formatted as percentages", async () => {
+test("there is no drill-down control and no 1st/2nd serve toggle", async () => {
   renderTab();
   await screen.findByText("Your serve");
 
-  // One per side, and "100%" rather than "0%" because the latter also occurs as a
-  // legitimate stat value elsewhere on the tab.
-  expect(await screen.findAllByText("100%")).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "Your serve" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "2nd serve" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "1st or 2nd serve" })).not.toBeInTheDocument();
+});
+
+test("the trend graphs are gone", async () => {
+  renderTab();
+  await screen.findByText("Your serve");
+
+  expect(screen.queryByText(/per match/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Serve % in")).not.toBeInTheDocument();
+});
+
+test("Your serve shows two fault-mode courts, one per serve number", async () => {
+  renderTab();
+  const card = (await screen.findByText("Your serve")).closest(".flex.flex-col") as HTMLElement;
+  const scope = within(card);
+
+  expect(
+    scope.getByRole("img", { name: "Fault mode: net 55%, long 20%, wide 25%" }),
+  ).toBeInTheDocument();
+  expect(
+    scope.getByRole("img", { name: "Fault mode: net 38%, long 34%, wide 28%" }),
+  ).toBeInTheDocument();
+});
+
+// The whole point of this card: not what share of the opponent's serve landed in,
+// but what the tracked player did with it — one bar, in vs. error.
+test("Return of opponent serve shows one return-in-vs-error bar, combined across both serve numbers", async () => {
+  renderTab();
+  await screen.findByText("Return of opponent serve");
+
+  // (74 + 86) / 2 = 80, unweighted since no attempt counts are available to weight
+  // by — shown once as the headline, again in the legend chip below it.
+  expect(screen.getAllByText("80% in")).toHaveLength(2);
+  expect(screen.getByText("20% error")).toBeInTheDocument();
+});
+
+test("Return of opponent serve shows one fault-mode court, combined from both serve numbers' return-outcome breakdown (not the always-null fault_mode field)", async () => {
+  renderTab();
+  const card = (await screen.findByText("Return of opponent serve")).closest(
+    ".flex.flex-col",
+  ) as HTMLElement;
+  const scope = within(card);
+
+  expect(scope.queryByText(/No faults on this serve yet/)).not.toBeInTheDocument();
+  // {Net:11, Long:9, Wide:6} + {Net:7, Long:4, Wide:3} = {18, 13, 9} of 40,
+  // renormalised: net 45%, long 33%, wide 23%.
+  expect(scope.getAllByRole("img")).toHaveLength(1);
+  expect(
+    scope.getByRole("img", { name: "Fault mode: net 45%, long 33%, wide 23%" }),
+  ).toBeInTheDocument();
+});
+
+test("shows an empty state for a serve number that's never been attempted", async () => {
+  const stats: ServeStats = {
+    ...SERVE_STATS,
+    serving: {
+      ...SERVE_STATS.serving,
+      outcome: { first_serve: SERVE_STATS.serving.outcome.first_serve, second_serve: null },
+      fault_mode: { first_serve: SERVE_STATS.serving.fault_mode.first_serve, second_serve: null },
+    },
+  };
+  renderTab(stats);
+  await screen.findByText("Your serve");
+
+  expect(screen.getByText("No 2nd serves recorded yet.")).toBeInTheDocument();
+  expect(screen.getByText("No faults on this serve yet.")).toBeInTheDocument();
+});
+
+test("shows an empty state when the opponent card has no returns recorded at all", async () => {
+  const stats: ServeStats = {
+    ...SERVE_STATS,
+    returning: {
+      ...SERVE_STATS.returning,
+      return_outcome: { first_serve: [], second_serve: [] },
+    },
+  };
+  renderTab(stats);
+  await screen.findByText("Return of opponent serve");
+
+  expect(screen.getByText("No returns recorded yet.")).toBeInTheDocument();
+  expect(screen.getByText("No faults on this serve yet.")).toBeInTheDocument();
 });

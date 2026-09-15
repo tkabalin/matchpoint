@@ -34,13 +34,13 @@ export function ChipRow<T extends string>({
           onClick={() => onChange(option.value)}
           aria-pressed={value === option.value}
           className={cn(
-            "flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium whitespace-nowrap",
+            "flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-sm font-bold whitespace-nowrap",
             value === option.value
               ? "border-primary bg-primary text-primary-foreground"
               : "border-border bg-transparent text-muted-foreground",
           )}
         >
-          {option.icon && <option.icon className="size-3.5 shrink-0" aria-hidden="true" />}
+          {option.icon && <option.icon className="size-4 shrink-0" aria-hidden="true" />}
           {option.label}
         </button>
       ))}

@@ -26,6 +26,10 @@ export function CategoricalPatternDefs() {
         <rect width="6" height="6" fill="var(--color-cat-violet)" />
         <path d="M0 0 L6 6 M6 0 L0 6" stroke="black" strokeOpacity="0.4" strokeWidth="1.5" />
       </pattern>
+      <pattern id="chart-pattern-sky" width="24" height="24" patternUnits="userSpaceOnUse">
+        <rect width="24" height="24" fill="var(--color-cat-sky)" />
+        <rect width="8" height="24" fill="white" fillOpacity="0.6" />
+      </pattern>
     </defs>
   );
 }
