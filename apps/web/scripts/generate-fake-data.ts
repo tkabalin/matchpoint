@@ -25,8 +25,17 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { PointCreate, ScoreCheckpointCreate } from "@matchpoint/api-client";
-import { zPointCreate, zScoreCheckpointCreate } from "@matchpoint/api-client/zod";
+import type {
+  NoteFocus,
+  PlayerNoteCreate,
+  PointCreate,
+  ScoreCheckpointCreate,
+} from "@matchpoint/api-client";
+import {
+  zPlayerNoteCreate,
+  zPointCreate,
+  zScoreCheckpointCreate,
+} from "@matchpoint/api-client/zod";
 
 import { startPoint, commitDraft, transition } from "../src/features/capture/capture-flow.ts";
 import type { CaptureAction, CaptureState } from "../src/features/capture/capture-flow.ts";
@@ -80,6 +89,7 @@ const IMPORT_DIR = resolve(OUT_DIR, "import");
 // The season the matches are spread over, oldest first.
 const SEASON_START = new Date(2025, 8, 6);
 const SEASON_END = new Date(2026, 7, 22);
+const seasonDays = Math.round((SEASON_END.getTime() - SEASON_START.getTime()) / 86_400_000);
 
 // --- Randomness ------------------------------------------------------------------
 //
@@ -1108,6 +1118,105 @@ function generateMatch(
   };
 }
 
+// --- Coach notes -------------------------------------------------------------------
+//
+// Not capture: the dated notes a coach files on the player screen between matches, so
+// they are drawn after the season and never touch a point. Each is filed under the focus
+// areas the note form offers, and what a coach writes about follows the player's
+// temperament, so the notes read against the same numbers the archetype produced.
+
+interface GeneratedNote {
+  id: string;
+  playerId: string;
+  recordedOn: string;
+  focusAreas: NoteFocus[];
+  body: string;
+}
+
+const NOTE_BODIES: Record<NoteFocus, readonly string[]> = {
+  technical: [
+    "Backhand grip slipping to continental under pressure. Shadow swings before the next session.",
+    "Ball toss drifting left on the second serve. Worked on catching it three times before serving.",
+    "Contact point late on the forehand when rushed. Split step earlier.",
+    "Volleys were punched, not blocked. Good session.",
+    "Slice backhand floating. Needs a lower finish.",
+  ],
+  mental: [
+    "Went quiet after dropping serve at 4-4. Talked about resetting between points.",
+    "Best focus of the season. Stayed with the routine on every big point.",
+    "Rushing between points when behind. Agreed on a towel routine.",
+    "Argued a line call and lost the next three games. Discussed letting it go.",
+    "Calm through a long second set. Big step.",
+  ],
+  physical: [
+    "Legs went in the third set. Adding the interval session on Thursdays.",
+    "Recovery step much sharper after the ladder work.",
+    "Stiff on the first change of direction. Warm-up needs to be longer.",
+    "Cramping late in the second match of the day. Hydration plan for tournaments.",
+    "Fastest to the drop shot in the group today.",
+  ],
+  tactical: [
+    "Coming to the net behind nothing. Approach off the short ball only.",
+    "Serve-plus-one pattern working: wide serve, forehand to the open court.",
+    "Kept pulling the trigger from behind the baseline. Build the point first.",
+    "Found the opponent's backhand early and stayed on it. Good match plan.",
+    "Playing every point the same way. Vary the return position on second serves.",
+  ],
+};
+
+const NOTE_FOCUS_BY_TEMPERAMENT: Record<Temperament, readonly (readonly [NoteFocus, number])[]> = {
+  aggressive: [
+    ["tactical", 4],
+    ["mental", 3],
+    ["technical", 2],
+    ["physical", 1],
+  ],
+  balanced: [
+    ["technical", 3],
+    ["tactical", 2],
+    ["mental", 2],
+    ["physical", 2],
+  ],
+  passive: [
+    ["technical", 3],
+    ["physical", 3],
+    ["tactical", 2],
+    ["mental", 1],
+  ],
+};
+
+function generateNotes(
+  player: RosterPlayer,
+  archetype: Archetype,
+  playedOn: readonly string[],
+): GeneratedNote[] {
+  const count = 3 + Math.floor(rng() * 6);
+  const notes: GeneratedNote[] = [];
+  for (let index = 0; index < count; index++) {
+    // Half the notes are the match-day write-up, the rest a training session.
+    const onMatchDay = playedOn.length > 0 && chance(0.5);
+    const recordedOn = onMatchDay
+      ? pick(playedOn)
+      : isoDate(new Date(SEASON_START.getTime() + Math.floor(rng() * seasonDays) * 86_400_000));
+    const focus = weighted(NOTE_FOCUS_BY_TEMPERAMENT[archetype.temperament]);
+    const focusAreas: NoteFocus[] = [focus];
+    // A fifth of notes are filed under two areas, the way a shortening backswing
+    // under pressure is technical and mental at once.
+    if (chance(0.2)) {
+      const second = weighted(NOTE_FOCUS_BY_TEMPERAMENT[archetype.temperament]);
+      if (second !== focus) focusAreas.push(second);
+    }
+    notes.push({
+      id: uuid(),
+      playerId: player.id,
+      recordedOn,
+      focusAreas,
+      body: pick(NOTE_BODIES[focus]),
+    });
+  }
+  return notes.sort((left, right) => left.recordedOn.localeCompare(right.recordedOn));
+}
+
 // --- CSV ------------------------------------------------------------------------------
 
 function csvCell(value: unknown): string {
@@ -1372,8 +1481,6 @@ function importCheckpointRow(
 const players = makeRoster(PLAYER_COUNT);
 const matches: GeneratedMatch[] = [];
 
-const seasonDays = Math.round((SEASON_END.getTime() - SEASON_START.getTime()) / 86_400_000);
-
 const circuits = new Map(players.map((player) => [player.id, circuitFor(player, players)]));
 // What each player has already played, as `day:opponent`. The importer recognises a
 // match by (player, played_on, opponent_name, event), and two matches against one
@@ -1396,6 +1503,18 @@ for (let index = 0; index < MATCH_COUNT; index++) {
 
 matches.sort((left, right) => left.match.playedOn.localeCompare(right.match.playedOn));
 
+// After the season, so that adding or changing the notes leaves every point as it was.
+const archetypeByLabel = new Map(ARCHETYPES.map((archetype) => [archetype.label, archetype]));
+const notes = players.flatMap((player) =>
+  generateNotes(
+    player,
+    archetypeByLabel.get(player.archetype)!,
+    matches
+      .filter((generated) => generated.match.trackedPlayerId === player.id)
+      .map((generated) => generated.match.playedOn),
+  ),
+);
+
 mkdirSync(OUT_DIR, { recursive: true });
 
 const bundle = {
@@ -1405,6 +1524,7 @@ const bundle = {
   /** Every payload below is a `toJSON()` from the capture model, unchanged. */
   players,
   matches,
+  notes,
 };
 
 writeFileSync(resolve(OUT_DIR, "capture-data.json"), JSON.stringify(bundle, null, 2));
@@ -1447,6 +1567,20 @@ writeFileSync(
     matches.flatMap((generated) =>
       generated.checkpoints.map((row) => checkpointRow(generated, row.payload)),
     ),
+  ),
+);
+
+writeFileSync(
+  resolve(OUT_DIR, "notes.csv"),
+  csv(
+    ["player_id", "note_id", "recorded_on", "focus_areas", "body"],
+    notes.map((note) => [
+      note.playerId,
+      note.id,
+      note.recordedOn,
+      note.focusAreas.join(" "),
+      note.body,
+    ]),
   ),
 );
 
@@ -1566,6 +1700,41 @@ writeFileSync(
   ),
 );
 
+// focus_areas travels space-separated: the values are single words, and a list in one
+// cell is the shape the importer's spec documents.
+const IMPORT_NOTE_COLUMNS = [
+  "coach_email",
+  "player_first_name",
+  "player_last_name",
+  "recorded_on",
+  "focus_areas",
+  "body",
+];
+
+writeFileSync(
+  resolve(IMPORT_DIR, "notes.csv"),
+  csv(
+    IMPORT_NOTE_COLUMNS,
+    notes.map((note) => {
+      const player = playerById.get(note.playerId)!;
+      const body: PlayerNoteCreate = {
+        body: note.body,
+        recorded_on: note.recordedOn,
+        focus_areas: note.focusAreas,
+      };
+      zPlayerNoteCreate.parse(body);
+      return [
+        emailOf(player),
+        player.first_name,
+        player.last_name,
+        body.recorded_on,
+        body.focus_areas?.join(" ") ?? "",
+        body.body,
+      ];
+    }),
+  ),
+);
+
 // Quoted in the README below: the gaps are real, so the README says how many rather
 // than assuring the reader they are rare. A forced ending that struck a ball is the one
 // blank wing the coach's attention accounts for — a missed return ends the point
@@ -1605,6 +1774,7 @@ writeFileSync(
     "| `matches.csv` | One row per match, with the derived scoreline. |",
     "| `points.csv` | One row per captured point, every field flattened. |",
     "| `checkpoints.csv` | One row per score checkpoint, the board as the coach declared it. |",
+    "| `notes.csv` | One row per coach note, dated and filed under its focus areas. |",
     "| `import/` | The same season in the files the API's import script reads, plus `photos/`. |",
     "",
     "A `capture-data.json` sits here too after a run, holding the same data in the match log's own",
@@ -1618,6 +1788,11 @@ writeFileSync(
     "and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and",
     "the temperament reaches the points: an aggressive player ends rallies early, at the net, and",
     "hands over more unforced errors; a passive one lobs, drops and grinds.",
+    "",
+    `Each player also has a handful of dated coach notes (${grouped(notes.length)} in all), half written up on a`,
+    "match day and half after a training session, filed under the focus areas the note form offers.",
+    "What a coach writes about follows the player's temperament: an aggressive player's notes lean",
+    "tactical and mental, a passive player's technical and physical.",
     "",
     "`import/photos/` holds a face for every player and coach, named for the row it belongs to",
     "(`player-07.webp` is the seventh row of `import/players.csv`). They are the one thing here the",

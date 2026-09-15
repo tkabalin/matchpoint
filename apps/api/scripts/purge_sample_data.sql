@@ -8,7 +8,8 @@
 -- matches that do collide keep their stored points and end up half one season, half the
 -- other.
 --
--- Only the matches go, with their points and score checkpoints. The coaches and players
+-- The matches go, with their points and score checkpoints, and so do the players' notes,
+-- which a regenerated season redraws the same way. The coaches and players themselves
 -- stay for the import to reuse, which is what lets each player keep the username they
 -- sign in with. match_sets follows its match out on the constraint's own ON DELETE CASCADE.
 --
@@ -42,5 +43,7 @@ DELETE FROM score_checkpoints
 WHERE match_id IN (SELECT id FROM matches WHERE player_id IN (SELECT id FROM purge_players));
 
 DELETE FROM matches WHERE player_id IN (SELECT id FROM purge_players);
+
+DELETE FROM player_notes WHERE player_id IN (SELECT id FROM purge_players);
 
 COMMIT;

@@ -10,6 +10,7 @@ the same files.
 | `matches.csv` | One row per match, with the derived scoreline. |
 | `points.csv` | One row per captured point, every field flattened. |
 | `checkpoints.csv` | One row per score checkpoint, the board as the coach declared it. |
+| `notes.csv` | One row per coach note, dated and filed under its focus areas. |
 | `import/` | The same season in the files the API's import script reads, plus `photos/`. |
 
 A `capture-data.json` sits here too after a run, holding the same data in the match log's own
@@ -23,6 +24,11 @@ Each coach's 12 players cycle through the same 12 archetypes (`players.csv`'s
 and so on. An archetype fixes a player's tier, temperament, serve style and dominant hand, and
 the temperament reaches the points: an aggressive player ends rallies early, at the net, and
 hands over more unforced errors; a passive one lobs, drops and grinds.
+
+Each player also has a handful of dated coach notes (194 in all), half written up on a
+match day and half after a training session, filed under the focus areas the note form offers.
+What a coach writes about follows the player's temperament: an aggressive player's notes lean
+tactical and mental, a passive player's technical and physical.
 
 `import/photos/` holds a face for every player and coach, named for the row it belongs to
 (`player-07.webp` is the seventh row of `import/players.csv`). They are the one thing here the

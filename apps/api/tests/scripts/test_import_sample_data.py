@@ -28,6 +28,7 @@ from matchpoint_api.models import (
     MatchSet,
     MatchSide,
     Player,
+    PlayerNote,
     Point,
     RallyBucket,
     ReturnOutcome,
@@ -66,6 +67,7 @@ def _write_dataset(
     matches: list[dict[str, str]] | None = None,
     points: list[dict[str, str]] | None = None,
     checkpoints: list[dict[str, str]] | None = None,
+    notes: list[dict[str, str]] | None = None,
 ) -> None:
     """The three mandatory files, plus points.csv and checkpoints.csv only when the test
     wants them.
@@ -80,6 +82,8 @@ def _write_dataset(
         _write_csv(csv_dir, "points.csv", points)
     if checkpoints is not None:
         _write_csv(csv_dir, "checkpoints.csv", checkpoints)
+    if notes is not None:
+        _write_csv(csv_dir, "notes.csv", notes)
 
 
 def coach_row(**overrides: str) -> dict[str, str]:
@@ -181,6 +185,17 @@ def checkpoint_row(**overrides: str) -> dict[str, str]:
         "serves_next": "opponent",
         "order_changed": "false",
         "after": _snapshot((6, 3, "tracked"), (2, 1, None)),
+    } | overrides
+
+
+def note_row(**overrides: str) -> dict[str, str]:
+    return {
+        "coach_email": COACH_EMAIL,
+        "player_first_name": "Thomas",
+        "player_last_name": "Kabalin",
+        "recorded_on": "2026-08-20",
+        "focus_areas": "mental technical",
+        "body": "Went quiet after dropping serve. Reset routine.",
     } | overrides
 
 
@@ -710,6 +725,78 @@ def test_a_re_run_leaves_a_stored_checkpoint_untouched(db_session: Session, tmp_
     assert summary.checkpoints_skipped == 1
 
 
+# --- notes ------------------------------------------------------------------------
+
+
+def test_a_note_row_becomes_a_note_on_its_player(db_session: Session, tmp_path: Path) -> None:
+    """Focus areas land in the enum's own order, whatever order the cell listed them."""
+    _write_dataset(tmp_path, notes=[note_row()])
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    player = db_session.scalars(select(Player)).one()
+    note = db_session.scalars(select(PlayerNote)).one()
+    assert note.player_id == player.id
+    assert note.recorded_on == date(2026, 8, 20)
+    assert note.body == "Went quiet after dropping serve. Reset routine."
+    assert note.focus_areas == ["technical", "mental"]
+    assert summary.notes_created == 1
+
+
+def test_a_note_with_no_focus_areas_lands_with_none(db_session: Session, tmp_path: Path) -> None:
+    _write_dataset(tmp_path, notes=[note_row(focus_areas="")])
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    assert db_session.scalars(select(PlayerNote)).one().focus_areas == []
+
+
+def test_a_note_row_with_an_unknown_focus_area_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, notes=[note_row(), note_row(focus_areas="nutrition")])
+
+    with pytest.raises(ValueError, match=r"notes\.csv line 3") as caught:
+        run_import(db_session, tmp_path, STUB_HASH)
+
+    assert "nutrition" in str(caught.value)
+
+
+def test_a_note_dated_in_the_future_names_its_line(db_session: Session, tmp_path: Path) -> None:
+    """The schema's own bound, so a hand-typed year slip is caught here rather than shown
+    as a note about a session that hasn't happened."""
+    _write_dataset(tmp_path, notes=[note_row(recorded_on="2099-01-01")])
+
+    with pytest.raises(ValueError, match=r"notes\.csv line 2") as caught:
+        run_import(db_session, tmp_path, STUB_HASH)
+
+    assert "future" in str(caught.value)
+
+
+def test_a_note_row_naming_an_unknown_player_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, notes=[note_row(player_first_name="Nobody")])
+
+    with pytest.raises(ValueError, match=r"notes\.csv line 2: no players\.csv row"):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_re_run_refreshes_a_notes_focus_areas_rather_than_duplicating_it(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, notes=[note_row()])
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    _write_dataset(tmp_path, notes=[note_row(focus_areas="tactical")])
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    note = db_session.scalars(select(PlayerNote)).one()
+    assert note.focus_areas == ["tactical"]
+    assert summary.notes_created == 0
+    assert summary.notes_reused == 1
+
+
 def test_match_sets_are_recomputed_only_for_matches_with_points(
     db_session: Session, tmp_path: Path
 ) -> None:
@@ -779,6 +866,8 @@ def test_the_summary_counts_what_it_wrote(db_session: Session, tmp_path: Path) -
         points_skipped=0,
         checkpoints_created=0,
         checkpoints_skipped=0,
+        notes_created=0,
+        notes_reused=0,
         matches_recomputed=1,
     )
 
@@ -834,6 +923,8 @@ def test_the_same_csvs_twice_write_one_copy_of_everything(
         points_skipped=2,
         checkpoints_created=0,
         checkpoints_skipped=0,
+        notes_created=0,
+        notes_reused=0,
         matches_recomputed=1,
     )
 
@@ -1046,7 +1137,12 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     engine is bound to the dev URL at import time — an unpatched run would write to the
     dev database and escape the fixture's rollback.
     """
-    _write_dataset(tmp_path, points=[point_row()], checkpoints=[checkpoint_row()])
+    _write_dataset(
+        tmp_path,
+        points=[point_row()],
+        checkpoints=[checkpoint_row()],
+        notes=[note_row()],
+    )
     monkeypatch.setattr(import_sample_data, "CSV_DIR", str(tmp_path))
     monkeypatch.setattr(import_sample_data, "session_factory", lambda: nullcontext(db_session))
     monkeypatch.setattr(import_sample_data, "hash_password", lambda password: STUB_HASH)
@@ -1057,6 +1153,7 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     assert "Coaches: 1 new, 0 already there." in printed
     assert "Points: 1 new, 0 already there." in printed
     assert "Checkpoints: 1 new, 0 already there." in printed
+    assert "Notes: 1 new, 0 already there." in printed
     assert "Set scores recomputed across 1 matches." in printed
     password = printed.rsplit("Demo coach password (same for every imported coach): ", 1)[1]
     assert password.strip().count("-") == 3
@@ -1080,4 +1177,5 @@ def test_main_says_nothing_about_points_when_there_is_no_points_file(
     assert "Coaches: 1 new, 0 already there." in printed
     assert "Points:" not in printed
     assert "Checkpoints:" not in printed
+    assert "Notes:" not in printed
     assert "Set scores" not in printed

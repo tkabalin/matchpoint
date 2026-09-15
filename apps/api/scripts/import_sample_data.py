@@ -18,14 +18,15 @@ Running this against prod:
        docker compose -f /opt/matchpoint/compose.yml exec -T postgres \\
            pg_dump -U matchpoint matchpoint > backup-before-import.sql
   2. From apps/web/scripts/fake-data/import/, scp coaches.csv, players.csv, matches.csv,
-     points.csv and checkpoints.csv if there are any, and the photos/ folder, to the
-     VPS, then copy each into the api container (compose has no volume mount for
+     points.csv, checkpoints.csv and notes.csv if there are any, and the photos/ folder,
+     to the VPS, then copy each into the api container (compose has no volume mount for
      arbitrary host files):
        docker compose -f /opt/matchpoint/compose.yml cp coaches.csv api:/tmp/coaches.csv
        docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
        docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv
        docker compose -f /opt/matchpoint/compose.yml cp points.csv api:/tmp/points.csv
        docker compose -f /opt/matchpoint/compose.yml cp checkpoints.csv api:/tmp/checkpoints.csv
+       docker compose -f /opt/matchpoint/compose.yml cp notes.csv api:/tmp/notes.csv
        docker compose -f /opt/matchpoint/compose.yml cp photos api:/tmp/photos
   3. If this is replacing a season already imported there, clear it first with
      purge_sample_data.sql; see the paragraph on regenerated seasons below.
@@ -47,6 +48,8 @@ Expected CSV files, read from /tmp inside the container:
                 game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,
                 is_set_point,is_set_end,is_match_point
   checkpoints.csv: coach_email,match_key,sequence,serves_next,order_changed,after
+  notes.csv:    coach_email,player_first_name,player_last_name,recorded_on,focus_areas,
+                body
 
 - date_of_birth: ISO format (YYYY-MM-DD), blank = unset.
 - played_on: ISO format (YYYY-MM-DD), and required — a match is filed by the date it
@@ -82,6 +85,9 @@ Expected CSV files, read from /tmp inside the container:
   checkpoint shares its match's sequence space with the points. `match_sets` needs
   nothing of its own — it's recomputed from the imported points and checkpoints, same
   as a live sync would.
+- notes.csv is optional: one dated coach note per row, joined to a player the way
+  matches.csv is. focus_areas is a space-separated subset of technical | mental |
+  physical | tactical, blank for none; recorded_on is an ISO date no later than today.
 
 All imported coaches share one password, printed at the end, since sample coaches are
 never signed up for real and the CSV carries no password to hash.
@@ -90,7 +96,7 @@ Re-running is safe: the same CSVs a second time reuse what is already stored rat
 duplicating it, so a corrected dataset can simply be imported again. A row is recognised
 by its natural key — a coach by email, a player by (coach, first_name, last_name), a
 match by (player, played_on, opponent_name, event), a point or a checkpoint by (match,
-sequence) — and
+sequence), a note by (player, recorded_on, body) — and
 everything past that key is refreshed from the CSV, which is what makes a correction
 land. A match cannot be recognised by its match_key, since that is never stored, which
 is why those four columns have to tell one of a player's matches from another. Three
@@ -134,7 +140,9 @@ from matchpoint_api.models import (
     MatchResult,
     MatchResultReason,
     MatchSide,
+    NoteFocus,
     Player,
+    PlayerNote,
     Point,
     RallyBucket,
     ReturnOutcome,
@@ -146,6 +154,7 @@ from matchpoint_api.models import (
     UnusualReason,
     Wing,
 )
+from matchpoint_api.schemas.player_note import PlayerNoteCreate
 from matchpoint_api.schemas.point import PointCreate
 from matchpoint_api.schemas.score_checkpoint import ScoreCheckpointCreate
 from matchpoint_api.security import hash_password
@@ -194,6 +203,8 @@ class ImportSummary(NamedTuple):
     points_skipped: int
     checkpoints_created: int
     checkpoints_skipped: int
+    notes_created: int
+    notes_reused: int
     matches_recomputed: int
 
 
@@ -505,6 +516,52 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         checkpoints_created = len(landed)
         checkpoints_skipped = len(checkpoint_values) - checkpoints_created
 
+    notes_created = notes_reused = 0
+    notes_path = csv_dir / "notes.csv"
+    if notes_path.exists():
+        with notes_path.open(newline="") as f:
+            note_rows = list(csv.DictReader(f))
+        # A note has no id in the file, so it is recognised by what it says and when:
+        # the same note twice is one note, a reworded one is another.
+        note_by_identity: dict[tuple[uuid.UUID, date, str], PlayerNote] = {
+            (note.player_id, note.recorded_on, note.body): note
+            for note in db.scalars(select(PlayerNote).where(PlayerNote.player_id.in_(player_ids)))
+        }
+        for line_number, row in enumerate(note_rows, start=2):
+            player_key = (
+                row["coach_email"].lower(),
+                row["player_first_name"],
+                row["player_last_name"],
+            )
+            if (player := player_by_key.get(player_key)) is None:
+                raise ValueError(
+                    f"notes.csv line {line_number}: no players.csv row for {player_key}"
+                )
+            # Validated as a request body would be, the date included: the schema's own
+            # bounds on recorded_on are what refuse a note dated tomorrow.
+            try:
+                note_data = PlayerNoteCreate.model_validate(
+                    {
+                        "body": row["body"],
+                        "recorded_on": row["recorded_on"],
+                        "focus_areas": [NoteFocus(v) for v in row["focus_areas"].split()],
+                    }
+                )
+            except (ValidationError, ValueError) as exc:
+                raise ValueError(f"notes.csv line {line_number}: {exc}") from exc
+            identity = (player.id, note_data.recorded_on, note_data.body)
+            note = note_by_identity.get(identity)
+            if note is None:
+                note = PlayerNote(
+                    player_id=player.id, body=note_data.body, recorded_on=note_data.recorded_on
+                )
+                db.add(note)
+                notes_created += 1
+            else:
+                notes_reused += 1
+            note.focus_areas = [focus.value for focus in note_data.focus_areas]
+            note_by_identity[identity] = note
+
     # Every match named in points.csv or checkpoints.csv, not only those that gained a
     # row: a re-run that added events to a match already imported has to restate its
     # set scores.
@@ -522,6 +579,8 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         points_skipped=points_skipped,
         checkpoints_created=checkpoints_created,
         checkpoints_skipped=checkpoints_skipped,
+        notes_created=notes_created,
+        notes_reused=notes_reused,
         matches_recomputed=len(matches_with_points),
     )
 
@@ -550,6 +609,8 @@ def main() -> None:
             f"Checkpoints: {summary.checkpoints_created} new, "
             f"{summary.checkpoints_skipped} already there."
         )
+    if (csv_dir / "notes.csv").exists():
+        print(f"Notes: {summary.notes_created} new, {summary.notes_reused} already there.")
     if summary.matches_recomputed:
         print(f"Set scores recomputed across {summary.matches_recomputed} matches.")
     print(f"Demo coach password (same for every imported coach): {password}")

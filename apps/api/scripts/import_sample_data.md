@@ -18,12 +18,13 @@ container, the demo password). This covers *constructing valid rows*.
 | `matches.csv` | yes       | match                                                                 |
 | `points.csv`  | optional  | captured point — omit the file entirely for a match with no points |
 | `checkpoints.csv` | optional | score checkpoint, the board as the coach declared it on the score editor |
+| `notes.csv`   | optional  | dated coach note about a player, filed under its focus areas          |
 | `photos/`     | optional  | the files `photo` cells name; any folder works, the cell is the path |
 
 Re-running the importer on an edited version of the same files is safe: rows are
 recognised by natural key (coach by email, player by coach+first+last name, match by
-player+played_on+opponent+event, point by match+sequence) and refreshed, not
-duplicated.
+player+played_on+opponent+event, point by match+sequence, note by
+player+recorded_on+body) and refreshed, not duplicated.
 
 A **regenerated** season is not an edited one. The generator draws each match's date and
 opponent from its RNG stream, so a fresh run shares almost no match natural key with the
@@ -188,3 +189,22 @@ checkpoint plus the points after it, the same as a live sync.
   vets: `{"sets": [{"set_number": 1, "games_tracked": 6, "games_opponent": 3,
   "tiebreak_tracked": null, "tiebreak_opponent": null, "winner": "tracked"}, ...]}`,
   set 1 first with no gaps, `winner` null on the set in progress.
+
+## `notes.csv`
+
+```
+coach_email,player_first_name,player_last_name,recorded_on,focus_areas,body
+```
+
+One row per coach note, the dated timeline the player screen shows. Not capture data:
+these are what a coach types up after a session or a match.
+
+- `(coach_email, player_first_name, player_last_name)` must match a `players.csv` row
+  exactly, as on `matches.csv`.
+- `recorded_on`: `YYYY-MM-DD`, **required**, no later than today and no more than ten
+  years back (`schemas/player_note.py`'s own bounds).
+- `focus_areas`: a space-separated subset of `technical` \| `mental` \| `physical` \|
+  `tactical`, blank for none. Order and repeats don't matter; they're canonicalised.
+- `body`: the note, free text.
+- `(player, recorded_on, body)` is how a second import recognises the note, so a
+  reworded note is a new one and a re-filed one refreshes its focus areas.
