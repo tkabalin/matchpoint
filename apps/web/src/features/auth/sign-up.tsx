@@ -337,6 +337,11 @@ export function SignUp() {
           >
             Request a new one
           </button>
+          <p className="text-center text-sm">
+            <Link to="/" className="text-primary underline underline-offset-4">
+              Back to sign in
+            </Link>
+          </p>
         </CardFooter>
       </AuthShell>
     );
