@@ -45,6 +45,32 @@ test("chips whose half is whose on the court", () => {
   expect(screen.getByText("Rivera")).toBeVisible();
 });
 
+test("marks the server's stance on the side matching the court being played from", () => {
+  const { rerender } = render(
+    <ServeScreen
+      step={SERVE_1}
+      draft={draftFor("DEUCE")}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onAction={vi.fn()}
+    />,
+  );
+  const deuceLeft = screen.getByTestId("serve-stance").style.left;
+
+  rerender(
+    <ServeScreen
+      step={SERVE_1}
+      draft={draftFor("AD")}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onAction={vi.fn()}
+    />,
+  );
+  const adLeft = screen.getByTestId("serve-stance").style.left;
+
+  expect(deuceLeft).not.toBe(adLeft);
+});
+
 test("a tap in the live service box records a serve in, with no placement", async () => {
   const { onAction, user } = renderServe();
 

@@ -17,21 +17,23 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { UnforcedIcon } from "@/components/unforced-icon";
 
-import type { CaptureAction, CaptureStep } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels } from "./court-diagram";
+import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
+import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels, CourtServeMarker } from "./court-diagram";
 import type { CourtTapZone } from "./court-diagram";
 import type { FailureMode } from "./point";
 
-// No draft is needed here, unlike the serve screen: nothing on this screen depends on
-// the court side, and the second-serve line comes from the step alone.
+// Unlike the serve screen, nothing here dispatches differently by court side — `draft`
+// is only read for the ball marker showing which side the opponent is serving from.
 export function ReturnScreen({
   step,
+  draft,
   trackedPlayerName,
   opponentName,
   onAction,
   syncStatus,
 }: {
   step: Extract<CaptureStep, { name: "SERVE" }>;
+  draft: PointDraft;
   trackedPlayerName: string;
   opponentName: string;
   onAction: (action: CaptureAction) => void;
@@ -134,6 +136,7 @@ export function ReturnScreen({
         onPendingChange={setPending}
       >
         <CourtPlayerLabels trackedPlayerName={trackedPlayerName} opponentName={opponentName} />
+        <CourtServeMarker half="far" courtSide={draft.courtSide} />
       </CourtDiagram>
 
       <div className={COURT_ACTIONS}>

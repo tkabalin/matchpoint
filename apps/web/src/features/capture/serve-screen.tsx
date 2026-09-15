@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
-import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels, CourtServeMarker } from "./court-diagram";
 import type { CourtBox, CourtTapZone } from "./court-diagram";
 import type { CourtSide, FailureMode, ServeAttempt } from "./point";
 
@@ -174,6 +174,7 @@ export function ServeScreen({
         onPendingChange={setPending}
       >
         <CourtPlayerLabels trackedPlayerName={trackedPlayerName} opponentName={opponentName} />
+        <CourtServeMarker half="near" courtSide={live} />
       </CourtDiagram>
 
       <div className={COURT_ACTIONS}>

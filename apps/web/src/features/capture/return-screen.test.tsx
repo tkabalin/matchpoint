@@ -2,7 +2,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
-import type { CaptureAction, CaptureStep } from "./capture-flow";
+import { startPoint } from "./capture-flow";
+import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
+import type { CourtSide } from "./point";
 import { ReturnScreen } from "./return-screen";
 
 // Real timers: the court's flash is a 420ms setTimeout, same as court-diagram.test.tsx.
@@ -10,11 +12,16 @@ import { ReturnScreen } from "./return-screen";
 const SERVE_1: Extract<CaptureStep, { name: "SERVE" }> = { name: "SERVE", number: 1 };
 const SERVE_2: Extract<CaptureStep, { name: "SERVE" }> = { name: "SERVE", number: 2 };
 
-function renderReturn(options: { step?: typeof SERVE_1 } = {}) {
+function draftFor(courtSide: CourtSide = "DEUCE"): PointDraft {
+  return startPoint("match-1", 0, "OPPONENT", courtSide).draft;
+}
+
+function renderReturn(options: { step?: typeof SERVE_1; draft?: PointDraft } = {}) {
   const onAction = vi.fn<(action: CaptureAction) => void>();
   render(
     <ReturnScreen
       step={options.step ?? SERVE_1}
+      draft={options.draft ?? draftFor()}
       trackedPlayerName="Rivera"
       opponentName="Okoye"
       onAction={onAction}
@@ -36,6 +43,32 @@ test("chips whose half is whose on the court", () => {
 
   expect(screen.getByText("Okoye")).toBeVisible();
   expect(screen.getByText("Rivera")).toBeVisible();
+});
+
+test("marks the opponent's stance on the side matching the court they're serving from", () => {
+  const { rerender } = render(
+    <ReturnScreen
+      step={SERVE_1}
+      draft={draftFor("DEUCE")}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onAction={vi.fn()}
+    />,
+  );
+  const deuceLeft = screen.getByTestId("serve-stance").style.left;
+
+  rerender(
+    <ReturnScreen
+      step={SERVE_1}
+      draft={draftFor("AD")}
+      trackedPlayerName="Rivera"
+      opponentName="Okoye"
+      onAction={vi.fn()}
+    />,
+  );
+  const adLeft = screen.getByTestId("serve-stance").style.left;
+
+  expect(deuceLeft).not.toBe(adLeft);
 });
 
 test("a return into the safe area goes straight to the rally", async () => {

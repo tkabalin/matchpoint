@@ -639,6 +639,7 @@ export function LiveMatch({
         ) : (
           <ReturnScreen
             step={step}
+            draft={draft}
             trackedPlayerName={playerName}
             opponentName={opponentName}
             onAction={dispatch}

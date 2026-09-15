@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { zoomScale } from "./court-geometry";
+import type { CourtSide } from "./point";
 
 // A zone flashes before the flow advances, so the coach sees which zone registered
 // without looking up from the match. Local only — a timer, never a promise, per
@@ -199,6 +200,58 @@ export function CourtPlayerLabels({
         </span>
       ))}
     </>
+  );
+}
+
+// The column each side's own deuce/ad box centres on. The far half reads deuce/ad left
+// to right, the near half ad/deuce (see final-ball-screen.tsx's own comment), so the
+// same `CourtSide` sits under a different column depending which baseline it's read
+// from — column centres copied from court-geometry.ts's own COLUMN_BOXES.
+const STANCE_COLUMNS: Record<"far" | "near", Record<CourtSide, string>> = {
+  far: { DEUCE: "32.12%", AD: "66.36%" },
+  near: { AD: "32.12%", DEUCE: "66.36%" },
+};
+
+/**
+ * The tennis ball marking which side of the baseline the current serve is being played
+ * from — the serve screen for our player's own serve (`half="near"`), the return screen
+ * for the opponent's (`half="far"`). No Lucide shape reads as a tennis ball, so it's
+ * drawn directly rather than borrowed from the icon library (see `.claude/rules/web-icons.md`).
+ */
+export function CourtServeMarker({
+  half,
+  courtSide,
+}: {
+  half: "far" | "near";
+  courtSide: CourtSide;
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      data-testid="serve-stance"
+      viewBox="0 0 24 24"
+      className="pointer-events-none absolute z-30 size-4 -translate-x-1/2 drop-shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
+      style={{
+        left: STANCE_COLUMNS[half][courtSide],
+        ...(half === "near" ? { bottom: "1.5%" } : { top: "1.5%" }),
+      }}
+    >
+      <circle cx="12" cy="12" r="10" fill="#CBFF00" stroke="white" strokeWidth="1.5" />
+      <path
+        d="M4 6 Q12 12 4 18"
+        fill="none"
+        stroke="white"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M20 6 Q12 12 20 18"
+        fill="none"
+        stroke="white"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
