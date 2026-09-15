@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
-import { outboxDb, OUTBOX_PAYLOAD_VERSION, type OutboxEntry, type OutboxFailure } from "./db";
+import {
+  outboxDb,
+  OUTBOX_PAYLOAD_VERSION,
+  type OutboxEntry,
+  type OutboxFailure,
+  type OutboxRow,
+} from "./db";
 import {
   append,
   countUnsynced,
@@ -9,11 +15,13 @@ import {
   markFailed,
   onAppendFailure,
   readByMatch,
+  readFailed,
   readPending,
   remove,
   removeByMatch,
   retryFailed,
   watchCounts,
+  watchFailed,
   watchQueuedCreate,
   type AppendFailure,
   type AppendResult,
@@ -427,6 +435,60 @@ describe("markFailed", () => {
     await markFailed([], PARKED);
 
     expect(await readPending(COACH_ID)).toHaveLength(1);
+  });
+});
+
+describe("readFailed", () => {
+  // Ids descend lexically against enqueue order here too — see readPending above.
+  test("returns only this coach's failed rows, oldest first", async () => {
+    await append(pointEntry("zz-parked"));
+    await append(pointEntry("yy-pending"));
+    await append(pointEntry("xx-other-coach", { coachId: OTHER_COACH_ID }));
+    await append(pointEntry("aa-parked"));
+    await markFailed(["zz-parked", "xx-other-coach", "aa-parked"], PARKED);
+
+    const rows = await readFailed(COACH_ID);
+
+    expect(rows.map((row) => row.id)).toEqual(["zz-parked", "aa-parked"]);
+  });
+
+  test("carries each row's own recorded failure", async () => {
+    await append(pointEntry("p1"));
+    await markFailed(["p1"], PARKED);
+
+    const [row] = await readFailed(COACH_ID);
+
+    expect(row!.failure).toEqual(PARKED);
+  });
+
+  test("is empty for a coach with nothing parked", async () => {
+    await append(pointEntry("p1"));
+
+    expect(await readFailed(COACH_ID)).toEqual([]);
+  });
+});
+
+describe("watchFailed", () => {
+  const subscriptions: { unsubscribe: () => void }[] = [];
+
+  afterEach(() => {
+    for (const subscription of subscriptions.splice(0)) subscription.unsubscribe();
+  });
+
+  function watch(coachId: string): OutboxRow[][] {
+    const seen: OutboxRow[][] = [];
+    subscriptions.push(watchFailed(coachId).subscribe((rows) => seen.push(rows)));
+    return seen;
+  }
+
+  test("re-emits this coach's failed rows as the queue changes", async () => {
+    await append(pointEntry("p1"));
+    const seen = watch(COACH_ID);
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual([]));
+
+    await markFailed(["p1"], PARKED);
+
+    await vi.waitFor(() => expect(seen.at(-1)?.map((row) => row.id)).toEqual(["p1"]));
   });
 });
 

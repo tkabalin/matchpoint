@@ -173,6 +173,20 @@ export async function markFailed(ids: readonly string[], failure: OutboxFailure)
 }
 
 /**
+ * Every failed row of this coach's, oldest first — the detail behind the failed
+ * count, so the sync status UI can say why, not just how many: each row's own
+ * `failure.message`.
+ */
+export function readFailed(coachId: string): Promise<OutboxRow[]> {
+  return outboxDb.entries.where("[coachId+status]").equals([coachId, "failed"]).sortBy("seq");
+}
+
+/** Reactive form of readFailed, so the sync status UI's detail sheet needs no polling. */
+export function watchFailed(coachId: string): Observable<OutboxRow[]> {
+  return liveQuery(() => readFailed(coachId));
+}
+
+/**
  * Returns every failed row of this coach's to the queue; answers how many. The
  * recorded failure goes with the status: a retried row's old reason would read
  * as a fresh refusal if it were left to show alongside `pending`.

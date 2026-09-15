@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { SyncStatus } from "@/components/sync-status";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import * as log from "@/features/outbox/match-log";
@@ -609,6 +610,8 @@ export function LiveMatch({
           dispatch({ type: "ADD_NOTE", text });
         }}
       />
+
+      <SyncStatus coachId={coachId} />
 
       {step.name === "SERVE" &&
         (draft.server === "TRACKED" ? (

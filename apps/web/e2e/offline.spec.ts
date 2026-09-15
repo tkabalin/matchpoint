@@ -38,10 +38,11 @@ import {
  * in the last describe block that need hundreds of rows, a match completed on
  * the server, or a second match queued before the first one's points.
  *
- * What #217 still leaves uncovered: retrying a parked match by hand needs the
- * sync status UI (#115). The capture-claim conflict (#197) has its own spec,
- * capture-claim.spec.ts, since it needs no service worker and runs against the
- * dev server rather than this file's production build.
+ * What #217 leaves uncovered elsewhere: the capture-claim conflict (#197) has its
+ * own spec, capture-claim.spec.ts, since it needs no service worker and runs
+ * against the dev server rather than this file's production build. Retrying a
+ * parked match by hand (#115) has its own spec too, in the "drain behaviour"
+ * block below, alongside the park it retries.
  *
  * The helpers for talking to the API and for driving the capture screens live in
  * api.ts and capture.ts, shared with the specs that came after this one. What is
@@ -321,6 +322,47 @@ test.describe("drain behaviour", () => {
     });
     expect(await matchStatus(page, doomed.matchId)).toBe(404);
     expect(await matchesNamed(page, marker)).toBe(1);
+  });
+
+  test("retrying a parked match from the sync status UI re-attempts it", async ({ page }) => {
+    await openHome(page);
+    const coachId = await recordedOwner(page);
+    const doomedPlayerId = await createPlayer(page);
+    const keptPlayerId = await createPlayer(page);
+    await deletePlayer(page, doomedPlayerId);
+
+    await page.context().setOffline(true);
+    const marker = `E2E retry ${crypto.randomUUID()}`;
+    const doomed = buildMatchRow({ coachId, playerId: doomedPlayerId, opponentName: marker });
+    await seedOutbox(page, [doomed]);
+
+    await page.context().setOffline(false);
+    await expect.poll(() => matchStatus(page, doomed.matchId), { timeout: 20_000 }).toBe(404);
+    await expect.poll(() => readOutboxRows(page), { timeout: 20_000 }).toHaveLength(1);
+
+    // The doomed match's own capture screen can never reopen (its player is gone),
+    // so the retry has to be reachable from any live match: the sync status UI reads
+    // the whole coach's queue, not just the one match on screen (#115).
+    await openCapture(page, keptPlayerId);
+    await tapOutMatch(page, "Another opponent", []);
+    await page.getByText("1 point failed").click();
+    await expect(page.getByText("Unknown player_id")).toBeVisible();
+
+    await page.getByRole("button", { name: "Retry" }).click();
+
+    // The deleted player is still gone, so the retry re-parks with the same
+    // reason — this proves the control exists and re-attempts, not that this
+    // particular fixture can ever succeed.
+    await expect
+      .poll(() => readOutboxRows(page), { timeout: 20_000 })
+      .toContainEqual(
+        expect.objectContaining({
+          id: doomed.id,
+          status: "failed",
+          failure: { status: 404, message: "Unknown player_id" },
+        }),
+      );
+    expect(await matchStatus(page, doomed.matchId)).toBe(404);
   });
 
   test("a point deleted from the outbox before sync never reaches the server", async ({ page }) => {

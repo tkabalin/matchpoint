@@ -15,6 +15,12 @@ vi.mock("@/features/outbox/outbox", () => ({
 }));
 const { append } = await import("@/features/outbox/outbox");
 
+// The sync status indicator has its own test file; stubbed here so this file's mock of
+// outbox.ts (above) doesn't have to shadow every export that component reads.
+vi.mock("@/components/sync-status", () => ({
+  SyncStatus: () => null,
+}));
+
 const COACH_ID = "3f1c2b4e-0000-4000-8000-0000000000c1";
 const PLAYER_ID = "3f1c2b4e-0000-4000-8000-000000000001";
 
