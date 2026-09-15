@@ -11,9 +11,16 @@
  * Each card leads with the same forced/unforced symbol the Rally tab and the return
  * screen's own forced/unforced sheet use (a flexed arm, a thumbs down — see
  * .claude/rules/web-icons.md), so the two ideas look the same everywhere they appear.
+ *
+ * FORCED still has the final shot to ask about, so it hands off to that screen at the
+ * same zoom — no cut to smooth over. MISTAKE ends the point right here, so it waits out
+ * a zoom back to the whole court first (the same exit final-shot-screen.tsx's own
+ * `exit` does), rather than cutting straight from a tight crop to the next point's full
+ * court.
  */
 
 import { BicepsFlexed, ThumbsDown } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,7 +28,7 @@ import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { CourtDiagram, ZoomedCard } from "./court-diagram";
+import { CourtDiagram, ZoomedCard, ZOOM_MS } from "./court-diagram";
 import { subCells, toCourtBox } from "./court-geometry";
 
 const ENDINGS: {
@@ -65,6 +72,18 @@ export function EndingScreen({
   const loser = won ? opponentName : trackedPlayerName;
   // subCells(zoomTo, 1, 2) always returns exactly 2 regions, one per ending below.
   const cells = subCells(zoomTo, 1, 2);
+
+  // Set only by MISTAKE — FORCED hands off to the final shot screen at the same zoom,
+  // so it dispatches immediately. Same "wait out the zoom, guard the second tap" shape
+  // as final-shot-screen.tsx's own `exit`.
+  const [exiting, setExiting] = useState(false);
+  const exitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (exitTimer.current !== null) clearTimeout(exitTimer.current);
+    };
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -75,13 +94,22 @@ export function EndingScreen({
         <p className="mt-1.5 text-sm text-muted-foreground">Point to {winner}</p>
       </div>
 
-      <CourtDiagram zoomTo={zoomTo} className="min-h-0 flex-1">
+      <CourtDiagram zoomTo={exiting ? null : zoomTo} className="min-h-0 flex-1">
         {ENDINGS.map(({ endReason, label, Icon, colorClass }, index) => (
           <ZoomedCard key={endReason} box={toCourtBox(cells[index]!)} gapClassName="p-[3px]">
             <Button
               variant="ghost"
+              disabled={exiting}
               onClick={() => {
-                onAction({ type: "TAP_ENDING", endReason });
+                if (endReason !== "MISTAKE") {
+                  onAction({ type: "TAP_ENDING", endReason });
+                  return;
+                }
+                if (exiting) return;
+                setExiting(true);
+                exitTimer.current = setTimeout(() => {
+                  onAction({ type: "TAP_ENDING", endReason });
+                }, ZOOM_MS);
               }}
               // Opaque, unlike the shot screen's cards: a card spanning the court's
               // lines would show them through a translucent white.
