@@ -9,16 +9,14 @@
  * rather than after the point has scored.
  *
  * Each card leads with the same forced/unforced symbol the Rally tab and the return
- * screen's own forced/unforced sheet use (a flexed arm, a banana peel — see
- * unforced-icon.tsx's own comment on why they're two different sources), so the two
- * ideas look the same everywhere they appear.
+ * screen's own forced/unforced sheet use (a flexed arm, a thumbs down — see
+ * .claude/rules/web-icons.md), so the two ideas look the same everywhere they appear.
  */
 
-import { BicepsFlexed } from "lucide-react";
-import type { ComponentType, ReactNode, SVGProps } from "react";
+import { BicepsFlexed, ThumbsDown } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
-import { UnforcedIcon } from "@/components/unforced-icon";
 import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
@@ -29,7 +27,7 @@ import { subCells, toCourtBox } from "./court-geometry";
 const ENDINGS: {
   endReason: "FORCED" | "MISTAKE";
   label: string;
-  Icon: ComponentType<SVGProps<SVGSVGElement>>;
+  Icon: typeof BicepsFlexed;
   colorClass: string;
 }[] = [
   {
@@ -41,7 +39,7 @@ const ENDINGS: {
   {
     endReason: "MISTAKE",
     label: "Unforced",
-    Icon: UnforcedIcon,
+    Icon: ThumbsDown,
     colorClass: "text-outcome-unforced",
   },
 ];

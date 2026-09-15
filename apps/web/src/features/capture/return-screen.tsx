@@ -8,14 +8,13 @@
  * can't carry — hence the follow-up.
  */
 
-import { BicepsFlexed, CircleX, RotateCcw, Spade } from "lucide-react";
+import { BicepsFlexed, CircleX, RotateCcw, Spade, ThumbsDown } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { UnforcedIcon } from "@/components/unforced-icon";
 
 import type { CaptureAction, CaptureStep, PointDraft } from "./capture-flow";
 import { COURT_ACTIONS, CourtDiagram, CourtPlayerLabels, CourtServeMarker } from "./court-diagram";
@@ -224,7 +223,7 @@ export function ReturnScreen({
               className="h-[76px] flex-col gap-1"
             >
               <span className="flex items-center gap-1.5 text-base font-semibold text-outcome-unforced">
-                <UnforcedIcon className="size-4" />
+                <ThumbsDown className="size-4" />
                 Unforced
               </span>
               <span className="text-xs text-muted-foreground">A returnable ball missed</span>
