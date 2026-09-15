@@ -1,9 +1,15 @@
 import type { PlayerRead, PlayerSelfRead } from "@matchpoint/api-client";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
 import { PlayerDetailsCard } from "./player-details-card";
+
+// clampNoteTo below spies on HTMLElement.prototype, which outlives the test that
+// set it up: this config doesn't restore mocks between them.
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const BASE_PLAYER: PlayerRead = {
   id: "player-1",
@@ -73,4 +79,34 @@ test("shows a player's own details with no Edit button and no Notes row", () => 
   expect(screen.getByText("right")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
   expect(screen.queryByText("Notes")).not.toBeInTheDocument();
+});
+
+// A note runs to 2000 characters on a half-width card, so it clamps to four lines
+// with the rest behind a toggle. jsdom lays nothing out, so the overflow the
+// component measures has to be stated here.
+function clampNoteTo(lines: number) {
+  const lineHeight = 16;
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(4 * lineHeight);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(lines * lineHeight);
+}
+
+test("a long note collapses, and Show more reveals the whole of it", async () => {
+  clampNoteTo(9);
+  const user = userEvent.setup({ delay: null });
+  const notes = "Serves wide on the ad court whenever the score is tight. ".repeat(20);
+  render(<PlayerDetailsCard player={{ ...BASE_PLAYER, notes }} onEdit={() => {}} />);
+
+  expect(screen.getByText(/Serves wide on the ad court/)).toHaveClass("line-clamp-4");
+
+  await user.click(screen.getByRole("button", { name: "Show more" }));
+
+  expect(screen.getByText(/Serves wide on the ad court/)).not.toHaveClass("line-clamp-4");
+  expect(screen.getByRole("button", { name: "Show less" })).toBeInTheDocument();
+});
+
+test("a note that already fits gets no toggle", () => {
+  clampNoteTo(1);
+  render(<PlayerDetailsCard player={BASE_PLAYER} onEdit={() => {}} />);
+
+  expect(screen.queryByRole("button", { name: "Show more" })).not.toBeInTheDocument();
 });

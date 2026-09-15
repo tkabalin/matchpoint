@@ -1,8 +1,10 @@
 import type { PlayerRead, PlayerSelfRead } from "@matchpoint/api-client";
 import { IdCard, Pencil } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // `date_of_birth` is a plain calendar date; `new Date(str)` reads it as UTC
 // midnight, which is the previous day east of UTC (.claude/rules/web.md).
@@ -60,13 +62,64 @@ export function PlayerDetailsCard({
         {"notes" in player && (
           <div>
             <dt className="text-muted-foreground">Notes</dt>
-            {/* `dd` collapses newlines by default — a note written line by
-                line in the edit sheet's textarea has to keep reading that
-                way here. */}
-            <dd className="whitespace-pre-line">{player.notes ?? "—"}</dd>
+            <PlayerNotes notes={player.notes} />
           </div>
         )}
       </dl>
     </StatCard>
+  );
+}
+
+/**
+ * A note runs to 2000 characters and this card is half the page wide, so an
+ * unbounded one buries everything under it. Clamped to four lines with the rest a
+ * tap away, rather than truncated: the coach wrote it, they can still read it.
+ */
+function PlayerNotes({ notes }: { notes: string | null }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [clamped, setClamped] = useState(false);
+
+  // Measured, not guessed from a character count: four lines of this width is a
+  // different number of characters for every note. Observed rather than measured once,
+  // because a rotation or a webfont arriving after mount rewraps the note, and a stale
+  // "it fits" hides the toggle on a note whose tail is now unreachable. Skipped while
+  // expanded, where the two heights always agree.
+  useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node || expanded) return;
+    const measure = () => {
+      setClamped(node.scrollHeight > node.clientHeight);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+    };
+  }, [notes, expanded]);
+
+  return (
+    <dd>
+      {/* The clamp goes on a child, not the `dd` itself: a `dl > div` may hold
+          nothing but `dt` and `dd`, so the toggle has to live inside this one.
+          `whitespace-pre-line` because a note written line by line in the edit
+          sheet's textarea has to keep reading that way here. */}
+      <p ref={ref} className={cn("whitespace-pre-line", !expanded && "line-clamp-4")}>
+        {notes ?? "—"}
+      </p>
+      {clamped && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => {
+            setExpanded((open) => !open);
+          }}
+          className="mt-0.5 font-medium text-primary"
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </dd>
   );
 }
