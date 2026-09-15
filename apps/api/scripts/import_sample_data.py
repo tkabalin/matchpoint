@@ -18,12 +18,14 @@ Running this against prod:
        docker compose -f /opt/matchpoint/compose.yml exec -T postgres \\
            pg_dump -U matchpoint matchpoint > backup-before-import.sql
   2. From apps/web/scripts/fake-data/import/, scp coaches.csv, players.csv, matches.csv,
-     points.csv if there is one, and the photos/ folder, to the VPS, then copy each into
-     the api container (compose has no volume mount for arbitrary host files):
+     points.csv and checkpoints.csv if there are any, and the photos/ folder, to the
+     VPS, then copy each into the api container (compose has no volume mount for
+     arbitrary host files):
        docker compose -f /opt/matchpoint/compose.yml cp coaches.csv api:/tmp/coaches.csv
        docker compose -f /opt/matchpoint/compose.yml cp players.csv api:/tmp/players.csv
        docker compose -f /opt/matchpoint/compose.yml cp matches.csv api:/tmp/matches.csv
        docker compose -f /opt/matchpoint/compose.yml cp points.csv api:/tmp/points.csv
+       docker compose -f /opt/matchpoint/compose.yml cp checkpoints.csv api:/tmp/checkpoints.csv
        docker compose -f /opt/matchpoint/compose.yml cp photos api:/tmp/photos
   3. If this is replacing a season already imported there, clear it first with
      purge_sample_data.sql; see the paragraph on regenerated seasons below.
@@ -44,6 +46,7 @@ Expected CSV files, read from /tmp inside the container:
                 ball_half,ball_depth,ball_out_mode,rally_length_bucket,set_number,
                 game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,
                 is_set_point,is_set_end,is_match_point
+  checkpoints.csv: coach_email,match_key,sequence,serves_next,order_changed,after
 
 - date_of_birth: ISO format (YYYY-MM-DD), blank = unset.
 - played_on: ISO format (YYYY-MM-DD), and required — a match is filed by the date it
@@ -72,8 +75,13 @@ Expected CSV files, read from /tmp inside the container:
   pair up (e.g. wing with shot_type) and which are conditional on another column
   (e.g. unusual_reason only on an `end_reason` of `unusual`). Booleans are
   `true | false` (also accepts `1 | 0` and `yes | no`); blank means unset on an optional
-  column. `match_sets` needs nothing of its own — it's recomputed from the imported
-  points, same as a live sync would.
+  column.
+- checkpoints.csv is optional too: one row per score checkpoint, the board as the coach
+  declared it on the score editor, joined to a match the same way. `after` is one JSON
+  cell in the shape `schemas/score_checkpoint.py`'s `ScoreSnapshot` vets, and a
+  checkpoint shares its match's sequence space with the points. `match_sets` needs
+  nothing of its own — it's recomputed from the imported points and checkpoints, same
+  as a live sync would.
 
 All imported coaches share one password, printed at the end, since sample coaches are
 never signed up for real and the CSV carries no password to hash.
@@ -81,14 +89,15 @@ never signed up for real and the CSV carries no password to hash.
 Re-running is safe: the same CSVs a second time reuse what is already stored rather than
 duplicating it, so a corrected dataset can simply be imported again. A row is recognised
 by its natural key — a coach by email, a player by (coach, first_name, last_name), a
-match by (player, played_on, opponent_name, event), a point by (match, sequence) — and
+match by (player, played_on, opponent_name, event), a point or a checkpoint by (match,
+sequence) — and
 everything past that key is refreshed from the CSV, which is what makes a correction
 land. A match cannot be recognised by its match_key, since that is never stored, which
 is why those four columns have to tell one of a player's matches from another. Three
 things are deliberately not refreshed: a player keeps the username minted on its first
 import, being what that player signs in with; a coach or player that already has a photo
-keeps it, so a re-run writes no second file; and a point already stored is left as it is
-rather than rewritten, the rule the ingest route follows for a repeated point.
+keeps it, so a re-run writes no second file; and a point or checkpoint already stored is
+left as it is rather than rewritten, the rule the ingest routes follow for a repeated one.
 
 What re-running does not do is replace a regenerated season. The generator draws each
 match's date and opponent from its RNG stream, so a fresh run shares almost none of the
@@ -98,6 +107,7 @@ script, then import, taking the same backup first.
 """
 
 import csv
+import json
 import secrets
 import uuid
 from datetime import date
@@ -128,6 +138,7 @@ from matchpoint_api.models import (
     Point,
     RallyBucket,
     ReturnOutcome,
+    ScoreCheckpoint,
     ScoringSystem,
     ServeOutcome,
     ShotType,
@@ -136,6 +147,7 @@ from matchpoint_api.models import (
     Wing,
 )
 from matchpoint_api.schemas.point import PointCreate
+from matchpoint_api.schemas.score_checkpoint import ScoreCheckpointCreate
 from matchpoint_api.security import hash_password
 from matchpoint_api.usernames import next_username
 
@@ -180,6 +192,8 @@ class ImportSummary(NamedTuple):
     matches_reused: int
     points_created: int
     points_skipped: int
+    checkpoints_created: int
+    checkpoints_skipped: int
     matches_recomputed: int
 
 
@@ -381,7 +395,9 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                         server=MatchSide(row["server"]),
                         won=_parse_bool(row["won"]),
                         court_side=CourtSide(row["court_side"]),
-                        serve1_outcome=ServeOutcome(row["serve1_outcome"]),
+                        serve1_outcome=ServeOutcome(v)
+                        if (v := _blank_to_none(row["serve1_outcome"]))
+                        else None,
                         serve1_fault_mode=FailureMode(v)
                         if (v := _blank_to_none(row["serve1_fault_mode"]))
                         else None,
@@ -394,7 +410,9 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                         return_outcome=ReturnOutcome(v)
                         if (v := _blank_to_none(row["return_outcome"]))
                         else None,
-                        end_reason=EndReason(row["end_reason"]),
+                        end_reason=EndReason(v)
+                        if (v := _blank_to_none(row["end_reason"]))
+                        else None,
                         unusual_reason=UnusualReason(v)
                         if (v := _blank_to_none(row["unusual_reason"]))
                         else None,
@@ -446,10 +464,52 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
             ).all()
             points_created = len(landed)
             points_skipped = len(point_values) - points_created
-        # Every match named in points.csv, not only those that gained a point: a re-run
-        # that added points to a match already imported has to restate its set scores.
-        for match_id in matches_with_points:
-            recompute_match_sets(db, match_id)
+    checkpoints_created = checkpoints_skipped = 0
+    checkpoint_values: list[dict[str, object]] = []
+    checkpoints_path = csv_dir / "checkpoints.csv"
+    if checkpoints_path.exists():
+        with checkpoints_path.open(newline="") as f:
+            for line_number, row in enumerate(csv.DictReader(f), start=2):
+                match_lookup = (row["coach_email"].lower(), row["match_key"])
+                if (match := match_by_key.get(match_lookup)) is None:
+                    raise ValueError(
+                        f"checkpoints.csv line {line_number}: no matches.csv row with "
+                        f"match_key {match_lookup}"
+                    )
+                try:
+                    checkpoint_data = ScoreCheckpointCreate(
+                        id=uuid.uuid4(),
+                        sequence=int(row["sequence"]),
+                        serves_next=MatchSide(row["serves_next"]),
+                        order_changed=_parse_bool(row["order_changed"]),
+                        after=json.loads(row["after"]),
+                    )
+                except (ValidationError, ValueError) as exc:
+                    raise ValueError(f"checkpoints.csv line {line_number}: {exc}") from exc
+                # mode="json" for the ingest route's reason: the stored document is the
+                # wire form exactly, so read-back needs no translation.
+                checkpoint_values.append(
+                    {**checkpoint_data.model_dump(mode="json"), "match_id": match.id}
+                )
+                matches_with_points.add(match.id)
+
+    if checkpoint_values:
+        landed = db.execute(
+            insert(ScoreCheckpoint)
+            .on_conflict_do_nothing(
+                index_elements=[ScoreCheckpoint.match_id, ScoreCheckpoint.sequence]
+            )
+            .returning(ScoreCheckpoint.id),
+            checkpoint_values,
+        ).all()
+        checkpoints_created = len(landed)
+        checkpoints_skipped = len(checkpoint_values) - checkpoints_created
+
+    # Every match named in points.csv or checkpoints.csv, not only those that gained a
+    # row: a re-run that added events to a match already imported has to restate its
+    # set scores.
+    for match_id in matches_with_points:
+        recompute_match_sets(db, match_id)
 
     return ImportSummary(
         coaches_created=coaches_created,
@@ -460,6 +520,8 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
         matches_reused=matches_reused,
         points_created=points_created,
         points_skipped=points_skipped,
+        checkpoints_created=checkpoints_created,
+        checkpoints_skipped=checkpoints_skipped,
         matches_recomputed=len(matches_with_points),
     )
 
@@ -482,10 +544,14 @@ def main() -> None:
         f"Matches: {summary.matches_created} new, {summary.matches_reused} already there."
     )
     if (csv_dir / "points.csv").exists():
+        print(f"Points: {summary.points_created} new, {summary.points_skipped} already there.")
+    if (csv_dir / "checkpoints.csv").exists():
         print(
-            f"Points: {summary.points_created} new, {summary.points_skipped} already there, "
-            f"across {summary.matches_recomputed} matches."
+            f"Checkpoints: {summary.checkpoints_created} new, "
+            f"{summary.checkpoints_skipped} already there."
         )
+    if summary.matches_recomputed:
+        print(f"Set scores recomputed across {summary.matches_recomputed} matches.")
     print(f"Demo coach password (same for every imported coach): {password}")
 
 

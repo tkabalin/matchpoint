@@ -9,7 +9,8 @@ the same files.
 | `players.csv` | The roster. |
 | `matches.csv` | One row per match, with the derived scoreline. |
 | `points.csv` | One row per captured point, every field flattened. |
-| `import/` | The same season in the four files the API's import script reads, plus `photos/`. |
+| `checkpoints.csv` | One row per score checkpoint, the board as the coach declared it. |
+| `import/` | The same season in the files the API's import script reads, plus `photos/`. |
 
 A `capture-data.json` sits here too after a run, holding the same data in the match log's own
 nested shape: a `Match.toJSON()` per match, then its points, each a `Point.toJSON()` exactly as
@@ -32,17 +33,20 @@ of photos rather than naming files the importer cannot find.
 ## Reading a point
 
 A point's score fields (`won`, `server`, `court_side`, and the nine `context` stamps) are always
-set. An empty observation field almost always means the field does not apply to that point, not
+set. An empty observation field usually means the field does not apply to that point, not
 that the coach missed something: `wing` and `shot_type` are blank on every unforced error (the
 flow doesn't ask which stroke produced a miss), on aces, double faults and unusual points, and
-on a missed return, which `return_outcome` already places. The one genuine gap is a forced
-ending whose shot went unrecorded: 1,928 points, 6% of the 32,576 with no `wing`.
+on a missed return, which `return_outcome` already places.
 
-Everything else capture may leave unseen — the serve, the ending, the final ball — is a column
-`PointCreate` takes non-null, and a game skipped behind a score checkpoint is a game with no
-points to import, so this dataset generates none of it. Serve placement is only ever recorded
-for the tracked player, and `ball_in` is always true, because capture records where the last
-ball to land finished, never where a miss went.
+The gaps capture allows are here too, at the rate a coach actually leaves them, clustered by
+match. 1,395 points have a serve nobody watched (no attempt, or a lone first fault), 953
+have an ending seen only as who won it (`end_reason` null, and the rally length and final ball
+with it), and 1,741 forced endings went by without their shot, 6% of the 31,631 with no `wing`.
+23 matches hold a score checkpoint: a run of games the coach declared on the score
+editor rather than captured, so those games have no points and the set score comes from the
+checkpoint. Serve placement is only ever recorded for the tracked player, and `ball_in` is
+always true, because capture records where the last ball to land finished, never where a miss
+went.
 
 ## Importing it
 

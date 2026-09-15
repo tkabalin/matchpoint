@@ -6,6 +6,7 @@ bad row names its own line rather than surfacing as a constraint violation.
 """
 
 import csv
+import json
 from contextlib import nullcontext
 from datetime import date
 from pathlib import Path
@@ -30,6 +31,7 @@ from matchpoint_api.models import (
     Point,
     RallyBucket,
     ReturnOutcome,
+    ScoreCheckpoint,
     ScoringSystem,
     ServeOutcome,
     ShotType,
@@ -63,8 +65,10 @@ def _write_dataset(
     players: list[dict[str, str]] | None = None,
     matches: list[dict[str, str]] | None = None,
     points: list[dict[str, str]] | None = None,
+    checkpoints: list[dict[str, str]] | None = None,
 ) -> None:
-    """The three mandatory files, plus points.csv only when the test wants one.
+    """The three mandatory files, plus points.csv and checkpoints.csv only when the test
+    wants them.
 
     coaches/players/matches are opened unconditionally by the import, so every test
     needs all three even when its subject is one of them.
@@ -74,6 +78,8 @@ def _write_dataset(
     _write_csv(csv_dir, "matches.csv", matches if matches is not None else [match_row()])
     if points is not None:
         _write_csv(csv_dir, "points.csv", points)
+    if checkpoints is not None:
+        _write_csv(csv_dir, "checkpoints.csv", checkpoints)
 
 
 def coach_row(**overrides: str) -> dict[str, str]:
@@ -144,6 +150,37 @@ def point_row(**overrides: str) -> dict[str, str]:
         "is_set_point": "false",
         "is_set_end": "false",
         "is_match_point": "false",
+    } | overrides
+
+
+def _snapshot(*sets: tuple[int, int, str | None]) -> str:
+    """`after` as the CSV carries it: one JSON cell, sets in order, no tiebreaks."""
+    return json.dumps(
+        {
+            "sets": [
+                {
+                    "set_number": number,
+                    "games_tracked": tracked,
+                    "games_opponent": opponent,
+                    "tiebreak_tracked": None,
+                    "tiebreak_opponent": None,
+                    "winner": winner,
+                }
+                for number, (tracked, opponent, winner) in enumerate(sets, start=1)
+            ]
+        }
+    )
+
+
+def checkpoint_row(**overrides: str) -> dict[str, str]:
+    """A board declared one set up, with the second set under way."""
+    return {
+        "coach_email": COACH_EMAIL,
+        "match_key": "m1",
+        "sequence": "40",
+        "serves_next": "opponent",
+        "order_changed": "false",
+        "after": _snapshot((6, 3, "tracked"), (2, 1, None)),
     } | overrides
 
 
@@ -567,6 +604,112 @@ def test_a_point_row_with_an_unknown_match_key_names_its_line(
     assert "m7" in str(caught.value)
 
 
+def test_a_point_row_can_leave_the_serve_and_the_ending_unwatched(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """The two holes capture leaves when the coach looked away, which the importer used
+    to refuse as if the columns were still required."""
+    _write_dataset(
+        tmp_path,
+        points=[
+            point_row(
+                serve1_outcome="",
+                end_reason="",
+                wing="",
+                shot_type="",
+                ball_in="",
+                ball_out_mode="",
+                rally_length_bucket="",
+            )
+        ],
+    )
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    point = db_session.scalars(select(Point)).one()
+    assert point.serve1_outcome is None
+    assert point.end_reason is None
+    assert point.rally_length_bucket is None
+
+
+# --- checkpoints ------------------------------------------------------------------
+
+
+def test_a_checkpoint_row_becomes_a_checkpoint_on_its_match(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, checkpoints=[checkpoint_row()])
+
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    match = db_session.scalars(select(Match)).one()
+    checkpoint = db_session.scalars(select(ScoreCheckpoint)).one()
+    assert checkpoint.match_id == match.id
+    assert checkpoint.sequence == 40
+    assert checkpoint.serves_next is MatchSide.OPPONENT
+    assert checkpoint.order_changed is False
+    assert checkpoint.after == json.loads(checkpoint_row()["after"])
+    assert summary.checkpoints_created == 1
+
+
+def test_a_checkpoint_is_the_base_the_points_after_it_add_to(
+    db_session: Session, tmp_path: Path
+) -> None:
+    """A declared set with no points behind it still reaches match_sets, and a game won
+    after the checkpoint lands on the set it declared in progress."""
+    _write_dataset(
+        tmp_path,
+        points=[point_row(sequence="41", set_number="2", game_number="4", is_game_end="true")],
+        checkpoints=[checkpoint_row()],
+    )
+
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    sets = {row.set_number: row for row in db_session.scalars(select(MatchSet))}
+    assert sets[1].games_won_tracked == 6
+    assert sets[1].games_won_opponent == 3
+    assert sets[1].winner is MatchSide.TRACKED
+    assert sets[2].games_won_tracked == 3
+    assert sets[2].games_won_opponent == 1
+    assert sets[2].winner is None
+
+
+def test_a_checkpoint_row_breaking_the_snapshot_shape_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(
+        tmp_path,
+        checkpoints=[checkpoint_row(), checkpoint_row(sequence="50", after='{"sets": []}')],
+    )
+
+    with pytest.raises(ValueError, match=r"checkpoints\.csv line 3"):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_checkpoint_row_with_an_unknown_match_key_names_its_line(
+    db_session: Session, tmp_path: Path
+) -> None:
+    _write_dataset(tmp_path, checkpoints=[checkpoint_row(match_key="m7")])
+
+    with pytest.raises(
+        ValueError, match=r"checkpoints\.csv line 2: no matches\.csv row with match_key"
+    ):
+        run_import(db_session, tmp_path, STUB_HASH)
+
+
+def test_a_re_run_leaves_a_stored_checkpoint_untouched(db_session: Session, tmp_path: Path) -> None:
+    _write_dataset(tmp_path, checkpoints=[checkpoint_row()])
+    run_import(db_session, tmp_path, STUB_HASH)
+
+    _write_dataset(tmp_path, checkpoints=[checkpoint_row(serves_next="tracked")])
+    summary = run_import(db_session, tmp_path, STUB_HASH)
+
+    checkpoint = db_session.scalars(select(ScoreCheckpoint)).one()
+    assert checkpoint.serves_next is MatchSide.OPPONENT
+    assert summary.checkpoints_created == 0
+    assert summary.checkpoints_skipped == 1
+
+
 def test_match_sets_are_recomputed_only_for_matches_with_points(
     db_session: Session, tmp_path: Path
 ) -> None:
@@ -634,6 +777,8 @@ def test_the_summary_counts_what_it_wrote(db_session: Session, tmp_path: Path) -
         matches_reused=0,
         points_created=2,
         points_skipped=0,
+        checkpoints_created=0,
+        checkpoints_skipped=0,
         matches_recomputed=1,
     )
 
@@ -687,6 +832,8 @@ def test_the_same_csvs_twice_write_one_copy_of_everything(
         matches_reused=2,
         points_created=0,
         points_skipped=2,
+        checkpoints_created=0,
+        checkpoints_skipped=0,
         matches_recomputed=1,
     )
 
@@ -899,7 +1046,7 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
     engine is bound to the dev URL at import time — an unpatched run would write to the
     dev database and escape the fixture's rollback.
     """
-    _write_dataset(tmp_path, points=[point_row()])
+    _write_dataset(tmp_path, points=[point_row()], checkpoints=[checkpoint_row()])
     monkeypatch.setattr(import_sample_data, "CSV_DIR", str(tmp_path))
     monkeypatch.setattr(import_sample_data, "session_factory", lambda: nullcontext(db_session))
     monkeypatch.setattr(import_sample_data, "hash_password", lambda password: STUB_HASH)
@@ -908,7 +1055,9 @@ def test_main_imports_from_the_csv_dir_and_prints_the_password(
 
     printed = capfd.readouterr().out
     assert "Coaches: 1 new, 0 already there." in printed
-    assert "Points: 1 new, 0 already there, across 1 matches." in printed
+    assert "Points: 1 new, 0 already there." in printed
+    assert "Checkpoints: 1 new, 0 already there." in printed
+    assert "Set scores recomputed across 1 matches." in printed
     password = printed.rsplit("Demo coach password (same for every imported coach): ", 1)[1]
     assert password.strip().count("-") == 3
     assert db_session.scalars(select(Coach)).one().password_hash == STUB_HASH
@@ -930,3 +1079,5 @@ def test_main_says_nothing_about_points_when_there_is_no_points_file(
     printed = capfd.readouterr().out
     assert "Coaches: 1 new, 0 already there." in printed
     assert "Points:" not in printed
+    assert "Checkpoints:" not in printed
+    assert "Set scores" not in printed

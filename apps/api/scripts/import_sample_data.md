@@ -17,6 +17,7 @@ container, the demo password). This covers *constructing valid rows*.
 | `players.csv` | yes       | player                                                               |
 | `matches.csv` | yes       | match                                                                 |
 | `points.csv`  | optional  | captured point — omit the file entirely for a match with no points |
+| `checkpoints.csv` | optional | score checkpoint, the board as the coach declared it on the score editor |
 | `photos/`     | optional  | the files `photo` cells name; any folder works, the cell is the path |
 
 Re-running the importer on an edited version of the same files is safe: rows are
@@ -106,8 +107,9 @@ coach_email,match_key,sequence,server,won,court_side,serve1_outcome,serve1_fault
 against `schemas/point.py`'s `PointCreate` before it's stored — shape only, never
 tennis-logic coherence, so a set score that doesn't add up won't be rejected. The
 match's set tally (`match_sets`) is recomputed afterwards purely from `is_game_end` /
-`is_set_end` + `won`, so for a demo to look right on the dashboard, keep those three
-flags consistent with the scoreline you intend, even though nothing enforces it.
+`is_set_end` + `won` (on top of the newest checkpoint, if `checkpoints.csv` declares
+one), so for a demo to look right on the dashboard, keep those three flags consistent
+with the scoreline you intend, even though nothing enforces it.
 
 Booleans accept `true`/`false` (also `1`/`0`, `yes`/`no`). The nine score-context
 columns from `set_number` on (plus `in_tiebreak`) are **always required** — never
@@ -118,12 +120,12 @@ blank, whatever the point's other fields look like.
 | Column                                | Values                                                                             |
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
 | `server`                                | `tracked` \| `opponent`                                                            |
-| `serve1_outcome` (required)            | `in` \| `fault` \| `ace`                                                            |
+| `serve1_outcome`                       | `in` \| `fault` \| `ace`; blank = a serve nobody watched                            |
 | `court_side` (required), `ball_half`    | `deuce` \| `ad`                                                                     |
 | `serve1_fault_mode`, `serve2_fault_mode`, `ball_out_mode` | `net` \| `long` \| `wide`                                     |
 | `serve2_outcome`                       | `in` \| `fault` \| `ace`                                                            |
 | `return_outcome`                       | `in` \| `net` \| `long` \| `wide`                                                   |
-| `end_reason` (required)                | `forced` \| `mistake` \| `ace` \| `double_fault` \| `unusual`                       |
+| `end_reason`                           | `forced` \| `mistake` \| `ace` \| `double_fault` \| `unusual`; blank = an ending nobody watched |
 | `unusual_reason`                       | `net_touch` \| `ball_hit_player` \| `reached_over` \| `double_hit` \| `hindrance` \| `point_penalty` \| `other` |
 | `wing`                                  | `forehand` \| `backhand`                                                            |
 | `shot_type`                             | `drive` \| `volley` \| `dropshot` \| `lob`                                          |
@@ -135,6 +137,12 @@ blank, whatever the point's other fields look like.
 The trickiest part of a hand-written row. `PointCreate` enforces these as a group —
 get any one wrong and the whole row is rejected:
 
+- **Unwatched serve.** A blank `serve1_outcome` is a serve nobody saw, not a fourth
+  outcome: `serve1_fault_mode`, `serve2_*` and `return_outcome` are all blank with it,
+  and the point carries on to its ending as normal.
+- **Unwatched ending.** A blank `end_reason` is an ending seen only as who won it:
+  `unusual_reason`, `rally_length_bucket` and the whole last-shot group below are
+  blank with it.
 - **Second serve.** `serve2_outcome` is set only when `serve1_outcome` is `fault`
   (never on an ace or an in-first-serve), and even then it's optional: a faulted first
   serve whose second attempt went unwatched records no `serve2_outcome` either.
@@ -160,3 +168,23 @@ get any one wrong and the whole row is rejected:
     `ball_half`, `ball_depth` and `ball_out_mode` all blank alongside it. If `ball_in`
     is true, `ball_half` and `ball_depth` are required and `ball_out_mode` is blank; if
     false, `ball_out_mode` is required and `ball_half`/`ball_depth` are blank.
+
+## `checkpoints.csv`
+
+```
+coach_email,match_key,sequence,serves_next,order_changed,after
+```
+
+One row per score checkpoint: the scoreboard as the coach declared it on the score
+editor, which is how capture records games nobody watched or corrects a mis-tap.
+`(coach_email, match_key)` joins to a `matches.csv` row as for a point, and a
+checkpoint shares its match's `sequence` space with the points (no point and
+checkpoint of one match may share a sequence). The set tally is folded from the newest
+checkpoint plus the points after it, the same as a live sync.
+
+- `serves_next`: `tracked` \| `opponent`, who serves the game after the declared board.
+- `order_changed`: boolean, whether the serving order on court deviated from rotation.
+- `after`: one JSON cell in the shape `schemas/score_checkpoint.py`'s `ScoreSnapshot`
+  vets: `{"sets": [{"set_number": 1, "games_tracked": 6, "games_opponent": 3,
+  "tiebreak_tracked": null, "tiebreak_opponent": null, "winner": "tracked"}, ...]}`,
+  set 1 first with no gaps, `winner` null on the set in progress.
