@@ -37,8 +37,8 @@ def test_point_round_trips_with_the_minimal_shape(db_session: Session) -> None:
     assert saved.sequence == 0
     assert saved.server is MatchSide.TRACKED
     assert saved.won is True
+    assert saved.court_side is CourtSide.DEUCE
     assert saved.serve1_outcome is ServeOutcome.IN
-    assert saved.serve1_box is CourtSide.DEUCE
     assert saved.serve1_fault_mode is None
     assert saved.serve2_outcome is None
     assert saved.return_outcome is None
@@ -71,8 +71,8 @@ def test_point_round_trips_with_a_full_two_serve_opponent_serve_point(
         sequence=7,
         server=MatchSide.OPPONENT,
         won=True,
+        court_side=CourtSide.AD,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=None,
         serve2_outcome=ServeOutcome.IN,
         return_outcome=ReturnOutcome.IN,
@@ -101,10 +101,12 @@ def test_point_round_trips_with_a_full_two_serve_opponent_serve_point(
     assert saved is not None
     assert saved.sequence == 7
     assert saved.server is MatchSide.OPPONENT
+    # The side is the point's own, recorded whoever served.
+    assert saved.court_side is CourtSide.AD
     assert saved.serve1_outcome is ServeOutcome.FAULT
-    # Location is null on an opponent serve regardless of outcome, placement there
-    # being out of scope for capture.
-    assert saved.serve1_box is None
+    # A fault mode is null on an opponent serve, placement there being out of scope
+    # for capture.
+    assert saved.serve1_fault_mode is None
     assert saved.serve2_outcome is ServeOutcome.IN
     assert saved.return_outcome is ReturnOutcome.IN
     assert saved.wing is Wing.BACKHAND
@@ -190,8 +192,8 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
     on the columns rather than on the scenario."""
     point = make_point(
         db_session,
+        court_side=None,
         serve1_outcome=None,
-        serve1_box=None,
         end_reason=None,
         note=None,
         wing=None,
@@ -203,8 +205,10 @@ def test_nullable_columns_accept_null(db_session: Session) -> None:
 
     saved = db_session.get(Point, point.id)
     assert saved is not None
+    # Null here is a point stored before the column existed, and nothing else: the
+    # ingestion schema takes court_side non-null.
+    assert saved.court_side is None
     assert saved.serve1_outcome is None
-    assert saved.serve1_box is None
     assert saved.end_reason is None
     assert saved.serve2_outcome is None
     assert saved.return_outcome is None
@@ -238,11 +242,10 @@ def _insert_raw_point(session: Session, **columns: object) -> None:
         "sequence": 0,
         "server": "tracked",
         "won": True,
+        "court_side": "deuce",
         "serve1_outcome": "in",
-        "serve1_box": None,
         "serve1_fault_mode": None,
         "serve2_outcome": None,
-        "serve2_box": None,
         "serve2_fault_mode": None,
         "return_outcome": None,
         "end_reason": "forced",
@@ -310,11 +313,10 @@ def test_database_rejects_a_mid_ball_depth(db_session: Session) -> None:
 # mistyped in the revision fails nothing but the test below.
 ENUM_COLUMNS: list[tuple[str, type[enum.StrEnum], dict[str, str]]] = [
     ("server", MatchSide, {}),
+    ("court_side", CourtSide, {}),
     ("serve1_outcome", ServeOutcome, {}),
-    ("serve1_box", CourtSide, {}),
     ("serve1_fault_mode", FailureMode, {}),
     ("serve2_outcome", ServeOutcome, {}),
-    ("serve2_box", CourtSide, {}),
     ("serve2_fault_mode", FailureMode, {}),
     ("return_outcome", ReturnOutcome, {}),
     ("end_reason", EndReason, {}),

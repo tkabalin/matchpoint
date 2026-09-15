@@ -148,7 +148,7 @@ export type CourtDepth = 'short' | 'deep';
 /**
  * CourtSide
  *
- * One half of the court: a service box, or the far court on the final ball.
+ * One half of the court: the side a point is played from, or where a ball lands.
  */
 export type CourtSide = 'deuce' | 'ad';
 
@@ -1022,6 +1022,7 @@ export type PointCreate = {
      */
     ball_in?: boolean | null;
     ball_out_mode?: FailureMode | null;
+    court_side: CourtSide;
     end_reason?: EndReason | null;
     /**
      * Game Number
@@ -1069,10 +1070,8 @@ export type PointCreate = {
      * Sequence
      */
     sequence: number;
-    serve1_box?: CourtSide | null;
     serve1_fault_mode?: FailureMode | null;
     serve1_outcome?: ServeOutcome | null;
-    serve2_box?: CourtSide | null;
     serve2_fault_mode?: FailureMode | null;
     serve2_outcome?: ServeOutcome | null;
     server: MatchSide;
@@ -1186,6 +1185,7 @@ export type PointRead = {
      */
     ball_in: boolean | null;
     ball_out_mode: FailureMode | null;
+    court_side: CourtSide | null;
     end_reason: EndReason | null;
     /**
      * Game Number
@@ -1237,10 +1237,8 @@ export type PointRead = {
      * Sequence
      */
     sequence: number;
-    serve1_box: CourtSide | null;
     serve1_fault_mode: FailureMode | null;
     serve1_outcome: ServeOutcome | null;
-    serve2_box: CourtSide | null;
     serve2_fault_mode: FailureMode | null;
     serve2_outcome: ServeOutcome | null;
     server: MatchSide;

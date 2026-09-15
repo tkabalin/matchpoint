@@ -90,7 +90,7 @@ coach_email,player_first_name,player_last_name,opponent_name,played_on,surface,e
 ## `points.csv`
 
 ```
-coach_email,match_key,sequence,server,won,serve1_outcome,serve1_box,serve1_fault_mode,serve2_outcome,serve2_box,serve2_fault_mode,return_outcome,end_reason,unusual_reason,note,wing,shot_type,ball_in,ball_half,ball_depth,ball_out_mode,rally_length_bucket,set_number,game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,is_set_point,is_set_end,is_match_point
+coach_email,match_key,sequence,server,won,court_side,serve1_outcome,serve1_fault_mode,serve2_outcome,serve2_fault_mode,return_outcome,end_reason,unusual_reason,note,wing,shot_type,ball_in,ball_half,ball_depth,ball_out_mode,rally_length_bucket,set_number,game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,is_set_point,is_set_end,is_match_point
 ```
 
 `(coach_email, match_key)` joins to a `matches.csv` row. Every row is validated
@@ -110,7 +110,7 @@ blank, whatever the point's other fields look like.
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
 | `server`                                | `tracked` \| `opponent`                                                            |
 | `serve1_outcome` (required)            | `in` \| `fault` \| `ace`                                                            |
-| `serve1_box`, `serve2_box`, `ball_half` | `deuce` \| `ad`                                                                     |
+| `court_side` (required), `ball_half`    | `deuce` \| `ad`                                                                     |
 | `serve1_fault_mode`, `serve2_fault_mode`, `ball_out_mode` | `net` \| `long` \| `wide`                                     |
 | `serve2_outcome`                       | `in` \| `fault` \| `ace`                                                            |
 | `return_outcome`                       | `in` \| `net` \| `long` \| `wide`                                                   |
@@ -129,12 +129,11 @@ get any one wrong and the whole row is rejected:
 - **Second serve.** `serve2_outcome` is set only when `serve1_outcome` is `fault`
   (never on an ace or an in-first-serve), and even then it's optional: a faulted first
   serve whose second attempt went unwatched records no `serve2_outcome` either.
-- **Serve placement**, checked once per attempt (`serve1_*`, then `serve2_*` if it
-  exists):
-  - Server was `opponent`, or there was no such attempt: `*_box` and `*_fault_mode`
-    both blank, an opponent's placement is out of scope.
-  - Outcome is `fault`: `*_fault_mode` set, `*_box` blank.
-  - Outcome is `in` or `ace`: `*_box` set, `*_fault_mode` blank.
+- **Serve fault mode**, checked once per attempt (`serve1_*`, then `serve2_*` if it
+  exists): set exactly when the tracked player served and that attempt's outcome is
+  `fault`, and blank otherwise. A serve that landed needs no placement of its own,
+  `court_side` being the box it had to land in, and an opponent's placement is out of
+  scope.
 - **Double fault.** Both serves faulted exactly when `end_reason` is `double_fault`.
 - **Return outcome.** Set only when `server` is `opponent` (it describes the tracked
   player's return of the opponent's serve, so it's never set on a point the tracked

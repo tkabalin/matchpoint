@@ -36,8 +36,8 @@ Expected CSV files, read from /tmp inside the container:
   players.csv:  coach_email,first_name,last_name,date_of_birth,dominant_hand,gender,notes
   matches.csv:  coach_email,player_first_name,player_last_name,opponent_name,played_on,
                 surface,event,scoring_system,result,match_key
-  points.csv:   coach_email,match_key,sequence,server,won,serve1_outcome,serve1_box,
-                serve1_fault_mode,serve2_outcome,serve2_box,serve2_fault_mode,
+  points.csv:   coach_email,match_key,sequence,server,won,court_side,serve1_outcome,
+                serve1_fault_mode,serve2_outcome,serve2_fault_mode,
                 return_outcome,end_reason,unusual_reason,note,wing,shot_type,ball_in,
                 ball_half,ball_depth,ball_out_mode,rally_length_bucket,set_number,
                 game_number,in_tiebreak,is_break_point,is_game_point,is_game_end,
@@ -351,18 +351,13 @@ def run_import(db: Session, csv_dir: Path, password_hash: str) -> ImportSummary:
                         sequence=int(row["sequence"]),
                         server=MatchSide(row["server"]),
                         won=_parse_bool(row["won"]),
+                        court_side=CourtSide(row["court_side"]),
                         serve1_outcome=ServeOutcome(row["serve1_outcome"]),
-                        serve1_box=CourtSide(v)
-                        if (v := _blank_to_none(row["serve1_box"]))
-                        else None,
                         serve1_fault_mode=FailureMode(v)
                         if (v := _blank_to_none(row["serve1_fault_mode"]))
                         else None,
                         serve2_outcome=ServeOutcome(v)
                         if (v := _blank_to_none(row["serve2_outcome"]))
-                        else None,
-                        serve2_box=CourtSide(v)
-                        if (v := _blank_to_none(row["serve2_box"]))
                         else None,
                         serve2_fault_mode=FailureMode(v)
                         if (v := _blank_to_none(row["serve2_fault_mode"]))

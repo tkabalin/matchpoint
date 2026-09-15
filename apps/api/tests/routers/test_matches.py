@@ -1789,7 +1789,6 @@ def test_ingest_stores_every_field_the_client_stamped(
     payload = point_payload(
         sequence=4,
         server="opponent",
-        serve1_box=None,
         return_outcome="in",
         note="Second serve too short again.",
         rally_length_bucket="b3",
@@ -1823,7 +1822,6 @@ def test_ingest_stores_an_unwatched_serve_and_ending_as_null(
     db_session.commit()
     payload = point_payload(
         serve1_outcome=None,
-        serve1_box=None,
         end_reason=None,
         wing=None,
         shot_type=None,
@@ -1990,7 +1988,9 @@ def test_one_invalid_point_rejects_the_whole_batch(
     response = _ingest(
         client,
         match,
-        [point_payload(sequence=0), point_payload(sequence=1, serve1_box=None)],
+        # The second point's serve landed, so a fault mode on it is a shape PointCreate
+        # refuses.
+        [point_payload(sequence=0), point_payload(sequence=1, serve1_fault_mode="net")],
     )
 
     assert response.status_code == 422
@@ -2283,10 +2283,8 @@ def test_list_points_round_trips_every_field_the_ingest_route_stored(
         server="tracked",
         won=True,
         serve1_outcome="fault",
-        serve1_box=None,
         serve1_fault_mode="net",
         serve2_outcome="in",
-        serve2_box="ad",
         serve2_fault_mode=None,
         return_outcome=None,
         end_reason="mistake",

@@ -115,11 +115,10 @@ def point_row(**overrides: str) -> dict[str, str]:
         "sequence": "0",
         "server": "tracked",
         "won": "true",
+        "court_side": "deuce",
         "serve1_outcome": "in",
-        "serve1_box": "deuce",
         "serve1_fault_mode": "",
         "serve2_outcome": "",
-        "serve2_box": "",
         "serve2_fault_mode": "",
         "return_outcome": "",
         "end_reason": "mistake",
@@ -402,8 +401,8 @@ def test_a_point_row_becomes_a_point_on_its_match(db_session: Session, tmp_path:
     assert point.sequence == 0
     assert point.server is MatchSide.TRACKED
     assert point.won is True
+    assert point.court_side is CourtSide.DEUCE
     assert point.serve1_outcome is ServeOutcome.IN
-    assert point.serve1_box is CourtSide.DEUCE
     assert point.end_reason is EndReason.MISTAKE
     assert point.wing is Wing.FOREHAND
     assert point.shot_type is ShotType.DRIVE
@@ -424,8 +423,8 @@ def test_a_point_row_carries_the_columns_the_other_shape_leaves_blank(
         points=[
             point_row(
                 server="opponent",
+                court_side="ad",
                 serve1_outcome="fault",
-                serve1_box="",
                 serve2_outcome="in",
                 return_outcome="in",
                 end_reason="unusual",
@@ -444,6 +443,7 @@ def test_a_point_row_carries_the_columns_the_other_shape_leaves_blank(
 
     point = db_session.scalars(select(Point)).one()
     assert point.server is MatchSide.OPPONENT
+    assert point.court_side is CourtSide.AD
     assert point.serve1_outcome is ServeOutcome.FAULT
     assert point.serve2_outcome is ServeOutcome.IN
     assert point.return_outcome is ReturnOutcome.IN

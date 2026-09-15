@@ -35,25 +35,24 @@ MAX_COUNTER = 2_147_483_647
 _NO_CONTACT_END_REASONS = frozenset({EndReason.ACE, EndReason.DOUBLE_FAULT, EndReason.UNUSUAL})
 
 
-def _check_serve_location(
+def _check_serve_fault_mode(
     attempt: int,
     outcome: ServeOutcome | None,
-    box: CourtSide | None,
     fault_mode: FailureMode | None,
     *,
     server: MatchSide,
 ) -> None:
-    """Where one serve attempt landed: a box, a fault mode, or nothing at all."""
-    if outcome is None or server is MatchSide.OPPONENT:
-        # Either there was no such attempt, or it was the opponent's, whose placement
-        # is out of scope for capture.
-        if box is not None or fault_mode is not None:
-            raise ValueError(f"serve {attempt} records no location on this point")
-    elif outcome is ServeOutcome.FAULT:
-        if fault_mode is None or box is not None:
-            raise ValueError(f"a faulted serve {attempt} records serve{attempt}_fault_mode alone")
-    elif box is None or fault_mode is not None:
-        raise ValueError(f"a landed serve {attempt} records serve{attempt}_box")
+    """How one serve attempt missed, recorded on the tracked player's faults alone.
+
+    A serve that landed records nothing here: where it had to go is court_side, which
+    the point carries whoever served. An opponent's fault records nothing either, its
+    placement being out of scope for capture.
+    """
+    faulted = outcome is ServeOutcome.FAULT and server is MatchSide.TRACKED
+    if faulted and fault_mode is None:
+        raise ValueError(f"a faulted serve {attempt} records serve{attempt}_fault_mode")
+    if not faulted and fault_mode is not None:
+        raise ValueError(f"serve {attempt} records no fault mode on this point")
 
 
 class PointCreate(RequestModel):
@@ -74,14 +73,16 @@ class PointCreate(RequestModel):
     server: MatchSide
     # The tracked player's side, always, whoever served.
     won: bool
+    # Which half the point was played from, fixed before the serve and so never a thing
+    # the coach can miss. It is also the box a tracked serve had to land in, which is
+    # why a serve that lands records no placement of its own (#286).
+    court_side: CourtSide
 
     # Null is a serve nobody watched, not a fourth outcome: the capture model drops
-    # the attempt rather than inventing one (#210). Its location goes with it.
+    # the attempt rather than inventing one (#210). Its fault mode goes with it.
     serve1_outcome: ServeOutcome | None = None
-    serve1_box: CourtSide | None = None
     serve1_fault_mode: FailureMode | None = None
     serve2_outcome: ServeOutcome | None = None
-    serve2_box: CourtSide | None = None
     serve2_fault_mode: FailureMode | None = None
 
     return_outcome: ReturnOutcome | None = None
@@ -121,20 +122,8 @@ class PointCreate(RequestModel):
         # unwatched is a lone fault, the same observation hole as no serve at all.
         if self.serve2_outcome is not None and self.serve1_outcome is not ServeOutcome.FAULT:
             raise ValueError("a second serve is recorded only after the first serve faulted")
-        _check_serve_location(
-            1,
-            self.serve1_outcome,
-            self.serve1_box,
-            self.serve1_fault_mode,
-            server=self.server,
-        )
-        _check_serve_location(
-            2,
-            self.serve2_outcome,
-            self.serve2_box,
-            self.serve2_fault_mode,
-            server=self.server,
-        )
+        _check_serve_fault_mode(1, self.serve1_outcome, self.serve1_fault_mode, server=self.server)
+        _check_serve_fault_mode(2, self.serve2_outcome, self.serve2_fault_mode, server=self.server)
         both_faulted = (
             self.serve1_outcome is ServeOutcome.FAULT and self.serve2_outcome is ServeOutcome.FAULT
         )
@@ -237,12 +226,12 @@ class PointRead(BaseModel):
     sequence: int
     server: MatchSide
     won: bool
+    # Null only on a point stored before the column existed; PointCreate requires it.
+    court_side: CourtSide | None
 
     serve1_outcome: ServeOutcome | None
-    serve1_box: CourtSide | None
     serve1_fault_mode: FailureMode | None
     serve2_outcome: ServeOutcome | None
-    serve2_box: CourtSide | None
     serve2_fault_mode: FailureMode | None
 
     return_outcome: ReturnOutcome | None

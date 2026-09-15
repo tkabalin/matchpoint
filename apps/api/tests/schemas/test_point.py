@@ -39,17 +39,12 @@ from tests.factories import point_payload
 # carries two serve attempts.
 SECOND_SERVE: dict[str, Any] = {
     "serve1_outcome": "fault",
-    "serve1_box": None,
     "serve1_fault_mode": "long",
     "serve2_outcome": "in",
-    "serve2_box": "ad",
 }
 
 # The opponent serving: no placement is captured on any of their attempts.
-OPPONENT_SERVE: dict[str, Any] = {
-    "server": "opponent",
-    "serve1_box": None,
-}
+OPPONENT_SERVE: dict[str, Any] = {"server": "opponent"}
 
 # Nothing was struck, so neither the last shot nor the final ball is recorded.
 NO_CONTACT: dict[str, Any] = {
@@ -69,8 +64,8 @@ def test_the_default_shape_round_trips() -> None:
     point = _point()
 
     assert point.server is MatchSide.TRACKED
+    assert point.court_side is CourtSide.DEUCE
     assert point.serve1_outcome is ServeOutcome.IN
-    assert point.serve1_box is CourtSide.DEUCE
     assert point.serve1_fault_mode is None
     assert point.serve2_outcome is None
     assert point.return_outcome is None
@@ -94,10 +89,19 @@ def test_the_default_shape_round_trips() -> None:
         pytest.param(SECOND_SERVE, id="second serve after a first-serve fault"),
         pytest.param(
             SECOND_SERVE
-            | {"serve2_outcome": "fault", "serve2_box": None}
+            | {"serve2_outcome": "fault"}
             | {"serve2_fault_mode": "net", "end_reason": "double_fault", "won": False}
             | NO_CONTACT,
             id="double fault",
+        ),
+        # The same ending from the other side of the net, where the fault modes that
+        # go with it on a tracked serve are refused rather than required.
+        pytest.param(
+            OPPONENT_SERVE
+            | {"serve1_outcome": "fault", "serve2_outcome": "fault"}
+            | {"end_reason": "double_fault"}
+            | NO_CONTACT,
+            id="the opponent double faulted",
         ),
         pytest.param(
             {"serve1_outcome": "ace", "end_reason": "ace"} | NO_CONTACT,
@@ -112,14 +116,14 @@ def test_the_default_shape_round_trips() -> None:
         # The observation holes the capture model leaves (#210): a serve nobody
         # watched, a first-serve fault whose second attempt went unwatched, an ending
         # nobody watched, and a final ball nobody watched.
-        pytest.param({"serve1_outcome": None, "serve1_box": None}, id="unwatched serve"),
+        pytest.param({"serve1_outcome": None}, id="unwatched serve"),
         pytest.param(
-            {"serve1_outcome": "fault", "serve1_box": None, "serve1_fault_mode": "long"},
+            {"serve1_outcome": "fault", "serve1_fault_mode": "long"},
             id="a faulted first serve whose second attempt went unwatched",
         ),
         pytest.param({"end_reason": None} | NO_CONTACT, id="unwatched ending"),
         pytest.param(
-            {"serve1_outcome": None, "serve1_box": None, "end_reason": None} | NO_CONTACT,
+            {"serve1_outcome": None, "end_reason": None} | NO_CONTACT,
             id="only the winner seen",
         ),
         pytest.param(
@@ -160,20 +164,18 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
     [
         pytest.param({"serve2_outcome": "in"}, id="a second serve after a first serve that landed"),
         pytest.param(
-            {"serve1_outcome": "fault", "serve1_box": None}
+            {"serve1_outcome": "fault"}
             | {"serve1_fault_mode": "net", "end_reason": "double_fault"}
             | NO_CONTACT,
             id="the double-fault ending after a lone first-serve fault",
         ),
-        pytest.param({"serve1_box": None}, id="a landed serve missing its box"),
-        pytest.param({"serve1_outcome": None}, id="an unwatched serve keeping its box"),
+        pytest.param({"serve1_fault_mode": "net"}, id="a landed serve carrying a fault mode"),
         pytest.param(
-            {
-                "serve1_outcome": None,
-                "serve1_box": None,
-                "serve2_outcome": "in",
-                "serve2_box": "ad",
-            },
+            {"serve1_outcome": None, "serve1_fault_mode": "net"},
+            id="an unwatched serve keeping a fault mode",
+        ),
+        pytest.param(
+            {"serve1_outcome": None, "serve2_outcome": "in"},
             id="a second serve after an unwatched first",
         ),
         pytest.param(
@@ -190,14 +192,9 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
             id="an unwatched final ball carrying an out mode",
         ),
         pytest.param(
-            SECOND_SERVE | {"serve1_box": "deuce"},
-            id="a faulted serve keeping its box",
-        ),
-        pytest.param(
             SECOND_SERVE | {"serve1_fault_mode": None},
             id="a faulted serve with no fault mode",
         ),
-        pytest.param(OPPONENT_SERVE | {"serve1_box": "deuce"}, id="placement on an opponent serve"),
         pytest.param(
             OPPONENT_SERVE | {"serve1_fault_mode": "net"},
             id="a fault mode on an opponent serve",
@@ -206,12 +203,12 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
             SECOND_SERVE | {"serve2_fault_mode": "net"},
             id="a landed second serve carrying a fault mode",
         ),
-        pytest.param({"serve2_box": "ad"}, id="a location on a second serve that never happened"),
         pytest.param(
-            SECOND_SERVE
-            | {"serve2_outcome": "fault", "serve2_box": None}
-            | {"serve2_fault_mode": "net"}
-            | NO_CONTACT,
+            {"serve2_fault_mode": "net"},
+            id="a fault mode on a second serve that never happened",
+        ),
+        pytest.param(
+            SECOND_SERVE | {"serve2_outcome": "fault"} | {"serve2_fault_mode": "net"} | NO_CONTACT,
             id="both serves faulted without the double-fault ending",
         ),
         pytest.param(
@@ -252,6 +249,7 @@ def test_shapes_the_contract_allows(overrides: dict[str, Any]) -> None:
         pytest.param({"game_number": MAX_COUNTER + 1}, id="a game number past the column"),
         pytest.param({"note": ""}, id="an empty note"),
         pytest.param({"server": "either"}, id="a server outside the enum"),
+        pytest.param({"court_side": "centre"}, id="a court side outside the enum"),
         pytest.param({"end_reason": "winner"}, id="an end reason outside the enum"),
         pytest.param({"match_id": str(uuid.uuid4())}, id="a body naming its own match"),
         pytest.param({"timestamp": 1_760_000_000}, id="an unknown field"),
@@ -262,7 +260,7 @@ def test_shapes_the_contract_refuses(overrides: dict[str, Any]) -> None:
         _point(**overrides)
 
 
-@pytest.mark.parametrize("field", ["sequence", "server", "won"])
+@pytest.mark.parametrize("field", ["sequence", "server", "won", "court_side"])
 def test_a_missing_required_field_is_refused(field: str) -> None:
     payload = point_payload()
     del payload[field]
@@ -274,7 +272,7 @@ def test_a_missing_required_field_is_refused(field: str) -> None:
 def test_an_omitted_serve_or_ending_reads_as_unwatched() -> None:
     """The two fields the capture model can leave null default the same way the other
     observation fields do, since an absent observation is the same fact as a null one."""
-    payload = point_payload(serve1_box=None, **NO_CONTACT)
+    payload = point_payload(**NO_CONTACT)
     del payload["serve1_outcome"]
     del payload["end_reason"]
 
@@ -318,6 +316,7 @@ def test_the_full_enum_membership_reaches_the_columns() -> None:
     the wrong one shows up here rather than as a CHECK violation at ingest."""
     point = _point(
         **OPPONENT_SERVE,
+        court_side="ad",
         return_outcome="wide",
         won=False,
         end_reason="unusual",
@@ -327,6 +326,7 @@ def test_the_full_enum_membership_reaches_the_columns() -> None:
     )
 
     assert point.server is MatchSide.OPPONENT
+    assert point.court_side is CourtSide.AD
     assert point.return_outcome is ReturnOutcome.WIDE
     assert point.unusual_reason is UnusualReason.POINT_PENALTY
     assert point.rally_length_bucket is RallyBucket.B2

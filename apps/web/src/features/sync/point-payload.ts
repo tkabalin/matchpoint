@@ -2,7 +2,7 @@
  * The boundary between the capture domain model and the API for points, the
  * sibling of match-payload.ts. `Point` is shaped for scoring and `PointCreate` for
  * storage, so the two differ in more than case: a serve is an array of attempts here
- * and six flat columns there, and a final ball is one `ballLocation` here and four
+ * and four flat columns there, and a final ball is one `ballLocation` here and four
  * columns there. Annotating the return type is what makes a backend field change a
  * compile error in this app: see "Contract checks against the API" in docs/testing.md.
  *
@@ -18,20 +18,17 @@ import type { Point, ServeAttempt } from "@/features/capture/point";
 import { lower, lowerOrNull } from "./enum-case";
 
 /**
- * One attempt's three columns. A serve that landed records the box it was aimed at,
- * which is the side the point was played from (see ServeAttempt.location); a fault
- * records how it missed; an opponent's serve records neither, and an attempt nobody
- * watched is absent from `serves` and so null throughout.
+ * One attempt's two columns. A fault of the tracked player's records how it missed;
+ * a serve that landed records nothing further, `court_side` being the box it had to
+ * land in; an opponent's attempt records neither, placement there being out of scope;
+ * and an attempt nobody watched is absent from `serves` and so null throughout.
  */
 function serveColumns(attempt: ServeAttempt | undefined, point: Point) {
-  if (attempt === undefined) return { outcome: null, box: null, faultMode: null };
-  if (point.server === "OPPONENT") {
-    return { outcome: lower(attempt.outcome), box: null, faultMode: null };
+  if (attempt === undefined) return { outcome: null, faultMode: null };
+  if (point.server === "OPPONENT" || attempt.outcome !== "FAULT") {
+    return { outcome: lower(attempt.outcome), faultMode: null };
   }
-  if (attempt.outcome === "FAULT") {
-    return { outcome: lower(attempt.outcome), box: null, faultMode: lowerOrNull(attempt.location) };
-  }
-  return { outcome: lower(attempt.outcome), box: lower(point.courtSide), faultMode: null };
+  return { outcome: lower(attempt.outcome), faultMode: lowerOrNull(attempt.location) };
 }
 
 export function toPointCreate(point: Point): PointCreate {
@@ -48,11 +45,10 @@ export function toPointCreate(point: Point): PointCreate {
     sequence: point.sequence,
     server: lower(point.server),
     won: point.won,
+    court_side: lower(point.courtSide),
     serve1_outcome: first.outcome,
-    serve1_box: first.box,
     serve1_fault_mode: first.faultMode,
     serve2_outcome: second.outcome,
-    serve2_box: second.box,
     serve2_fault_mode: second.faultMode,
     return_outcome: lowerOrNull(point.returnOutcome),
     end_reason: lowerOrNull(point.endReason),

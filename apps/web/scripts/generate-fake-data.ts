@@ -956,7 +956,7 @@ const API_SERVE_OUTCOME: Record<ServeOutcome, ApiPoint["serve1_outcome"]> = {
   ACE: "ace",
 };
 
-const API_COURT_SIDE: Record<CourtSide, NonNullable<ApiPoint["serve1_box"]>> = {
+const API_COURT_SIDE: Record<CourtSide, ApiPoint["court_side"]> = {
   DEUCE: "deuce",
   AD: "ad",
 };
@@ -1020,22 +1020,20 @@ type ServeAttemptPayload = ReturnType<Point["toJSON"]>["serves"][number];
 
 interface ApiServe {
   outcome: ApiPoint["serve1_outcome"];
-  box: ApiPoint["serve1_box"];
   faultMode: ApiPoint["serve1_fault_mode"];
 }
 
-/** One serve attempt: its outcome, then the box it landed in or the way it missed. */
-function apiServe(attempt: ServeAttemptPayload, server: Server, courtSide: CourtSide): ApiServe {
+/** One serve attempt: its outcome, then the way it missed if it did. */
+function apiServe(attempt: ServeAttemptPayload, server: Server): ApiServe {
   const outcome = API_SERVE_OUTCOME[attempt.outcome];
-  // Placement is the tracked player's alone, and a serve that landed is placed by the box
-  // the point was played from — capture never records where inside the box it went.
-  if (server !== "TRACKED") return { outcome, box: null, faultMode: null };
-  if (attempt.outcome !== "FAULT")
-    return { outcome, box: API_COURT_SIDE[courtSide], faultMode: null };
+  // Placement is the tracked player's alone, and a serve that landed needs none of its
+  // own: court_side is the box it had to land in, and capture never records where
+  // inside that box it went.
+  if (server !== "TRACKED" || attempt.outcome !== "FAULT") return { outcome, faultMode: null };
   if (attempt.location === null) {
     throw new Error("a tracked player's faulted serve records where it missed");
   }
-  return { outcome, box: null, faultMode: API_FAILURE_MODE[attempt.location] };
+  return { outcome, faultMode: API_FAILURE_MODE[attempt.location] };
 }
 
 /** One captured point as the API stores it, minus the id the importer mints itself. */
@@ -1045,9 +1043,9 @@ function toApiPoint(payload: ReturnType<Point["toJSON"]>): ApiPoint {
   const first = payload.serves[0];
   if (first === undefined) throw new Error(`point ${payload.id} records no serve to map`);
   if (payload.endReason === null) throw new Error(`point ${payload.id} records no ending to map`);
-  const serve1 = apiServe(first, payload.server, payload.courtSide);
+  const serve1 = apiServe(first, payload.server);
   const second = payload.serves[1];
-  const serve2 = second && apiServe(second, payload.server, payload.courtSide);
+  const serve2 = second && apiServe(second, payload.server);
   const location = payload.ballLocation;
   // ballIn is always true from the capture path, so the final ball is always a zone
   // (point.ts says so on the field itself); a FailureMode here would be imported data.
@@ -1058,11 +1056,10 @@ function toApiPoint(payload: ReturnType<Point["toJSON"]>): ApiPoint {
     sequence: payload.sequence,
     server: API_SERVER[payload.server],
     won: payload.won,
+    court_side: API_COURT_SIDE[payload.courtSide],
     serve1_outcome: serve1.outcome,
-    serve1_box: serve1.box,
     serve1_fault_mode: serve1.faultMode,
     serve2_outcome: serve2?.outcome ?? null,
-    serve2_box: serve2?.box ?? null,
     serve2_fault_mode: serve2?.faultMode ?? null,
     return_outcome:
       payload.returnOutcome === null ? null : API_RETURN_OUTCOME[payload.returnOutcome],
@@ -1120,11 +1117,10 @@ const IMPORT_POINT_FIELDS = [
   "sequence",
   "server",
   "won",
+  "court_side",
   "serve1_outcome",
-  "serve1_box",
   "serve1_fault_mode",
   "serve2_outcome",
-  "serve2_box",
   "serve2_fault_mode",
   "return_outcome",
   "end_reason",

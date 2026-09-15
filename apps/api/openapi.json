@@ -273,7 +273,7 @@
         "type": "string"
       },
       "CourtSide": {
-        "description": "One half of the court: a service box, or the far court on the final ball.",
+        "description": "One half of the court: the side a point is played from, or where a ball lands.",
         "enum": [
           "deuce",
           "ad"
@@ -1895,6 +1895,9 @@
               }
             ]
           },
+          "court_side": {
+            "$ref": "#/components/schemas/CourtSide"
+          },
           "end_reason": {
             "anyOf": [
               {
@@ -1983,16 +1986,6 @@
             "title": "Sequence",
             "type": "integer"
           },
-          "serve1_box": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CourtSide"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "serve1_fault_mode": {
             "anyOf": [
               {
@@ -2007,16 +2000,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ServeOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "serve2_box": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CourtSide"
               },
               {
                 "type": "null"
@@ -2092,6 +2075,7 @@
           "sequence",
           "server",
           "won",
+          "court_side",
           "set_number",
           "game_number",
           "in_tiebreak",
@@ -2277,6 +2261,16 @@
               }
             ]
           },
+          "court_side": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CourtSide"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "end_reason": {
             "anyOf": [
               {
@@ -2364,16 +2358,6 @@
             "title": "Sequence",
             "type": "integer"
           },
-          "serve1_box": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CourtSide"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "serve1_fault_mode": {
             "anyOf": [
               {
@@ -2388,16 +2372,6 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ServeOutcome"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "serve2_box": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/CourtSide"
               },
               {
                 "type": "null"
@@ -2472,11 +2446,10 @@
           "sequence",
           "server",
           "won",
+          "court_side",
           "serve1_outcome",
-          "serve1_box",
           "serve1_fault_mode",
           "serve2_outcome",
-          "serve2_box",
           "serve2_fault_mode",
           "return_outcome",
           "end_reason",

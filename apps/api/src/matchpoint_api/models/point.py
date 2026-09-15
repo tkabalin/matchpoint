@@ -23,7 +23,7 @@ class ServeOutcome(enum.StrEnum):
 
 
 class CourtSide(enum.StrEnum):
-    """One half of the court: a service box, or the far court on the final ball."""
+    """One half of the court: the side a point is played from, or where a ball lands."""
 
     DEUCE = "deuce"
     AD = "ad"
@@ -144,21 +144,23 @@ class Point(Base):
     sequence: Mapped[int]
     server: Mapped[MatchSide] = mapped_column(str_enum(MatchSide, "point_server"))
     won: Mapped[bool]
+    # Which half the point was played from. Nullable only for rows stored before the
+    # column existed, where the side survives only where a tracked serve was watched and
+    # landed; PointCreate requires it, so no point arriving now lands null.
+    court_side: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_court_side"))
 
     # Null when nobody watched the serve; a second attempt only ever follows a
-    # first-serve fault. Location is null on an opponent serve, placement there being
-    # out of scope, and otherwise the box when it landed or a FailureMode when not.
+    # first-serve fault. A fault mode is recorded for the tracked player's own serves
+    # alone, an opponent's placement being out of scope.
     serve1_outcome: Mapped[ServeOutcome | None] = mapped_column(
         str_enum(ServeOutcome, "point_serve1_outcome")
     )
-    serve1_box: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_serve1_box"))
     serve1_fault_mode: Mapped[FailureMode | None] = mapped_column(
         str_enum(FailureMode, "point_serve1_fault_mode")
     )
     serve2_outcome: Mapped[ServeOutcome | None] = mapped_column(
         str_enum(ServeOutcome, "point_serve2_outcome")
     )
-    serve2_box: Mapped[CourtSide | None] = mapped_column(str_enum(CourtSide, "point_serve2_box"))
     serve2_fault_mode: Mapped[FailureMode | None] = mapped_column(
         str_enum(FailureMode, "point_serve2_fault_mode")
     )

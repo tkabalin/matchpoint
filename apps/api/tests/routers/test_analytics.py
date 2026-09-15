@@ -175,7 +175,6 @@ def test_overview_point_metrics(client: TestClient, db_session: Session, coach: 
         sequence=2,
         is_game_end=True,
         server=MatchSide.OPPONENT,
-        serve1_box=None,
         return_outcome=ReturnOutcome.IN,
     )
     make_point(
@@ -278,10 +277,8 @@ def test_serving_metrics_and_breakdown(
         match_id=match.id,
         sequence=3,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
-        serve2_box=None,
         shot_type=ShotType.VOLLEY,
     )
     make_point(
@@ -290,7 +287,6 @@ def test_serving_metrics_and_breakdown(
         sequence=4,
         won=False,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -350,7 +346,6 @@ def test_returning_metrics_and_breakdown(
     match = make_match(db_session, player_id=player.id)
     opponent_serve = {
         "server": MatchSide.OPPONENT,
-        "serve1_box": None,
     }
     make_point(
         db_session,
@@ -429,7 +424,7 @@ def test_serving_fault_modes_split_by_serve_number(
     """Four faulted first serves (2 net, 1 long, 1 wide) and one faulted second."""
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
-    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    faulted = {"serve1_outcome": ServeOutcome.FAULT}
     make_point(db_session, match_id=match.id, sequence=0)
     for sequence, mode in enumerate(
         [FailureMode.NET, FailureMode.LONG, FailureMode.WIDE, FailureMode.NET], start=1
@@ -481,7 +476,6 @@ def test_the_returning_side_reports_no_fault_modes(
         sequence=0,
         server=MatchSide.OPPONENT,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.LONG,
         serve2_outcome=ServeOutcome.IN,
         return_outcome=ReturnOutcome.IN,
@@ -507,7 +501,7 @@ def test_serve_outcome_shares_split_by_serve_number(
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     no_shot = {"wing": None, "shot_type": None}
-    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    opponent_serve = {"server": MatchSide.OPPONENT}
     make_point(db_session, match_id=match.id, sequence=0)
     make_point(
         db_session,
@@ -522,7 +516,6 @@ def test_serve_outcome_shares_split_by_serve_number(
         match_id=match.id,
         sequence=2,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
     )
@@ -531,7 +524,6 @@ def test_serve_outcome_shares_split_by_serve_number(
         match_id=match.id,
         sequence=3,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -595,7 +587,7 @@ def test_return_outcomes_split_by_serve_number(
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
-    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    opponent_serve = {"server": MatchSide.OPPONENT}
     missed = {"won": False, "end_reason": EndReason.MISTAKE, "wing": None, "shot_type": None}
     second_serve = {"serve1_outcome": ServeOutcome.FAULT, "serve2_outcome": ServeOutcome.IN}
     for sequence in range(2):
@@ -665,11 +657,9 @@ def test_an_unwatched_serve_stays_out_of_every_serve_rate(
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     make_point(db_session, match_id=match.id, sequence=0)
-    make_point(db_session, match_id=match.id, sequence=1, serve1_outcome=None, serve1_box=None)
+    make_point(db_session, match_id=match.id, sequence=1, serve1_outcome=None)
     unwatched_only = make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, 2))
-    make_point(
-        db_session, match_id=unwatched_only.id, sequence=0, serve1_outcome=None, serve1_box=None
-    )
+    make_point(db_session, match_id=unwatched_only.id, sequence=0, serve1_outcome=None)
 
     serving = _get(client, player.id, "serve")["serving"]
 
@@ -698,13 +688,12 @@ def test_a_player_whose_serves_all_went_unwatched_keeps_the_breakdown_and_no_rat
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=match.id, sequence=0, serve1_outcome=None, serve1_box=None)
+    make_point(db_session, match_id=match.id, sequence=0, serve1_outcome=None)
     make_point(
         db_session,
         match_id=match.id,
         sequence=1,
         serve1_outcome=None,
-        serve1_box=None,
         won=False,
         end_reason=EndReason.MISTAKE,
         wing=Wing.BACKHAND,
@@ -736,7 +725,7 @@ def test_an_unwatched_second_serve_is_no_miss_in_the_trend(
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
-    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    faulted = {"serve1_outcome": ServeOutcome.FAULT}
     make_point(
         db_session,
         match_id=match.id,
@@ -768,7 +757,7 @@ def test_serve_trend_runs_oldest_to_most_recent(
         make_match(db_session, player_id=player.id, played_on=date(THIS_YEAR, 7, day))
         for day in (1, 2, 3)
     ]
-    faulted = {"serve1_outcome": ServeOutcome.FAULT, "serve1_box": None}
+    faulted = {"serve1_outcome": ServeOutcome.FAULT}
     make_point(db_session, match_id=matches[0].id, sequence=0)
     make_point(db_session, match_id=matches[0].id, sequence=1)
     make_point(db_session, match_id=matches[1].id, sequence=0)
@@ -785,7 +774,6 @@ def test_serve_trend_runs_oldest_to_most_recent(
         match_id=matches[1].id,
         sequence=2,
         server=MatchSide.OPPONENT,
-        serve1_box=None,
         return_outcome=ReturnOutcome.IN,
     )
     make_point(
@@ -793,7 +781,6 @@ def test_serve_trend_runs_oldest_to_most_recent(
         match_id=matches[1].id,
         sequence=3,
         server=MatchSide.OPPONENT,
-        serve1_box=None,
         serve1_outcome=ServeOutcome.FAULT,
         serve2_outcome=ServeOutcome.IN,
         return_outcome=ReturnOutcome.IN,
@@ -836,7 +823,6 @@ def test_serve_trend_keeps_only_the_most_recent_matches(
         match_id=oldest.id,
         sequence=0,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
     )
@@ -1275,7 +1261,6 @@ def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coac
         sequence=8,
         won=False,
         server=MatchSide.OPPONENT,
-        serve1_box=None,
         return_outcome=ReturnOutcome.NET,
         end_reason=EndReason.MISTAKE,
         wing=None,
@@ -1405,7 +1390,6 @@ def test_serve_narrows_to_one_set(client: TestClient, db_session: Session, coach
         set_number=2,
         won=False,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -1558,7 +1542,7 @@ def test_returning_breakdown_narrows_with_the_rest_of_the_payload(
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
-    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    opponent_serve = {"server": MatchSide.OPPONENT}
     make_point(
         db_session,
         match_id=match.id,
@@ -1726,7 +1710,6 @@ def test_serve_narrows_to_one_opponent(
         sequence=0,
         won=False,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -1914,7 +1897,6 @@ def test_serve_narrows_to_one_surface(
         sequence=0,
         won=False,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.FAULT,
         serve2_fault_mode=FailureMode.LONG,
@@ -2144,7 +2126,7 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
     player = make_player(db_session, coach_id=coach.id)
     scoped = make_match(db_session, player_id=player.id)
     other = make_match(db_session, player_id=player.id)
-    opponent_serve = {"server": MatchSide.OPPONENT, "serve1_box": None}
+    opponent_serve = {"server": MatchSide.OPPONENT}
     make_point(db_session, match_id=scoped.id, sequence=0)
     make_point(
         db_session,
@@ -2158,7 +2140,6 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
         match_id=other.id,
         sequence=0,
         serve1_outcome=ServeOutcome.FAULT,
-        serve1_box=None,
         serve1_fault_mode=FailureMode.NET,
         serve2_outcome=ServeOutcome.IN,
     )
@@ -2316,7 +2297,6 @@ def _captured_match(
             match_id=match.id,
             sequence=sequence,
             server=MatchSide.OPPONENT,
-            serve1_box=None,
             return_outcome=ReturnOutcome.IN,
             won=won,
             end_reason=reason,
@@ -2328,7 +2308,6 @@ def _captured_match(
             match_id=match.id,
             sequence=sequence,
             server=MatchSide.OPPONENT,
-            serve1_box=None,
             return_outcome=ReturnOutcome.NET,
             won=False,
             end_reason=EndReason.MISTAKE,
@@ -2343,7 +2322,6 @@ def _captured_match(
             sequence=sequence,
             won=landed,
             serve1_outcome=ServeOutcome.IN if landed else ServeOutcome.FAULT,
-            serve1_box=CourtSide.DEUCE if landed else None,
             serve1_fault_mode=None if landed else FailureMode.NET,
             end_reason=EndReason.ACE if landed else EndReason.DOUBLE_FAULT,
             wing=None,

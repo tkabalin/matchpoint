@@ -72,8 +72,8 @@ test("a point recorded in full reaches the server with every field", async ({ pa
   const [point] = await pointsOf(page, matchId);
   expect(point).toMatchObject({
     won: true,
+    court_side: "deuce",
     serve1_outcome: "in",
-    serve1_box: "deuce",
     end_reason: "forced",
     rally_length_bucket: "b2",
     wing: "forehand",

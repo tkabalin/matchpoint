@@ -66,7 +66,7 @@ export const zCourtDepth = z.enum(['short', 'deep']);
 /**
  * CourtSide
  *
- * One half of the court: a service box, or the far court on the final ball.
+ * One half of the court: the side a point is played from, or where a ball lands.
  */
 export const zCourtSide = z.enum(['deuce', 'ad']);
 
@@ -1043,6 +1043,7 @@ export const zPointCreate = z.object({
     ball_half: zCourtSide.nullish(),
     ball_in: z.boolean().nullish(),
     ball_out_mode: zFailureMode.nullish(),
+    court_side: zCourtSide,
     end_reason: zEndReason.nullish(),
     game_number: z.int().gte(1).lte(2147483647),
     id: z.uuid(),
@@ -1057,10 +1058,8 @@ export const zPointCreate = z.object({
     rally_length_bucket: zRallyBucket.nullish(),
     return_outcome: zReturnOutcome.nullish(),
     sequence: z.int().gte(0).lte(2147483647),
-    serve1_box: zCourtSide.nullish(),
     serve1_fault_mode: zFailureMode.nullish(),
     serve1_outcome: zServeOutcome.nullish(),
-    serve2_box: zCourtSide.nullish(),
     serve2_fault_mode: zFailureMode.nullish(),
     serve2_outcome: zServeOutcome.nullish(),
     server: zMatchSide,
@@ -1102,6 +1101,7 @@ export const zPointRead = z.object({
     ball_half: zCourtSide.nullable(),
     ball_in: z.boolean().nullable(),
     ball_out_mode: zFailureMode.nullable(),
+    court_side: zCourtSide.nullable(),
     end_reason: zEndReason.nullable(),
     game_number: z.int(),
     id: z.uuid(),
@@ -1117,10 +1117,8 @@ export const zPointRead = z.object({
     rally_length_bucket: zRallyBucket.nullable(),
     return_outcome: zReturnOutcome.nullable(),
     sequence: z.int(),
-    serve1_box: zCourtSide.nullable(),
     serve1_fault_mode: zFailureMode.nullable(),
     serve1_outcome: zServeOutcome.nullable(),
-    serve2_box: zCourtSide.nullable(),
     serve2_fault_mode: zFailureMode.nullable(),
     serve2_outcome: zServeOutcome.nullable(),
     server: zMatchSide,

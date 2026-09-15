@@ -154,12 +154,13 @@ describe("toPointCreate", () => {
     expect(body.rally_length_bucket).toBe("b4");
   });
 
-  // A serve that landed carries no location of its own in the capture model: the box
-  // it was aimed at is the side the point was played from.
-  test("places a landed serve in the box the point was played from", () => {
+  // The side is the point's own fact, sent whoever served and whatever the serve did:
+  // it is also the box a tracked serve had to land in, which is why no serve column
+  // repeats it.
+  test("sends the side the point was played from", () => {
     const body = toPointCreate(point({ courtSide: "AD" }));
+    expect(body.court_side).toBe("ad");
     expect(body.serve1_outcome).toBe("in");
-    expect(body.serve1_box).toBe("ad");
     expect(body.serve1_fault_mode).toBeNull();
     expect(body.serve2_outcome).toBeNull();
   });
@@ -174,10 +175,8 @@ describe("toPointCreate", () => {
       }),
     );
     expect(body.serve1_outcome).toBe("fault");
-    expect(body.serve1_box).toBeNull();
     expect(body.serve1_fault_mode).toBe("long");
     expect(body.serve2_outcome).toBe("in");
-    expect(body.serve2_box).toBe("deuce");
     expect(body.serve2_fault_mode).toBeNull();
   });
 
@@ -193,7 +192,9 @@ describe("toPointCreate", () => {
       }),
     );
     expect(body.serve1_fault_mode).toBeNull();
-    expect(body.serve2_box).toBeNull();
+    expect(body.serve2_fault_mode).toBeNull();
+    // The side is still the point's own, an opponent's serve or not.
+    expect(body.court_side).toBe("deuce");
     expect(body.return_outcome).toBe("in");
   });
 
@@ -202,7 +203,7 @@ describe("toPointCreate", () => {
   test("sends an unwatched serve and ending as null", () => {
     const body = toPointCreate(point({ serves: [], endReason: null, ...NO_CONTACT }));
     expect(body.serve1_outcome).toBeNull();
-    expect(body.serve1_box).toBeNull();
+    expect(body.serve1_fault_mode).toBeNull();
     expect(body.end_reason).toBeNull();
     expect(body.wing).toBeNull();
     expect(body.ball_in).toBeNull();

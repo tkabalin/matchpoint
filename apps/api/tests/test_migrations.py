@@ -299,6 +299,133 @@ def test_dropping_mid_clears_the_placement_rather_than_the_point(round_trip_url:
         settings.database_url = original_url
 
 
+def test_the_court_side_carries_across_the_boxes_and_back(round_trip_url: str) -> None:
+    """The side a point was played from survives the boxes it used to be stored in.
+
+    A box held the side only where the tracked player served, the serve was watched and
+    it landed, so the upgrade has those rows to move and no others; the downgrade puts
+    back the ones a box can hold and loses the rest, which is the loss the upgrade
+    exists to end (#286)."""
+    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    original_url = settings.database_url
+    settings.database_url = round_trip_url
+    engine = create_engine(round_trip_url)
+    try:
+        # The revision before a4e17b90c6d2, and so the only place a serve box can be
+        # arranged: after it the column is gone.
+        command.upgrade(config, "7c4e2f9a1b58")
+        with engine.begin() as connection:
+            coach_id = connection.execute(
+                text(
+                    "INSERT INTO coaches (id, email, display_name, password_hash) "
+                    "VALUES (gen_random_uuid(), 'coach@example.com', 'Coach', 'not-a-hash') "
+                    "RETURNING id"
+                )
+            ).scalar()
+            player_id = connection.execute(
+                text(
+                    "INSERT INTO players (id, first_name, last_name, username, coach_id) "
+                    "VALUES (gen_random_uuid(), 'Sam', 'Smith', 'smtsam001', :coach_id) "
+                    "RETURNING id"
+                ),
+                {"coach_id": coach_id},
+            ).scalar()
+            match_id = connection.execute(
+                text(
+                    "INSERT INTO matches (id, player_id, played_on) "
+                    "VALUES (gen_random_uuid(), :player_id, '2026-08-01') RETURNING id"
+                ),
+                {"player_id": player_id},
+            ).scalar()
+            # Every shape a box could be in, in order: a landed first serve, a landed
+            # second after a fault, an ace off a second serve. Then the three that
+            # stored no side at all: an opponent's serve, a double fault, and a serve
+            # nobody watched.
+            blank: dict[str, object] = {
+                "server": "tracked",
+                "serve1_outcome": None,
+                "serve1_fault_mode": None,
+                "serve2_outcome": None,
+                "serve2_fault_mode": None,
+                "serve1_box": None,
+                "serve2_box": None,
+                "end_reason": None,
+            }
+            faulted_first = {"serve1_outcome": "fault", "serve1_fault_mode": "net"}
+            arrangements: list[dict[str, str]] = [
+                {"serve1_outcome": "in", "serve1_box": "deuce", "end_reason": "forced"},
+                faulted_first
+                | {"serve2_outcome": "in", "serve2_box": "ad", "end_reason": "forced"},
+                faulted_first
+                | {"serve2_outcome": "ace", "serve2_box": "deuce", "end_reason": "ace"},
+                {"server": "opponent", "serve1_outcome": "in", "end_reason": "forced"},
+                faulted_first
+                | {"serve2_outcome": "fault", "serve2_fault_mode": "wide"}
+                | {"end_reason": "double_fault"},
+                {},
+            ]
+            for sequence, arrangement in enumerate(arrangements):
+                connection.execute(
+                    text(
+                        "INSERT INTO points (id, match_id, sequence, server, won, "
+                        "serve1_outcome, serve1_fault_mode, serve2_outcome, "
+                        "serve2_fault_mode, serve1_box, serve2_box, end_reason, "
+                        "set_number, game_number, in_tiebreak, is_break_point, "
+                        "is_game_point, is_game_end, is_set_point, is_set_end, "
+                        "is_match_point) "
+                        "VALUES (gen_random_uuid(), :match_id, :sequence, :server, true, "
+                        ":serve1_outcome, :serve1_fault_mode, :serve2_outcome, "
+                        ":serve2_fault_mode, :serve1_box, :serve2_box, :end_reason, "
+                        "1, 1, false, false, false, false, false, false, false)"
+                    ),
+                    {"match_id": match_id, "sequence": sequence, **blank, **arrangement},
+                )
+
+        command.upgrade(config, "head")
+
+        with engine.begin() as connection:
+            sides = (
+                connection.execute(text("SELECT court_side FROM points ORDER BY sequence"))
+                .scalars()
+                .all()
+            )
+        assert sides == ["deuce", "ad", "deuce", None, None, None]
+
+        with engine.begin() as connection:
+            # A point as capture sends one now: the side is the point's own, so it is
+            # there on an opponent's serve, where no box could ever have held it.
+            connection.execute(
+                text(
+                    "INSERT INTO points (id, match_id, sequence, server, won, court_side, "
+                    "serve1_outcome, end_reason, set_number, game_number, in_tiebreak, "
+                    "is_break_point, is_game_point, is_game_end, is_set_point, is_set_end, "
+                    "is_match_point) "
+                    "VALUES (gen_random_uuid(), :match_id, 6, 'opponent', true, 'ad', "
+                    "'in', 'forced', 1, 1, false, false, false, false, false, false, false)"
+                ),
+                {"match_id": match_id},
+            )
+
+        command.downgrade(config, "7c4e2f9a1b58")
+
+        with engine.begin() as connection:
+            boxes = connection.execute(
+                text("SELECT serve1_box, serve2_box FROM points ORDER BY sequence")
+            ).all()
+        assert boxes == [
+            ("deuce", None),
+            (None, "ad"),
+            (None, "deuce"),
+            (None, None),
+            (None, None),
+            (None, None),
+            (None, None),
+        ]
+    finally:
+        engine.dispose()
+        settings.database_url = original_url
+
+
 def test_the_schema_at_head_matches_the_models(_test_engine: Engine) -> None:
     """Alembic's own autogenerate comparison, asserted rather than printed.
 
