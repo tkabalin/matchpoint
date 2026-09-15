@@ -73,6 +73,14 @@ import { cn } from "@/lib/utils";
 // so the visual tally caps here regardless of how many players there are.
 const TALLY_CAP = 8;
 
+// A handful of icons at the row's normal size look sparse next to the big
+// roster numeral, so they scale up as the shown count shrinks.
+function tallyIconSize(shownCount: number) {
+  if (shownCount <= 3) return "size-5";
+  if (shownCount <= 5) return "size-4";
+  return "size-3.5";
+}
+
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
   const { data: players } = useQuery(listPlayersOptions());
@@ -255,7 +263,10 @@ export function Home() {
                     {Array.from({ length: Math.min(roster.length, TALLY_CAP) }).map((_, index) => (
                       <PersonStanding
                         key={index}
-                        className="size-3.5 shrink-0 text-muted-foreground"
+                        className={cn(
+                          tallyIconSize(Math.min(roster.length, TALLY_CAP)),
+                          "shrink-0 text-muted-foreground",
+                        )}
                       />
                     ))}
                     {roster.length > TALLY_CAP && (
