@@ -171,9 +171,9 @@ export function SignUp() {
     }
   }
 
-  // Shared by the OTP step's "request a new one" and the password step's "start
-  // over": both send the coach back to the email step, email preserved, without
-  // auto-firing a new request-otp call — every request stays a deliberate click.
+  // Shared by the OTP step's and the password step's "start over": both send the
+  // coach back to the email step, email preserved, without auto-firing a new
+  // request-otp call — every request stays a deliberate click.
   function handleStartOver() {
     setStep("email");
     setOtp("");
@@ -328,14 +328,14 @@ export function SignUp() {
         </CardContent>
         <CardFooter className="flex-col gap-2">
           <p className="text-center text-sm text-muted-foreground">
-            Didn't get a code, or has it expired?
+            Wrong email, no code, or has it expired?
           </p>
           <button
             type="button"
             onClick={handleStartOver}
             className="text-sm text-primary underline underline-offset-4"
           >
-            Request a new one
+            Start over
           </button>
           <p className="text-center text-sm">
             <Link to="/" className="text-primary underline underline-offset-4">

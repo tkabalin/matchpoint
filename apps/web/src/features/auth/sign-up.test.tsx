@@ -359,12 +359,12 @@ test("sends one verify-otp however impatiently Verify is clicked", async () => {
   expect(await screen.findByLabelText("Password")).toBeInTheDocument();
 });
 
-test("requesting a new code from the OTP step returns to the email step with the email preserved", async () => {
+test("starting over from the OTP step returns to the email step with the email preserved", async () => {
   const user = userEvent.setup({ delay: null });
   await goToOtpStep(user);
 
   await user.type(screen.getByLabelText("Code"), "123456");
-  await user.click(screen.getByRole("button", { name: "Request a new one" }));
+  await user.click(screen.getByRole("button", { name: "Start over" }));
 
   expect(await screen.findByLabelText("Email")).toHaveValue("coach@example.com");
   expect(screen.queryByLabelText("Code")).not.toBeInTheDocument();
