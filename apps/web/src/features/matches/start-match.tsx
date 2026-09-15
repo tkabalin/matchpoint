@@ -1,6 +1,6 @@
 import { listPlayersOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Search } from "lucide-react";
 import { useState } from "react";
 
@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
  * match list (where no player is in hand yet) needs this step first.
  */
 export function StartMatch() {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const { data: players, isPending } = useQuery(listPlayersOptions());
 
@@ -33,13 +34,25 @@ export function StartMatch() {
         title="Start a match"
         centred
         back={
-          <Link
-            to="/matches"
-            aria-label="Back to matches"
+          // Reachable from Matches' own FAB and from Home's now (PrimaryMatchAction),
+          // so a fixed destination sent half of those visits somewhere they didn't
+          // come from — same reasoning as `player-profile.tsx`'s own back button.
+          // Pops real browser history, falling back to Home only for a direct/deep
+          // link with nothing to pop.
+          <button
+            type="button"
+            aria-label="Back"
             className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            onClick={() => {
+              if (router.history.canGoBack()) {
+                router.history.back();
+              } else {
+                void router.navigate({ to: "/home" });
+              }
+            }}
           >
             <ArrowLeft />
-          </Link>
+          </button>
         }
       />
 

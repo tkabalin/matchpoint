@@ -105,7 +105,7 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
 // mounting the real `CoachMatchStatsPage` wrapper the actual route file
 // (`_authenticated.matches.$matchId.tsx`) uses — not a re-declared stand-in — so this
 // test exercises the same route-id-bound param resolution production does.
-function buildRouter(matchId: string) {
+function buildRouter(matchId: string, initialEntries = [`/matches/${matchId}`]) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -117,23 +117,28 @@ function buildRouter(matchId: string) {
     path: "/matches",
     component: () => <h1>Matches</h1>,
   });
+  const homeRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
+    path: "/home",
+    component: () => <h1>Home</h1>,
+  });
   const matchStatsRoute = createRoute({
     getParentRoute: () => authenticatedRoute,
     path: "/matches/$matchId",
     component: CoachMatchStatsPage,
   });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([matchesRoute, matchStatsRoute]),
+    authenticatedRoute.addChildren([matchesRoute, homeRoute, matchStatsRoute]),
   ]);
   return createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: [`/matches/${matchId}`] }),
+    history: createMemoryHistory({ initialEntries }),
   });
 }
 
-async function renderPage(matchId = match.id) {
+async function renderPage(matchId = match.id, initialEntries?: string[]) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = buildRouter(matchId);
+  const router = buildRouter(matchId, initialEntries);
   render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
@@ -155,14 +160,29 @@ test("shows the match's own summary and its result", async () => {
   expect(screen.getByRole("img", { name: "Won" })).toBeInTheDocument();
 });
 
-test("links back to the matches list", async () => {
+// A direct/deep link has nothing to pop, so the back control falls back to
+// `backTo` ("/matches" for the coach route) rather than popping nothing.
+test("falls back to the matches list for a direct link with no history to pop", async () => {
   stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
   const user = userEvent.setup({ delay: null });
   await renderPage();
 
-  await user.click(screen.getByRole("link", { name: "Back to matches" }));
+  await user.click(screen.getByRole("button", { name: "Back" }));
 
   expect(await screen.findByRole("heading", { name: "Matches" })).toBeInTheDocument();
+});
+
+// Reachable from a completed capture's "View results" too (new-match.tsx), which can
+// itself have been started from Home — a fixed "/matches" destination sent that visit
+// somewhere it didn't come from, so the back control has to pop real history instead.
+test("returns to Home when that's where the coach came from", async () => {
+  stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
+  const user = userEvent.setup({ delay: null });
+  await renderPage(match.id, ["/home", `/matches/${match.id}`]);
+
+  await user.click(screen.getByRole("button", { name: "Back" }));
+
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
 });
 
 test("opens on the Serve tab, with the same Serve/Rally toggle the player page uses", async () => {

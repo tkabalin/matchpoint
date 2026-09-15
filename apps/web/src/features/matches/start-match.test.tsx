@@ -42,7 +42,7 @@ function stubPlayers(response: () => Response) {
   );
 }
 
-function renderStartMatch() {
+function renderStartMatch({ initialEntries = ["/new-match"] }: { initialEntries?: string[] } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const authenticatedRoute = createRoute({
@@ -65,12 +65,17 @@ function renderStartMatch() {
     path: "/matches",
     component: () => <h1>Matches</h1>,
   });
+  const homeRoute = createRoute({
+    getParentRoute: () => authenticatedRoute,
+    path: "/home",
+    component: () => <h1>Home</h1>,
+  });
   const routeTree = rootRoute.addChildren([
-    authenticatedRoute.addChildren([startMatchRoute, setupRoute, matchesRoute]),
+    authenticatedRoute.addChildren([startMatchRoute, setupRoute, matchesRoute, homeRoute]),
   ]);
   const router = createRouter({
     routeTree,
-    history: createMemoryHistory({ initialEntries: ["/new-match"] }),
+    history: createMemoryHistory({ initialEntries }),
   });
   render(
     <QueryClientProvider client={queryClient}>
@@ -134,15 +139,40 @@ test("picking a player carries their id into match setup", async () => {
   expect(await screen.findByRole("heading", { name: "Match Setup" })).toBeInTheDocument();
 });
 
-test("the back control returns to the match list", async () => {
+// Reachable from Matches' own FAB and from Home's now (PrimaryMatchAction) — a fixed
+// "/matches" destination sent every Home-originated visit somewhere it didn't come
+// from, so the back control has to pop real history instead of hardcoding one.
+test("the back control returns to Matches when that's where the coach came from", async () => {
   const user = userEvent.setup({ delay: null });
   stubPlayers(() => Response.json([amahle]));
-  renderStartMatch();
+  renderStartMatch({ initialEntries: ["/matches", "/new-match"] });
   await screen.findByText("Amahle Nkosi");
 
-  await user.click(screen.getByLabelText("Back to matches"));
+  await user.click(screen.getByLabelText("Back"));
 
   expect(await screen.findByRole("heading", { name: "Matches" })).toBeInTheDocument();
+});
+
+test("the back control returns to Home when that's where the coach came from", async () => {
+  const user = userEvent.setup({ delay: null });
+  stubPlayers(() => Response.json([amahle]));
+  renderStartMatch({ initialEntries: ["/home", "/new-match"] });
+  await screen.findByText("Amahle Nkosi");
+
+  await user.click(screen.getByLabelText("Back"));
+
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
+});
+
+test("the back control falls back to Home for a direct link with no history to pop", async () => {
+  const user = userEvent.setup({ delay: null });
+  stubPlayers(() => Response.json([amahle]));
+  renderStartMatch({ initialEntries: ["/new-match"] });
+  await screen.findByText("Amahle Nkosi");
+
+  await user.click(screen.getByLabelText("Back"));
+
+  expect(await screen.findByRole("heading", { name: "Home" })).toBeInTheDocument();
 });
 
 // The roster is a request, so there is a window with nothing to list. Placeholders

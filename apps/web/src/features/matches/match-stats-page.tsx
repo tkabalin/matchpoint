@@ -1,6 +1,6 @@
 import { getMatchOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import {
   ArrowLeft,
   ChevronDown,
@@ -49,6 +49,7 @@ export function MatchStatsPage({
   matchId: string;
   backTo?: string;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("serve");
   const [set, setSet] = useState<SetFilter>("all");
   const [phase, setPhase] = useState<PhaseFilter>("full");
@@ -87,13 +88,26 @@ export function MatchStatsPage({
         title={`vs ${opponent}`}
         subtitle={detail}
         back={
-          <Link
-            to={backTo}
-            aria-label="Back to matches"
+          // Reachable from the matches list (match-card.tsx) and, since a completed
+          // capture's "View results" also lands here, from wherever that match was
+          // started — Home included. `backTo` is only the fallback for a direct/deep
+          // link with nothing to pop, same reasoning as `start-match.tsx`'s own back
+          // button; a fixed destination would send those other visits somewhere they
+          // didn't come from.
+          <button
+            type="button"
+            aria-label="Back"
             className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+            onClick={() => {
+              if (router.history.canGoBack()) {
+                router.history.back();
+              } else {
+                void router.navigate({ to: backTo });
+              }
+            }}
           >
             <ArrowLeft />
-          </Link>
+          </button>
         }
         trailing={
           match.result &&
