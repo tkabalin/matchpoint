@@ -42,7 +42,7 @@ test("playerFormValuesFrom maps every field, falling back for nullable ones", ()
     lastName: "Nkosi",
     dateOfBirth: "",
     gender: "",
-    hand: "right",
+    hand: "",
     notes: "",
   });
 });
@@ -79,6 +79,12 @@ test("buildPlayerUpdateBody sends null for notes cleared back to empty", () => {
   const values = { ...playerFormValuesFrom(player), notes: "   " };
 
   expect(buildPlayerUpdateBody(player, values)).toEqual({ notes: null });
+});
+
+test("buildPlayerUpdateBody sends null for dominant hand cleared back to unpicked", () => {
+  const values = { ...playerFormValuesFrom(player), hand: "" as const };
+
+  expect(buildPlayerUpdateBody(player, values)).toEqual({ dominant_hand: null });
 });
 
 test("buildPlayerUpdateBody can include several changed fields at once", () => {

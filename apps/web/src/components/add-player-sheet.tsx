@@ -90,7 +90,7 @@ export function AddPlayerSheet({
           date_of_birth: values.dateOfBirth,
           // Narrowed by `isValid` before this runs, so the empty member is gone.
           gender: values.gender as Exclude<PlayerFormValues["gender"], "">,
-          dominant_hand: values.hand,
+          dominant_hand: values.hand === "" ? null : values.hand,
           notes: values.notes.trim() === "" ? null : values.notes.trim(),
         },
       });

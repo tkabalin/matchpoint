@@ -5,6 +5,9 @@ import { dateOfBirthError } from "@/lib/date-of-birth";
 export type Hand = "right" | "left";
 /** "" is the unpicked state — gender is required, so it starts with nothing chosen. */
 export type GenderChoice = Gender | "";
+/** "" is the unpicked state — dominant hand is optional, and a preselected side
+ *  wouldn't actually be optional to the coach filling this in. */
+export type HandChoice = Hand | "";
 
 // Mirrored from the spec's maxLength, which the generated client types but does not
 // enforce — the same hand-mirroring caveat sign-up.tsx already carries.
@@ -16,7 +19,7 @@ export type PlayerFormValues = {
   lastName: string;
   dateOfBirth: string;
   gender: GenderChoice;
-  hand: Hand;
+  hand: HandChoice;
   notes: string;
 };
 
@@ -25,7 +28,7 @@ export const BLANK_PLAYER_FORM: PlayerFormValues = {
   lastName: "",
   dateOfBirth: "",
   gender: "",
-  hand: "right",
+  hand: "",
   notes: "",
 };
 
@@ -36,7 +39,7 @@ export function playerFormValuesFrom(player: PlayerRead): PlayerFormValues {
     lastName: player.last_name,
     dateOfBirth: player.date_of_birth ?? "",
     gender: player.gender ?? "",
-    hand: player.dominant_hand ?? "right",
+    hand: player.dominant_hand ?? "",
     notes: player.notes ?? "",
   };
 }
@@ -68,13 +71,14 @@ export function buildPlayerUpdateBody(
   const lastName = values.lastName.trim();
   const notes = values.notes.trim() === "" ? null : values.notes.trim();
   const gender = values.gender === "" ? null : values.gender;
+  const hand = values.hand === "" ? null : values.hand;
 
   if (firstName !== original.first_name) body.first_name = firstName;
   if (lastName !== original.last_name) body.last_name = lastName;
   if (values.dateOfBirth !== (original.date_of_birth ?? ""))
     body.date_of_birth = values.dateOfBirth;
   if (gender !== original.gender) body.gender = gender;
-  if (values.hand !== (original.dominant_hand ?? "right")) body.dominant_hand = values.hand;
+  if (hand !== original.dominant_hand) body.dominant_hand = hand;
   if (notes !== original.notes) body.notes = notes;
 
   return body;

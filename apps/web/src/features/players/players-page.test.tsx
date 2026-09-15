@@ -218,7 +218,9 @@ test("submitting the add-player form posts every required field", async () => {
   expect(body).toContain('"first_name":"Nomsa"');
   expect(body).toContain('"date_of_birth":"2008-04-12"');
   expect(body).toContain('"gender":"female"');
-  expect(body).toContain('"dominant_hand":"right"');
+  // Optional and left unpicked by fillRequiredFields, so it goes as null rather than
+  // as a side the coach never chose.
+  expect(body).toContain('"dominant_hand":null');
 });
 
 // Player setup happens ahead of time, not courtside, so the full record is asked
