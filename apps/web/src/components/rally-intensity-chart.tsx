@@ -175,7 +175,7 @@ export function RallyIntensityChart({ matchId }: { matchId: string }) {
 
           <div className="flex justify-between gap-3 text-xs font-medium text-foreground">
             <span>Low → dominant, fast points.</span>
-            <span className="text-right">High → grinding baseline battles.</span>
+            <span className="text-right">High → long, physical exchanges.</span>
           </div>
         </>
       )}

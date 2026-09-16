@@ -320,5 +320,5 @@ test("shows the rally-intensity hypnogram", async () => {
 
   expect(await screen.findByText("Rally intensity: how matches are going")).toBeInTheDocument();
   expect(screen.getByText("Low → dominant, fast points.")).toBeInTheDocument();
-  expect(screen.getByText("High → grinding baseline battles.")).toBeInTheDocument();
+  expect(screen.getByText("High → long, physical exchanges.")).toBeInTheDocument();
 });
