@@ -310,38 +310,43 @@ test("tapping a match row navigates to its stats page", async () => {
   expect(await screen.findByRole("heading", { name: "Match Stats" })).toBeInTheDocument();
 });
 
-test("the edit icon hands the match to the caller instead of navigating", async () => {
+test("the edit menu item hands the match to the caller instead of navigating", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
   const user = userEvent.setup({ delay: null });
   const { onEdit } = renderMatchList();
 
-  await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
+  await user.click(await screen.findByRole("button", { name: /Actions for the match/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
 
   expect(onEdit).toHaveBeenCalledWith(expect.objectContaining({ id: match.id }));
   expect(screen.queryByRole("heading", { name: "Match Stats" })).not.toBeInTheDocument();
 });
 
-test("the delete icon hands the match to the caller instead of navigating", async () => {
+test("the delete menu item hands the match to the caller instead of navigating", async () => {
   stubFetch({ matches: () => Response.json([match]), players: () => Response.json([player]) });
   const user = userEvent.setup({ delay: null });
   const { onDelete } = renderMatchList();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await user.click(await screen.findByRole("button", { name: /Actions for the match/ }));
+  await user.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
   expect(onDelete).toHaveBeenCalledWith(expect.objectContaining({ id: match.id }));
   expect(screen.queryByRole("heading", { name: "Match Stats" })).not.toBeInTheDocument();
 });
 
-test("the edit icon is still offered once the match has a result", async () => {
+test("the actions menu is still offered once the match has a result, with both Edit and Delete", async () => {
   stubFetch({
     matches: () => Response.json([{ ...match, result: "win" }]),
     players: () => Response.json([player]),
   });
+  const user = userEvent.setup({ delay: null });
   renderMatchList();
   await screen.findByText("T. Naidoo");
 
-  expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Delete the match/ })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: /Actions for the match/ }));
+
+  expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
 });
 
 test("filters by opponent name", async () => {

@@ -339,6 +339,22 @@ test("renders the welcome heading", async () => {
   expect(screen.getByRole("heading", { name: "Home", level: 1 })).toBeInTheDocument();
 });
 
+// #274: a failed roster query used to fall back to `[]` with nothing telling
+// the coach apart from a genuinely empty roster.
+test("shows an alert instead of a false empty roster when the players query fails", async () => {
+  stubFetch({
+    "/api/coaches/me": () => Response.json(coach),
+    "/api/players": () => new Response("nope", { status: 500 }),
+    "/api/matches": () => Response.json([]),
+    "/api/squad/analytics/members": () => Response.json([]),
+    ...FALLBACK_ROUTES,
+  });
+
+  await renderHome();
+
+  expect(await screen.findByText("Could not load your players.")).toBeInTheDocument();
+});
+
 test("greets the coach by name once loaded", async () => {
   stubAuthenticatedHome();
   await renderHome();
@@ -582,6 +598,37 @@ test("shows the squad's player count, with a matching row of tally icons", async
   expect(snapshot.getByText("2")).toBeInTheDocument();
   expect(snapshot.getByText("players")).toBeInTheDocument();
   expect(snapshot.getByTestId("player-tally").querySelectorAll("svg")).toHaveLength(2);
+});
+
+// #277: RosterTile used to run its own getPlayerOverviewOptions query per
+// roster player, purely to colour its win-rate underline — a request Home's
+// own listSquadMemberStatsOptions call already answers. This pins that the
+// per-player overview call is gone, not just that the underline still
+// renders something.
+test("roster tiles read the win-rate underline off the squad query, firing no per-player overview request", async () => {
+  const fetchMock = vi.fn().mockImplementation((input: Request) => {
+    const { pathname } = new URL(input.url);
+    const handler = Object.entries({
+      "/api/coaches/me": () => new Response(null, { status: 401 }),
+      "/api/players": () => Response.json(players),
+      "/api/matches": () => Response.json([]),
+      "/api/squad/analytics/members": () => Response.json([bestFormMember, worstFormMember]),
+      ...FALLBACK_ROUTES,
+    })
+      .filter(([path]) => pathname.includes(path))
+      .sort((a, b) => b[0].length - a[0].length)[0]?.[1];
+    if (!handler) throw new Error(`Unstubbed fetch: ${pathname}`);
+    return Promise.resolve(handler());
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await renderHome();
+  await screen.findByRole("region", { name: "Squad snapshot" });
+
+  const requestedPaths = fetchMock.mock.calls.map(
+    (call) => new URL((call[0] as Request).url).pathname,
+  );
+  expect(requestedPaths.some((path) => path.includes("/analytics/overview"))).toBe(false);
 });
 
 test("caps the player tally at 8 icons and shows the overflow count", async () => {

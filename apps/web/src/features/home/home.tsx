@@ -2,7 +2,6 @@ import type { PlayerRead, RallyStats, SquadMemberStats } from "@matchpoint/api-c
 import {
   getCurrentCoachOptions,
   getPlayerOptions,
-  getPlayerOverviewOptions,
   getRallyStatsOptions,
   listPlayersOptions,
   listSquadMemberStatsOptions,
@@ -40,6 +39,7 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { PlayerCard } from "@/components/player-card";
 import { PrimaryMatchAction } from "@/components/primary-match-action";
 import { ResultDots } from "@/components/result-dots";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -63,6 +63,7 @@ import {
 import type { AttentionResult } from "@/lib/analytics/types.provisional";
 import { dismissAttentionFlag, isAttentionFlagDismissed } from "@/lib/attention-flag-dismissed";
 import { initialsFor } from "@/lib/coach-initials";
+import { getErrorStatus } from "@/lib/error-status";
 import { getLastViewedPlayerId, setLastViewedPlayerId } from "@/lib/last-viewed-player";
 import { PATTERN_CLASS } from "@/lib/palette";
 import { useInView } from "@/lib/use-in-view";
@@ -83,7 +84,11 @@ function tallyIconSize(shownCount: number) {
 
 export function Home() {
   const { data: coach } = useQuery(getCurrentCoachOptions());
-  const { data: players } = useQuery(listPlayersOptions());
+  const {
+    data: players,
+    isError: rosterIsError,
+    error: rosterError,
+  } = useQuery(listPlayersOptions());
   const { data: squadStats } = useQuery(listSquadMemberStatsOptions());
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
@@ -206,6 +211,24 @@ export function Home() {
           onChange={(event) => setSearch(event.target.value)}
         />
       </InputGroup>
+
+      {/* #274: a failed roster query used to read as "no players yet" —
+          `roster` falls back to `[]` below regardless, so nothing further
+          down the page can tell a real failure apart from an empty squad
+          without this. */}
+      {rosterIsError && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {getErrorStatus(rosterError) === 401 ? (
+              <>
+                Your session has expired. <Link to="/">Sign in</Link> to see your players.
+              </>
+            ) : (
+              "Could not load your players."
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {search !== "" && (
         <div className="flex flex-col gap-2" role="list" aria-label="Search results">
@@ -438,7 +461,7 @@ export function Home() {
             slicing off the top of each avatar's swatch-halo ring. */}
         <div className="-mx-4 flex gap-4 overflow-x-auto px-4 py-1">
           {roster.map((player) => (
-            <RosterTile key={player.id} player={player} />
+            <RosterTile key={player.id} player={player} member={findMember(player.id)} />
           ))}
           <button
             type="button"
@@ -650,12 +673,20 @@ function AttentionCard({
   );
 }
 
-function RosterTile({ player }: { player: PlayerRead }) {
+function RosterTile({
+  player,
+  member,
+}: {
+  player: PlayerRead;
+  member: SquadMemberStats | undefined;
+}) {
   // The underline is a score band on form, which is what the palette rule reserves
   // these three colours for — a player with no form yet gets a neutral bar, not
-  // the worst band: `0` would misreport "struggling" for "no data yet".
-  const { data: overview } = useQuery(getPlayerOverviewOptions({ path: { player_id: player.id } }));
-  const form = overview?.form?.value ?? null;
+  // the worst band: `0` would misreport "struggling" for "no data yet". Reads off
+  // the squad query `Home` already fetches for every other roster row (#277)
+  // instead of its own per-player overview request, which used to fire once per
+  // roster tile on every Home load.
+  const form = member ? periodWinPercent(member.period_record) : null;
   const tone =
     form === null
       ? "bg-muted"

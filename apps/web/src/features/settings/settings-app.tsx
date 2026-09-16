@@ -7,13 +7,12 @@ import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/componen
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useTheme } from "@/lib/theme";
 
-import { StubRow } from "./stub-row";
-
 /** App (#178, wireframe 1c). Install MatchPoint is real — #130 already built
  * `/install`, this just gives it a styled row instead of the old plain-text link.
  * Appearance is a real Light/Dark toggle (#182, #200) — no "System" option, since
- * the theme is decided solely by this choice, never by the OS preference.
- * Notifications is still a stub: no notifications system to configure yet. */
+ * the theme is decided solely by this choice, never by the OS preference. No
+ * Notifications row (#208): there's no notifications system to configure, and
+ * none planned, so the stub was removed rather than left waiting on nothing. */
 export function SettingsApp() {
   const [theme, setTheme] = useTheme();
 
@@ -62,7 +61,6 @@ export function SettingsApp() {
             </ToggleGroup>
           </ItemActions>
         </Item>
-        <StubRow label="Notifications" />
       </ItemGroup>
     </AppPage>
   );

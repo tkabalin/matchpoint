@@ -79,6 +79,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** Opens the match row's kebab menu and clicks "Edit" or "Delete" (#292: both
+ * used to be their own always-visible icon buttons). */
+async function clickMatchMenuItem(
+  user: ReturnType<typeof userEvent.setup>,
+  name: "Edit" | "Delete",
+) {
+  await user.click(await screen.findByRole("button", { name: /Actions for the match/ }));
+  await user.click(await screen.findByRole("menuitem", { name }));
+}
+
 test("renders the page heading and the match list", async () => {
   stubFetch({ "/api/matches": () => Response.json([]) });
 
@@ -114,13 +124,15 @@ test("tapping a match row navigates to its stats page", async () => {
 
 // Finishing a match freezes its result and scoring system, not its metadata (#228),
 // so the control stays: it is the sheet that locks the one field that cannot move.
-test("the edit icon is still offered once the match has a result", async () => {
+test("the edit menu item is still offered once the match has a result", async () => {
   stubFetch({ "/api/matches": () => Response.json([{ ...match, result: "win" }]) });
+  const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
   await screen.findByText("T. Naidoo");
+  await user.click(screen.getByRole("button", { name: /Actions for the match/ }));
 
-  expect(screen.getByRole("button", { name: /Edit details for the match/ })).toBeInTheDocument();
+  expect(await screen.findByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
 });
 
 test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what changed", async () => {
@@ -138,7 +150,7 @@ test("the edit icon opens the edit sheet, pre-filled, and PATCHes only what chan
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
+  await clickMatchMenuItem(user, "Edit");
 
   const opponentField = await screen.findByRole("textbox", { name: "Opponent" });
   expect(opponentField).toHaveValue("T. Naidoo");
@@ -168,7 +180,7 @@ test("a completed match edits its metadata, with the scoring system locked", asy
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Edit details for the match/ }));
+  await clickMatchMenuItem(user, "Edit");
 
   // The rulebook the points were scored under cannot move, and says why.
   expect(await screen.findByRole("combobox", { name: "Scoring system" })).toBeDisabled();
@@ -197,7 +209,7 @@ test("Cancel closes the delete sheet without deleting", async () => {
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Cancel" }));
 
@@ -217,7 +229,7 @@ test("Delete match asks for confirmation before sending anything", async () => {
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
 
   expect(await screen.findByRole("heading", { name: "Delete this match?" })).toBeInTheDocument();
   expect(deletes).toEqual([]);
@@ -240,7 +252,7 @@ test("confirming deletes the match and it leaves the list", async () => {
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
@@ -259,7 +271,7 @@ test("a failed delete says so and keeps the match", async () => {
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
@@ -284,7 +296,7 @@ test("the delete names this device, so its own capture claim cannot block it", a
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 
@@ -320,7 +332,7 @@ test("a match being captured on another device offers to release and delete anyw
   const user = userEvent.setup({ delay: null });
   renderMatchesPage();
 
-  await user.click(await screen.findByRole("button", { name: /Delete the match/ }));
+  await clickMatchMenuItem(user, "Delete");
   await screen.findByRole("heading", { name: "Delete this match?" });
   await user.click(screen.getByRole("button", { name: "Delete match" }));
 

@@ -100,6 +100,7 @@ export function MatchStatsPage({
     player && `vs ${opponent}`,
     formatPlayedOn(match.played_on),
     match.surface && SURFACE_LABEL[match.surface],
+    match.event,
   ]
     .filter(Boolean)
     .join(" · ");

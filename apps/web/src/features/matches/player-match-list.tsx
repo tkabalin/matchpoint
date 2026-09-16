@@ -51,7 +51,7 @@ export function PlayerMatchList() {
   return (
     <div className="flex flex-col gap-2">
       {matches.map((match) => (
-        <MatchCard key={match.id} match={match} player={player} />
+        <MatchCard key={match.id} match={match} player={player} matchHref="/me/matches/$matchId" />
       ))}
     </div>
   );

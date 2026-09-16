@@ -62,11 +62,12 @@ test("Install MatchPoint links to the real install guide", async () => {
   expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
 });
 
-test("Notifications is still a stub, not interactive", async () => {
+// #208: no notifications system exists or is planned, so the stub row that
+// used to promise one "soon" was removed rather than left waiting on nothing.
+test("has no Notifications row", async () => {
   await renderPage();
 
-  expect(screen.getByText("Notifications")).toBeInTheDocument();
-  expect(screen.getByText("soon")).toBeInTheDocument();
+  expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
 });
 
 test("Appearance toggles between light and dark, and persists the choice", async () => {

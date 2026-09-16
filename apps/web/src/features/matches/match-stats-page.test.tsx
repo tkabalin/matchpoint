@@ -196,6 +196,26 @@ test("names the player whose match it is, with the opponent alongside the rest",
   expect(screen.getByText("vs T. Naidoo · Aug 10 · Hard")).toBeInTheDocument();
 });
 
+// #291: a match's Event was captured (createMatch/editMatchSheet) but never
+// shown anywhere.
+test("includes the match's event in the subtitle when one was recorded", async () => {
+  stubFetch({
+    [`/api/matches/${match.id}`]: () => Response.json({ ...match, event: "Club Championship" }),
+  });
+
+  await renderPage();
+
+  expect(screen.getByText("Aug 10 · Hard · Club Championship")).toBeInTheDocument();
+});
+
+test("shows no stray separator in the subtitle when a match has no event", async () => {
+  stubFetch({ [`/api/matches/${match.id}`]: () => Response.json({ ...match, event: null }) });
+
+  await renderPage();
+
+  expect(screen.getByText("Aug 10 · Hard")).toBeInTheDocument();
+});
+
 test("falls back to the opponent as the title where the roster has no such player", async () => {
   stubFetch({ [`/api/matches/${match.id}`]: () => Response.json(match) });
 

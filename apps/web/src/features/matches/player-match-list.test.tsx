@@ -9,6 +9,7 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { PlayerMatchList } from "./player-match-list";
@@ -64,7 +65,12 @@ function renderPlayerMatchList() {
     path: "/me/matches",
     component: PlayerMatchList,
   });
-  const routeTree = rootRoute.addChildren([matchesRoute]);
+  const matchStatsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/me/matches/$matchId",
+    component: () => <h1>Match Stats</h1>,
+  });
+  const routeTree = rootRoute.addChildren([matchesRoute, matchStatsRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/me/matches"] }),
@@ -80,15 +86,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the player's own matches, with no Edit or Delete controls", async () => {
+test("renders the player's own matches, with no actions menu", async () => {
   stubFetch({ matches: () => Response.json([match]) });
 
   renderPlayerMatchList();
 
   expect(await screen.findByText("Nomsa Dube")).toBeInTheDocument();
   expect(screen.getByText("T. Naidoo")).toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Edit details/ })).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Delete the match/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Actions for the match/ })).not.toBeInTheDocument();
+});
+
+// #273: MatchCard defaults to the coach-only `/matches/$matchId`, which 401s a
+// player session — the player's own list has to override it.
+test("tapping a match row navigates to the player's own stats route, not the coach one", async () => {
+  stubFetch({ matches: () => Response.json([match]) });
+  const user = userEvent.setup({ delay: null });
+  renderPlayerMatchList();
+  await screen.findByText("T. Naidoo");
+
+  await user.click(screen.getByRole("link"));
+
+  expect(await screen.findByRole("heading", { name: "Match Stats" })).toBeInTheDocument();
 });
 
 test("shows an empty state with no matches yet", async () => {
