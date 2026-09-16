@@ -59,6 +59,14 @@ export default defineConfig({
   use: {
     baseURL: "http://localhost:5173",
     trace: "on-first-retry",
+    // Every click waits for the element's box to stop moving, and the runner's
+    // frames are slow enough that a sheet's 200ms slide-in costs seconds rather
+    // than milliseconds to wait out (worst measured: 3.5s for one tap on
+    // mobile-webkit). app.css collapses transitions and animations under this, so
+    // the box is already where it will stay, and exempts the capture flash there so
+    // the specs that assert it still see what a coach sees. Under contextOptions
+    // because the flat `reducedMotion` option is gone in 1.62.
+    contextOptions: { reducedMotion: "reduce" },
   },
   projects: [
     // One sign-up for the whole run rather than one per test: the flow costs an Argon2

@@ -60,7 +60,13 @@ test("a game reaching deuce shows AD before the win", async ({ page }) => {
   await expect(opponentCall()).toHaveText("40");
 
   await skipPoint(page, true);
-  await expect(page.getByText("Game won")).toBeVisible();
+  const flash = page.getByText("Game won");
+  await expect(flash).toBeVisible();
+  // Opacity, not just visibility, because the suite runs under reduced motion
+  // (playwright.config.ts) and the flash's keyframe ends at 0: collapsing it rather
+  // than exempting it would hold that end frame, and toBeVisible cannot see the
+  // difference. A coach who asked for less motion still gets the confirmation.
+  await expect(flash).toHaveCSS("opacity", "1");
   await expect(trackedRow.getByRole("cell").nth(0)).toHaveText("1");
 });
 
