@@ -321,7 +321,7 @@ test("shows an empty state instead of a blank grid when no player has computable
   ).toBeInTheDocument();
 });
 
-test("zooms into a crowded plot on tap, and back out again", async () => {
+test("zooms into a crowded plot on tap, and back out again, without growing the avatars", async () => {
   stubFetch({
     [shortRally.id]: shortRallyStats,
     [noRallyData.id]: noRallyDataStats,
@@ -334,17 +334,23 @@ test("zooms into a crowded plot on tap, and back out again", async () => {
   const zoomIn = screen.getByRole("button", { name: "Zoom in on player insights" });
   const zoomOut = screen.getByRole("button", { name: "Zoom out on player insights" });
   const link = screen.getByRole("link", { name: "Alex Chen's player insights" });
-  const zoomLayer = link.parentElement!;
 
   expect(zoomOut).toBeDisabled();
-  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
+  // Base position from the group-scaled test above: left 90%, top 90%.
+  expect(link).toHaveStyle({ left: "90%", top: "90%" });
 
   await user.click(zoomIn);
-  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1.5)" });
+  // Re-derived at scale 1.5 with no pan yet: 50 + 1.5 * (90 - 50) = 110 —
+  // spread further from the plot's own centre, not just magnified in place.
+  expect(link).toHaveStyle({ left: "110%", top: "110%" });
   expect(zoomOut).not.toBeDisabled();
+  // The whole point of zooming into a cluster is separating avatars that are
+  // a fixed size — not growing them proportionally along with the gap
+  // between them, which a CSS `transform: scale()` on the plot used to do.
+  expect(within(link).getByText("AC")).toHaveClass("size-7");
 
   await user.click(zoomOut);
-  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
+  expect(link).toHaveStyle({ left: "90%", top: "90%" });
   expect(zoomOut).toBeDisabled();
 });
 
@@ -383,11 +389,13 @@ test("pinching off-centre zooms into that spot, not the box's own centre", async
   fireEvent.pointerMove(box, { pointerId: 1, clientX: 110, clientY: 60 });
   fireEvent.pointerMove(box, { pointerId: 2, clientX: 190, clientY: 60 });
 
-  // Scale doubles (80px apart / 40px apart), and the pan that keeps (150, 60)
-  // fixed under the still-centred-on-(150,60) fingers at that new scale is
-  // exactly (-50, 40) — nothing close to the (0, 0) a centre-only zoom would
-  // leave it at.
-  expect(zoomLayer).toHaveStyle({ transform: "translate(-50px, 40px) scale(2)" });
+  // Scale doubles (80px apart / 40px apart) with a pan of (-50, 40) that
+  // keeps (150, 60) fixed under the still-centred-on-(150,60) fingers at
+  // that new scale — in a 200×200 box that's -25%/+20% of its own size, on
+  // top of Alex Chen's own 90%/90% base position: 50 + 2 * (90 - 50) - 25 =
+  // 105 (left), 50 + 2 * (90 - 50) + 20 = 150 (top). Nothing close to a
+  // centre-only zoom, which would leave the pan terms at 0.
+  expect(link).toHaveStyle({ left: "105%", top: "150%" });
 });
 
 test("zooming all the way in disables further zoom-in", async () => {

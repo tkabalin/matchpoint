@@ -124,6 +124,11 @@ export function PlayerInsightsCard({
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  // The box's own pixel size, captured alongside `pan` whenever a gesture
+  // measures it — reading `boxRef.current` during render itself isn't
+  // allowed, so this is what lets the percentage-space zoom below convert
+  // `pan`'s pixels into a percentage without a ref read at render time.
+  const [boxSize, setBoxSize] = useState({ width: 1, height: 1 });
 
   function pointerDistance(): number {
     const [a, b] = [...pointers.current.values()];
@@ -164,6 +169,7 @@ export function PlayerInsightsCard({
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const box = boxRef.current?.getBoundingClientRect();
     if (!box) return;
+    setBoxSize({ width: box.width, height: box.height });
 
     if (pointers.current.size === 2 && pinchStart.current) {
       const { distance, scale: startScale, anchor } = pinchStart.current;
@@ -222,6 +228,26 @@ export function PlayerInsightsCard({
       if (next === MIN_SCALE) setPan({ x: 0, y: 0 });
       return next;
     });
+  }
+
+  // Where a raw `scaleToGroupRange` percentage actually renders once zoomed:
+  // spreading two avatars apart, at a fixed size, is the whole point of
+  // zooming into a cluster, but a CSS `transform: scale()` on the plotted
+  // layer magnifies the avatars themselves right along with the gap between
+  // them — same overlap, same amount of overlap relative to icon size, just
+  // bigger. This instead re-derives each avatar's *position* at the zoomed
+  // scale, in the same 0-100% coordinate space `scaleToGroupRange` already
+  // outputs, so an avatar's own rendered size (still governed solely by
+  // `rallyLengthSizeBucket`) never changes with zoom — only the spacing does.
+  // `pan` is already tracked in on-screen pixels by the gesture handlers
+  // above; converting it to a percentage of the box's own size (`boxSize`,
+  // captured alongside `pan` itself) is what lets the same pinch/drag math
+  // drive this percentage-space zoom instead of a pixel-space CSS transform.
+  const panPercentX = (pan.x / boxSize.width) * 100;
+  const panPercentY = (pan.y / boxSize.height) * 100;
+
+  function zoomedPercent(base: number, panPercent: number): number {
+    return 50 + scale * (base - 50) + panPercent;
   }
 
   const results = useQueries({
@@ -301,26 +327,22 @@ export function PlayerInsightsCard({
                 onPointerUp={endPointer}
                 onPointerCancel={endPointer}
               >
-                {/* The frame above stays fixed; only this inner layer pans and
-                    scales, so zooming reads as looking closer into the same
-                    plot rather than the box itself growing. Sized to exactly
-                    fill the frame (not just `inset-0`'s default) so the
-                    avatars' own `left`/`top` percentages keep resolving
-                    against the frame's real size regardless of the
-                    transform, which only affects painting, not layout. */}
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
-                    transformOrigin: "center center",
-                  }}
-                >
+                {/* No CSS transform on this layer any more: zooming re-derives
+                    each avatar's own position percentage (see `zoomedPercent`
+                    above) rather than visually magnifying the whole plot, so
+                    an avatar's rendered size never changes with zoom, only
+                    its distance from its neighbours. A position past 0-100%
+                    is simply clipped by the frame's own `overflow-hidden`,
+                    the same way panning past the edge of a photo would be. */}
+                <div className="absolute inset-0">
                   <div
-                    className="absolute inset-x-0 top-1/2 h-0.5 bg-muted-foreground/40"
+                    className="absolute inset-x-0 h-0.5 bg-muted-foreground/40"
+                    style={{ top: `${zoomedPercent(50, panPercentY)}%` }}
                     aria-hidden="true"
                   />
                   <div
-                    className="absolute inset-y-0 left-1/2 w-0.5 bg-muted-foreground/40"
+                    className="absolute inset-y-0 w-0.5 bg-muted-foreground/40"
+                    style={{ left: `${zoomedPercent(50, panPercentX)}%` }}
                     aria-hidden="true"
                   />
 
@@ -333,7 +355,10 @@ export function PlayerInsightsCard({
                         to="/players/$playerId"
                         params={{ playerId: player.id }}
                         className="absolute -translate-x-1/2 -translate-y-1/2"
-                        style={{ left: `${left}%`, top: `${top}%` }}
+                        style={{
+                          left: `${zoomedPercent(left, panPercentX)}%`,
+                          top: `${zoomedPercent(top, panPercentY)}%`,
+                        }}
                         aria-label={`${player.first_name} ${player.last_name}'s player insights`}
                       >
                         <PlayerAvatar
