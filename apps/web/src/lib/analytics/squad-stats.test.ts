@@ -18,10 +18,8 @@ import {
   periodWinPercent,
   pickBestWorst,
   rallyLengthSizeBucket,
-  resiliencePercent,
   scaleToGroupRange,
   squadHeadline,
-  tacticalEfficiencyPercent,
 } from "./squad-stats";
 import type { SquadStatsEntry } from "./types.provisional";
 
@@ -37,8 +35,6 @@ const alex: Named = {
   forcedToUnforcedRatio: 1.6,
   firstServeInPercent: 68,
   matchesLoggedThisPeriod: 10,
-  forcedErrorsSuffered: 6,
-  pointsWon: 80,
 };
 const priya: Named = {
   playerId: "priya",
@@ -50,8 +46,6 @@ const priya: Named = {
   forcedToUnforcedRatio: 0.9,
   firstServeInPercent: 46,
   matchesLoggedThisPeriod: 9,
-  forcedErrorsSuffered: 3,
-  pointsWon: 40,
 };
 const rookie: Named = {
   playerId: "rookie",
@@ -63,44 +57,18 @@ const rookie: Named = {
   forcedToUnforcedRatio: 1.0,
   firstServeInPercent: 55,
   matchesLoggedThisPeriod: 1,
-  forcedErrorsSuffered: 1,
-  pointsWon: 10,
 };
 
 test("metricValue and metricDisplay resolve each metric key", () => {
   expect(metricValue(alex, "record")).toBeCloseTo(80);
   expect(metricValue(alex, "forcedToUnforced")).toBe(1.6);
   expect(metricValue(alex, "firstServe")).toBe(68);
-  expect(metricValue(alex, "pressureIndex")).toBe(6);
-  expect(metricValue(alex, "resilience")).toBeCloseTo(37.5);
-  expect(metricValue(alex, "tacticalEfficiency")).toBeCloseTo(20);
 
   // "record" displays the win % it sorts by, not the "W–L" string — showing
   // both risked disagreeing (a 3–2 player can outrank a displayed 5–5 one).
   expect(metricDisplay(alex, "record")).toBe("80%");
   expect(metricDisplay(alex, "forcedToUnforced")).toBe("1.60");
   expect(metricDisplay(alex, "firstServe")).toBe("68%");
-  expect(metricDisplay(alex, "resilience")).toBe("38%");
-  expect(metricDisplay(alex, "tacticalEfficiency")).toBe("20%");
-});
-
-// Pressure Index is a signed difference (forced - unforced), not a
-// percentage — a negative or zero balance both need to read plainly, not as
-// "-0" or a fabricated sign on zero.
-test("metricDisplay signs a positive Pressure Index and leaves zero/negative unsigned", () => {
-  expect(metricDisplay(alex, "pressureIndex")).toBe("+6");
-  expect(metricDisplay({ ...alex, forcedCount: 10, unforcedCount: 10 }, "pressureIndex")).toBe("0");
-  expect(metricDisplay({ ...alex, forcedCount: 4, unforcedCount: 10 }, "pressureIndex")).toBe("-6");
-});
-
-test("resiliencePercent is a forced share of a player's own errors, null when neither has happened", () => {
-  expect(resiliencePercent({ forcedErrorsSuffered: 3, unforcedCount: 1 })).toBeCloseTo(75);
-  expect(resiliencePercent({ forcedErrorsSuffered: 0, unforcedCount: 0 })).toBeNull();
-});
-
-test("tacticalEfficiencyPercent is forcing shots induced over points won, null with no points won yet", () => {
-  expect(tacticalEfficiencyPercent({ forcedCount: 16, pointsWon: 80 })).toBeCloseTo(20);
-  expect(tacticalEfficiencyPercent({ forcedCount: 5, pointsWon: 0 })).toBeNull();
 });
 
 test("metricDisplay shows an em dash for a metric that isn't computable yet", () => {
@@ -136,7 +104,8 @@ test("squadHeadline returns a zeroed record, zeroed counts and a null rate for a
 
 // No minimum-matches threshold any more: every player is ranked, including
 // one with a single match logged (rookie: 1-0, a 100% record outranks
-// everyone despite the small sample).
+// everyone despite the small sample) — a null metric value sorts last rather
+// than being excluded.
 test("buildLeaderboard ranks every player by the selected metric, no threshold", () => {
   const rows = buildLeaderboard([alex, priya, rookie], "record", "");
 
@@ -147,31 +116,17 @@ test("buildLeaderboard ranks every player by the selected metric, no threshold",
 });
 
 test("buildLeaderboard reorders when the metric key changes", () => {
-  // alex: 16-10=+6, priya: 9-10=-1, rookie: 2-2=0.
-  const byPressure = buildLeaderboard([alex, priya, rookie], "pressureIndex", "");
+  const byForced = buildLeaderboard([alex, priya], "forcedToUnforced", "");
 
-  expect(byPressure.map((row) => row.name)).toEqual(["Alex Chen", "Rookie Reed", "Priya Singh"]);
+  expect(byForced.map((row) => row.name)).toEqual(["Alex Chen", "Priya Singh"]);
 });
 
-// #267: a player with no computable value for the selected metric (nobody's
-// logged either kind of error yet) is excluded from that metric's
-// leaderboard entirely, not parked in a last-place "—" row — a player with
-// zero errors either way isn't the same thing as this squad's steadiest or
-// its most mistake-prone.
-test("buildLeaderboard excludes a player with no computable metric value entirely", () => {
-  const noErrorsYet: Named = { ...rookie, forcedErrorsSuffered: 0, unforcedCount: 0 };
-  const rows = buildLeaderboard([alex, noErrorsYet], "resilience", "");
+test("buildLeaderboard puts a null metric value last, displayed as an em dash", () => {
+  const noRatioYet: Named = { ...rookie, forcedToUnforcedRatio: null };
+  const rows = buildLeaderboard([alex, noRatioYet], "forcedToUnforced", "");
 
-  expect(rows.map((row) => row.name)).toEqual(["Alex Chen"]);
-});
-
-// firstServe used to sort a null value last; it's now excluded the same way
-// every other metric is, for consistency.
-test("buildLeaderboard excludes a null firstServe value the same way as the newer metrics", () => {
-  const noServeDataYet: Named = { ...rookie, firstServeInPercent: null };
-  const rows = buildLeaderboard([alex, noServeDataYet], "firstServe", "");
-
-  expect(rows.map((row) => row.name)).toEqual(["Alex Chen"]);
+  expect(rows.map((row) => row.name)).toEqual(["Alex Chen", "Rookie Reed"]);
+  expect(rows[1]).toMatchObject({ rank: 2, metricValue: null });
 });
 
 test("buildLeaderboard filters by search", () => {

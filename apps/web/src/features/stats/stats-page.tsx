@@ -12,10 +12,7 @@ import { ChipRow } from "@/components/chip-row";
 import { AppPage, PageHeader } from "@/components/page-shell";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import type {
-  SquadLeaderboardMetricKey,
-  SquadTrendMetricKey,
-} from "@/lib/analytics/types.provisional";
+import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
 import { SURFACE_ICON } from "@/lib/tennis-labels";
 
@@ -50,9 +47,9 @@ export function StatsPage() {
   const { data: squadStats } = useQuery(
     listSquadMemberStatsOptions({ query: { surface: surfaceQuery } }),
   );
-  const [leaderboardMetric, setLeaderboardMetric] = useState<SquadLeaderboardMetricKey>("record");
+  const [leaderboardMetric, setLeaderboardMetric] = useState<SquadMetricKey>("record");
   const [search, setSearch] = useState("");
-  const [trendMetric, setTrendMetric] = useState<SquadTrendMetricKey>("record");
+  const [trendMetric, setTrendMetric] = useState<SquadMetricKey>("record");
 
   if (isError) {
     return (
@@ -98,8 +95,6 @@ export function StatsPage() {
       forcedToUnforcedRatio: member?.period_forced_to_unforced_ratio ?? null,
       firstServeInPercent: member?.period_first_serve_in_percent ?? null,
       matchesLoggedThisPeriod: member?.matches_logged_this_period ?? 0,
-      forcedErrorsSuffered: member?.period_forced_errors_suffered ?? 0,
-      pointsWon: member?.period_points_won ?? 0,
     };
   });
 

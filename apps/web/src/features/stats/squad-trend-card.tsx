@@ -18,20 +18,17 @@ import {
   METRIC_PATTERN,
   fillSquadTrendGaps,
 } from "@/lib/analytics/squad-stats";
-import type { SquadTrendMetricKey } from "@/lib/analytics/types.provisional";
+import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
 import { getErrorStatus } from "@/lib/error-status";
 import { CATEGORICAL_STROKE_DASH, PATTERN_VAR } from "@/lib/palette";
 
-// Only the trend's own three metrics — not every `METRIC_LABEL` entry, which
-// (since #267) also carries the leaderboard-only ones the squad trend wire
-// endpoint has no way to plot.
-const TREND_METRICS: SquadTrendMetricKey[] = ["record", "forcedToUnforced", "firstServe"];
-const METRIC_OPTIONS: { value: SquadTrendMetricKey; label: string; icon: LucideIcon }[] =
-  TREND_METRICS.map((value) => ({ value, label: METRIC_LABEL[value], icon: METRIC_ICON[value] }));
+const METRIC_OPTIONS: { value: SquadMetricKey; label: string; icon: LucideIcon }[] = (
+  Object.entries(METRIC_LABEL) as [SquadMetricKey, string][]
+).map(([value, label]) => ({ value, label, icon: METRIC_ICON[value] }));
 
 // The chip row's own vocabulary (shared with the leaderboard) isn't the
 // wire's — the API's `SquadMetric` enum spells the last two differently.
-const API_METRIC: Record<SquadTrendMetricKey, SquadMetric> = {
+const API_METRIC: Record<SquadMetricKey, SquadMetric> = {
   record: "record",
   forcedToUnforced: "forced_to_unforced",
   firstServe: "first_serve_in",
@@ -45,8 +42,8 @@ export function SquadTrendCard({
   onMetricChange,
   surface,
 }: {
-  metric: SquadTrendMetricKey;
-  onMetricChange: (metric: SquadTrendMetricKey) => void;
+  metric: SquadMetricKey;
+  onMetricChange: (metric: SquadMetricKey) => void;
   /** Narrows the pooled weekly tallies to one surface via the real `surface`
    *  axis (#225) — undefined means every surface, matching the shared filter
    *  row above this card on the squad stats page. */
@@ -85,7 +82,7 @@ export function SquadTrendCard({
         <h3 className="text-base font-bold text-foreground">Squad trend</h3>
       </div>
 
-      <ChipRow<SquadTrendMetricKey>
+      <ChipRow<SquadMetricKey>
         aria-label="Trend metric"
         options={METRIC_OPTIONS}
         value={metric}

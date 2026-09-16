@@ -99,49 +99,17 @@ export interface SquadStatsEntry {
    *  API's own percentage is. */
   firstServeInPercent: number | null;
   matchesLoggedThisPeriod: number;
-  /** Errors the opponent forced onto this player — Resilience's own
-   *  denominator input alongside `unforcedCount` above (#267). */
-  forcedErrorsSuffered: number;
-  /** Points this player won this period — Tactical Efficiency's own
-   *  denominator (#267). */
-  pointsWon: number;
 }
 
-/** Which squad-wide metric is selected. The leaderboard and the trend card
- *  each only support a subset of these (see `SquadLeaderboardMetricKey`/
- *  `SquadTrendMetricKey` below) — this wider union is only what
- *  `metricValue`/`metricDisplay`/`METRIC_LABEL`/etc. in `squad-stats.ts` are
- *  keyed by, since that logic is shared between both cards. */
-export type SquadMetricKey =
-  | "record"
-  | "forcedToUnforced"
-  | "firstServe"
-  | "pressureIndex"
-  | "resilience"
-  | "tacticalEfficiency";
-
-/** The trend chart's own metric set (#267) — unchanged by the leaderboard's
- *  replacement below, since the squad trend wire endpoint (`SquadMetric`)
- *  can only ever serve these three; it has no way to trend Pressure Index,
- *  Resilience or Tactical Efficiency. */
-export type SquadTrendMetricKey = "record" | "forcedToUnforced" | "firstServe";
-
-/** The leaderboard's own metric set (#267) — replaces the old
- *  Forced:Unforced ratio-only leaderboard with three metrics scoped to the
- *  leaderboard specifically (Pressure Index keeps the same underlying
- *  forced/unforced numbers, just ranked by difference instead of ratio, so
- *  it still needs no percentage display). */
-export type SquadLeaderboardMetricKey =
-  "record" | "firstServe" | "pressureIndex" | "resilience" | "tacticalEfficiency";
+/** Which of the three squad-wide metrics is selected — shared vocabulary
+ *  between the leaderboard's own filter chips and the trend card's. */
+export type SquadMetricKey = "record" | "forcedToUnforced" | "firstServe";
 
 /** One row of the Squad stats leaderboard, after the selected metric has
- *  been resolved to a single sortable number. No minimum-matches threshold
- *  gates this — a player with *some* data still ranks. A player with no
- *  computable value at all for the selected metric (#267: e.g. Resilience
- *  with no errors either way yet) is excluded from the leaderboard entirely
- *  by `buildLeaderboard` before this row shape exists, rather than kept as a
- *  null-valued row — `metricValue` stays nullable in the type only because
- *  nothing prevents a caller from constructing one outside that function. */
+ *  been resolved to a single sortable number. Every player is ranked — no
+ *  minimum-matches threshold gates this any more; a player with no data yet
+ *  for the selected metric just sorts last, with a null `metricValue`
+ *  displayed as "—" rather than a fabricated one. */
 export interface SquadLeaderboardRow {
   playerId: string;
   name: string;

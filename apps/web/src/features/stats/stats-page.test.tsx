@@ -213,19 +213,16 @@ test("switching the leaderboard metric chip reorders the ranked rows", async () 
   await renderPage();
   await screen.findAllByText(/Chen|Singh|Rivera|Ross/);
 
-  await user.click(within(leaderboardChips()).getByRole("button", { name: "Pressure Index" }));
+  await user.click(within(leaderboardChips()).getByRole("button", { name: "Forced : Unforced" }));
 
-  // Ranked by forced - unforced: Chen 16-10=+6, Ross 2-2=0, Rivera 9-10=-1, Singh 7-10=-3.
   const rows = screen.getAllByText(/Chen|Singh|Rivera|Ross/);
   expect(rows.map((row) => row.textContent)).toEqual([
     "Alex Chen",
-    "Rookie Ross",
     "Sam Rivera",
     "Priya Singh",
+    "Rookie Ross",
   ]);
-  // The row shows the split counts, not the difference, for this metric —
-  // the same needle visual and text convention the old Forced:Unforced
-  // leaderboard metric it replaced already used.
+  // The row shows the split counts, not the ratio, for this metric.
   expect(screen.getByText("16 | 10")).toBeInTheDocument();
 });
 
@@ -246,40 +243,16 @@ test("the trend card's metric selection is independent of the leaderboard's", as
   const user = userEvent.setup({ delay: null });
   await renderPage();
 
-  await user.click(within(leaderboardChips()).getByRole("button", { name: "Pressure Index" }));
+  await user.click(within(leaderboardChips()).getByRole("button", { name: "Forced : Unforced" }));
 
   expect(
     within(trendChips()).getByRole("button", { name: "Win percentage", pressed: true }),
   ).toBeInTheDocument();
   expect(
     within(leaderboardChips()).getByRole("button", {
-      name: "Pressure Index",
+      name: "Forced : Unforced",
       pressed: true,
     }),
-  ).toBeInTheDocument();
-});
-
-// #267: the trend card kept its own three metrics (the wire endpoint can't
-// trend the leaderboard-only ones), while the leaderboard dropped
-// Forced:Unforced in favor of its own five-metric set.
-test("the trend chip row still offers Forced : Unforced; the leaderboard's own row no longer does", async () => {
-  stubFetch();
-  await renderPage();
-
-  expect(
-    within(trendChips()).getByRole("button", { name: "Forced : Unforced" }),
-  ).toBeInTheDocument();
-  expect(
-    within(leaderboardChips()).queryByRole("button", { name: "Forced : Unforced" }),
-  ).not.toBeInTheDocument();
-  expect(
-    within(leaderboardChips()).getByRole("button", { name: "Pressure Index" }),
-  ).toBeInTheDocument();
-  expect(
-    within(leaderboardChips()).getByRole("button", { name: "Resilience" }),
-  ).toBeInTheDocument();
-  expect(
-    within(leaderboardChips()).getByRole("button", { name: "Tactical Efficiency" }),
   ).toBeInTheDocument();
 });
 
@@ -371,42 +344,6 @@ test("picking a surface re-fetches both the members and the trend with it applie
       (url) => url.includes("/squad/analytics/trend") && url.includes("surface=clay"),
     ),
   ).toBe(true);
-});
-
-// #267: Danny's own call for the zero-denominator case — exclude, not a
-// fabricated 0%/NaN row.
-test("Resilience excludes a player with no forced or unforced errors logged yet", async () => {
-  const noErrorsYet: PlayerRead = player("p4", "Noor", "Patel");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockImplementation((input: Request) => {
-      const { pathname } = new URL(input.url);
-      if (pathname === "/api/players")
-        return Promise.resolve(Response.json([...players, noErrorsYet]));
-      if (pathname === "/api/squad/analytics/members") {
-        return Promise.resolve(
-          Response.json([
-            ...squadStats,
-            member({
-              player_id: "p4",
-              period_forced_errors_suffered: 0,
-              period_unforced_errors: 0,
-            }),
-          ]),
-        );
-      }
-      if (pathname === "/api/squad/analytics/trend") return Promise.resolve(Response.json(trend));
-      throw new Error(`Unstubbed fetch: ${pathname}`);
-    }),
-  );
-  const user = userEvent.setup({ delay: null });
-  await renderPage();
-  await screen.findAllByText(/Chen|Singh|Rivera|Ross/);
-
-  await user.click(within(leaderboardChips()).getByRole("button", { name: "Resilience" }));
-
-  expect(await screen.findAllByText(/Chen|Singh|Rivera|Ross/)).not.toHaveLength(0);
-  expect(screen.queryByText("Noor Patel")).not.toBeInTheDocument();
 });
 
 test("the Spread histogram is gone", async () => {
