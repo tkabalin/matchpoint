@@ -5,8 +5,9 @@ import { expect, test, vi, afterEach } from "vitest";
 
 import { ServeTab } from "./serve-tab";
 
-// The opponent card's "In" share combines 1st and 2nd serve return-outcome rows —
-// 74 and 86, averaging to 80 (serve-tab.test.tsx's own regression case below).
+// The opponent card's "In" share pools both serve numbers' return-outcome rows on
+// the returns behind them: 74 of 100 first serves and 43 of 50 second ones (the
+// regression case below).
 const SERVE_STATS: ServeStats = {
   serving: {
     breakdown: [],
@@ -160,10 +161,10 @@ test("Return of opponent serve shows one return-in-vs-error bar, combined across
   renderTab();
   await screen.findByText("Return of opponent serve");
 
-  // (74 + 86) / 2 = 80, unweighted although the counts beside them could weight it
-  // (#295), shown once as the headline and again in the legend chip below it.
-  expect(screen.getAllByText("80% in")).toHaveLength(2);
-  expect(screen.getByText("20% error")).toBeInTheDocument();
+  // 117 of 150 returns = 78%, not the 80% averaging 74% and 86% unweighted gives
+  // (#295). Shown once as the headline and again in the legend chip below it.
+  expect(screen.getAllByText("78% in")).toHaveLength(2);
+  expect(screen.getByText("22% error")).toBeInTheDocument();
 });
 
 test("Return of opponent serve shows one fault-mode court, combined from both serve numbers' return-outcome breakdown (not the always-null fault_mode field)", async () => {
@@ -174,11 +175,38 @@ test("Return of opponent serve shows one fault-mode court, combined from both se
   const scope = within(card);
 
   expect(scope.queryByText(/No faults on this serve yet/)).not.toBeInTheDocument();
-  // {Net:11, Long:9, Wide:6} + {Net:7, Long:4, Wide:3} = {18, 13, 9} of 40,
-  // renormalised: net 45%, long 33%, wide 23%.
+  // Counts, not the percentages beside them: {Net:11, Long:9, Wide:6} +
+  // {Net:3, Long:2, Wide:2} = {14, 11, 8} of 33, so net 42%, long 33%, wide 24%.
   expect(scope.getAllByRole("img")).toHaveLength(1);
   expect(
-    scope.getByRole("img", { name: "Fault mode: net 45%, long 33%, wide 23%" }),
+    scope.getByRole("img", { name: "Fault mode: net 42%, long 33%, wide 24%" }),
+  ).toBeInTheDocument();
+});
+
+test("the opponent card's fault court holds at zero when no return faulted", async () => {
+  const stats: ServeStats = {
+    ...SERVE_STATS,
+    returning: {
+      ...SERVE_STATS.returning,
+      return_outcome: {
+        first_serve: [
+          { label: "In", value: 100, count: 12, max: 100 },
+          { label: "Net", value: 0, count: 0, max: 100 },
+          { label: "Long", value: 0, count: 0, max: 100 },
+          { label: "Wide", value: 0, count: 0, max: 100 },
+        ],
+        second_serve: [],
+      },
+    },
+  };
+  renderTab(stats);
+  const card = (await screen.findByText("Return of opponent serve")).closest(
+    ".flex.flex-col",
+  ) as HTMLElement;
+  const scope = within(card);
+
+  expect(
+    scope.getByRole("img", { name: "Fault mode: net 0%, long 0%, wide 0%" }),
   ).toBeInTheDocument();
 });
 

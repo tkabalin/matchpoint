@@ -355,19 +355,24 @@ function rowCount(rows: ReturnOutcomeRow[], label: string): number {
   return rows.find((row) => row.label === label)?.count ?? 0;
 }
 
-/** Both serve numbers' own "In" share, averaged unweighted: an even split across
- *  1st/2nd is nothing worse than the independent rounding either side already
- *  carries. The returns behind each percentage now come with it (#295), so a
- *  weighted combine lands with this card's own switch to raw counts. */
+/** One serve number's whole return tally. The API emits a row per outcome or no rows
+ *  at all, so these four counts are every return it recorded against that serve. */
+function rowTotal(rows: ReturnOutcomeRow[]): number {
+  return rows.reduce((sum, row) => sum + row.count, 0);
+}
+
+/** Both serve numbers' returns pooled into one "In" share, weighted by the returns
+ *  behind each now that the rows carry them (#295). Averaging the two percentages
+ *  instead let a handful of second serves count for as much as a hundred firsts. */
 function combinedReturnSplit(
   split: ReturnOutcomeSplit,
 ): { inPercent: number; errorPercent: number } | null {
-  const inRates = [split.first_serve, split.second_serve]
-    .filter((rows) => rows.length > 0)
-    .map((rows) => rowValue(rows, "In"));
-  if (inRates.length === 0) return null;
+  const sides = [split.first_serve, split.second_serve].filter((rows) => rows.length > 0);
+  if (sides.length === 0) return null;
 
-  const inPercent = Math.round(inRates.reduce((sum, rate) => sum + rate, 0) / inRates.length);
+  const returns = sides.reduce((sum, rows) => sum + rowTotal(rows), 0);
+  const returnedIn = sides.reduce((sum, rows) => sum + rowCount(rows, "In"), 0);
+  const inPercent = Math.round((100 * returnedIn) / returns);
   return { inPercent, errorPercent: 100 - inPercent };
 }
 
@@ -386,12 +391,9 @@ function returnFaultShares(rows: ReturnOutcomeRow[]): FaultModeShares | null {
   };
 }
 
-/** `returnFaultShares` for both serve numbers, summed into one. Each side's three
- *  values are already its own independent ~100 (renormalised again by
- *  `FaultModeCourt` regardless), so summing two comparable-scale shares and
- *  letting that renormalisation take relative proportions is the same
- *  unweighted-combine approximation `combinedReturnSplit` above already uses.
- *  The counts sum as plain counts, which is where a weighted one would read them. */
+/** `returnFaultShares` for both serve numbers, combined on their counts rather than
+ *  their shares (#295): each side's shares are scaled to its own returns, so adding
+ *  those let a serve number barely faced move the court as far as one faced all match. */
 function combinedFaultShares(
   first: ReturnOutcomeRow[],
   second: ReturnOutcomeRow[],
@@ -403,12 +405,19 @@ function combinedFaultShares(
   const empty = { net: 0, long: 0, wide: 0, net_count: 0, long_count: 0, wide_count: 0 };
   const a = firstShares ?? empty;
   const b = secondShares ?? empty;
+  const net = a.net_count + b.net_count;
+  const long = a.long_count + b.long_count;
+  const wide = a.wide_count + b.wide_count;
+  const faults = net + long + wide;
+  // A card where every return landed in has no faults to take a share of, so the
+  // court draws three zeroes rather than dividing by zero.
+  const share = (count: number) => (faults > 0 ? Math.round((100 * count) / faults) : 0);
   return {
-    net: a.net + b.net,
-    long: a.long + b.long,
-    wide: a.wide + b.wide,
-    net_count: a.net_count + b.net_count,
-    long_count: a.long_count + b.long_count,
-    wide_count: a.wide_count + b.wide_count,
+    net: share(net),
+    long: share(long),
+    wide: share(wide),
+    net_count: net,
+    long_count: long,
+    wide_count: wide,
   };
 }
