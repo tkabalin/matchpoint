@@ -22,9 +22,15 @@ let cachedTheme: Theme = readStoredTheme();
 // UI (CSS-class-driven) would otherwise show two different themes.
 applyTheme(cachedTheme);
 
+// Dark mode is deactivated: Settings' own Light/Dark toggle is gone, so
+// nothing in the app can ever set this key to "dark" any more, but a coach
+// who switched before this shipped would otherwise be stuck there with no
+// way back — this always resolves to light instead of trusting whatever's
+// still in storage from before. The mechanism itself (this module, the
+// `.dark` class, every dark: CSS token) stays intact, unremoved, so
+// re-enabling the toggle later is the only change re-enabling needs.
 function readStoredTheme(): Theme {
-  const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  return stored === "dark" ? "dark" : DEFAULT_THEME;
+  return DEFAULT_THEME;
 }
 
 /** The only place `.dark` is ever toggled on `<html>` — index.html's inline

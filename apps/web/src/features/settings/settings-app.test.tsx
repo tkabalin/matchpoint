@@ -70,20 +70,9 @@ test("has no Notifications row", async () => {
   expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
 });
 
-test("Appearance toggles between light and dark, and persists the choice", async () => {
-  localStorage.removeItem("matchpoint:theme");
-  const user = userEvent.setup({ delay: null });
+// Dark mode is deactivated: no Appearance row to offer a toggle from any more.
+test("has no Appearance row", async () => {
   await renderPage();
 
-  expect(document.documentElement).not.toHaveClass("dark");
-
-  await user.click(screen.getByRole("button", { name: "Dark" }));
-
-  expect(document.documentElement).toHaveClass("dark");
-  expect(localStorage.getItem("matchpoint:theme")).toBe("dark");
-
-  await user.click(screen.getByRole("button", { name: "Light" }));
-
-  expect(document.documentElement).not.toHaveClass("dark");
-  expect(localStorage.getItem("matchpoint:theme")).toBe("light");
+  expect(screen.queryByText("Appearance")).not.toBeInTheDocument();
 });

@@ -26,10 +26,15 @@
          main.tsx loads. Deliberately duplicated from src/lib/theme.ts's own
          resolve logic (kept in sync by hand): this has to run before any module
          loads, so it can't import that file. No matchMedia read anywhere — light
-         and dark are decided solely by localStorage, defaulting to light. -->
+         and dark are decided solely by localStorage, defaulting to light.
+
+         Dark mode is deactivated (Settings' own toggle is gone, see
+         settings-app.tsx): this always resolves "light" rather than trusting a
+         stored "dark" value some coach picked before that shipped, the same
+         reasoning theme.ts's own readStoredTheme now applies. -->
     <script>
       (function () {
-        var theme = localStorage.getItem("matchpoint:theme") === "dark" ? "dark" : "light";
+        var theme = "light";
         document.documentElement.classList.toggle("dark", theme === "dark");
         document.getElementById("color-scheme-meta").setAttribute("content", theme);
         document
