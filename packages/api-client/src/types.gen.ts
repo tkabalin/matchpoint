@@ -219,7 +219,9 @@ export type FailureMode = 'net' | 'long' | 'wide';
  * How one serve number's faults split between the three ways a serve misses.
  *
  * Percentages of that serve number's faults, each rounded on its own, so the three
- * need not come to exactly 100.
+ * need not come to exactly 100, each beside the count of faults that missed that
+ * way: "3 of 7" is a different read from "3 of 100" at the sample sizes one match
+ * has (#295).
  */
 export type FaultModeShares = {
     /**
@@ -227,13 +229,25 @@ export type FaultModeShares = {
      */
     long: number;
     /**
+     * Long Count
+     */
+    long_count: number;
+    /**
      * Net
      */
     net: number;
     /**
+     * Net Count
+     */
+    net_count: number;
+    /**
      * Wide
      */
     wide: number;
+    /**
+     * Wide Count
+     */
+    wide_count: number;
 };
 
 /**
@@ -1414,6 +1428,34 @@ export type ResetPasswordRequest = {
 export type ReturnOutcome = 'in' | 'net' | 'long' | 'wide';
 
 /**
+ * ReturnOutcomeRow
+ *
+ * One return outcome as a percentage bar, beside the returns that ended that way.
+ *
+ * Its own type rather than a `BreakdownRow`, because that row's `value` is a raw
+ * count everywhere else it is produced and here it is a percentage, so the count
+ * needs a field of its own (#295).
+ */
+export type ReturnOutcomeRow = {
+    /**
+     * Count
+     */
+    count: number;
+    /**
+     * Label
+     */
+    label: string;
+    /**
+     * Max
+     */
+    max: number;
+    /**
+     * Value
+     */
+    value: number;
+};
+
+/**
  * ReturnOutcomeSplit
  *
  * The tracked player's own return outcomes, split by the serve returned.
@@ -1426,11 +1468,11 @@ export type ReturnOutcomeSplit = {
     /**
      * First Serve
      */
-    first_serve: Array<BreakdownRow>;
+    first_serve: Array<ReturnOutcomeRow>;
     /**
      * Second Serve
      */
-    second_serve: Array<BreakdownRow>;
+    second_serve: Array<ReturnOutcomeRow>;
 };
 
 /**

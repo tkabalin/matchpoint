@@ -54,6 +54,7 @@ from matchpoint_api.schemas.analytics import (
     RallyLengthBucket,
     RallyStats,
     RallyTrendPoint,
+    ReturnOutcomeRow,
     ReturnOutcomeSplit,
     ServeOutcomeShares,
     ServeOutcomeSplit,
@@ -762,7 +763,7 @@ def get_player_overview(
 
 
 def _fault_shares(faults: Counter[FailureMode]) -> FaultModeShares | None:
-    """The three ways a serve misses, as percentages, or None while none has."""
+    """The three ways a serve misses, as percentages over counts, or None while none has."""
     total = sum(faults.values())
     if total == 0:
         return None
@@ -770,6 +771,9 @@ def _fault_shares(faults: Counter[FailureMode]) -> FaultModeShares | None:
         net=round(100 * faults[FailureMode.NET] / total),
         long=round(100 * faults[FailureMode.LONG] / total),
         wide=round(100 * faults[FailureMode.WIDE] / total),
+        net_count=faults[FailureMode.NET],
+        long_count=faults[FailureMode.LONG],
+        wide_count=faults[FailureMode.WIDE],
     )
 
 
@@ -855,13 +859,18 @@ def _serve_outcomes(
     }
 
 
-def _return_rows(outcomes: Counter[ReturnOutcome]) -> list[BreakdownRow]:
-    """Every return outcome as a percentage bar, or nothing until one is recorded."""
+def _return_rows(outcomes: Counter[ReturnOutcome]) -> list[ReturnOutcomeRow]:
+    """Every return outcome as a percentage over its own count, or nothing yet."""
     total = sum(outcomes.values())
     if total == 0:
         return []
     return [
-        BreakdownRow(label=label, value=round(100 * outcomes[outcome] / total), max=100)
+        ReturnOutcomeRow(
+            label=label,
+            value=round(100 * outcomes[outcome] / total),
+            count=outcomes[outcome],
+            max=100,
+        )
         for outcome, label in _RETURN_OUTCOME_LABEL.items()
     ]
 

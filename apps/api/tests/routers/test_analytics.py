@@ -458,8 +458,22 @@ def test_serving_fault_modes_split_by_serve_number(
 
     # Five faulted first serves: 2 net, 1 long, 2 wide. One faulted second, into the net.
     assert body["serving"]["fault_mode"] == {
-        "first_serve": {"net": 40, "long": 20, "wide": 40},
-        "second_serve": {"net": 100, "long": 0, "wide": 0},
+        "first_serve": {
+            "net": 40,
+            "long": 20,
+            "wide": 40,
+            "net_count": 2,
+            "long_count": 1,
+            "wide_count": 2,
+        },
+        "second_serve": {
+            "net": 100,
+            "long": 0,
+            "wide": 0,
+            "net_count": 1,
+            "long_count": 0,
+            "wide_count": 0,
+        },
     }
 
 
@@ -631,20 +645,17 @@ def test_return_outcomes_split_by_serve_number(
 
     body = _get(client, player.id, "serve")
 
-    def rows(**percentages: int) -> list[dict[str, Any]]:
-        return [
-            {
-                "label": label,
-                "value": percentages.get(label.lower(), 0),
-                "secondary_value": None,
-                "max": 100,
-            }
-            for label in ("In", "Net", "Long", "Wide")
-        ]
+    def rows(**returns: tuple[int, int]) -> list[dict[str, Any]]:
+        """Each label's percentage and its own return count, both stated as literals."""
+        built: list[dict[str, Any]] = []
+        for label in ("In", "Net", "Long", "Wide"):
+            percent, count = returns.get(label.lower(), (0, 0))
+            built.append({"label": label, "value": percent, "count": count, "max": 100})
+        return built
 
     assert body["returning"]["return_outcome"] == {
-        "first_serve": rows(**{"in": 50, "net": 25, "long": 25}),
-        "second_serve": rows(**{"in": 50, "wide": 50}),
+        "first_serve": rows(**{"in": (50, 2), "net": (25, 1), "long": (25, 1)}),
+        "second_serve": rows(**{"in": (50, 1), "wide": (50, 1)}),
     }
     # The serving card asks about the opponent's return, which capture never records.
     assert body["serving"]["return_outcome"] == {"first_serve": [], "second_serve": []}
@@ -2425,6 +2436,9 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
         "net": 100,
         "long": 0,
         "wide": 0,
+        "net_count": 1,
+        "long_count": 0,
+        "wide_count": 0,
     }
     assert len(player_wide["serving"]["trend"]) == 2
     # The serve outcomes and the return outcomes are two more queries of their own.
@@ -2435,7 +2449,7 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
     assert body["returning"]["return_outcome"]["first_serve"][0] == {
         "label": "In",
         "value": 100,
-        "secondary_value": None,
+        "count": 1,
         "max": 100,
     }
     assert player_wide["serving"]["outcome"]["first_serve"] == {

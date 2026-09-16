@@ -17,8 +17,8 @@ const SERVE_STATS: ServeStats = {
       second_serve: { landed: 85, fault: 12, ace: 3 },
     },
     fault_mode: {
-      first_serve: { net: 55, long: 20, wide: 25 },
-      second_serve: { net: 38, long: 34, wide: 28 },
+      first_serve: { net: 55, long: 20, wide: 25, net_count: 11, long_count: 4, wide_count: 5 },
+      second_serve: { net: 38, long: 34, wide: 28, net_count: 19, long_count: 17, wide_count: 14 },
     },
     return_outcome: { first_serve: [], second_serve: [] },
     trend: [
@@ -40,16 +40,16 @@ const SERVE_STATS: ServeStats = {
     fault_mode: { first_serve: null, second_serve: null },
     return_outcome: {
       first_serve: [
-        { label: "In", value: 74, max: 100 },
-        { label: "Net", value: 11, max: 100 },
-        { label: "Long", value: 9, max: 100 },
-        { label: "Wide", value: 6, max: 100 },
+        { label: "In", value: 74, count: 74, max: 100 },
+        { label: "Net", value: 11, count: 11, max: 100 },
+        { label: "Long", value: 9, count: 9, max: 100 },
+        { label: "Wide", value: 6, count: 6, max: 100 },
       ],
       second_serve: [
-        { label: "In", value: 86, max: 100 },
-        { label: "Net", value: 7, max: 100 },
-        { label: "Long", value: 4, max: 100 },
-        { label: "Wide", value: 3, max: 100 },
+        { label: "In", value: 86, count: 43, max: 100 },
+        { label: "Net", value: 7, count: 3, max: 100 },
+        { label: "Long", value: 4, count: 2, max: 100 },
+        { label: "Wide", value: 3, count: 2, max: 100 },
       ],
     },
     trend: [
@@ -160,8 +160,8 @@ test("Return of opponent serve shows one return-in-vs-error bar, combined across
   renderTab();
   await screen.findByText("Return of opponent serve");
 
-  // (74 + 86) / 2 = 80, unweighted since no attempt counts are available to weight
-  // by — shown once as the headline, again in the legend chip below it.
+  // (74 + 86) / 2 = 80, unweighted although the counts beside them could weight it
+  // (#295), shown once as the headline and again in the legend chip below it.
   expect(screen.getAllByText("80% in")).toHaveLength(2);
   expect(screen.getByText("20% error")).toBeInTheDocument();
 });

@@ -4,7 +4,13 @@ import { expect, test } from "vitest";
 
 import { FaultModeCourt } from "./fault-mode-court";
 
-const SHARES: FaultModeShares = { net: 55, long: 20, wide: 25 };
+/** The court draws the percentages and never the counts beside them (#295), so
+ *  each case states its three shares and the helper fills matching counts in. */
+function shares(net: number, long: number, wide: number): FaultModeShares {
+  return { net, long, wide, net_count: net, long_count: long, wide_count: wide };
+}
+
+const SHARES = shares(55, 20, 25);
 
 test("renders one accessible label naming all three shares", () => {
   render(<FaultModeCourt shares={SHARES} />);
@@ -18,7 +24,7 @@ test("renders one accessible label naming all three shares", () => {
 // don't reliably sum to 100 — this locks in that what's drawn (and printed) always
 // does, regardless of what the raw shares add up to.
 test("renormalises shares that don't sum to 100", () => {
-  render(<FaultModeCourt shares={{ net: 40, long: 20, wide: 20 }} />);
+  render(<FaultModeCourt shares={shares(40, 20, 20)} />);
 
   // 40+20+20=80 raw, so renormalised: net 50%, long 25%, wide 25%.
   expect(
@@ -45,7 +51,7 @@ test("prints the wide share exactly once", () => {
 });
 
 test("a fault mode with no clear majority still renders without throwing", () => {
-  render(<FaultModeCourt shares={{ net: 34, long: 33, wide: 33 }} />);
+  render(<FaultModeCourt shares={shares(34, 33, 33)} />);
 
   expect(screen.getByRole("img")).toBeInTheDocument();
 });

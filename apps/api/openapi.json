@@ -362,25 +362,40 @@
         "type": "string"
       },
       "FaultModeShares": {
-        "description": "How one serve number's faults split between the three ways a serve misses.\n\nPercentages of that serve number's faults, each rounded on its own, so the three\nneed not come to exactly 100.",
+        "description": "How one serve number's faults split between the three ways a serve misses.\n\nPercentages of that serve number's faults, each rounded on its own, so the three\nneed not come to exactly 100, each beside the count of faults that missed that\nway: \"3 of 7\" is a different read from \"3 of 100\" at the sample sizes one match\nhas (#295).",
         "properties": {
           "long": {
             "title": "Long",
             "type": "number"
           },
+          "long_count": {
+            "title": "Long Count",
+            "type": "integer"
+          },
           "net": {
             "title": "Net",
             "type": "number"
           },
+          "net_count": {
+            "title": "Net Count",
+            "type": "integer"
+          },
           "wide": {
             "title": "Wide",
             "type": "number"
+          },
+          "wide_count": {
+            "title": "Wide Count",
+            "type": "integer"
           }
         },
         "required": [
           "net",
           "long",
-          "wide"
+          "wide",
+          "net_count",
+          "long_count",
+          "wide_count"
         ],
         "title": "FaultModeShares",
         "type": "object"
@@ -2778,19 +2793,48 @@
         "title": "ReturnOutcome",
         "type": "string"
       },
+      "ReturnOutcomeRow": {
+        "description": "One return outcome as a percentage bar, beside the returns that ended that way.\n\nIts own type rather than a `BreakdownRow`, because that row's `value` is a raw\ncount everywhere else it is produced and here it is a percentage, so the count\nneeds a field of its own (#295).",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max": {
+            "title": "Max",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "label",
+          "value",
+          "count",
+          "max"
+        ],
+        "title": "ReturnOutcomeRow",
+        "type": "object"
+      },
       "ReturnOutcomeSplit": {
         "description": "The tracked player's own return outcomes, split by the serve returned.\n\nPercentages of that serve number's recorded returns. Empty on the serving side\nthroughout: capture records the player's return of the opponent's serve and\nnothing about the opponent's return of theirs.",
         "properties": {
           "first_serve": {
             "items": {
-              "$ref": "#/components/schemas/BreakdownRow"
+              "$ref": "#/components/schemas/ReturnOutcomeRow"
             },
             "title": "First Serve",
             "type": "array"
           },
           "second_serve": {
             "items": {
-              "$ref": "#/components/schemas/BreakdownRow"
+              "$ref": "#/components/schemas/ReturnOutcomeRow"
             },
             "title": "Second Serve",
             "type": "array"

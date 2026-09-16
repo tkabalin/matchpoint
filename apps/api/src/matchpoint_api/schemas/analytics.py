@@ -118,12 +118,17 @@ class FaultModeShares(BaseModel):
     """How one serve number's faults split between the three ways a serve misses.
 
     Percentages of that serve number's faults, each rounded on its own, so the three
-    need not come to exactly 100.
+    need not come to exactly 100, each beside the count of faults that missed that
+    way: "3 of 7" is a different read from "3 of 100" at the sample sizes one match
+    has (#295).
     """
 
     net: float
     long: float
     wide: float
+    net_count: int
+    long_count: int
+    wide_count: int
 
 
 class FaultModeSplit(BaseModel):
@@ -163,6 +168,23 @@ class ServeOutcomeSplit(BaseModel):
     second_serve: ServeOutcomeShares | None
 
 
+class ReturnOutcomeRow(BaseModel):
+    """One return outcome as a percentage bar, beside the returns that ended that way.
+
+    Its own type rather than a `BreakdownRow`, because that row's `value` is a raw
+    count everywhere else it is produced and here it is a percentage, so the count
+    needs a field of its own (#295).
+    """
+
+    label: str
+    # Percentage of that serve number's recorded returns.
+    value: int
+    # How many of that serve number's returns ended this way.
+    count: int
+    # Ceiling the row's bar is drawn against, 100 for a percentage.
+    max: int
+
+
 class ReturnOutcomeSplit(BaseModel):
     """The tracked player's own return outcomes, split by the serve returned.
 
@@ -171,8 +193,8 @@ class ReturnOutcomeSplit(BaseModel):
     nothing about the opponent's return of theirs.
     """
 
-    first_serve: list[BreakdownRow]
-    second_serve: list[BreakdownRow]
+    first_serve: list[ReturnOutcomeRow]
+    second_serve: list[ReturnOutcomeRow]
 
 
 class ServeTrendPoint(BaseModel):
