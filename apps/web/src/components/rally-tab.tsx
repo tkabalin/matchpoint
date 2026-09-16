@@ -260,9 +260,7 @@ export function RallyTab({
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-bold text-foreground">
-            Error insight: tap to expand, tap again to collapse
-          </p>
+          <p className="mb-2 text-sm font-bold text-foreground">Error insight: tap to expand</p>
           <div className="grid grid-cols-3 gap-2">
             {styles.map((style) => (
               <StyleCard
