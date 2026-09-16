@@ -38,7 +38,12 @@ async function renderSettings() {
     path: "/",
     component: () => <h1>Sign In</h1>,
   });
-  const routeTree = rootRoute.addChildren([settingsRoute, signInRoute]);
+  const installRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/me/install",
+    component: () => <h1>Install MatchPoint</h1>,
+  });
+  const routeTree = rootRoute.addChildren([settingsRoute, signInRoute, installRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/me/settings"] }),
@@ -72,6 +77,16 @@ test("renders the change-password fields and the sign-out action", async () => {
   expect(screen.getByLabelText("New password")).toBeInTheDocument();
   expect(screen.getByLabelText("Confirm new password")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
+});
+
+// #275: a player had no reachable path to the install guide before this row existed.
+test("links to the player's own install guide route", async () => {
+  const user = userEvent.setup({ delay: null });
+  await renderSettings();
+
+  await user.click(screen.getByRole("link", { name: "Install MatchPoint" }));
+
+  expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
 });
 
 test("blocks submit until the new password and its confirmation match", async () => {

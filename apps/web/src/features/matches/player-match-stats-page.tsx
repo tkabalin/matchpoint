@@ -2,7 +2,7 @@ import { getRouteApi } from "@tanstack/react-router";
 
 import { MatchStatsPage } from "./match-stats-page";
 
-const routeApi = getRouteApi("/_player/me/matches/$matchId");
+const routeApi = getRouteApi("/_player/me_/matches/$matchId");
 
 /**
  * A player's own route-bound wrapper. `MatchStatsPage` mounts under two different

@@ -10,8 +10,13 @@ import { detectPlatform, isRunningInstalled } from "@/lib/device-platform";
  * Reached from Settings (permanent) and from a dismissible card on Home shown once,
  * so it always starts from a real place a coach chose to go back to. Kept to one
  * screen and plain, numbered steps on purpose: this is reassurance, not a manual.
+ *
+ * Mounted under both the coach's and the player's own route trees (#275) —
+ * `backTo` mirrors `MatchStatsPage`'s own coach/player split so each session
+ * returns to its own Settings rather than the other one's, which a player
+ * session can't even load.
  */
-export function InstallGuide() {
+export function InstallGuide({ backTo = "/settings" }: { backTo?: "/settings" | "/me/settings" }) {
   const platform = detectPlatform();
   const installed = isRunningInstalled();
 
@@ -21,7 +26,7 @@ export function InstallGuide() {
         title="Install MatchPoint"
         back={
           <Link
-            to="/settings"
+            to={backTo}
             aria-label="Back to settings"
             className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
           >

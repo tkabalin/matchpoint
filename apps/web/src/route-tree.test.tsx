@@ -294,6 +294,49 @@ test("redirects a player session to sign-in on a confirmed 401", async () => {
   expect(await screen.findByRole("heading", { name: "Sign In" })).toBeInTheDocument();
 });
 
+// #290: `_player.me.settings.tsx`/`_player.me.matches.*.tsx` were filed as children of
+// `/me`, whose own component (`PlayerSelfView`) renders no `<Outlet/>` — so the URL
+// changed but "Me" stayed on screen, the same trap #193's `/settings/faq` test below
+// already catches for the coach side. Only the generated tree (mounted here) can
+// reproduce it; every other test of these two pages builds its own flat, hand-written
+// tree.
+test("/me/settings renders as its own page, not the Me screen", async () => {
+  stubFetch({
+    "/api/auth/player/me": () => Response.json(playerSelf),
+  });
+
+  await renderRouteTreeAt("/me/settings");
+
+  expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Amahle Nkosi" })).not.toBeInTheDocument();
+});
+
+test("/me/matches renders as its own page, not the Me screen", async () => {
+  stubFetch({
+    "/api/auth/player/me": () => Response.json(playerSelf),
+    "/api/matches": () => Response.json([]),
+  });
+
+  await renderRouteTreeAt("/me/matches");
+
+  expect(await screen.findByRole("heading", { name: "Matches" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Amahle Nkosi" })).not.toBeInTheDocument();
+});
+
+// #275: a player had no reachable path to the install guide before this route
+// existed. Same trailing-underscore un-nesting as #290's fix above, so this is
+// also the only place that can catch a regression back to the Me screen.
+test("/me/install renders as its own page, not the Me screen", async () => {
+  stubFetch({
+    "/api/auth/player/me": () => Response.json(playerSelf),
+  });
+
+  await renderRouteTreeAt("/me/install");
+
+  expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
+  expect(screen.queryByRole("heading", { name: "Amahle Nkosi" })).not.toBeInTheDocument();
+});
+
 // #257: `/` used to render the sign-in form unconditionally, with no session check at
 // all — these are its inverse of the `_authenticated`/`_player` guard tests above.
 test("/ redirects straight to /home with a live coach session, rather than showing the form", async () => {

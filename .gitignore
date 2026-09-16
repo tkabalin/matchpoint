@@ -12,6 +12,7 @@ node_modules/
 dist/
 dev-dist/
 .vite/
+.tanstack/
 
 # ESLint / TypeScript / pnpm caches and logs
 .eslintcache

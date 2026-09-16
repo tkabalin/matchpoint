@@ -33,9 +33,10 @@ import { Route as AuthenticatedSettingsAppRouteImport } from "./routes/_authenti
 import { Route as AuthenticatedSettingsFaqRouteImport } from "./routes/_authenticated.settings.faq"
 import { Route as AuthenticatedSettingsMatchDefaultsRouteImport } from "./routes/_authenticated.settings.match-defaults"
 import { Route as AuthenticatedSettingsSupportRouteImport } from "./routes/_authenticated.settings.support"
-import { Route as PlayerMeSettingsRouteImport } from "./routes/_player.me.settings"
-import { Route as PlayerMeMatchesIndexRouteImport } from "./routes/_player.me.matches.index"
-import { Route as PlayerMeMatchesMatchIdRouteImport } from "./routes/_player.me.matches.$matchId"
+import { Route as PlayerMeInstallRouteImport } from "./routes/_player.me_.install"
+import { Route as PlayerMeSettingsRouteImport } from "./routes/_player.me_.settings"
+import { Route as PlayerMeMatchesIndexRouteImport } from "./routes/_player.me_.matches.index"
+import { Route as PlayerMeMatchesMatchIdRouteImport } from "./routes/_player.me_.matches.$matchId"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -167,20 +168,25 @@ const AuthenticatedSettingsSupportRoute =
     path: "/settings/support",
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const PlayerMeInstallRoute = PlayerMeInstallRouteImport.update({
+  id: "/me_/install",
+  path: "/me/install",
+  getParentRoute: () => PlayerRoute,
+} as any)
 const PlayerMeSettingsRoute = PlayerMeSettingsRouteImport.update({
-  id: "/settings",
-  path: "/settings",
-  getParentRoute: () => PlayerMeRoute,
+  id: "/me_/settings",
+  path: "/me/settings",
+  getParentRoute: () => PlayerRoute,
 } as any)
 const PlayerMeMatchesIndexRoute = PlayerMeMatchesIndexRouteImport.update({
-  id: "/matches/",
-  path: "/matches/",
-  getParentRoute: () => PlayerMeRoute,
+  id: "/me_/matches/",
+  path: "/me/matches/",
+  getParentRoute: () => PlayerRoute,
 } as any)
 const PlayerMeMatchesMatchIdRoute = PlayerMeMatchesMatchIdRouteImport.update({
-  id: "/matches/$matchId",
-  path: "/matches/$matchId",
-  getParentRoute: () => PlayerMeRoute,
+  id: "/me_/matches/$matchId",
+  path: "/me/matches/$matchId",
+  getParentRoute: () => PlayerRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -193,7 +199,7 @@ export interface FileRoutesByFullPath {
   "/install": typeof AuthenticatedInstallRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/stats": typeof AuthenticatedStatsRoute
-  "/me": typeof PlayerMeRouteWithChildren
+  "/me": typeof PlayerMeRoute
   "/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
@@ -202,6 +208,7 @@ export interface FileRoutesByFullPath {
   "/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/settings/support": typeof AuthenticatedSettingsSupportRoute
+  "/me/install": typeof PlayerMeInstallRoute
   "/me/settings": typeof PlayerMeSettingsRoute
   "/matches/": typeof AuthenticatedMatchesIndexRoute
   "/new-match/": typeof AuthenticatedNewMatchIndexRoute
@@ -220,7 +227,7 @@ export interface FileRoutesByTo {
   "/install": typeof AuthenticatedInstallRoute
   "/profile": typeof AuthenticatedProfileRoute
   "/stats": typeof AuthenticatedStatsRoute
-  "/me": typeof PlayerMeRouteWithChildren
+  "/me": typeof PlayerMeRoute
   "/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByTo {
   "/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/settings/support": typeof AuthenticatedSettingsSupportRoute
+  "/me/install": typeof PlayerMeInstallRoute
   "/me/settings": typeof PlayerMeSettingsRoute
   "/matches": typeof AuthenticatedMatchesIndexRoute
   "/new-match": typeof AuthenticatedNewMatchIndexRoute
@@ -250,7 +258,7 @@ export interface FileRoutesById {
   "/_authenticated/install": typeof AuthenticatedInstallRoute
   "/_authenticated/profile": typeof AuthenticatedProfileRoute
   "/_authenticated/stats": typeof AuthenticatedStatsRoute
-  "/_player/me": typeof PlayerMeRouteWithChildren
+  "/_player/me": typeof PlayerMeRoute
   "/_authenticated/matches/$matchId": typeof AuthenticatedMatchesMatchIdRoute
   "/_authenticated/new-match/$playerId": typeof AuthenticatedNewMatchPlayerIdRoute
   "/_authenticated/players/$playerId": typeof AuthenticatedPlayersPlayerIdRoute
@@ -259,13 +267,14 @@ export interface FileRoutesById {
   "/_authenticated/settings/faq": typeof AuthenticatedSettingsFaqRoute
   "/_authenticated/settings/match-defaults": typeof AuthenticatedSettingsMatchDefaultsRoute
   "/_authenticated/settings/support": typeof AuthenticatedSettingsSupportRoute
-  "/_player/me/settings": typeof PlayerMeSettingsRoute
+  "/_player/me_/install": typeof PlayerMeInstallRoute
+  "/_player/me_/settings": typeof PlayerMeSettingsRoute
   "/_authenticated/matches/": typeof AuthenticatedMatchesIndexRoute
   "/_authenticated/new-match/": typeof AuthenticatedNewMatchIndexRoute
   "/_authenticated/players/": typeof AuthenticatedPlayersIndexRoute
   "/_authenticated/settings/": typeof AuthenticatedSettingsIndexRoute
-  "/_player/me/matches/$matchId": typeof PlayerMeMatchesMatchIdRoute
-  "/_player/me/matches/": typeof PlayerMeMatchesIndexRoute
+  "/_player/me_/matches/$matchId": typeof PlayerMeMatchesMatchIdRoute
+  "/_player/me_/matches/": typeof PlayerMeMatchesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -288,6 +297,7 @@ export interface FileRouteTypes {
     | "/settings/faq"
     | "/settings/match-defaults"
     | "/settings/support"
+    | "/me/install"
     | "/me/settings"
     | "/matches/"
     | "/new-match/"
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | "/settings/faq"
     | "/settings/match-defaults"
     | "/settings/support"
+    | "/me/install"
     | "/me/settings"
     | "/matches"
     | "/new-match"
@@ -344,13 +355,14 @@ export interface FileRouteTypes {
     | "/_authenticated/settings/faq"
     | "/_authenticated/settings/match-defaults"
     | "/_authenticated/settings/support"
-    | "/_player/me/settings"
+    | "/_player/me_/install"
+    | "/_player/me_/settings"
     | "/_authenticated/matches/"
     | "/_authenticated/new-match/"
     | "/_authenticated/players/"
     | "/_authenticated/settings/"
-    | "/_player/me/matches/$matchId"
-    | "/_player/me/matches/"
+    | "/_player/me_/matches/$matchId"
+    | "/_player/me_/matches/"
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -533,26 +545,33 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof AuthenticatedSettingsSupportRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    "/_player/me/settings": {
-      id: "/_player/me/settings"
-      path: "/settings"
+    "/_player/me_/install": {
+      id: "/_player/me_/install"
+      path: "/me/install"
+      fullPath: "/me/install"
+      preLoaderRoute: typeof PlayerMeInstallRouteImport
+      parentRoute: typeof PlayerRoute
+    }
+    "/_player/me_/settings": {
+      id: "/_player/me_/settings"
+      path: "/me/settings"
       fullPath: "/me/settings"
       preLoaderRoute: typeof PlayerMeSettingsRouteImport
-      parentRoute: typeof PlayerMeRoute
+      parentRoute: typeof PlayerRoute
     }
-    "/_player/me/matches/": {
-      id: "/_player/me/matches/"
-      path: "/matches"
+    "/_player/me_/matches/": {
+      id: "/_player/me_/matches/"
+      path: "/me/matches"
       fullPath: "/me/matches/"
       preLoaderRoute: typeof PlayerMeMatchesIndexRouteImport
-      parentRoute: typeof PlayerMeRoute
+      parentRoute: typeof PlayerRoute
     }
-    "/_player/me/matches/$matchId": {
-      id: "/_player/me/matches/$matchId"
-      path: "/matches/$matchId"
+    "/_player/me_/matches/$matchId": {
+      id: "/_player/me_/matches/$matchId"
+      path: "/me/matches/$matchId"
       fullPath: "/me/matches/$matchId"
       preLoaderRoute: typeof PlayerMeMatchesMatchIdRouteImport
-      parentRoute: typeof PlayerMeRoute
+      parentRoute: typeof PlayerRoute
     }
   }
 }
@@ -600,28 +619,20 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
-interface PlayerMeRouteChildren {
+interface PlayerRouteChildren {
+  PlayerMeRoute: typeof PlayerMeRoute
+  PlayerMeInstallRoute: typeof PlayerMeInstallRoute
   PlayerMeSettingsRoute: typeof PlayerMeSettingsRoute
   PlayerMeMatchesMatchIdRoute: typeof PlayerMeMatchesMatchIdRoute
   PlayerMeMatchesIndexRoute: typeof PlayerMeMatchesIndexRoute
 }
 
-const PlayerMeRouteChildren: PlayerMeRouteChildren = {
+const PlayerRouteChildren: PlayerRouteChildren = {
+  PlayerMeRoute: PlayerMeRoute,
+  PlayerMeInstallRoute: PlayerMeInstallRoute,
   PlayerMeSettingsRoute: PlayerMeSettingsRoute,
   PlayerMeMatchesMatchIdRoute: PlayerMeMatchesMatchIdRoute,
   PlayerMeMatchesIndexRoute: PlayerMeMatchesIndexRoute,
-}
-
-const PlayerMeRouteWithChildren = PlayerMeRoute._addFileChildren(
-  PlayerMeRouteChildren,
-)
-
-interface PlayerRouteChildren {
-  PlayerMeRoute: typeof PlayerMeRouteWithChildren
-}
-
-const PlayerRouteChildren: PlayerRouteChildren = {
-  PlayerMeRoute: PlayerMeRouteWithChildren,
 }
 
 const PlayerRouteWithChildren =

@@ -32,20 +32,25 @@ function stubUserAgent(userAgent: string) {
   Object.defineProperty(navigator, "userAgent", { value: userAgent, configurable: true });
 }
 
-async function renderInstallGuide() {
+async function renderInstallGuide(backTo?: "/settings" | "/me/settings") {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   const installRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/install",
-    component: InstallGuide,
+    component: () => <InstallGuide backTo={backTo} />,
   });
   const settingsRoute = createRoute({
     getParentRoute: () => rootRoute,
     path: "/settings",
     component: () => <h1>Settings</h1>,
   });
-  const routeTree = rootRoute.addChildren([installRoute, settingsRoute]);
+  const playerSettingsRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/me/settings",
+    component: () => <h1>Player Settings</h1>,
+  });
+  const routeTree = rootRoute.addChildren([installRoute, settingsRoute, playerSettingsRoute]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/install"] }),
@@ -123,4 +128,17 @@ test("links back to settings", async () => {
   await user.click(screen.getByRole("link", { name: "Back to settings" }));
 
   expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+});
+
+// #275: mounted under the player's own route tree too, whose Settings lives
+// at a different path the coach's own session can't reach.
+test("links back to the player's own settings when given that backTo", async () => {
+  stubMatchMedia(false);
+  stubUserAgent(IPHONE_UA);
+  const user = userEvent.setup({ delay: null });
+
+  await renderInstallGuide("/me/settings");
+  await user.click(screen.getByRole("link", { name: "Back to settings" }));
+
+  expect(await screen.findByRole("heading", { name: "Player Settings" })).toBeInTheDocument();
 });

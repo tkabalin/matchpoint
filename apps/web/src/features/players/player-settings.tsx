@@ -1,4 +1,6 @@
 import { changePlayerPassword, playerLogout } from "@matchpoint/api-client";
+import { Link } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 
@@ -10,7 +12,7 @@ import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Item, ItemTitle } from "@/components/ui/item";
+import { Item, ItemActions, ItemContent, ItemGroup, ItemTitle } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
 import { SignOutAction } from "@/features/settings/sign-out-action";
 import { parseErrorMessage } from "@/lib/parse-error";
@@ -159,6 +161,20 @@ export function PlayerSettings() {
           </Button>
         </form>
       </StatCard>
+
+      {/* #275: a player had no reachable path to the install guide at all —
+          it existed only on the coach's own `/install`, which a player
+          session can't load. */}
+      <ItemGroup>
+        <Item variant="outline" render={<Link to="/me/install" />}>
+          <ItemContent>
+            <ItemTitle>Install MatchPoint</ItemTitle>
+          </ItemContent>
+          <ItemActions>
+            <ChevronRight className="size-4 text-muted-foreground" />
+          </ItemActions>
+        </Item>
+      </ItemGroup>
 
       <Separator />
 
