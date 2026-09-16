@@ -112,8 +112,10 @@ export function EndingScreen({
                 }, ZOOM_MS);
               }}
               // Opaque, unlike the shot screen's cards: a card spanning the court's
-              // lines would show them through a translucent white.
-              className="h-full w-full flex-col gap-1 rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] p-2 whitespace-normal shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
+              // lines would show them through a translucent white. overflow-hidden for
+              // the MISTAKE exit: the label and subtitle keep their size as the zoom-out
+              // shrinks the card, and clipping beats spilling over the other card.
+              className="h-full w-full flex-col gap-1 overflow-hidden rounded-lg border-white/70 bg-[color-mix(in_oklch,var(--color-court)_8%,white)] p-2 whitespace-normal shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white"
             >
               {/* size-auto opts out of Button's own `svg:not([class*='size-'])` rule
                   (see basket-icon.tsx's own note on this), so flex-1 can size it. */}
