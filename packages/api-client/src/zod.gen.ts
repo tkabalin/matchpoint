@@ -586,12 +586,11 @@ export const zRallyLengthBucket = z.object({
 /**
  * RallyTrendPoint
  *
- * One match's typical rally length, as a bar on the rally tab's per-match trend (#294).
+ * One match's share of points past five shots, as a bar on the rally tab's trend (#294).
  */
 export const zRallyTrendPoint = z.object({
+    long_rally_share: z.number(),
     match: z.string(),
-    rally_bucket_label: z.string(),
-    rally_bucket_rank: z.int(),
     result: zMatchResult.nullable(),
     went_the_distance: z.boolean().nullable()
 });

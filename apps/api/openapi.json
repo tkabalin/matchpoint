@@ -2694,19 +2694,15 @@
         "type": "object"
       },
       "RallyTrendPoint": {
-        "description": "One match's typical rally length, as a bar on the rally tab's per-match trend (#294).",
+        "description": "One match's share of points past five shots, as a bar on the rally tab's trend (#294).",
         "properties": {
+          "long_rally_share": {
+            "title": "Long Rally Share",
+            "type": "number"
+          },
           "match": {
             "title": "Match",
             "type": "string"
-          },
-          "rally_bucket_label": {
-            "title": "Rally Bucket Label",
-            "type": "string"
-          },
-          "rally_bucket_rank": {
-            "title": "Rally Bucket Rank",
-            "type": "integer"
           },
           "result": {
             "anyOf": [
@@ -2732,8 +2728,7 @@
         },
         "required": [
           "match",
-          "rally_bucket_rank",
-          "rally_bucket_label",
+          "long_rally_share",
           "result",
           "went_the_distance"
         ],

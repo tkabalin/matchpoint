@@ -1378,21 +1378,17 @@ export type RallyStats = {
 /**
  * RallyTrendPoint
  *
- * One match's typical rally length, as a bar on the rally tab's per-match trend (#294).
+ * One match's share of points past five shots, as a bar on the rally tab's trend (#294).
  */
 export type RallyTrendPoint = {
+    /**
+     * Long Rally Share
+     */
+    long_rally_share: number;
     /**
      * Match
      */
     match: string;
-    /**
-     * Rally Bucket Label
-     */
-    rally_bucket_label: string;
-    /**
-     * Rally Bucket Rank
-     */
-    rally_bucket_rank: number;
     result: MatchResult | null;
     /**
      * Went The Distance

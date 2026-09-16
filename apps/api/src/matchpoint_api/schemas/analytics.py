@@ -348,20 +348,17 @@ class RallyLengthAverages(BaseModel):
 
 
 class RallyTrendPoint(BaseModel):
-    """One match's typical rally length, as a bar on the rally tab's per-match trend (#294)."""
+    """One match's share of points past five shots, as a bar on the rally tab's trend (#294)."""
 
     # A short axis label: "M1" is the oldest match in the series, as the serve trend's is.
     match: str
-    # Which of the four buckets this match's bucketed points average to, 1 through 4.
-    # Rounded to a bucket rather than left as a mean number of shots: four levels are
-    # what capture records, so a bar sits on one of them rather than between two. Named
-    # for the rank and not the bucket, since `RallyBucket` is the b1-to-b4 label beside it.
-    rally_bucket_rank: int
-    # The shot range that bucket stands for, so a bar can name it without the client
-    # keeping a second copy of the ranges the capture screen defines.
-    rally_bucket_label: str
+    # What percentage of this match's bucketed points ran past five shots, 0 to 100.
+    # A share rather than the average bucket this replaced (#296): rally length clusters
+    # in the 3-5 bucket, so an average barely moves match to match, where the share
+    # separates a quick serve-and-volley win from a baseline war.
+    long_rally_share: float
     # The tracked player's own result, which is what colours the bar. Null in a match
-    # nobody has recorded a result for, where the bar still has a height to draw.
+    # nobody has recorded a result for, where the bar is drawn but left uncoloured.
     result: MatchResult | None
     # Whether the match reached the last set its scoring system allows. Null where the
     # question has no answer: an unrecorded scoring system, a set board not yet derived,

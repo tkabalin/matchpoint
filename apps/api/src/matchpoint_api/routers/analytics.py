@@ -258,8 +258,8 @@ _RALLY_LENGTH_MIDPOINT = {
     RallyBucket.B4: 13.0,
 }
 
-# The buckets shortest first, which is the rank a trend bar is drawn at: b1 is 1.
-_RALLY_BUCKETS = tuple(RallyBucket)
+# The buckets a long rally falls in: the two whose ranges start past five shots.
+_LONG_RALLY_BUCKETS = (RallyBucket.B3, RallyBucket.B4)
 
 
 def _percent(
@@ -1311,18 +1311,14 @@ def _rally_length_averages(counts: Row[Any]) -> RallyLengthAverages:
     return RallyLengthAverages(won=_mean_shots(won), lost=_mean_shots(lost))
 
 
-def _average_bucket(counts: Row[Any]) -> int:
-    """Which bucket a match's points average to, as the rank 1 to 4 a bar is drawn at.
+def _long_rally_share(counts: Row[Any]) -> float:
+    """What percentage of a match's bucketed points ran past five shots (#296).
 
-    Integer arithmetic so an exact half rounds up rather than to even as `round` does:
-    a handful of points lands on a half often, and banker's rounding would draw one
-    such match a level below the next for no reason a coach could see. The denominator
-    cannot be zero, a row existing only because a point was bucketed.
+    The denominator cannot be zero, a row existing only because a point was bucketed.
     """
-    tallies = [getattr(counts, f"rally_{bucket.value}") for bucket in _RALLY_BUCKETS]
-    weighted = sum(rank * count for rank, count in enumerate(tallies, start=1))
-    points = sum(tallies)
-    return (2 * weighted + points) // (2 * points)
+    bucketed = {bucket: getattr(counts, f"rally_{bucket.value}") for bucket in RallyBucket}
+    long_rallies = sum(bucketed[bucket] for bucket in _LONG_RALLY_BUCKETS)
+    return _percent_value(long_rallies, sum(bucketed.values()))
 
 
 def _went_the_distance(
@@ -1359,10 +1355,10 @@ def _deepest_sets(db: Session, match_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID
 
 
 def _rally_trend(db: Session, player_id: uuid.UUID, scope: PointScope) -> list[RallyTrendPoint]:
-    """The recent matches' typical rally length, one entry each and oldest first (#294).
+    """How much of each recent match ran past five shots, one entry each and oldest first (#294).
 
-    Only bucketed points count, so a match that recorded no bucket has no height to
-    plot and no entry, as a match whose serves went unwatched has none on the serve
+    Only bucketed points count, so a match that recorded no bucket has no share to
+    read and no entry, as a match whose serves went unwatched has none on the serve
     trend. The result and the deciding-set flag describe the whole match rather than
     the scoped points: a tab narrowed to one set still colours its bars by who won.
     """
@@ -1375,7 +1371,7 @@ def _rally_trend(db: Session, player_id: uuid.UUID, scope: PointScope) -> list[R
                 func.count()
                 .filter(Point.rally_length_bucket == bucket)
                 .label(f"rally_{bucket.value}")
-                for bucket in _RALLY_BUCKETS
+                for bucket in RallyBucket
             ),
         )
         .select_from(Point)
@@ -1395,12 +1391,10 @@ def _rally_trend(db: Session, player_id: uuid.UUID, scope: PointScope) -> list[R
     deepest = _deepest_sets(db, [row.id for row in newest_first])
     trend: list[RallyTrendPoint] = []
     for position, row in enumerate(reversed(newest_first), start=1):
-        rank = _average_bucket(row)
         trend.append(
             RallyTrendPoint(
                 match=f"M{position}",
-                rally_bucket_rank=rank,
-                rally_bucket_label=_RALLY_LENGTH_LABEL[_RALLY_BUCKETS[rank - 1]],
+                long_rally_share=_long_rally_share(row),
                 result=row.result,
                 went_the_distance=_went_the_distance(row.scoring_system, deepest.get(row.id)),
             )

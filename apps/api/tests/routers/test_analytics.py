@@ -1209,11 +1209,6 @@ def test_every_scoring_system_has_a_set_count() -> None:
     assert set(_MAX_SETS) == set(ScoringSystem)
 
 
-# The four ranges, in the order a bucket's rank indexes them, so a trend assertion
-# names the label the API pairs with the rank it asserts.
-BUCKET_LABELS = ("1-2 shots", "3-5 shots", "6-10 shots", "11+ shots")
-
-
 def _bucketed_match(
     db_session: Session,
     player_id: uuid.UUID,
@@ -1227,12 +1222,11 @@ def _bucketed_match(
     return match
 
 
-def _bar(rank: int, **overrides: Any) -> dict[str, Any]:
+def _bar(share: float, **overrides: Any) -> dict[str, Any]:
     """One expected trend bar, its defaults the facts an unfinished match has none of."""
     return {
         "match": "M1",
-        "rally_bucket_rank": rank,
-        "rally_bucket_label": BUCKET_LABELS[rank - 1],
+        "long_rally_share": share,
         "result": None,
         "went_the_distance": None,
     } | overrides
@@ -1241,36 +1235,36 @@ def _bar(rank: int, **overrides: Any) -> dict[str, Any]:
 def test_rally_trend_runs_oldest_to_most_recent(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """Three matches on consecutive days: a short one, a middling one, a grind.
+    """Three matches on consecutive days: a short one, a mixed one, a grind.
 
     None of them records a result or a scoring system, which is what the two null
     fields say: the bar has a height, and nothing yet to colour or flag it with.
     """
     player = make_player(db_session, coach_id=coach.id)
     for day, buckets in enumerate(
-        [[RallyBucket.B1], [RallyBucket.B2, RallyBucket.B2], [RallyBucket.B4]], start=1
+        [[RallyBucket.B1], [RallyBucket.B2, RallyBucket.B3], [RallyBucket.B4]], start=1
     ):
         _bucketed_match(db_session, player.id, buckets, played_on=date(THIS_YEAR, 7, day))
 
     body = _get(client, player.id, "rally")
 
     assert body["trend"] == [
-        _bar(1),
-        _bar(2, match="M2"),
-        _bar(4, match="M3"),
+        _bar(0),
+        _bar(50, match="M2"),
+        _bar(100, match="M3"),
     ]
 
 
-def test_rally_trend_rounds_a_half_up_to_the_longer_bucket(
+def test_rally_trend_rounds_the_share_to_a_whole_percent(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
-    """One point in each of the two middle buckets, averaging exactly 2.5."""
+    """One of three points ran long, a recurring third the bar has to land a whole on."""
     player = make_player(db_session, coach_id=coach.id)
-    _bucketed_match(db_session, player.id, [RallyBucket.B2, RallyBucket.B3])
+    _bucketed_match(db_session, player.id, [RallyBucket.B1, RallyBucket.B2, RallyBucket.B3])
 
     body = _get(client, player.id, "rally")
 
-    assert body["trend"] == [_bar(3)]
+    assert body["trend"] == [_bar(33)]
 
 
 def test_rally_trend_leaves_out_a_match_that_bucketed_nothing(
@@ -1284,9 +1278,9 @@ def test_rally_trend_leaves_out_a_match_that_bucketed_nothing(
 
     body = _get(client, player.id, "rally")
 
-    # M1 and not M2: a match with no height to plot is absent rather than at zero,
+    # M1 and not M2: a match with no bucket to read is absent rather than at zero,
     # so the labels number the bars that exist.
-    assert body["trend"] == [_bar(3)]
+    assert body["trend"] == [_bar(100)]
 
 
 def test_rally_trend_keeps_only_the_most_recent_matches(
@@ -1300,7 +1294,7 @@ def test_rally_trend_keeps_only_the_most_recent_matches(
 
     body = _get(client, player.id, "rally")
 
-    assert body["trend"] == [_bar(1, match=f"M{position}") for position in range(1, 7)]
+    assert body["trend"] == [_bar(0, match=f"M{position}") for position in range(1, 7)]
 
 
 def test_rally_trend_carries_each_matchs_own_result(
@@ -1378,7 +1372,7 @@ def test_rally_trend_has_no_flag_for_a_single_set_format(
 
     body = _get(client, player.id, "rally")
 
-    assert body["trend"] == [_bar(2)]
+    assert body["trend"] == [_bar(0)]
 
 
 def test_rally_trend_has_no_flag_before_a_set_board_is_derived(
@@ -1392,7 +1386,7 @@ def test_rally_trend_has_no_flag_before_a_set_board_is_derived(
 
     body = _get(client, player.id, "rally")
 
-    assert body["trend"] == [_bar(2)]
+    assert body["trend"] == [_bar(0)]
 
 
 def test_rally_trend_describes_the_whole_match_under_a_set_filter(
@@ -1424,7 +1418,7 @@ def test_rally_trend_describes_the_whole_match_under_a_set_filter(
 
     body = _get(client, player.id, "rally?set_number=1")
 
-    assert body["trend"] == [_bar(1, result="win", went_the_distance=True)]
+    assert body["trend"] == [_bar(0, result="win", went_the_distance=True)]
 
 
 def test_point_ender_styles(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -2494,9 +2488,9 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert body["errors_overall"]["sample_size"] == "n=1"
     assert [style["count"] for style in body["styles"]["you"]] == [1, 0, 0]
     assert [style["count"] for style in body["styles"]["opponents"]] == [0, 0, 0]
-    assert body["trend"] == [_bar(1)]
+    assert body["trend"] == [_bar(0)]
     player_wide = _get(client, player.id, "rally")
-    assert player_wide["trend"] == [_bar(1), _bar(4, match="M2")]
+    assert player_wide["trend"] == [_bar(0), _bar(100, match="M2")]
     assert len(player_wide["lost_by_shot"]) == 1
     assert (player_wide["won"], player_wide["lost"]) == (1, 1)
     assert player_wide["errors_overall"]["sample_size"] == "n=2"
