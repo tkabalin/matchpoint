@@ -19,7 +19,10 @@
  * — which is what advances the match to the next point's serve or return screen — waits
  * out one more zoom (see `exit` below): the reverse of the camera move that brought the
  * coach in here, so the screen doesn't just cut from a tight crop straight to the whole
- * court.
+ * court. The wing strip and each card's icon and label fade out as that zoom starts:
+ * they keep their full size while the cards shrink around them, so left in place they
+ * hang over the court for the whole zoom, long after the cards have stopped reading as
+ * buttons.
  */
 
 import {
@@ -34,6 +37,7 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
@@ -114,6 +118,9 @@ export function FinalShotScreen({
   };
   // subCells(gridRegion, 4, 2) always returns exactly 8 regions, one per wing/shot pair below.
   const cells = subCells(gridRegion, 4, 2);
+  // transition-opacity's default 150ms is the tap flash's own --duration-fast, so the
+  // labels are gone within the first third of the 480ms zoom rather than riding it out.
+  const fadeOnExit = cn("transition-opacity", exiting !== null && "opacity-0");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="px-0.5 pt-[22px] pb-[14px]">
@@ -130,7 +137,7 @@ export function FinalShotScreen({
               when the region is squeezed narrow (a short viewport in landscape);
               overflow-hidden + truncate on the label is the same guard rather than
               letting a long word push the icon out or spill into the other column. */}
-          <div className="flex h-full w-full items-center gap-2">
+          <div className={cn("flex h-full w-full items-center gap-2", fadeOnExit)}>
             {WINGS.map((wing) => (
               <div
                 key={wing.wing}
@@ -168,10 +175,12 @@ export function FinalShotScreen({
                 // landscape leaves each one only a few px tall) can end up smaller than
                 // the icon-plus-label's own natural size — without this the label spills
                 // past the card's own edge into the next one instead of just clipping.
-                className="h-full w-full gap-1 overflow-hidden rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
+                className="h-full w-full overflow-hidden rounded-lg border-white/70 bg-white/90 text-center text-sm font-semibold whitespace-normal text-foreground shadow-[0_1px_6px_rgb(0_0_0/0.18)] hover:bg-white/99"
               >
-                <shot.Icon className="size-3.5 shrink-0" aria-hidden="true" />
-                {shot.label}
+                <span className={cn("flex items-center justify-center gap-1", fadeOnExit)}>
+                  <shot.Icon className="size-3.5 shrink-0" aria-hidden="true" />
+                  {shot.label}
+                </span>
               </Button>
             </ZoomedCard>
           )),
