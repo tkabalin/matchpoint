@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { BasketIcon } from "./basket-icon";
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { CourtDiagram, ZoomedCard } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, ZoomedCard } from "./court-diagram";
 import { subCells, toCourtBox } from "./court-geometry";
 import type { RallyBucket } from "./point";
 
@@ -97,6 +97,11 @@ export function RallyLengthScreen({
           </ZoomedCard>
         ))}
       </CourtDiagram>
+
+      {/* No buttons here, but the band's space is still reserved so the court sits
+          exactly where the final ball screen's did: without it the court is centred
+          in the room the band left, and the zoom-in starts from a frame 26px lower. */}
+      <div className={COURT_ACTIONS} />
     </div>
   );
 }

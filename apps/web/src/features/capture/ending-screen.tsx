@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 
 import type { CaptureAction } from "./capture-flow";
 import type { CourtRegion } from "./court-diagram";
-import { CourtDiagram, ZoomedCard, ZOOM_MS } from "./court-diagram";
+import { COURT_ACTIONS, CourtDiagram, ZoomedCard, ZOOM_MS } from "./court-diagram";
 import { subCells, toCourtBox } from "./court-geometry";
 
 const ENDINGS: {
@@ -130,6 +130,11 @@ export function EndingScreen({
           </ZoomedCard>
         ))}
       </CourtDiagram>
+
+      {/* Reserves the band's space with no buttons in it, for the same reason
+          rally-length-screen.tsx does: the MISTAKE zoom-out lands on a frame the next
+          serve screen then replaces, and it has to be the same frame or the court cuts. */}
+      <div className={COURT_ACTIONS} />
     </div>
   );
 }
