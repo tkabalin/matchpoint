@@ -10,13 +10,9 @@ import {
   BicepsFlexed,
   CircleCheck,
   CircleX,
-  ChevronDown,
-  ChevronUp,
-  Rainbow,
   Sparkle,
   Swords,
   ThumbsDown,
-  TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -44,13 +40,6 @@ const STYLE_ICON: Record<PointEnderStyle["kind"], typeof BicepsFlexed> = {
   forced: BicepsFlexed,
   unforced: ThumbsDown,
   unusual: Sparkle,
-};
-
-const SHOT_TYPE_ICON: Record<string, typeof TrendingUp> = {
-  Drive: TrendingUp,
-  Volley: ChevronUp,
-  Dropshot: ChevronDown,
-  Lob: Rainbow,
 };
 
 /** `won_by_shot`/`lost_by_shot` are keyed by wing × shot type ("Forehand
@@ -172,6 +161,20 @@ export function RallyTab({
   const unforcedCount = styles.find((style) => style.kind === "unforced")?.count ?? 0;
   const forcedUnforcedLabel =
     wonSide === "you" ? "Opponent forced : unforced" : "Your forced : Unforced";
+  // Summed across every style rather than read off whichever drill is open
+  // — this is its own permanent section now, not a per-style drill-down, so
+  // it reads the same regardless of which (if any) style card is expanded.
+  // Only "forced" ever carries real wing counts in practice (unforced skips
+  // the shot-detail screen entirely, unusual has no wing at all), but summing
+  // across all three needs no special-casing to get that right.
+  const wing = styles.reduce(
+    (total, style) => ({
+      forehand: total.forehand + (style.detail.wing?.forehand ?? 0),
+      backhand: total.backhand + (style.detail.wing?.backhand ?? 0),
+    }),
+    { forehand: 0, backhand: 0 },
+  );
+  const wingTotal = wing.forehand + wing.backhand;
 
   return (
     <div className="flex flex-col gap-3">
@@ -239,7 +242,7 @@ export function RallyTab({
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-bold">Winning shot</p>
+          <p className="mb-2 text-sm font-bold">Winning shot that forced an error</p>
           <ShotRadar
             className="mx-auto aspect-square w-full max-w-80"
             series={[
@@ -258,6 +261,48 @@ export function RallyTab({
             ]}
           />
         </div>
+
+        {/* Its own permanent section now, summed across every style rather
+            than tucked inside one style's own drill-down — a coach reads it
+            alongside the radar above without having to tap a card open
+            first. Only shown when there's real wing data to show, the same
+            "nothing to show, say nothing" reasoning every other conditional
+            section on this card already follows. */}
+        {wingTotal > 0 && (
+          <div>
+            <p className="mb-2 text-sm font-bold text-foreground">Wing</p>
+            <OutcomeStack
+              segments={[
+                { pattern: "yellow", weight: wing.forehand, label: `Forehand ${wing.forehand}` },
+                // Sky, the same scoped 8th categorical color the Serve tab's
+                // Ace segment uses (.claude/rules/web-color.md's "Serve/Rally
+                // — sky" entry) — indigo, tried here first, was too close to
+                // yellow to tell apart, and sky is the common ground between
+                // this and Ace's own failed colors rather than a third new
+                // one.
+                { pattern: "sky", weight: wing.backhand, label: `Backhand ${wing.backhand}` },
+              ]}
+            />
+            <div className="flex gap-4">
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <ArrowBigRightDash
+                  className="size-6"
+                  style={{ color: PATTERN_VAR.yellow }}
+                  aria-hidden="true"
+                />
+                Forehand {wing.forehand}
+              </span>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <ArrowBigLeftDash
+                  className="size-6"
+                  style={{ color: PATTERN_VAR.sky }}
+                  aria-hidden="true"
+                />
+                Backhand {wing.backhand}
+              </span>
+            </div>
+          </div>
+        )}
 
         <div>
           <p className="mb-2 text-sm font-bold text-foreground">Error insight: tap to expand</p>
@@ -368,13 +413,14 @@ function StyleDrill({ style, wonSide }: { style: PointEnderStyle; wonSide: WonSi
     );
   }
 
-  const wingTotal = wing.forehand + wing.backhand;
-
-  // `wing` being a real object with two zeroes is not the same as no wing at all,
-  // and neither is a truthiness check enough to tell them apart. With no wing, no
-  // shot type and no zones there is nothing under any of the three headings, so
-  // the headings themselves should not appear.
-  if (wingTotal === 0 && shotType.length === 0 && courtZones.length === 0) {
+  // Wing and Shot type both moved out to their own permanent sections above
+  // the point-ender cards (Wing summed across every style; Shot type dropped
+  // outright as redundant with the winning-shot radar above it) — but this
+  // style's own wing/shot type still decide whether *this point* recorded
+  // anything at all (#232's own "a missed return records no shot" case) or
+  // whether it's genuinely just missing its own final-ball zone, which is a
+  // different, narrower fact than "nothing was captured for these points".
+  if (wing.forehand + wing.backhand === 0 && shotType.length === 0 && courtZones.length === 0) {
     return (
       <div className="border-t pt-3">
         <NothingToBreakDown count={style.count} />
@@ -384,68 +430,7 @@ function StyleDrill({ style, wonSide }: { style: PointEnderStyle; wonSide: WonSi
 
   return (
     <div className="border-t pt-3">
-      {/* Unforced errors never carry a wing or shot type at all — capture skips
-          that screen entirely for them (see `capture-flow.ts`'s own comment:
-          "an unforced error skips the shot"), not a gap in what was recorded.
-          So these two sections are omitted outright rather than shown empty;
-          Final ball still can have data for an unforced error (its landing
-          zone is captured on an earlier step), so it keeps its own fallback. */}
-      {wingTotal > 0 && (
-        <>
-          <p className="mb-2 text-base font-bold text-foreground">Wing: setup shot</p>
-          <OutcomeStack
-            segments={[
-              { pattern: "yellow", weight: wing.forehand, label: `Forehand ${wing.forehand}` },
-              // Sky, the same scoped 8th categorical color the Serve tab's
-              // Ace segment uses (.claude/rules/web-color.md's "Serve/Rally —
-              // sky" entry) — indigo, tried here first, was too close to
-              // yellow to tell apart, and sky is the common ground between
-              // this and Ace's own failed colors rather than a third new one.
-              { pattern: "sky", weight: wing.backhand, label: `Backhand ${wing.backhand}` },
-            ]}
-          />
-          <div className="flex gap-4">
-            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <ArrowBigRightDash
-                className="size-6"
-                style={{ color: PATTERN_VAR.yellow }}
-                aria-hidden="true"
-              />
-              Forehand {wing.forehand}
-            </span>
-            <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-              <ArrowBigLeftDash
-                className="size-6"
-                style={{ color: PATTERN_VAR.sky }}
-                aria-hidden="true"
-              />
-              Backhand {wing.backhand}
-            </span>
-          </div>
-        </>
-      )}
-
-      {shotType.length > 0 && (
-        <>
-          <p className={cn("mb-2 text-base font-bold text-foreground", wingTotal > 0 && "mt-3")}>
-            Shot type
-          </p>
-          <BreakdownBars
-            rows={shotType}
-            pattern="indigo"
-            icon={(row: BreakdownRow) => SHOT_TYPE_ICON[row.label] ?? TrendingUp}
-          />
-        </>
-      )}
-
-      <p
-        className={cn(
-          "mb-2 text-base font-bold text-foreground",
-          (wingTotal > 0 || shotType.length > 0) && "mt-3",
-        )}
-      >
-        Final ball: where it landed
-      </p>
+      <p className="mb-2 text-base font-bold text-foreground">Final ball: where it landed</p>
       {courtZones.length > 0 ? (
         <FinalBallCourt zones={courtZones} wonSide={wonSide} flip={wonSide === "you"} />
       ) : (

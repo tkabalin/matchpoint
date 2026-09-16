@@ -176,7 +176,6 @@ test("shows the point-ender style cards, none open by default", async () => {
   expect(screen.getByRole("button", { name: /^Forced/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /^Unforced/ })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /^Unusual/ })).toBeInTheDocument();
-  expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
   expect(screen.queryByText("Final ball: where it landed")).not.toBeInTheDocument();
 });
 
@@ -187,8 +186,7 @@ test("tapping a style card opens its drill", async () => {
 
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
 
-  expect(await screen.findByText("Wing: setup shot")).toBeInTheDocument();
-  expect(screen.getByText("Final ball: where it landed")).toBeInTheDocument();
+  expect(await screen.findByText("Final ball: where it landed")).toBeInTheDocument();
 });
 
 test("tapping the open card again collapses it", async () => {
@@ -198,10 +196,10 @@ test("tapping the open card again collapses it", async () => {
 
   const forcedCard = screen.getByRole("button", { name: /^Forced/ });
   await user.click(forcedCard);
-  await screen.findByText("Wing: setup shot");
+  await screen.findByText("Final ball: where it landed");
   await user.click(forcedCard);
 
-  expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
+  expect(screen.queryByText("Final ball: where it landed")).not.toBeInTheDocument();
 });
 
 test("tapping a different style card swaps the drill", async () => {
@@ -209,19 +207,17 @@ test("tapping a different style card swaps the drill", async () => {
   renderTab();
   await screen.findByText("Point enders");
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
-  await screen.findByText("Wing: setup shot");
+  await screen.findByText("Final ball: where it landed");
 
   await user.click(screen.getByRole("button", { name: /^Unusual/ }));
 
   expect(await screen.findByText("Reason")).toBeInTheDocument();
-  expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
 });
 
-// Unforced errors never carry a wing or shot type at all (capture skips that
-// screen for them) — so those two sections are omitted outright, headings
-// included, rather than shown with an empty-state placeholder underneath.
-// Final ball can still have real data for an unforced error and keeps showing.
-test("Unforced's drill omits Wing and Shot type entirely, but still shows Final ball", async () => {
+// Shot type was removed outright as redundant with the winning-shot radar
+// above it, and Wing moved out to its own permanent section — neither is
+// part of any per-style drill any more, Unforced's included.
+test("Unforced's drill has no Wing or Shot type heading, only Final ball", async () => {
   const user = userEvent.setup({ delay: null });
   renderTab();
   await screen.findByText("Point enders");
@@ -230,9 +226,7 @@ test("Unforced's drill omits Wing and Shot type entirely, but still shows Final 
 
   expect(await screen.findByText("Final ball: where it landed")).toBeInTheDocument();
   expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
-  expect(screen.queryByText("No setup shot recorded.")).not.toBeInTheDocument();
   expect(screen.queryByText("Shot type")).not.toBeInTheDocument();
-  expect(screen.queryByText("No shot type recorded.")).not.toBeInTheDocument();
 });
 
 test("switching You won / You lost leaves the drill closed", async () => {
@@ -256,11 +250,10 @@ test("switching sides while a drill is open closes it, rather than silently swap
   renderTab();
   await screen.findByText("Point enders");
   await user.click(screen.getByRole("button", { name: /^Forced/ }));
-  await screen.findByText("Wing: setup shot");
+  await screen.findByText("Final ball: where it landed");
 
   await user.click(screen.getByRole("button", { name: /^You lost/ }));
 
-  expect(screen.queryByText("Wing: setup shot")).not.toBeInTheDocument();
   expect(screen.queryByText("Final ball: where it landed")).not.toBeInTheDocument();
 });
 
@@ -271,11 +264,32 @@ test("the winning-shot heading stays the same across the Won/Lost toggle", async
   renderTab();
   await screen.findByText("Point enders");
 
-  expect(screen.getByText("Winning shot")).toBeInTheDocument();
+  expect(screen.getByText("Winning shot that forced an error")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: /^You lost/ }));
 
-  expect(screen.getByText("Winning shot")).toBeInTheDocument();
+  expect(screen.getByText("Winning shot that forced an error")).toBeInTheDocument();
+});
+
+// Wing is its own permanent section now (summed across every style for the
+// current side), not tucked inside one style's own drill-down — visible with
+// no card open, and it recomputes rather than disappearing when the Won/Lost
+// toggle switches which side's styles it's summing.
+test("Wing sums forehand/backhand across every style for the current side, with no card open", async () => {
+  const user = userEvent.setup({ delay: null });
+  renderTab();
+  await screen.findByText("Point enders");
+
+  // "you" styles: forced {1,1}, unforced {0,0}, unusual has no wing.
+  expect(screen.getByText("Wing")).toBeInTheDocument();
+  expect(screen.getByText("Forehand 1")).toBeInTheDocument();
+  expect(screen.getByText("Backhand 1")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
+
+  // "opponents" styles: forced {1,1}, unforced {0,1}, unusual has no wing.
+  expect(screen.getByText("Forehand 1")).toBeInTheDocument();
+  expect(screen.getByText("Backhand 2")).toBeInTheDocument();
 });
 
 // The radar's own ShotShare has no count of its own — this is summed from
