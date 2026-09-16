@@ -21,6 +21,11 @@ import { buildMatchLogRow, seedMatchLog } from "./outbox";
  */
 test.use({ storageState: COACH_STORAGE_STATE });
 
+// A player, a claimed match, an outbox seed and a takeover, four round trips
+// before the first assertion: 21s of the config's 30s default on mobile-webkit.
+// The same 60s the capture specs take.
+test.setTimeout(60_000);
+
 /**
  * A match already on the server and already claimed by a device standing in for
  * "the other device" — see the module doc comment above for why a raw claim call

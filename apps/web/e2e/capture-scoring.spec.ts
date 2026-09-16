@@ -23,6 +23,11 @@ import { COACH_STORAGE_STATE } from "./coach";
  */
 test.use({ storageState: COACH_STORAGE_STATE });
 
+// Sixteen taps through the winner sheet, and mobile-webkit spends ~1s of the
+// runner's frames on each one: the deuce game alone measured 26s against the
+// config's 30s default. The same 60s the other two capture specs take.
+test.setTimeout(60_000);
+
 test("a game reaching deuce shows AD before the win", async ({ page }) => {
   await openHome(page);
   const playerId = await createPlayer(page, { firstName: "Tracked" });
