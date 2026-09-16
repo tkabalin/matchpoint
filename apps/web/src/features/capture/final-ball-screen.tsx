@@ -98,7 +98,7 @@ export function FinalBallScreen({
           Unusual end
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           disabled={pending}
           onClick={() => {
             setAskingWinner(true);
