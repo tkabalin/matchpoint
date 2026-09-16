@@ -10,6 +10,17 @@
  * container, alongside its data) and reference a color via
  * `CATEGORICAL_PATTERN_FILL[name]` (`lib/palette.ts`) wherever that chart
  * takes a `fill`.
+ *
+ * Untested against real hover/tooltip interaction: `rally-hypnogram.tsx`
+ * tried the exact same shape (a `<defs>` wrapped in its own named component,
+ * `LossPatternDefs`, rather than a literal `<defs>` inline in the chart's
+ * JSX) and it broke Recharts' tooltip on hover specifically, even though the
+ * bars themselves rendered correctly — Recharts' own docs only ever show a
+ * literal inline `<defs>`, never one behind a wrapper component, and that
+ * turned out to matter. If this component is ever wired up for real, inline
+ * its `<defs>` at the call site instead of rendering `<CategoricalPatternDefs />`
+ * as a child, and confirm hovering a bar that uses one of these fills still
+ * works before shipping it.
  */
 export function CategoricalPatternDefs() {
   return (

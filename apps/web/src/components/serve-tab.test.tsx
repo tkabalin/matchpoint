@@ -148,10 +148,10 @@ test("Your serve shows two fault-mode courts, one per serve number", async () =>
   const scope = within(card);
 
   expect(
-    scope.getByRole("img", { name: "Fault mode: net 55%, long 20%, wide 25%" }),
+    scope.getByRole("img", { name: "Fault mode: net 11, long 4, wide 5" }),
   ).toBeInTheDocument();
   expect(
-    scope.getByRole("img", { name: "Fault mode: net 38%, long 34%, wide 28%" }),
+    scope.getByRole("img", { name: "Fault mode: net 19, long 17, wide 14" }),
   ).toBeInTheDocument();
 });
 
@@ -175,11 +175,11 @@ test("Return of opponent serve shows one fault-mode court, combined from both se
   const scope = within(card);
 
   expect(scope.queryByText(/No faults on this serve yet/)).not.toBeInTheDocument();
-  // Counts, not the percentages beside them: {Net:11, Long:9, Wide:6} +
-  // {Net:3, Long:2, Wide:2} = {14, 11, 8} of 33, so net 42%, long 33%, wide 24%.
+  // Counts, not the percentages behind them: {Net:11, Long:9, Wide:6} +
+  // {Net:3, Long:2, Wide:2} = net 14, long 11, wide 8 of 33.
   expect(scope.getAllByRole("img")).toHaveLength(1);
   expect(
-    scope.getByRole("img", { name: "Fault mode: net 42%, long 33%, wide 24%" }),
+    scope.getByRole("img", { name: "Fault mode: net 14, long 11, wide 8" }),
   ).toBeInTheDocument();
 });
 
@@ -205,9 +205,7 @@ test("the opponent card's fault court holds at zero when no return faulted", asy
   ) as HTMLElement;
   const scope = within(card);
 
-  expect(
-    scope.getByRole("img", { name: "Fault mode: net 0%, long 0%, wide 0%" }),
-  ).toBeInTheDocument();
+  expect(scope.getByRole("img", { name: "Fault mode: net 0, long 0, wide 0" })).toBeInTheDocument();
 });
 
 test("shows an empty state for a serve number that's never been attempted", async () => {

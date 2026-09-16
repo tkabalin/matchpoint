@@ -112,6 +112,7 @@ function stubFetch(routes: Record<string, (input: Request) => Response | Promise
   const defaults: Record<string, () => Response> = {
     [`/api/matches/${match.id}/analytics/serve`]: () => Response.json(DEFAULT_SERVE_STATS),
     [`/api/matches/${match.id}/analytics/rally`]: () => Response.json(DEFAULT_RALLY_STATS),
+    [`/api/matches/${match.id}/points`]: () => Response.json([]),
     "/api/players": () => Response.json([]),
   };
   vi.stubGlobal(

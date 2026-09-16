@@ -35,7 +35,7 @@ function stubFetch(matches: MatchRead[]) {
 
 function renderCard() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <PlayerSurfaceRecordCard playerId="player-1" />
     </QueryClientProvider>,
@@ -88,6 +88,32 @@ test("renders nothing rather than an empty card with no matches at all", async (
     expect(document.querySelector('[data-slot="skeleton"]')).not.toBeInTheDocument(),
   );
   expect(screen.queryByText("Performance by surface")).not.toBeInTheDocument();
+});
+
+// The panel is painted the real court colour capture itself uses, not an
+// abstract categorical swatch — a coach recognises clay by its colour
+// already, so this mocks the court rather than inventing a second language.
+test("paints each surface's panel with its own real-court-colour texture", async () => {
+  stubFetch([
+    makeMatch({ id: "m1", surface: "hard", result: "win" }),
+    makeMatch({ id: "m2", surface: "clay", result: "win" }),
+  ]);
+  const { container } = renderCard();
+  await screen.findByText("Performance by surface");
+
+  expect(container.querySelector(".pattern-surface-hard")).toBeInTheDocument();
+  expect(container.querySelector(".pattern-surface-clay")).toBeInTheDocument();
+});
+
+// The court-line diagram is drawn on top of the same panel the pattern paints
+// and the mask reveals — a coach should see an actual (simplified) court,
+// not just a colour swatch.
+test("draws a simplified court-line diagram on every panel", async () => {
+  stubFetch([makeMatch({ id: "m1", surface: "hard", result: "win" })]);
+  const { container } = renderCard();
+  await screen.findByText("Performance by surface");
+
+  expect(container.querySelectorAll("svg line").length).toBeGreaterThan(0);
 });
 
 test("shows a real error on a failed load", async () => {

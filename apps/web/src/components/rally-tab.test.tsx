@@ -21,7 +21,10 @@ const RALLY_STATS: RallyStats = {
   },
   won: 5,
   lost: 4,
-  lost_by_shot: [],
+  // Wing × shot type, one row per combination — the radar's own axes are
+  // keyed by shot type alone, so a coach reading "Drive 3" here is forehand
+  // and backhand drives summed together.
+  lost_by_shot: [{ label: "Forehand drive", value: 2, secondary_value: 1, max: 3 }],
   outcome_mix: [],
   rally_length: [
     { label: "1-2 shots", count: 4 },
@@ -29,7 +32,26 @@ const RALLY_STATS: RallyStats = {
     { label: "6-10 shots", count: 2 },
   ],
   average_rally_length: { won: 2.6, lost: 6.5 },
-  trend: [],
+  trend: [
+    {
+      match: "M1",
+      long_rally_share: 10,
+      result: "win",
+      went_the_distance: false,
+    },
+    {
+      match: "M2",
+      long_rally_share: 55,
+      result: "loss",
+      went_the_distance: true,
+    },
+    {
+      match: "M3",
+      long_rally_share: 30,
+      result: null,
+      went_the_distance: null,
+    },
+  ],
   shot_frequency: {
     you: [
       { shot: "Drive", share: 0.5 },
@@ -37,7 +59,11 @@ const RALLY_STATS: RallyStats = {
     ],
     opponents: [{ shot: "Drive", share: 1 }],
   },
-  won_by_shot: [],
+  won_by_shot: [
+    { label: "Forehand drive", value: 3, max: 5 },
+    { label: "Backhand drive", value: 2, max: 5 },
+    { label: "Forehand volley", value: 1, max: 5 },
+  ],
   styles: {
     you: [
       {
@@ -252,6 +278,25 @@ test("the winning-shot heading stays the same across the Won/Lost toggle", async
   expect(screen.getByText("Winning shot")).toBeInTheDocument();
 });
 
+// The radar's own ShotShare has no count of its own — this is summed from
+// won_by_shot/lost_by_shot, whose rows are wing × lowercase shot type
+// ("Forehand drive", matching analytics.py's own casing), both wings folded
+// into the one, re-capitalized shot-type count the radar shows ("Drive").
+test("the winning-shot radar shows each shot type's real count, summed across both wings", async () => {
+  const user = userEvent.setup({ delay: null });
+  renderTab();
+  await screen.findByText("Point enders");
+
+  // won_by_shot: Forehand drive 3 + Backhand drive 2 = 5; Forehand volley 1.
+  expect(screen.getByText("Drive 5")).toBeInTheDocument();
+  expect(screen.getByText("Volley 1")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: /^You lost/ }));
+
+  // lost_by_shot: Forehand drive, value 2 (unforced) + secondary_value 1 (forced) = 3.
+  expect(screen.getByText("Drive 3")).toBeInTheDocument();
+});
+
 // `styles[wonSide]` describes the side that *didn't* win those points' own
 // error, so the label names the opposite side from the toggle: "You won"
 // shows the opponent's forced/unforced (their errors gave you the point),
@@ -270,10 +315,10 @@ test("the forced:unforced stat names the opposite side from the Won/Lost toggle,
   expect(screen.getByText("2 | 1")).toBeInTheDocument();
 });
 
-test("shows the rally-length distribution, uncaptioned in the middle", async () => {
+test("shows the rally-intensity hypnogram", async () => {
   renderTab();
 
-  expect(await screen.findByText("Rally length: how points are ending")).toBeInTheDocument();
-  expect(screen.getByText("Short → often serve or return.")).toBeInTheDocument();
-  expect(screen.getByText("Long → often fitness, not technique.")).toBeInTheDocument();
+  expect(await screen.findByText("Rally intensity: how matches are going")).toBeInTheDocument();
+  expect(screen.getByText("Low → dominant, fast points.")).toBeInTheDocument();
+  expect(screen.getByText("High → grinding baseline battles.")).toBeInTheDocument();
 });

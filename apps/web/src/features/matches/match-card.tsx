@@ -1,4 +1,4 @@
-import type { MatchRead, MatchSide, PlayerRead, PointRead } from "@matchpoint/api-client";
+import type { MatchRead, PlayerRead } from "@matchpoint/api-client";
 import { listPointsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -9,121 +9,13 @@ import { PlayerAvatar } from "@/components/player-avatar";
 import { Button } from "@/components/ui/button";
 import { Item } from "@/components/ui/item";
 import { initialsFor } from "@/lib/coach-initials";
+import { blockHeight, deriveSets, GAMES_ROW_HEIGHT } from "@/lib/momentum";
 import { PATTERN_CLASS } from "@/lib/palette";
 import { SURFACE_ICON, SURFACE_LABEL } from "@/lib/tennis-labels";
 import { useInView } from "@/lib/use-in-view";
 import { cn } from "@/lib/utils";
 
 import { formatPlayedOn } from "./match-format";
-
-interface MomentumGame {
-  gameNumber: number;
-  winner: MatchSide;
-  isBreak: boolean;
-  pointsPlayed: number;
-}
-
-interface MomentumSet {
-  setNumber: number;
-  tracked: number;
-  opponent: number;
-  winner: MatchSide | null;
-  games: MomentumGame[];
-}
-
-/** Groups a match's raw point log into completed games, then completed sets —
- * `listPoints` already carries game number, set number, who served, and who
- * won each point, so both the set score and the game-by-game momentum below
- * are derived client-side rather than needing a dedicated backend endpoint.
- * A game with no `is_game_end` point yet (still being played) is dropped
- * rather than guessed at.
- *
- * `matchFinished` overrides a missing `is_set_end` flag for the *last* set
- * only: a real gap has shown up where a match had a definitive final result
- * (`match.result`) but its own last set carried no end-of-set point, which
- * otherwise read as "still in progress" — an impossible state for a match
- * that's actually over — and left that set floating with no winner mark, at
- * a different height to its neighbours (their score block reserves room for
- * an icon that never renders). Every set *before* the last one is trusted
- * regardless: the match couldn't have moved on to the next set otherwise. */
-function deriveSets(points: PointRead[], matchFinished: boolean): MomentumSet[] {
-  const bySet = new Map<number, Map<number, PointRead[]>>();
-  const setEnded = new Set<number>();
-  for (const point of points) {
-    if (point.is_set_end) setEnded.add(point.set_number);
-    let gamesByNumber = bySet.get(point.set_number);
-    if (!gamesByNumber) {
-      gamesByNumber = new Map();
-      bySet.set(point.set_number, gamesByNumber);
-    }
-    const group = gamesByNumber.get(point.game_number);
-    if (group) group.push(point);
-    else gamesByNumber.set(point.game_number, [point]);
-  }
-
-  const setNumbers = [...bySet.keys()].sort((a, b) => a - b);
-
-  return setNumbers.map((setNumber, index) => {
-    const gamesByNumber = bySet.get(setNumber)!;
-    const games = [...gamesByNumber.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([gameNumber, gamePoints]): MomentumGame | null => {
-        const ended = gamePoints.find((point) => point.is_game_end);
-        if (!ended) return null;
-        const winner: MatchSide = ended.won ? "tracked" : "opponent";
-        // One player serves the whole game, so any point's `server` will do.
-        // A break is the winner not being the side who served it.
-        const server = gamePoints[0]!.server;
-        return {
-          gameNumber,
-          winner,
-          isBreak: winner !== server,
-          pointsPlayed: gamePoints.length,
-        };
-      })
-      .filter((game): game is MomentumGame => game !== null);
-
-    const tracked = games.filter((game) => game.winner === "tracked").length;
-    const opponent = games.filter((game) => game.winner === "opponent").length;
-    const isLastSet = index === setNumbers.length - 1;
-    // Comparing games-so-far would call a 1-0 set "won" the moment the first
-    // game finishes — only an actual `is_set_end` point (a real completion
-    // signal, not a game-count heuristic) earns a winner mark, unless this is
-    // the last set of a match that's definitively over.
-    const ended = setEnded.has(setNumber) || !isLastSet || matchFinished;
-    const winner: MatchSide | null = ended ? (tracked > opponent ? "tracked" : "opponent") : null;
-    return { setNumber, tracked, opponent, winner, games };
-  });
-}
-
-// A love game (4 points) reads as the most dominant win, drawn as the tallest
-// block; a long deuce grind reads as the least, drawn as the shortest. Points
-// beyond a dozen still floor out at the minimum rather than shrinking further.
-const BLOCK_MAX_HEIGHT = 20;
-const BLOCK_MIN_HEIGHT = 8;
-const BLOCK_MIN_POINTS = 4;
-const BLOCK_MAX_POINTS = 12;
-
-function blockHeight(pointsPlayed: number): number {
-  const clamped = Math.min(Math.max(pointsPlayed, BLOCK_MIN_POINTS), BLOCK_MAX_POINTS);
-  const span = BLOCK_MAX_POINTS - BLOCK_MIN_POINTS;
-  return (
-    BLOCK_MAX_HEIGHT - ((clamped - BLOCK_MIN_POINTS) / span) * (BLOCK_MAX_HEIGHT - BLOCK_MIN_HEIGHT)
-  );
-}
-
-// The break-dot's own reserved space (a size-1 dot plus its mb-0.5 gap) above
-// the tallest possible bar — this is the games-row's own fixed height, not an
-// auto one. Left to size itself to its own tallest bar, a set whose longest
-// game happened to run a few points shorter than another set's would get a
-// shorter row overall, and since both rows are top-aligned (a set-group
-// column, not this row, is what shares a top edge with its neighbours), that
-// shorter row's *bottom* — its baseline — would sit measurably higher than
-// the other sets' (found against real seeded data: an 18.5px row next to a
-// 20px one). Every set's games-row now commits to the same fixed height
-// regardless of its own contents, which is what actually guarantees a shared
-// baseline, not just a shared top.
-const GAMES_ROW_HEIGHT = BLOCK_MAX_HEIGHT + 6;
 
 /** An initials-only avatar for our own tracked player on the rare roster
  * desync where their id no longer resolves. Never used for the opponent —

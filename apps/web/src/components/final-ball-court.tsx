@@ -8,14 +8,17 @@ import type { CourtZoneCount } from "@matchpoint/api-client";
  * style is scoped to — green for a style scoped to points the tracked player
  * won, vermillion for one scoped to points they lost. Same "the one to
  * address" reasoning `fault-mode-court.tsx` already uses on the Serve tab,
- * and the same majority-margin/pattern mechanics, just fed by real counts
- * instead of pre-rounded shares.
+ * and the same majority-margin mechanics, just fed by real counts instead of
+ * pre-rounded shares. The majority comparison itself still runs on each
+ * cell's share of the total (a raw count alone can't say which is "the
+ * biggest"), but what's actually printed on each cell is that raw count, not
+ * the percentage it was compared by.
  *
  * Net, long and wide are gone from this chart entirely — that out-of-bounds
  * breakdown now lives on the Serve tab's own fault-mode courts, so this
- * chart's zones (and the percentages they're a share of) are the four
- * in-court cells only. A thin net graphic still runs along the near edge,
- * purely decorative, so the diagram still reads as a court.
+ * chart's zones (and the counts printed on them) are the four in-court cells
+ * only. A thin net graphic still runs along the near edge, purely
+ * decorative, so the diagram still reads as a court.
  */
 
 const CELL_W = 90;
@@ -80,6 +83,14 @@ export function FinalBallCourt({
     { label: "deep", ad: "Ad deep", deuce: "Deuce deep" },
   ];
   const rows = flip ? [...rowOrder].reverse() : rowOrder;
+  // The net sits physically against "short" (a court-geometry fact, not a
+  // perspective one), so its slot has to move with the same flip that
+  // reorders the rows above — fixing it at the bottom regardless of flip
+  // left it facing the wrong way whenever `rows` put "short" on top instead.
+  // The AD/DEUCE header stays put either way, the one constant the rest
+  // takes its bearings from.
+  const courtY0 = flip ? HEADER_H : HEADER_H + NET_H;
+  const netY = flip ? HEADER_H + COURT_H : HEADER_H;
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -89,7 +100,7 @@ export function FinalBallCourt({
         height={VIEW_H}
         role="img"
         aria-label={`Final ball landing zones: ${DRAWN_ZONES.map(
-          (zone) => `${zone} ${pct(count(zone))}%`,
+          (zone) => `${zone} ${count(zone)}`,
         ).join(", ")}`}
       >
         <defs>
@@ -145,7 +156,7 @@ export function FinalBallCourt({
         </text>
 
         {rows.map((row, rowIndex) => {
-          const y1 = HEADER_H + rowIndex * CELL_H;
+          const y1 = courtY0 + rowIndex * CELL_H;
           const y2 = y1 + CELL_H;
           return (
             <g key={row.label}>
@@ -177,7 +188,7 @@ export function FinalBallCourt({
                       fill={textColor}
                       {...(majority ? {} : textHalo)}
                     >
-                      {pct(value)}%
+                      {value}
                     </text>
                   </g>
                 );
@@ -188,7 +199,7 @@ export function FinalBallCourt({
 
         <rect
           x={0}
-          y={HEADER_H}
+          y={courtY0}
           width={COURT_W}
           height={COURT_H}
           fill="none"
@@ -197,41 +208,29 @@ export function FinalBallCourt({
         />
         <line
           x1={COURT_W / 2}
-          y1={HEADER_H}
+          y1={courtY0}
           x2={COURT_W / 2}
-          y2={HEADER_H + COURT_H}
+          y2={courtY0 + COURT_H}
           stroke="var(--color-card)"
           strokeWidth={1}
         />
         <line
           x1={0}
-          y1={HEADER_H + CELL_H}
+          y1={courtY0 + CELL_H}
           x2={COURT_W}
-          y2={HEADER_H + CELL_H}
+          y2={courtY0 + CELL_H}
           stroke="var(--color-card)"
           strokeWidth={1}
         />
 
-        {/* Purely decorative net graphic along the near edge — not a scored
-            zone (no count, no label), just enough that the diagram still
-            reads as a court now that the out-zones are gone. */}
-        <rect
-          x={0}
-          y={HEADER_H + COURT_H}
-          width={COURT_W}
-          height={NET_H}
-          fill="url(#final-ball-net)"
-        />
-        <rect
-          x={-3}
-          y={HEADER_H + COURT_H - 3}
-          width={5}
-          height={NET_H + 6}
-          fill="var(--color-foreground)"
-        />
+        {/* Purely decorative net graphic, always against the "short" edge —
+            not a scored zone (no count, no label), just enough that the
+            diagram still reads as a court now that the out-zones are gone. */}
+        <rect x={0} y={netY} width={COURT_W} height={NET_H} fill="url(#final-ball-net)" />
+        <rect x={-3} y={netY - 3} width={5} height={NET_H + 6} fill="var(--color-foreground)" />
         <rect
           x={COURT_W - 2}
-          y={HEADER_H + COURT_H - 3}
+          y={netY - 3}
           width={5}
           height={NET_H + 6}
           fill="var(--color-foreground)"

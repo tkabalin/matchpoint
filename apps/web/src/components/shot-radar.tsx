@@ -26,11 +26,17 @@ const AXIS_ICON: Record<string, LucideIcon> = {
 const ICON_SIZE = 32;
 
 interface AxisTickProps {
-  x?: number;
-  y?: number;
-  cx?: number;
-  cy?: number;
+  // Recharts calls the tick function with x/y/cx/cy typed as `string | number`
+  // (`BaseTickContentProps`), even though every real call passes numbers.
+  x?: number | string;
+  y?: number | string;
+  cx?: number | string;
+  cy?: number | string;
   payload?: { value: string };
+  /** The real count behind this axis's share, keyed by the same shot-type
+   *  label — the radar's own data only carries a normalised share, so this
+   *  comes from a separate lookup built by the caller. */
+  counts?: Record<string, number | undefined>;
 }
 
 /**
@@ -39,20 +45,28 @@ interface AxisTickProps {
  * its axis — so the icon reads as belonging to that spoke of the web, not
  * floating in a fixed screen direction.
  */
-function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
+function AxisTick({ x: rawX = 0, y: rawY = 0, cx = 0, cy = 0, payload, counts }: AxisTickProps) {
+  const x = Number(rawX);
+  const y = Number(rawY);
   const label = payload?.value ?? "";
+  const count = counts?.[label];
   const Icon = AXIS_ICON[label];
-  const dx = x - cx;
-  const dy = y - cy;
+  const dx = x - Number(cx);
+  const dy = y - Number(cy);
   const length = Math.hypot(dx, dy) || 1;
   const unitX = dx / length;
   const unitY = dy / length;
-  // Always centred, never start/end-anchored: an edge-anchored label grows
-  // entirely in one direction from its point, and a long one ("Drop shot", the
-  // longest axis label this chart draws) reliably overflowed the container the
-  // moment it landed on a lower-left/lower-right axis rather than top/bottom.
-  // Centring halves the worst-case one-directional reach.
-  const textAnchor = "middle";
+  // Anchored by which side of centre the axis sits on, not always centred:
+  // this chart's four shot-type axes land exactly at top/right/bottom/left
+  // (never a diagonal), so the left and right axes can anchor their label
+  // away from centre (`end`/`start`) without the old diagonal-overflow risk
+  // a genuinely centred anchor was added to avoid — anchoring both toward
+  // *and* away from centre at once (what "middle" does here) is what was
+  // pulling a wide label like "Volley 52" back over its own icon on the
+  // right axis, and "Lob 15" over its icon on the left one. Top/bottom keep
+  // `middle`, since a horizontally-centred label under a horizontally-
+  // centred icon was never the problem.
+  const textAnchor = unitX < -0.1 ? "end" : unitX > 0.1 ? "start" : "middle";
   const iconDistance = 18;
   const iconX = x + unitX * iconDistance;
   const iconY = y + unitY * iconDistance;
@@ -86,7 +100,7 @@ function AxisTick({ x = 0, y = 0, cx = 0, cy = 0, payload }: AxisTickProps) {
         fontWeight={600}
         fill="var(--color-foreground)"
       >
-        {label}
+        {count === undefined ? label : `${label} ${count}`}
       </text>
     </g>
   );
@@ -114,11 +128,20 @@ export function ShotRadar({
   series,
   className,
 }: {
-  series: { name: string; color: string; points: { shot: string; share: number }[] }[];
+  series: {
+    name: string;
+    color: string;
+    /** `count` is optional and only ever read off the first series — the
+     *  axis label shows one number, so an H2H overlay's second series (were
+     *  one ever added here) would have nothing to attach a second count to. */
+    points: { shot: string; share: number; count?: number }[];
+  }[];
   className?: string;
 }) {
   const [first] = series;
   if (!first) return null;
+
+  const countByShot = Object.fromEntries(first.points.map((point) => [point.shot, point.count]));
 
   // Recharts wants one row per axis with a key per series.
   // Scaled to each series' own largest axis, not to a fixed 0-100 range: no
@@ -155,7 +178,10 @@ export function ShotRadar({
         margin={{ top: 32, bottom: 38, left: 56, right: 56 }}
       >
         <PolarGrid />
-        <PolarAngleAxis dataKey="shot" tick={<AxisTick />} />
+        <PolarAngleAxis
+          dataKey="shot"
+          tick={(props: AxisTickProps) => <AxisTick {...props} counts={countByShot} />}
+        />
         {series.map((entry) => (
           <Radar
             key={entry.name}

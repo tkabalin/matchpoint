@@ -47,6 +47,27 @@ test("an overlay keeps one property per series", () => {
   expect(styleText()).toContain("--color-sarah-k:");
 });
 
+// The radar's own ShotShare only ever carries a normalised share — a caller
+// that also knows the real count passes it alongside so the axis label can
+// show it, rather than leaving a coach to guess "20%" of what.
+test("shows the real count next to a shot's label when the caller provides one", () => {
+  const shotsWithCounts = [
+    { shot: "FH drive", share: 0.4, count: 8 },
+    { shot: "BH drive", share: 0.3, count: 6 },
+    { shot: "FH volley", share: 0.2, count: 4 },
+    { shot: "BH volley", share: 0.1, count: 2 },
+  ];
+  render(
+    <ShotRadar
+      series={[{ name: "Share of point-enders", color: "red", points: shotsWithCounts }]}
+    />,
+  );
+
+  expect(screen.getByText("FH drive 8")).toBeInTheDocument();
+  expect(screen.getByText("BH volley 2")).toBeInTheDocument();
+  expect(screen.queryByText("FH drive")).not.toBeInTheDocument();
+});
+
 // The caller maps whatever the analytics returned, which can be nothing at all.
 test("renders nothing when there is no series to draw", () => {
   const { container } = render(<ShotRadar series={[]} />);

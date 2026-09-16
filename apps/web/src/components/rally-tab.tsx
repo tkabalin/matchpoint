@@ -1,4 +1,4 @@
-import type { BreakdownRow, PointEnderStyle, RallyLengthBucket } from "@matchpoint/api-client";
+import type { BreakdownRow, PointEnderStyle } from "@matchpoint/api-client";
 import {
   getMatchRallyStatsOptions,
   getRallyStatsOptions,
@@ -13,24 +13,22 @@ import {
   ChevronDown,
   ChevronUp,
   Rainbow,
-  Ruler,
   Sparkle,
   Swords,
   ThumbsDown,
   TrendingUp,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import { BreakdownBars } from "@/components/breakdown-bars";
-import { LegibleXTick, LegibleYTick } from "@/components/chart-ticks";
 import { ForcedUnforcedBalance } from "@/components/forced-unforced-balance";
 import { OutcomeStack } from "@/components/outcome-swatch";
+import { RallyHypnogram } from "@/components/rally-hypnogram";
+import { RallyIntensityChart } from "@/components/rally-intensity-chart";
 import { SegmentedControl } from "@/components/segmented-control";
 import { ShotRadar } from "@/components/shot-radar";
 import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toSetNumber } from "@/lib/analytics/filter-options";
 import type { PhaseFilter, SetFilter, SurfaceFilter } from "@/lib/analytics/types.provisional";
@@ -54,6 +52,29 @@ const SHOT_TYPE_ICON: Record<string, typeof TrendingUp> = {
   Dropshot: ChevronDown,
   Lob: Rainbow,
 };
+
+/** `won_by_shot`/`lost_by_shot` are keyed by wing × shot type ("Forehand
+ *  drive", the shot half lowercase — `analytics.py`'s `_shot_row_label` uses
+ *  `_SHOT_LABEL` raw, never `.capitalize()`'d), one row per combination —
+ *  this sums both wings into the plain shot-type counts the radar's own axes
+ *  are keyed by, dropping the wing word rather than the shot type (always
+ *  the first word, always exactly one word, unlike "drop shot"). The radar's
+ *  own labels (`_shot_shares`) *do* run `_SHOT_LABEL[...].capitalize()`, so
+ *  the remainder is re-capitalized here too ("drive" -> "Drive", "drop shot"
+ *  -> "Drop shot") — the two backend label functions disagree on casing, so
+ *  matching them by string equality needs this to line up on both sides.
+ *  `lost_by_shot` splits a row's count into `value` (unforced) and
+ *  `secondary_value` (forced); `won_by_shot` already comes pre-summed into
+ *  `value` alone. */
+function shotTypeCounts(rows: BreakdownRow[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    const shotType = row.label.split(" ").slice(1).join(" ");
+    const key = shotType.charAt(0).toUpperCase() + shotType.slice(1);
+    counts[key] = (counts[key] ?? 0) + row.value + (row.secondary_value ?? 0);
+  }
+  return counts;
+}
 
 export function RallyTab({
   playerId,
@@ -137,6 +158,10 @@ export function RallyTab({
   const styles = data.styles[wonSide];
 
   const shotFrequency = data.shot_frequency[wonSide];
+  // The radar's own ShotShare carries only a normalised share, never a count
+  // — real per-shot-type counts come from the same won_by_shot/lost_by_shot
+  // rows the drill below already reads, summed across both wings.
+  const shotCounts = shotTypeCounts(wonSide === "you" ? data.won_by_shot : data.lost_by_shot);
   const openedStyle = styles.find((style) => style.kind === openStyle) ?? null;
   // `styles[wonSide]` describes whoever *didn't* win these points' own error:
   // "you won" styles are the opponent's forced/unforced errors (or your
@@ -150,7 +175,15 @@ export function RallyTab({
 
   return (
     <div className="flex flex-col gap-3">
-      <RallyLengthCard buckets={data.rally_length} />
+      {/* The trend hypnogram needs several matches to say anything; scoped to
+          one match it would draw a single, meaningless bar, so the per-match
+          page gets its own in-match, game-by-game rally-intensity read
+          instead (see `rally-intensity-chart.tsx`'s own doc comment). */}
+      {matchId === undefined ? (
+        <RallyHypnogram trend={data.trend} />
+      ) : (
+        <RallyIntensityChart matchId={matchId} />
+      )}
 
       <StatCard title="Point enders">
         <OutcomeStack
@@ -217,7 +250,10 @@ export function RallyTab({
                 // own light surface. chart-3 is the same dedicated chart hue,
                 // just further down its lightness ramp.
                 color: "var(--color-chart-3)",
-                points: shotFrequency,
+                points: shotFrequency.map((point) => ({
+                  ...point,
+                  count: shotCounts[point.shot],
+                })),
               },
             ]}
           />
@@ -242,52 +278,6 @@ export function RallyTab({
         {openedStyle && <StyleDrill style={openedStyle} wonSide={wonSide} />}
       </StatCard>
     </div>
-  );
-}
-
-/**
- * How many shots a point ran to before it ended — not scoped to who won it,
- * since the read this exists for cuts across that: a cluster of points ending in
- * the first few shots usually points to serve or return; a cluster ending only
- * after a long exchange usually points to fitness rather than technique. The
- * middle ground between those two doesn't have one clean read, so it's left
- * uncaptioned rather than forcing a claim onto it.
- */
-function RallyLengthCard({ buckets }: { buckets: RallyLengthBucket[] }) {
-  // chart-1 is a pale, near-white blue in light mode, illegible against this
-  // card's own light surface — same finding as `ShotRadar`'s own comment
-  // above, chart-3 is the same dedicated chart hue further down its
-  // lightness ramp.
-  const config = { count: { label: "Points", color: "var(--color-chart-3)" } };
-  const total = buckets.reduce((sum, bucket) => sum + bucket.count, 0);
-
-  return (
-    <StatCard>
-      <div className="flex items-center gap-3">
-        <Ruler className="size-9 shrink-0 text-primary" aria-hidden="true" />
-        <div>
-          <p className="text-base font-bold">Rally length: how points are ending</p>
-          <p className="text-xs text-muted-foreground">
-            Shots played before the point ended · n={total}
-          </p>
-        </div>
-      </div>
-
-      <ChartContainer config={config} className="aspect-[5/3] w-full">
-        <BarChart data={buckets}>
-          <CartesianGrid vertical={false} />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} tick={<LegibleXTick />} />
-          <YAxis allowDecimals={false} width={28} tick={<LegibleYTick />} />
-          <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="count" fill="var(--color-chart-3)" radius={2} />
-        </BarChart>
-      </ChartContainer>
-
-      <div className="flex justify-between gap-3 text-xs font-medium text-foreground">
-        <span>Short → often serve or return.</span>
-        <span className="text-right">Long → often fitness, not technique.</span>
-      </div>
-    </StatCard>
   );
 }
 

@@ -327,41 +327,35 @@
   );
 }
 
-/* The player surface-record card's own four textures, keyed by surface rather
-   than category — a surface is a genuinely separate axis from the categorical
-   palette above, so it never reuses an outcome color (win/forced/unforced),
-   even where a texture happens to read as "flat" or "solid". Violet is
-   deliberately never used here: this card's own loss count sits right above
-   every panel in vermillion (CircleX), and vermillion + violet must never
-   share a view. That leaves 3 safe colors for 4 surfaces, so hard and carpet
-   share blue — safe because their textures (flat vs. cross-hatched) are
-   maximally different, and each panel also carries its own icon and label
-   below, so color is never the only thing telling two panels apart. Mark
-   color per swatch mirrors the categorical choice already made for the same
-   base color above (white on indigo and blue, black on yellow). Hard is
-   deliberately flat: the one surface with no image at all, which is itself a
-   fourth distinct texture against the other three's visible marks, not a gap
-   in the pattern rule — see player-surface-record-card.tsx's own comment. */
+/* `PlayerSurfaceRecordCard`'s own four panels — the real court colour a coach
+   sees mid-match (`SURFACE_PATTERN_CLASS` in tennis-labels.ts, the same values
+   `live-match.tsx` paints capture with), textured rather than flat so the
+   surfaces still read apart by touch/shape, not colour alone. Hard stays
+   flat: the one surface capture itself never textures either. White marks
+   throughout, the same reason real tennis lines are always white regardless
+   of surface. */
 @utility pattern-surface-hard {
-  background-color: var(--primary);
+  background-color: var(--color-court);
 }
 
 @utility pattern-surface-clay {
-  background-color: var(--color-cat-indigo);
-  background-image: radial-gradient(rgb(255 255 255 / 0.5) 1px, transparent 1.3px);
+  background-color: var(--color-court-clay);
+  background-image: radial-gradient(rgb(255 255 255 / 0.35) 1px, transparent 1.3px);
   background-size: 5px 5px;
 }
 
 @utility pattern-surface-grass {
-  background-color: var(--color-cat-yellow);
-  background-image: repeating-linear-gradient(90deg, rgb(0 0 0 / 0.35) 0 1px, transparent 1px 6px);
+  background-color: var(--color-court-grass);
+  /* A darker stripe, not white: this is standing in for mown-lawn lanes, the
+     one surface texture that isn't itself a line-marking colour. */
+  background-image: repeating-linear-gradient(90deg, rgb(0 0 0 / 0.12) 0 1px, transparent 1px 6px);
 }
 
 @utility pattern-surface-carpet {
-  background-color: var(--primary);
+  background-color: var(--color-court-carpet);
   background-image:
-    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.35) 0 1px, transparent 1px 7px),
-    repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.35) 0 1px, transparent 1px 7px);
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 0.25) 0 1px, transparent 1px 7px),
+    repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.25) 0 1px, transparent 1px 7px);
 }
 
 /* The dual-ring halo every swatch carries. One of the two rings always contrasts

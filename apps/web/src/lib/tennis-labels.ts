@@ -20,9 +20,11 @@ export const SURFACE_ICON: Record<Surface, LucideIcon> = {
   carpet: Rows3,
 };
 
-/** One high-contrast texture per surface (`app.css`'s own `pattern-surface-*`
- *  utilities) — `PlayerSurfaceRecordCard`'s "Substrate Cross-Section" panels,
- *  the one place a surface is a background fill rather than an icon. */
+/** One textured panel per surface (`app.css`'s own `pattern-surface-*`
+ *  utilities), the real court colour capture itself paints
+ *  (`live-match.tsx`'s `COURT_SURFACES`) rather than an abstract stand-in —
+ *  `PlayerSurfaceRecordCard`'s "Substrate Cross-Section" panels, the one
+ *  place a surface is a background fill rather than an icon. */
 export const SURFACE_PATTERN_CLASS: Record<Surface, string> = {
   hard: "pattern-surface-hard",
   clay: "pattern-surface-clay",

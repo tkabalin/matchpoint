@@ -27,6 +27,7 @@ import { SURFACE_LABEL } from "@/lib/tennis-labels";
 import { cn } from "@/lib/utils";
 
 import { formatPlayedOn } from "./match-format";
+import { MomentumCard } from "./momentum-card";
 
 type Tab = "serve" | "rally";
 
@@ -146,6 +147,8 @@ export function MatchStatsPage({
         onSetChange={setSet}
         onPhaseChange={setPhase}
       />
+
+      <MomentumCard matchId={matchId} matchFinished={match.result !== null} />
 
       <ServeRallyToggle value={tab} onValueChange={setTab} />
 

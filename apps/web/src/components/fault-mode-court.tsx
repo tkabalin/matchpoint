@@ -7,9 +7,12 @@ import { ArrowLeft, ArrowRight, ArrowUp, Grid2x2 } from "lucide-react";
  * or side the way a rally's final ball does) bordered by the net, long and
  * wide out-zones, each sized by nothing but labelled with its own share.
  *
- * `FaultModeShares`' three numbers are each rounded independently server-side
- * and so don't reliably sum to 100 — renormalised here so what's drawn (and
- * printed) always does.
+ * `FaultModeShares`' three percentages are each rounded independently
+ * server-side and so don't reliably sum to 100 — renormalised here purely to
+ * decide which is the majority, since what's actually printed on each zone
+ * is its own raw count (`net_count`/`long_count`/`wide_count`, #295) rather
+ * than a percentage a coach would have to weigh against an unknown sample
+ * size ("42%" could be 42 of 100 serves or 3 of 7).
  *
  * Colour is majority-vs-not: whichever fault mode has the largest share, plus
  * any other within 10 points of it, is the one to address, so it carries
@@ -18,10 +21,14 @@ import { ArrowLeft, ArrowRight, ArrowUp, Grid2x2 } from "lucide-react";
  * "not the one to look at" rather than a second competing category, which is
  * also why it needs no pattern of its own the way a true categorical swatch
  * would. `final-ball-court.tsx`'s own majority fill (Rally tab) uses this
- * same mechanic, just fed by real counts and win/loss-themed colour.
+ * same mechanic, just fed by real counts throughout and win/loss-themed
+ * colour.
  */
 
-const WIDE_W = 16;
+// Equal to OUT_H (long/net's own thickness), not a separately-tuned number:
+// the wide zone reads as a third, equally-weighted out-zone framing the
+// court rather than a visibly thinner afterthought beside the other two.
+const WIDE_W = 22;
 const OUT_H = 22;
 const COURT_W = 96;
 const COURT_H = 116;
@@ -47,8 +54,9 @@ const textHalo = {
   paintOrder: "stroke" as const,
 };
 
-/** Each share renormalised so the three always sum to 100, and which of them
- *  count as "majority" (the largest, plus any other within 10 points of it). */
+/** Percentages renormalised so the three always sum to 100, purely to decide
+ *  which of them count as "majority" (the largest, plus any other within 10
+ *  points of it) — the colour signal, never what's printed on the zone. */
 function faultShares(shares: FaultModeShares) {
   const total = shares.net + shares.long + shares.wide;
   const pct = (value: number) => (total > 0 ? Math.round((value / total) * 100) : 0);
@@ -57,16 +65,26 @@ function faultShares(shares: FaultModeShares) {
   const wide = pct(shares.wide);
   const max = Math.max(net, long, wide);
   const isMajority = (value: number) => value >= max - MAJORITY_MARGIN;
-  return { net, long, wide, isMajority };
+  return { isMajority };
 }
 
 export function FaultModeCourt({ shares }: { shares: FaultModeShares }) {
-  const { net, long, wide, isMajority } = faultShares(shares);
+  const { isMajority } = faultShares(shares);
   // Long at the top, net at the bottom, matching the app's reference court
   // orientation (`final-ball-court.tsx`) — LONG points away off the far edge,
   // NET sits right in front.
-  const topZone = { text: "LONG", value: long, kind: "long" as const };
-  const bottomZone = { text: "NET", value: net, kind: "net" as const };
+  const topZone = {
+    text: "LONG",
+    pct: shares.long,
+    count: shares.long_count,
+    kind: "long" as const,
+  };
+  const bottomZone = {
+    text: "NET",
+    pct: shares.net,
+    count: shares.net_count,
+    kind: "net" as const,
+  };
 
   return (
     <svg
@@ -74,7 +92,7 @@ export function FaultModeCourt({ shares }: { shares: FaultModeShares }) {
       width={VIEW_W}
       height={VIEW_H}
       role="img"
-      aria-label={`Fault mode: net ${net}%, long ${long}%, wide ${wide}%`}
+      aria-label={`Fault mode: net ${shares.net_count}, long ${shares.long_count}, wide ${shares.wide_count}`}
     >
       <defs>
         {/* Vermillion's own 45°-diagonal-band pattern (web-color.md), so the
@@ -101,8 +119,20 @@ export function FaultModeCourt({ shares }: { shares: FaultModeShares }) {
 
       <OutZoneBar y={0} zone={topZone} isMajority={isMajority} />
       <OutZoneBar y={OUT_H + COURT_H} zone={bottomZone} isMajority={isMajority} />
-      <WideBar x={0} side="left" value={wide} majority={isMajority(wide)} showLabel={false} />
-      <WideBar x={COURT_X1} side="right" value={wide} majority={isMajority(wide)} showLabel />
+      <WideBar
+        x={0}
+        side="left"
+        count={shares.wide_count}
+        majority={isMajority(shares.wide)}
+        showLabel={false}
+      />
+      <WideBar
+        x={COURT_X1}
+        side="right"
+        count={shares.wide_count}
+        majority={isMajority(shares.wide)}
+        showLabel
+      />
 
       {/* The court itself: one plain white square, no in-court split. */}
       <rect
@@ -124,11 +154,11 @@ function OutZoneBar({
   isMajority,
 }: {
   y: number;
-  zone: { text: string; value: number; kind: "net" | "long" };
+  zone: { text: string; pct: number; count: number; kind: "net" | "long" };
   isMajority: (value: number) => boolean;
 }) {
-  const fill = isMajority(zone.value) ? MAJORITY_FILL : MINORITY_FILL;
-  const textColor = isMajority(zone.value) ? "white" : "var(--color-foreground)";
+  const fill = isMajority(zone.pct) ? MAJORITY_FILL : MINORITY_FILL;
+  const textColor = isMajority(zone.pct) ? "white" : "var(--color-foreground)";
   const isNet = zone.kind === "net";
   const iconSize = 14;
 
@@ -165,9 +195,9 @@ function OutZoneBar({
         textAnchor="middle"
         dominantBaseline="middle"
         fill={textColor}
-        {...(isMajority(zone.value) ? {} : textHalo)}
+        {...(isMajority(zone.pct) ? {} : textHalo)}
       >
-        {zone.text} {zone.value}%
+        {zone.text} {zone.count}
       </text>
     </g>
   );
@@ -176,18 +206,21 @@ function OutZoneBar({
 function WideBar({
   x,
   side,
-  value,
+  count,
   majority,
   showLabel,
 }: {
   x: number;
   side: "left" | "right";
-  value: number;
+  count: number;
   majority: boolean;
   showLabel: boolean;
 }) {
   const Icon = side === "left" ? ArrowLeft : ArrowRight;
-  const iconSize = 12;
+  // Matches OutZoneBar's own icon/text sizing now that the band is the same
+  // thickness as long/net's, rather than the smaller pair tuned for the old,
+  // narrower strip.
+  const iconSize = 14;
   const midY = OUT_H + COURT_H / 2;
   const labelX = x + WIDE_W / 2;
   const fill = majority ? MAJORITY_FILL : MINORITY_FILL;
@@ -207,15 +240,15 @@ function WideBar({
       {showLabel && (
         <text
           x={labelX}
-          y={midY + 28}
-          fontSize="9"
+          y={midY + 30}
+          fontSize="10"
           fontWeight="700"
           textAnchor="middle"
           fill={textColor}
-          transform={`rotate(${side === "left" ? -90 : 90} ${labelX} ${midY + 28})`}
+          transform={`rotate(${side === "left" ? -90 : 90} ${labelX} ${midY + 30})`}
           {...(majority ? {} : textHalo)}
         >
-          WIDE {value}%
+          WIDE {count}
         </text>
       )}
     </g>

@@ -1,6 +1,7 @@
 import { listMatchesOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { CircleCheck, CircleX, LandPlot } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { StatCard } from "@/components/stat-card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -24,23 +25,95 @@ import { cn } from "@/lib/utils";
  * new aggregate endpoint (see `match-list.tsx`'s own surface filter for the
  * same client-side precedent).
  *
- * "Substrate Cross-Section": each surface is its own textured panel (`app.css`'s
- * `pattern-surface-*` utilities) rather than a plain text row — hard flat,
- * clay finely stippled, grass a vertical pinstripe, carpet a cross-hatched
- * mesh, so the surfaces read apart by touch/shape even in pure black and
- * white, not by color alone. A solid white block masks down from the top of
- * each panel, its height the loss share, so the texture itself grows with
- * the win rate and "cuts through" the record rather than sitting beside it.
- * The exact win/loss count still stands above each panel in the same
- * tick/cross icons the rest of the app uses, since a visual proportion alone
- * can't carry the precise numbers.
+ * Each surface's panel is textured in the real court colour a coach sees
+ * mid-match (`pattern-surface-*` in app.css, the same colours `live-match.tsx`
+ * paints the capture screen with) rather than an abstract stand-in, with a
+ * simplified white court-line diagram drawn on top so it reads as an actual
+ * court, not just a swatch. A solid white block masks down from the top of
+ * each panel — animated in on mount, so the court visibly grows into view
+ * rather than snapping straight to its final state — its height the loss
+ * share, so the court itself (colour, texture and lines together) is what
+ * grows with the win rate and "cuts through" the record rather than sitting
+ * beside it. The exact win/loss count still stands above each panel in the
+ * same tick/cross icons the rest of the app uses, since a visual proportion
+ * alone can't carry the precise numbers, and the icon/label underneath is
+ * what tells two panels apart without relying on colour alone.
  */
+function CourtLines() {
+  return (
+    <svg
+      viewBox="0 0 200 100"
+      preserveAspectRatio="none"
+      className="absolute inset-0 h-full w-full"
+      aria-hidden="true"
+    >
+      <rect
+        x="0.75"
+        y="0.75"
+        width="198.5"
+        height="98.5"
+        fill="none"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeOpacity="0.85"
+      />
+      {/* Singles sidelines, inset from the doubles ones above — the band
+          outside them, top and bottom, is the doubles alley. */}
+      <line x1="0" y1="12" x2="200" y2="12" stroke="white" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line x1="0" y1="88" x2="200" y2="88" stroke="white" strokeWidth="1.2" strokeOpacity="0.8" />
+      {/* The net, spanning the full doubles width. */}
+      <line
+        x1="100"
+        y1="0"
+        x2="100"
+        y2="100"
+        stroke="white"
+        strokeWidth="1.2"
+        strokeOpacity="0.8"
+      />
+      {/* The two service lines, each set back from the net, plus the centre
+          service line between them splitting the deuce/ad boxes. */}
+      <line x1="46" y1="12" x2="46" y2="88" stroke="white" strokeWidth="1.2" strokeOpacity="0.8" />
+      <line
+        x1="154"
+        y1="12"
+        x2="154"
+        y2="88"
+        stroke="white"
+        strokeWidth="1.2"
+        strokeOpacity="0.8"
+      />
+      <line x1="46" y1="50" x2="154" y2="50" stroke="white" strokeWidth="1.2" strokeOpacity="0.8" />
+      {/* Centre marks, a short tick at each baseline's own midpoint. */}
+      <line x1="0" y1="50" x2="4" y2="50" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
+      <line
+        x1="196"
+        y1="50"
+        x2="200"
+        y2="50"
+        stroke="white"
+        strokeWidth="1.5"
+        strokeOpacity="0.85"
+      />
+    </svg>
+  );
+}
 export function PlayerSurfaceRecordCard({ playerId }: { playerId: string }) {
   const {
     data: matches,
     isPending,
     isError,
   } = useQuery(listMatchesOptions({ query: { player_id: playerId } }));
+
+  // Starts fully masked and reveals a tick after mount, so the CSS transition
+  // on the mask below actually has a "from" state to animate away from —
+  // setting it straight to its final height on the very first render leaves
+  // nothing for the transition to run between.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setRevealed(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   if (isPending) return <Skeleton className="h-40 w-full" />;
 
@@ -100,12 +173,14 @@ export function PlayerSurfaceRecordCard({ playerId }: { playerId: string }) {
                   SURFACE_PATTERN_CLASS[surface],
                 )}
               >
+                <CourtLines />
                 {/* White masks the loss share, from the top down, so the
-                    texture itself is what grows with the win rate — more
-                    wins reads as more of the surface visibly "claimed". */}
+                    court itself — colour, texture and lines together — is
+                    what grows with the win rate, animating in on mount
+                    rather than snapping straight to its final height. */}
                 <div
-                  className="absolute inset-x-0 top-0 bg-white"
-                  style={{ height: `${100 - winRate}%` }}
+                  className="absolute inset-x-0 top-0 bg-white transition-[height] duration-1000 ease-out"
+                  style={{ height: revealed ? `${100 - winRate}%` : "100%" }}
                   aria-hidden="true"
                 />
               </div>

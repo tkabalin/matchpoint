@@ -8,7 +8,7 @@ import {
   createRoute,
   createRouter,
 } from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -319,4 +319,92 @@ test("shows an empty state instead of a blank grid when no player has computable
   expect(
     screen.getByText("Not enough rally data logged yet to plot player insights."),
   ).toBeInTheDocument();
+});
+
+test("zooms into a crowded plot on tap, and back out again", async () => {
+  stubFetch({
+    [shortRally.id]: shortRallyStats,
+    [noRallyData.id]: noRallyDataStats,
+    [midRally.id]: midRallyStats,
+    [longRally.id]: longRallyStats,
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderLoadedCard();
+
+  const zoomIn = screen.getByRole("button", { name: "Zoom in on player insights" });
+  const zoomOut = screen.getByRole("button", { name: "Zoom out on player insights" });
+  const link = screen.getByRole("link", { name: "Alex Chen's player insights" });
+  const zoomLayer = link.parentElement!;
+
+  expect(zoomOut).toBeDisabled();
+  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
+
+  await user.click(zoomIn);
+  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1.5)" });
+  expect(zoomOut).not.toBeDisabled();
+
+  await user.click(zoomOut);
+  expect(zoomLayer).toHaveStyle({ transform: "translate(0px, 0px) scale(1)" });
+  expect(zoomOut).toBeDisabled();
+});
+
+// No `userEvent` helper expresses a two-finger pinch, so this drives raw
+// Pointer Events directly (`fireEvent`) rather than reaching for a real
+// accessible interaction that doesn't exist here.
+test("pinching off-centre zooms into that spot, not the box's own centre", async () => {
+  stubFetch({
+    [shortRally.id]: shortRallyStats,
+    [noRallyData.id]: noRallyDataStats,
+    [midRally.id]: midRallyStats,
+    [longRally.id]: longRallyStats,
+  });
+  await renderLoadedCard();
+
+  const link = screen.getByRole("link", { name: "Alex Chen's player insights" });
+  const zoomLayer = link.parentElement!;
+  const box = zoomLayer.parentElement!;
+  vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 200,
+    height: 200,
+    right: 200,
+    bottom: 200,
+    x: 0,
+    y: 0,
+    toJSON: () => "",
+  });
+
+  // Two fingers land either side of (150, 60), a spot in the box's own
+  // upper-right, nowhere near its centre at (100, 100) — then spread apart
+  // to double the distance between them, pinching in around that same spot.
+  fireEvent.pointerDown(box, { pointerId: 1, clientX: 130, clientY: 60 });
+  fireEvent.pointerDown(box, { pointerId: 2, clientX: 170, clientY: 60 });
+  fireEvent.pointerMove(box, { pointerId: 1, clientX: 110, clientY: 60 });
+  fireEvent.pointerMove(box, { pointerId: 2, clientX: 190, clientY: 60 });
+
+  // Scale doubles (80px apart / 40px apart), and the pan that keeps (150, 60)
+  // fixed under the still-centred-on-(150,60) fingers at that new scale is
+  // exactly (-50, 40) — nothing close to the (0, 0) a centre-only zoom would
+  // leave it at.
+  expect(zoomLayer).toHaveStyle({ transform: "translate(-50px, 40px) scale(2)" });
+});
+
+test("zooming all the way in disables further zoom-in", async () => {
+  stubFetch({
+    [shortRally.id]: shortRallyStats,
+    [noRallyData.id]: noRallyDataStats,
+    [midRally.id]: midRallyStats,
+    [longRally.id]: longRallyStats,
+  });
+  const user = userEvent.setup({ delay: null });
+  await renderLoadedCard();
+
+  const zoomIn = screen.getByRole("button", { name: "Zoom in on player insights" });
+  await user.click(zoomIn);
+  await user.click(zoomIn);
+  await user.click(zoomIn);
+  await user.click(zoomIn);
+
+  expect(zoomIn).toBeDisabled();
 });

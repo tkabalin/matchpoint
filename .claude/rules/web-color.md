@@ -237,18 +237,34 @@ categorical distinction on the dashboard that isn't a point outcome.
   — a de-emphasised "not the one to look at," not a second competing category. Net, long and wide no
   longer appear on this chart at all (that breakdown moved to the Serve tab's own fault-mode
   courts), so `--chart-1`'s old non-categorical gradient role here is gone with them.
-- **Player profile — surface record card ("Substrate Cross-Section")** — four textured panels, one
-  per surface, each its own `pattern-surface-*` utility (`app.css`): nav blue for hard and carpet,
-  indigo for clay, yellow for grass. Blue is safe here at all (the bottom nav is hidden on this
-  page, `nav={false}`) but still only 3 safe colors remain for 4 surfaces, since violet is off the
-  table — the card's own loss count sits above every panel in vermillion, and vermillion + violet
-  must never share a view. Hard and carpet share blue instead, told apart by texture alone (flat vs.
-  cross-hatched) plus each panel's own icon and label, the same "pattern carries it, not color
-  alone" reasoning the rest of this file already leans on. A genuinely new axis from the categorical
-  palette above, not a reuse of it — never let a surface default to an outcome color
-  (win/forced/unforced) even where hard's own texture is flat solid. The win rate itself is a plain
-  white mask scaling up from each panel's own bottom edge, not a pattern fill, so it needs no
-  categorical color of its own.
+- **Rally tab — rally-intensity hypnogram** (`rally-hypnogram.tsx`) and **rally intensity chart**
+  (`rally-intensity-chart.tsx`) — one bar per recent match (hypnogram) or per game within one match
+  (intensity chart), coloured by that match's or game's own outcome: win-green, loss-vermillion, or
+  (hypnogram only) a neutral `--muted-foreground` grey for a match nobody has recorded the result of
+  yet, never guessed at. A won bar is a plain, fully solid fill; a lost bar carries the same
+  high-contrast diagonal-stripe texture the rest of the app already uses for a loss
+  (`pattern-unforced` for a hand-rolled div bar, `LossPatternDefs`/`"url(#chart-pattern-loss)"` for
+  a Recharts SVG one) — a deliberate departure from this chart family's earlier flat-fill-only bars,
+  since here a single bar has no adjacent bar of the other colour to compare against, so colour
+  alone isn't enough to read win vs. loss in grayscale. "Went the distance" (reached a deciding set
+  or a match tiebreak) is a genuinely independent fact on the hypnogram — a match can be short and
+  still have gone to a decider — so it draws as a small amber diamond marker above the bar rather
+  than a competing bar colour. This is a deliberate, narrow exception to
+  "orange/`--color-outcome-forced` is reserved for point outcomes and hero-metric score bands, never
+  anything else": the marker is an annotation layered on top of the real categorical fill, not a
+  competing swatch or legend colour in its own right, the same reasoning that already lets
+  vermillion carry an extended "the one to address" meaning on the Serve tab's fault-mode courts.
+  Don't extend this further (a fifth meaning for orange) without the same care.
+- **Player profile — surface record card** (`player-surface-record-card.tsx`) — no longer a
+  categorical choice at all: each panel is painted the real court colour capture itself uses
+  (`SURFACE_PATTERN_CLASS` in `tennis-labels.ts`, mirroring `live-match.tsx`'s own `COURT_SURFACES`
+  — `--color-court`/`-grass`/`-clay`/`-carpet`), not a swatch from the categorical palette above. A
+  surface's colour is what it visibly is on a real court, not a category needing pattern-redundancy
+  the way the rainbow palette does — the icon and label under each panel are what tell two panels
+  apart without relying on colour alone, the same non-color-channel principle in a different form.
+  Never let a surface default to an outcome color (win/forced/unforced) regardless. The win rate
+  itself is a plain white mask scaling up from each panel's own bottom edge, not a second fill, so
+  it carries no color of its own.
 
 ## Light/dark mode background rule
 

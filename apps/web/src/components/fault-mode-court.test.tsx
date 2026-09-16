@@ -4,32 +4,41 @@ import { expect, test } from "vitest";
 
 import { FaultModeCourt } from "./fault-mode-court";
 
-/** The court draws the percentages and never the counts beside them (#295), so
- *  each case states its three shares and the helper fills matching counts in. */
-function shares(net: number, long: number, wide: number): FaultModeShares {
-  return { net, long, wide, net_count: net, long_count: long, wide_count: wide };
+/** Percentages still decide the majority colour; counts are what's printed
+ *  (#295) — kept genuinely different per case so a test can't pass by the
+ *  two coincidentally lining up. */
+function shares(
+  pcts: [net: number, long: number, wide: number],
+  counts: [net: number, long: number, wide: number],
+): FaultModeShares {
+  return {
+    net: pcts[0],
+    long: pcts[1],
+    wide: pcts[2],
+    net_count: counts[0],
+    long_count: counts[1],
+    wide_count: counts[2],
+  };
 }
 
-const SHARES = shares(55, 20, 25);
+const SHARES = shares([55, 20, 25], [11, 4, 5]);
 
-test("renders one accessible label naming all three shares", () => {
+test("renders one accessible label naming all three raw counts", () => {
   render(<FaultModeCourt shares={SHARES} />);
 
   expect(
-    screen.getByRole("img", { name: "Fault mode: net 55%, long 20%, wide 25%" }),
+    screen.getByRole("img", { name: "Fault mode: net 11, long 4, wide 5" }),
   ).toBeInTheDocument();
 });
 
-// FaultModeShares' three numbers are each rounded independently server-side and
-// don't reliably sum to 100 — this locks in that what's drawn (and printed) always
-// does, regardless of what the raw shares add up to.
-test("renormalises shares that don't sum to 100", () => {
-  render(<FaultModeCourt shares={shares(40, 20, 20)} />);
+// The majority colour is still decided by share, not count — a mode with
+// fewer faults overall can still be this match's own majority mode.
+test("colours by percentage even when the raw counts alone would suggest otherwise", () => {
+  const { container } = render(<FaultModeCourt shares={shares([60, 20, 20], [3, 1, 1])} />);
 
-  // 40+20+20=80 raw, so renormalised: net 50%, long 25%, wide 25%.
-  expect(
-    screen.getByRole("img", { name: "Fault mode: net 50%, long 25%, wide 25%" }),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/LONG 1/)).toBeInTheDocument();
+  expect(screen.getByText(/NET 3/)).toBeInTheDocument();
+  expect(container.querySelectorAll('rect[fill="url(#fault-court-majority)"]')).toHaveLength(1);
 });
 
 // Both serve cards face the same way — a fault mode has no "own serve vs.
@@ -38,20 +47,26 @@ test("renormalises shares that don't sum to 100", () => {
 // far edge) and net at the bottom, matching the app's reference court orientation.
 test("labels the top out-zone Long and the bottom Net", () => {
   render(<FaultModeCourt shares={SHARES} />);
-  expect(screen.getByText(/LONG 20%/)).toBeInTheDocument();
-  expect(screen.getByText(/NET 55%/)).toBeInTheDocument();
+  expect(screen.getByText(/LONG 4/)).toBeInTheDocument();
+  expect(screen.getByText(/NET 11/)).toBeInTheDocument();
 });
 
 // The wide out-zone renders on both sides of the court but only labels one, to
-// avoid printing "WIDE 25%" twice for a single share.
-test("prints the wide share exactly once", () => {
+// avoid printing "WIDE 5" twice for a single share.
+test("prints the wide count exactly once", () => {
   render(<FaultModeCourt shares={SHARES} />);
 
-  expect(screen.getAllByText(/WIDE 25%/)).toHaveLength(1);
+  expect(screen.getAllByText(/WIDE 5/)).toHaveLength(1);
 });
 
 test("a fault mode with no clear majority still renders without throwing", () => {
-  render(<FaultModeCourt shares={shares(34, 33, 33)} />);
+  render(<FaultModeCourt shares={shares([34, 33, 33], [7, 7, 6])} />);
 
   expect(screen.getByRole("img")).toBeInTheDocument();
+});
+
+test("never prints a percentage sign anywhere on the court", () => {
+  render(<FaultModeCourt shares={SHARES} />);
+
+  expect(screen.queryByText(/%/)).not.toBeInTheDocument();
 });
