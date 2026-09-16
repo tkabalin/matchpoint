@@ -191,7 +191,7 @@ export function ServeScreen({
           Ace
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           disabled={pending}
           onClick={() => {
             setLetNotice(null);

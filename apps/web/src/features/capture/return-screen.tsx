@@ -164,7 +164,7 @@ export function ReturnScreen({
           Fault
         </Button>
         <Button
-          variant="ghost"
+          variant="outline"
           disabled={pending}
           onClick={() => {
             setLetNotice(null);
