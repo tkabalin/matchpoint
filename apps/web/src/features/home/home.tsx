@@ -390,7 +390,7 @@ export function Home() {
                 emptyDetail="Not enough rally data logged yet."
               />
               <SquadRow
-                label="Best 1st serve %"
+                label="Most first serves landing in play"
                 icon={CircleCheck}
                 info={FIRST_SERVE_INFO}
                 member={bestWorstFirstServe.best}
@@ -405,7 +405,7 @@ export function Home() {
                 emptyDetail="Not enough matches logged yet."
               />
               <SquadRow
-                label="Worst 1st serve %"
+                label="Least first serves landing in play"
                 icon={CircleX}
                 info={FIRST_SERVE_INFO}
                 member={bestWorstFirstServe.worst}

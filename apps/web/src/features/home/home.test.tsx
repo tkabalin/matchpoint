@@ -679,7 +679,9 @@ test("shows the seven tendency rows with their scope-labelled captions and headl
   expect((await row("Most mistakes")).getByText("Sipho Dlamini")).toBeInTheDocument();
   expect((await row("Most aggressive")).getByText("Amahle Nkosi")).toBeInTheDocument();
   expect((await row("Most passive")).getByText("Sipho Dlamini")).toBeInTheDocument();
-  expect((await row("Best 1st serve %")).getByText("Amahle Nkosi")).toBeInTheDocument();
+  expect(
+    (await row("Most first serves landing in play")).getByText("Amahle Nkosi"),
+  ).toBeInTheDocument();
 });
 
 // Every stat here comes from the same default squadMember() fixture — a
