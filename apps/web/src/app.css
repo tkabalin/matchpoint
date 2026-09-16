@@ -404,4 +404,35 @@
   body {
     overflow-x: hidden;
   }
+  /* A viewer who asks their system for less motion gets none of the CSS kind, and so
+     does the e2e suite, which asks for it (playwright.config.ts): Playwright waits for
+     an element's box to stop moving before clicking it, and a starved WebKit frame
+     outlasts the sheet's 200ms slide by seconds. 0.01ms rather than `none` leaves a
+     collapsed transition still an animation that finishes, which is the path Base UI
+     unmounts its popups through. Recharts animates in JavaScript, not here. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+
+    /* Except the capture flash, the only confirmation a coach gets that a tap
+       registered: its keyframe ends at opacity 0, so collapsing it would hold that
+       end frame and show nothing at all. Reduced motion takes the movement, not the
+       message, so the panel just appears and score-flash.tsx's timer clears it. */
+    .animate-score-flash,
+    .animate-score-flash-long {
+      animation: none !important;
+    }
+
+    /* And not a spinner, which says work is still in flight: frozen at its last
+       frame it becomes a circle that claims nothing. Restated rather than excluded
+       because the collapse above is `!important`. */
+    .animate-spin {
+      animation: var(--animate-spin) !important;
+    }
+  }
 }
