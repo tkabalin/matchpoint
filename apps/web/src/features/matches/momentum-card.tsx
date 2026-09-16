@@ -1,8 +1,10 @@
 import { listPointsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { CircleCheck, CircleX, Waves } from "lucide-react";
+import { CircleCheck, CircleX, Info, Waves } from "lucide-react";
 
 import { StatCard } from "@/components/stat-card";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { blockHeight, deriveSets } from "@/lib/momentum";
 import { PATTERN_CLASS } from "@/lib/palette";
@@ -73,9 +75,26 @@ export function MomentumCard({
       <div className="flex items-center gap-3">
         <Waves className="size-9 shrink-0 text-primary" aria-hidden="true" />
         <div>
-          <p className="text-base font-bold">Momentum</p>
+          <div className="flex items-center gap-1">
+            <p className="text-base font-bold">Momentum</p>
+            {/* Tap-triggered, not hover — same touch-first reasoning as the
+                home screen's own squad-stat explainers. */}
+            <Popover>
+              <PopoverTrigger
+                render={<Button variant="ghost" size="icon-xs" className="text-muted-foreground" />}
+                aria-label="Explain momentum"
+              >
+                <Info className="size-3.5" aria-hidden="true" />
+              </PopoverTrigger>
+              <PopoverContent className="w-64 text-sm" side="bottom">
+                One bar per completed game, in play order. Its colour is who won the game, and its
+                height is how few points that took: a love game is the tallest, a long deuce game
+                the shortest. A dot above the bar marks a break of serve.
+              </PopoverContent>
+            </Popover>
+          </div>
           <p className="text-xs text-muted-foreground">
-            Momentum swing, bar height indicates level of dominance from the winner of that game
+            Bar height indicates level of dominance from the winner of that game
           </p>
         </div>
       </div>

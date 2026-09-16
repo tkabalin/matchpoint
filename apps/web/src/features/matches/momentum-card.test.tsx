@@ -1,6 +1,7 @@
 import type { PointRead } from "@matchpoint/api-client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi } from "vitest";
 
 import { MomentumCard } from "./momentum-card";
@@ -131,6 +132,16 @@ test("a note in one game carries that game's own label, not a different game's",
 
   const item = screen.getByRole("listitem");
   expect(item).toHaveTextContent("Set 1, Game 2: Serving big in game 2");
+});
+
+test("explains what the bars encode, behind the header's info button", async () => {
+  const user = userEvent.setup({ delay: null });
+  stubFetch(lovGameWonByTracked(1));
+  renderCard();
+
+  await user.click(await screen.findByRole("button", { name: "Explain momentum" }));
+
+  expect(await screen.findByText(/One bar per completed game/)).toBeInTheDocument();
 });
 
 test("explains what the break-of-serve dot means", async () => {
