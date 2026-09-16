@@ -4,13 +4,19 @@ import {
   listSquadMemberStatsOptions,
 } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import { useState } from "react";
 
 import { ChipRow } from "@/components/chip-row";
 import { AppPage, PageHeader } from "@/components/page-shell";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
+import type {
+  SquadLeaderboardMetricKey,
+  SquadTrendMetricKey,
+} from "@/lib/analytics/types.provisional";
+import { getErrorStatus } from "@/lib/error-status";
 import { SURFACE_ICON } from "@/lib/tennis-labels";
 
 import { PlayerInsightsCard } from "./player-insights-card";
@@ -38,15 +44,34 @@ const SURFACE_OPTIONS: { value: SquadSurfaceFilter; label: string; icon?: Lucide
  * coach-wide counterpart to the per-player Serve/Rally stats page.
  */
 export function StatsPage() {
-  const { data: roster } = useQuery(listPlayersOptions());
+  const { data: roster, isError, error } = useQuery(listPlayersOptions());
   const [surface, setSurface] = useState<SquadSurfaceFilter>("all");
   const surfaceQuery = surface === "all" ? undefined : surface;
   const { data: squadStats } = useQuery(
     listSquadMemberStatsOptions({ query: { surface: surfaceQuery } }),
   );
-  const [leaderboardMetric, setLeaderboardMetric] = useState<SquadMetricKey>("record");
+  const [leaderboardMetric, setLeaderboardMetric] = useState<SquadLeaderboardMetricKey>("record");
   const [search, setSearch] = useState("");
-  const [trendMetric, setTrendMetric] = useState<SquadMetricKey>("record");
+  const [trendMetric, setTrendMetric] = useState<SquadTrendMetricKey>("record");
+
+  if (isError) {
+    return (
+      <AppPage>
+        <PageHeader title="Squad stats" />
+        <Alert variant="destructive">
+          <AlertDescription>
+            {getErrorStatus(error) === 401 ? (
+              <>
+                Your session has expired. <Link to="/">Sign in</Link> to see your squad stats.
+              </>
+            ) : (
+              "Could not load squad stats."
+            )}
+          </AlertDescription>
+        </Alert>
+      </AppPage>
+    );
+  }
 
   if (!roster) {
     return (
@@ -73,6 +98,8 @@ export function StatsPage() {
       forcedToUnforcedRatio: member?.period_forced_to_unforced_ratio ?? null,
       firstServeInPercent: member?.period_first_serve_in_percent ?? null,
       matchesLoggedThisPeriod: member?.matches_logged_this_period ?? 0,
+      forcedErrorsSuffered: member?.period_forced_errors_suffered ?? 0,
+      pointsWon: member?.period_points_won ?? 0,
     };
   });
 

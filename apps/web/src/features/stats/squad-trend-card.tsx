@@ -1,6 +1,7 @@
 import type { SquadMetric, Surface } from "@matchpoint/api-client";
 import { getSquadTrendOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
@@ -8,6 +9,7 @@ import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChipRow } from "@/components/chip-row";
 import { LegibleXTick, LegibleYTick } from "@/components/chart-ticks";
 import { StatCard } from "@/components/stat-card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -16,16 +18,20 @@ import {
   METRIC_PATTERN,
   fillSquadTrendGaps,
 } from "@/lib/analytics/squad-stats";
-import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
+import type { SquadTrendMetricKey } from "@/lib/analytics/types.provisional";
+import { getErrorStatus } from "@/lib/error-status";
 import { CATEGORICAL_STROKE_DASH, PATTERN_VAR } from "@/lib/palette";
 
-const METRIC_OPTIONS: { value: SquadMetricKey; label: string; icon: LucideIcon }[] = (
-  Object.entries(METRIC_LABEL) as [SquadMetricKey, string][]
-).map(([value, label]) => ({ value, label, icon: METRIC_ICON[value] }));
+// Only the trend's own three metrics — not every `METRIC_LABEL` entry, which
+// (since #267) also carries the leaderboard-only ones the squad trend wire
+// endpoint has no way to plot.
+const TREND_METRICS: SquadTrendMetricKey[] = ["record", "forcedToUnforced", "firstServe"];
+const METRIC_OPTIONS: { value: SquadTrendMetricKey; label: string; icon: LucideIcon }[] =
+  TREND_METRICS.map((value) => ({ value, label: METRIC_LABEL[value], icon: METRIC_ICON[value] }));
 
 // The chip row's own vocabulary (shared with the leaderboard) isn't the
 // wire's — the API's `SquadMetric` enum spells the last two differently.
-const API_METRIC: Record<SquadMetricKey, SquadMetric> = {
+const API_METRIC: Record<SquadTrendMetricKey, SquadMetric> = {
   record: "record",
   forcedToUnforced: "forced_to_unforced",
   firstServe: "first_serve_in",
@@ -39,16 +45,18 @@ export function SquadTrendCard({
   onMetricChange,
   surface,
 }: {
-  metric: SquadMetricKey;
-  onMetricChange: (metric: SquadMetricKey) => void;
+  metric: SquadTrendMetricKey;
+  onMetricChange: (metric: SquadTrendMetricKey) => void;
   /** Narrows the pooled weekly tallies to one surface via the real `surface`
    *  axis (#225) — undefined means every surface, matching the shared filter
    *  row above this card on the squad stats page. */
   surface?: Surface;
 }) {
-  const { data: trend } = useQuery(
-    getSquadTrendOptions({ query: { metric: API_METRIC[metric], surface } }),
-  );
+  const {
+    data: trend,
+    isError,
+    error,
+  } = useQuery(getSquadTrendOptions({ query: { metric: API_METRIC[metric], surface } }));
   // Every point can legitimately be null at once — a roster with no resulted
   // matches in the window — which would otherwise draw a blank chart (axes,
   // no line, no dots) that reads as broken rather than as "not enough data".
@@ -77,7 +85,7 @@ export function SquadTrendCard({
         <h3 className="text-base font-bold text-foreground">Squad trend</h3>
       </div>
 
-      <ChipRow<SquadMetricKey>
+      <ChipRow<SquadTrendMetricKey>
         aria-label="Trend metric"
         options={METRIC_OPTIONS}
         value={metric}
@@ -85,7 +93,19 @@ export function SquadTrendCard({
         scroll
       />
 
-      {trend && !hasData ? (
+      {isError ? (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {getErrorStatus(error) === 401 ? (
+              <>
+                Your session has expired. <Link to="/">Sign in</Link> to see the squad trend.
+              </>
+            ) : (
+              "Could not load the squad trend."
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : trend && !hasData ? (
         <p className="flex aspect-[5/2] w-full items-center justify-center text-center text-xs text-muted-foreground">
           Not enough recent matches to show a trend yet.
         </p>

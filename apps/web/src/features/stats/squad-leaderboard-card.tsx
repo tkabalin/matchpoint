@@ -15,13 +15,26 @@ import {
   buildLeaderboard,
   metricDisplay,
 } from "@/lib/analytics/squad-stats";
-import type { SquadMetricKey, SquadStatsEntry } from "@/lib/analytics/types.provisional";
+import type { SquadLeaderboardMetricKey, SquadStatsEntry } from "@/lib/analytics/types.provisional";
 import { PATTERN_CLASS } from "@/lib/palette";
 import { cn } from "@/lib/utils";
 
-const METRIC_OPTIONS: { value: SquadMetricKey; label: string; icon: LucideIcon }[] = (
-  Object.entries(METRIC_LABEL) as [SquadMetricKey, string][]
-).map(([value, label]) => ({ value, label, icon: METRIC_ICON[value] }));
+// Only the leaderboard's own five metrics (#267) — not every `METRIC_LABEL`
+// entry, which also carries the trend-only `forcedToUnforced` this
+// leaderboard no longer offers as a standalone chip.
+const LEADERBOARD_METRICS: SquadLeaderboardMetricKey[] = [
+  "record",
+  "firstServe",
+  "pressureIndex",
+  "resilience",
+  "tacticalEfficiency",
+];
+const METRIC_OPTIONS: { value: SquadLeaderboardMetricKey; label: string; icon: LucideIcon }[] =
+  LEADERBOARD_METRICS.map((value) => ({
+    value,
+    label: METRIC_LABEL[value],
+    icon: METRIC_ICON[value],
+  }));
 
 type NamedEntry = SquadStatsEntry & { name: string };
 
@@ -34,11 +47,14 @@ function LeaderboardVisual({
   value,
   entry,
 }: {
-  metric: SquadMetricKey;
+  metric: SquadLeaderboardMetricKey;
   value: number | null;
   entry: SquadStatsEntry;
 }) {
-  if (metric === "forcedToUnforced") {
+  // Pressure Index *is* the forced:unforced balance the old leaderboard
+  // metric plotted, just ranked by difference instead of ratio (#267) — the
+  // same needle visual still fits, unchanged.
+  if (metric === "pressureIndex") {
     return <ForcedUnforcedBalance forced={entry.forcedCount} unforced={entry.unforcedCount} />;
   }
   const pattern = METRIC_PATTERN[metric];
@@ -66,8 +82,8 @@ export function SquadLeaderboardCard({
   /** Full roster, only for the avatar next to each row — the ranking/metric
    *  logic itself stays player-identity-free in `squad-stats.ts`. */
   players: Pick<PlayerRead, "id" | "first_name" | "last_name" | "photo_url">[];
-  metric: SquadMetricKey;
-  onMetricChange: (metric: SquadMetricKey) => void;
+  metric: SquadLeaderboardMetricKey;
+  onMetricChange: (metric: SquadLeaderboardMetricKey) => void;
   search: string;
   onSearchChange: (search: string) => void;
 }) {
@@ -82,7 +98,7 @@ export function SquadLeaderboardCard({
         <h3 className="text-base font-bold text-foreground">Leaderboard</h3>
       </div>
 
-      <ChipRow<SquadMetricKey>
+      <ChipRow<SquadLeaderboardMetricKey>
         aria-label="Leaderboard metric"
         options={METRIC_OPTIONS}
         value={metric}
@@ -105,7 +121,7 @@ export function SquadLeaderboardCard({
             const entry = entryByPlayerId.get(row.playerId)!;
             const player = playerById.get(row.playerId);
             const valueText =
-              metric === "forcedToUnforced"
+              metric === "pressureIndex"
                 ? `${entry.forcedCount} | ${entry.unforcedCount}`
                 : metricDisplay(entry, metric);
             return (

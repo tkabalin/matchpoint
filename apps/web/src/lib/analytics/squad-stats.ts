@@ -6,10 +6,11 @@ import type {
   SquadMemberStats,
   SquadTrendPoint,
 } from "@matchpoint/api-client";
-import { CircleCheck, type LucideIcon, Swords, Trophy } from "lucide-react";
+import { Anchor, CircleCheck, Gauge, type LucideIcon, Swords, Trophy } from "lucide-react";
 
 import type {
   SquadHeadline,
+  SquadLeaderboardMetricKey,
   SquadLeaderboardRow,
   SquadMetricKey,
   SquadStatsEntry,
@@ -30,10 +31,15 @@ import type { CategoryName } from "@/lib/palette";
  *  Forced:unforced is the one exception — its chip is a genuine outcome pair
  *  (forced/unforced error), so it keeps the outcome palette instead of this
  *  categorical one, the same as the player card's own needle. */
-export const METRIC_PATTERN: Record<SquadMetricKey, CategoryName> = {
+// No `pressureIndex` entry: like the old `forcedToUnforced` leaderboard
+// metric it replaced, it bypasses the coloured fill bar entirely in favor of
+// `ForcedUnforcedBalance`'s own needle visual, so it never indexes this.
+export const METRIC_PATTERN: Record<Exclude<SquadMetricKey, "pressureIndex">, CategoryName> = {
   record: "yellow",
   forcedToUnforced: "indigo",
   firstServe: "violet",
+  resilience: "sky",
+  tacticalEfficiency: "indigo",
 };
 
 /** Single source of truth for how each metric is named — the leaderboard and
@@ -43,16 +49,25 @@ export const METRIC_LABEL: Record<SquadMetricKey, string> = {
   record: "Win percentage",
   forcedToUnforced: "Forced : Unforced",
   firstServe: "First serves landing in play",
+  pressureIndex: "Pressure Index",
+  resilience: "Resilience",
+  tacticalEfficiency: "Tactical Efficiency",
 };
 
 /** Same icon each metric already carries elsewhere in the app
  *  (`.claude/rules/web-icons.md`) — the filter chip that picks a metric
  *  should look like the same concept, not introduce a fourth meaning for the
- *  shape. */
+ *  shape. Pressure Index and Resilience reuse `Swords`/`Anchor` from their
+ *  existing squad-wide uses (the old Forced:Unforced leaderboard metric, and
+ *  Home's own "Steadiest" ranking, respectively); `Gauge` is Tactical
+ *  Efficiency's first claim. */
 export const METRIC_ICON: Record<SquadMetricKey, LucideIcon> = {
   record: Trophy,
   forcedToUnforced: Swords,
   firstServe: CircleCheck,
+  pressureIndex: Swords,
+  resilience: Anchor,
+  tacticalEfficiency: Gauge,
 };
 
 type NamedEntry = SquadStatsEntry & { name: string };
@@ -62,23 +77,51 @@ export function winPercent(entry: Pick<SquadStatsEntry, "wins" | "losses">): num
   return total === 0 ? 0 : (entry.wins / total) * 100;
 }
 
+/** Forced errors suffered / (forced errors suffered + this player's own
+ *  unforced errors) × 100 — the same "share of total" shape `home.tsx`'s own
+ *  `periodResiliencePercent` has, but over `SquadStatsEntry`'s field names
+ *  rather than the raw `SquadMemberStats` payload's `period_`-prefixed ones,
+ *  since this leaderboard metric's real inputs are the entries built for
+ *  this page (#267). Null when neither has happened this period. */
+export function resiliencePercent(
+  entry: Pick<SquadStatsEntry, "forcedErrorsSuffered" | "unforcedCount">,
+): number | null {
+  const total = entry.forcedErrorsSuffered + entry.unforcedCount;
+  return total === 0 ? null : (entry.forcedErrorsSuffered / total) * 100;
+}
+
+/** Forcing shots induced / points won this period × 100 — how much of a
+ *  player's own winning was forced pressure rather than points that simply
+ *  played out (a winner, an opponent error the player didn't force, etc.).
+ *  Null when they haven't won a point yet — nothing to divide by. */
+export function tacticalEfficiencyPercent(
+  entry: Pick<SquadStatsEntry, "forcedCount" | "pointsWon">,
+): number | null {
+  return entry.pointsWon === 0 ? null : (entry.forcedCount / entry.pointsWon) * 100;
+}
+
 export function metricValue(entry: SquadStatsEntry, key: SquadMetricKey): number | null {
   if (key === "record") return winPercent(entry);
   if (key === "forcedToUnforced") return entry.forcedToUnforcedRatio;
-  return entry.firstServeInPercent;
+  if (key === "firstServe") return entry.firstServeInPercent;
+  if (key === "pressureIndex") return entry.forcedCount - entry.unforcedCount;
+  if (key === "resilience") return resiliencePercent(entry);
+  return tacticalEfficiencyPercent(entry);
 }
 
 /** The leaderboard always displays the number it sorts by — "record" used to
  *  show the "W–L" string while ranking on win %, so a 3–2 (60%) player could
- *  outrank a displayed 5–5 one. Forced:unforced is the one metric the
- *  leaderboard renders differently (the split counts plus a weight visual,
- *  not this string) — this stays the ratio for anything that still wants a
- *  single comparable number from it. */
+ *  outrank a displayed 5–5 one. Forced:unforced and Pressure Index are the
+ *  metrics the leaderboard renders differently (the split counts plus a
+ *  weight visual, not this string) — those stay a plain number for anything
+ *  that still wants a single comparable value from them. */
 export function metricDisplay(entry: SquadStatsEntry, key: SquadMetricKey): string {
   if (key === "record") return `${Math.round(winPercent(entry))}%`;
   const value = metricValue(entry, key);
   if (value === null) return "—";
-  return key === "forcedToUnforced" ? value.toFixed(2) : `${Math.round(value)}%`;
+  if (key === "forcedToUnforced") return value.toFixed(2);
+  if (key === "pressureIndex") return value > 0 ? `+${value}` : `${value}`;
+  return `${Math.round(value)}%`;
 }
 
 /** Each entry's own rate, weighted by its own `matchesLoggedThisPeriod`. The
@@ -130,20 +173,20 @@ function bySearch(entries: NamedEntry[], search: string): NamedEntry[] {
   return query ? entries.filter((entry) => entry.name.toLowerCase().includes(query)) : entries;
 }
 
-/** Every entry, sorted desc by the selected metric — no minimum-matches
- *  threshold: a coach with a small squad, or a player just getting started,
- *  still wants to see where everyone stands. A null metric value (nobody has
- *  a computable rate yet) sorts last rather than being excluded, and reads
- *  as "—" rather than a fabricated number. */
+/** Every entry with a computable value for the selected metric, sorted desc
+ *  — no minimum-matches threshold: a coach with a small squad, or a player
+ *  just getting started, still wants to see where everyone stands. A null
+ *  metric value (nobody has a computable rate yet, e.g. Resilience with no
+ *  errors logged either way) excludes that player from this metric's
+ *  leaderboard entirely (#267's Danny's own call) rather than parking them
+ *  in a last-place "—" row that would otherwise always read as "worst". */
 export function buildLeaderboard(
   entries: NamedEntry[],
-  key: SquadMetricKey,
+  key: SquadLeaderboardMetricKey,
   search: string,
 ): SquadLeaderboardRow[] {
-  const filtered = bySearch(entries, search);
-  const sorted = [...filtered].sort(
-    (a, b) => (metricValue(b, key) ?? -Infinity) - (metricValue(a, key) ?? -Infinity),
-  );
+  const filtered = bySearch(entries, search).filter((entry) => metricValue(entry, key) !== null);
+  const sorted = [...filtered].sort((a, b) => metricValue(b, key)! - metricValue(a, key)!);
 
   return sorted.map((entry, index) => ({
     playerId: entry.playerId,
