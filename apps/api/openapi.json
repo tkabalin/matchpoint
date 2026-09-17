@@ -1085,9 +1085,7 @@
         "description": "How a metric's value is scaled, so the client can label and cap it.",
         "enum": [
           "percent",
-          "ratio",
-          "per_set",
-          "per_match"
+          "ratio"
         ],
         "title": "MetricUnit",
         "type": "string"
@@ -1141,30 +1139,6 @@
           "email"
         ],
         "title": "OtpRequest",
-        "type": "object"
-      },
-      "OutcomeMixRow": {
-        "description": "How the points one side decided split between their forcing shots and errors.\n\nPercentages of the rally-ended points that side's own last shot settled. A clean\nwinner counts as forced: capture records no distinction between the two (#175).",
-        "properties": {
-          "forced": {
-            "title": "Forced",
-            "type": "number"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "unforced": {
-            "title": "Unforced",
-            "type": "number"
-          }
-        },
-        "required": [
-          "label",
-          "forced",
-          "unforced"
-        ],
-        "title": "OutcomeMixRow",
         "type": "object"
       },
       "PlayerChangePasswordRequest": {
@@ -2595,36 +2569,6 @@
           "average_rally_length": {
             "$ref": "#/components/schemas/RallyLengthAverages"
           },
-          "errors_overall": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "errors_under_pressure": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hero": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "lost": {
             "title": "Lost",
             "type": "integer"
@@ -2634,13 +2578,6 @@
               "$ref": "#/components/schemas/BreakdownRow"
             },
             "title": "Lost By Shot",
-            "type": "array"
-          },
-          "outcome_mix": {
-            "items": {
-              "$ref": "#/components/schemas/OutcomeMixRow"
-            },
-            "title": "Outcome Mix",
             "type": "array"
           },
           "rally_length": {
@@ -2676,15 +2613,11 @@
           }
         },
         "required": [
-          "hero",
           "won",
           "lost",
           "won_by_shot",
           "lost_by_shot",
-          "outcome_mix",
           "styles",
-          "errors_under_pressure",
-          "errors_overall",
           "shot_frequency",
           "rally_length",
           "average_rally_length",
@@ -3122,23 +3055,6 @@
           "fault_mode": {
             "$ref": "#/components/schemas/FaultModeSplit"
           },
-          "hero": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "metrics": {
-            "items": {
-              "$ref": "#/components/schemas/Metric"
-            },
-            "title": "Metrics",
-            "type": "array"
-          },
           "outcome": {
             "$ref": "#/components/schemas/ServeOutcomeSplit"
           },
@@ -3154,8 +3070,6 @@
           }
         },
         "required": [
-          "hero",
-          "metrics",
           "breakdown",
           "outcome",
           "fault_mode",

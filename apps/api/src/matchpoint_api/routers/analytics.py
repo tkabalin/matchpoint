@@ -8,7 +8,7 @@ from statistics import fmean, pstdev
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Row, and_, distinct, func, or_, select, tuple_
+from sqlalchemy import Row, and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from matchpoint_api.auth import CurrentCoach, CurrentPrincipal
@@ -43,7 +43,6 @@ from matchpoint_api.schemas.analytics import (
     Metric,
     MetricUnit,
     OpponentSummary,
-    OutcomeMixRow,
     PlayerOverview,
     PointEnderKind,
     PointEnderStyle,
@@ -164,10 +163,8 @@ OPPONENT_NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorDetail, "description": "No matches against this opponent"}
 }
 
-# Bars need a ceiling even where a rate has no natural one; these match the scale the
-# dashboard was designed against, and a value past one simply becomes its own ceiling.
-DOUBLE_FAULT_CAP = 5.0
-ACES_CAP = 6.0
+# A bar needs a ceiling even where a rate has no natural one; this matches the scale
+# the dashboard was designed against, and a value past it becomes its own ceiling.
 RATIO_CAP = 3.0
 
 FORCED_UNFORCED_LABEL = "Forced : Unforced ratio"
@@ -262,16 +259,7 @@ _RALLY_LENGTH_MIDPOINT = {
 _LONG_RALLY_BUCKETS = (RallyBucket.B3, RallyBucket.B4)
 
 
-def _percent(
-    label: str,
-    part: int,
-    whole: int,
-    *,
-    sample: str | None = None,
-    higher_is_better: bool = True,
-    baseline: float | None = None,
-    delta: float | None = None,
-) -> Metric | None:
+def _percent(label: str, part: int, whole: int, *, baseline: float | None = None) -> Metric | None:
     """A percentage metric, or None while nothing has been counted to take one of."""
     if whole == 0:
         return None
@@ -279,37 +267,11 @@ def _percent(
         label=label,
         value=round(100 * part / whole),
         unit=MetricUnit.PERCENT,
-        sample_size=sample if sample is not None else f"n={whole}",
+        sample_size=f"n={whole}",
         baseline=baseline,
-        delta=delta,
-        max=100,
-        higher_is_better=higher_is_better,
-    )
-
-
-def _per(
-    label: str,
-    count: int,
-    denominator: int,
-    *,
-    unit: MetricUnit,
-    cap: float,
-    sample: str,
-    higher_is_better: bool = False,
-) -> Metric | None:
-    """A per-set or per-match rate, or None while the denominator is empty."""
-    if denominator == 0:
-        return None
-    value = round(count / denominator, 1)
-    return Metric(
-        label=label,
-        value=value,
-        unit=unit,
-        sample_size=sample,
-        baseline=None,
         delta=None,
-        max=max(cap, value),
-        higher_is_better=higher_is_better,
+        max=100,
+        higher_is_better=True,
     )
 
 
@@ -326,9 +288,7 @@ def _ratio_value(forced: int, unforced: int) -> float | None:
     return round(forced / unforced, 2)
 
 
-def _forced_unforced(
-    forced: int, unforced: int, *, baseline: float | None = None, delta: float | None = None
-) -> Metric | None:
+def _forced_unforced(forced: int, unforced: int) -> Metric | None:
     """The forced : unforced ratio as a metric, or None while no rally has ended.
 
     With no unforced errors the count itself is shown ("4:0") while the bar fills to
@@ -348,8 +308,8 @@ def _forced_unforced(
         value=value,
         unit=MetricUnit.RATIO,
         sample_size=f"n={forced + unforced}",
-        baseline=baseline,
-        delta=delta,
+        baseline=None,
+        delta=None,
         max=ceiling,
         higher_is_better=True,
         display=display,
@@ -401,8 +361,7 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
 
     A superset on purpose: one shape whatever the endpoint, so the arithmetic on top
     is the only thing that differs and the query is exercised whole by every test.
-    Aggregating over no rows still returns one row of zero counts, and the per-set and
-    per-match denominators are counted off the scoped rows so they stay in step.
+    Aggregating over no rows still returns one row of zero counts.
     """
 
     # Conditions are Any because a bare boolean column (Point.won) arrives as an
@@ -412,18 +371,9 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
 
     tracked = Point.server == MatchSide.TRACKED
     opponent = Point.server == MatchSide.OPPONENT
-    # A serve nobody watched is null, and drops out of every serve rate: it is neither
-    # in nor a fault, so it counts in no numerator and must not pad the denominator.
-    served = Point.serve1_outcome.is_not(None)
-    first_in = Point.serve1_outcome != ServeOutcome.FAULT
-    second = Point.serve1_outcome == ServeOutcome.FAULT
     # Tiebreak points are excluded from game tallies: the players alternate serve
     # inside one, so its final point says nothing about anyone holding.
     game = and_(Point.is_game_end, ~Point.in_tiebreak)
-    # The ending's twin of `served`: a point whose ending nobody watched is a real
-    # point with a real winner, but it says nothing about how the point ended, so it
-    # belongs in no error rate's numerator and must not pad the denominator either.
-    ended = Point.end_reason.is_not(None)
     forced = Point.end_reason == EndReason.FORCED
     mistake = Point.end_reason == EndReason.MISTAKE
 
@@ -436,32 +386,14 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(game, opponent).label("return_games"),
             _count(game, opponent, Point.won).label("return_won"),
             _count(tracked).label("serve_points"),
-            _count(tracked, served).label("serves_seen"),
-            _count(tracked, first_in).label("first_in"),
-            _count(tracked, first_in, Point.won).label("first_in_won"),
-            _count(tracked, second).label("second_points"),
-            _count(tracked, second, Point.won).label("second_won"),
-            _count(tracked, Point.is_break_point).label("bp_faced"),
-            _count(tracked, Point.is_break_point, Point.won).label("bp_saved"),
             _count(tracked, Point.end_reason == EndReason.DOUBLE_FAULT).label("double_faults"),
             _count(tracked, Point.end_reason == EndReason.ACE).label("aces"),
             _count(tracked, Point.won, Point.wing == Wing.FOREHAND).label("forehand_wins"),
             _count(tracked, Point.won, Point.wing == Wing.BACKHAND).label("backhand_wins"),
             _count(opponent).label("return_points"),
-            _count(opponent, first_in).label("their_first_in"),
-            _count(opponent, first_in, Point.won).label("their_first_in_won"),
-            _count(opponent, second).label("their_second"),
-            _count(opponent, second, Point.won).label("their_second_won"),
-            _count(opponent, Point.is_break_point).label("bp_chances"),
-            _count(opponent, Point.is_break_point, Point.won).label("bp_converted"),
             _count(opponent, Point.end_reason == EndReason.ACE).label("their_aces"),
             _count(Point.won, forced).label("forced_won"),
-            _count(Point.won, mistake).label("mistake_won"),
-            _count(~Point.won, forced).label("forced_lost"),
             _count(~Point.won, mistake).label("mistake_lost"),
-            _count(ended).label("endings_seen"),
-            _count(Point.is_break_point, ~Point.won, mistake).label("bp_mistakes"),
-            _count(Point.is_break_point, ended).label("bp_endings_seen"),
             *(
                 _count(Point.rally_length_bucket == bucket).label(f"rally_{bucket.value}")
                 for bucket in RallyBucket
@@ -472,8 +404,6 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
                 )
                 for bucket in RallyBucket
             ),
-            func.count(distinct(tuple_(Point.match_id, Point.set_number))).label("sets_played"),
-            func.count(distinct(Point.match_id)).label("matches_with_points"),
         )
         .select_from(Point)
         .join(Match, Point.match_id == Match.id)
@@ -963,31 +893,6 @@ def _serving_stats(
     fault_mode: FaultModeSplit,
     trend: list[ServeTrendPoint],
 ) -> ServeSideStats:
-    sets_sample = f"n={counts.sets_played} sets"
-    matches_sample = f"n={counts.matches_with_points}"
-    metrics = [
-        _percent("Break points saved", counts.bp_saved, counts.bp_faced),
-        _percent(FIRST_SERVE_IN_LABEL, counts.first_in, counts.serves_seen),
-        _percent("1st serve points won", counts.first_in_won, counts.first_in),
-        _percent("2nd serve points won", counts.second_won, counts.second_points),
-        _per(
-            "Double faults / set",
-            counts.double_faults,
-            counts.sets_played,
-            unit=MetricUnit.PER_SET,
-            cap=DOUBLE_FAULT_CAP,
-            sample=sets_sample,
-        ),
-        _per(
-            "Aces / match",
-            counts.aces,
-            counts.matches_with_points,
-            unit=MetricUnit.PER_MATCH,
-            cap=ACES_CAP,
-            sample=matches_sample,
-            higher_is_better=True,
-        ),
-    ]
     breakdown = []
     if counts.serve_points:
         # How the player's own service points were won or thrown away: the wing each
@@ -1004,8 +909,6 @@ def _serving_stats(
             BreakdownRow(label=label, value=value, max=ceiling) for label, value in values.items()
         ]
     return ServeSideStats(
-        hero=_percent("Hold % (service games won)", counts.hold_won, counts.hold_games),
-        metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
         outcome=outcome,
         fault_mode=fault_mode,
@@ -1025,11 +928,6 @@ def _returning_stats(
     trend: list[ServeTrendPoint],
     scope: PointScope,
 ) -> ServeSideStats:
-    metrics = [
-        _percent("Break points converted", counts.bp_converted, counts.bp_chances),
-        _percent("1st serve return points won", counts.their_first_in_won, counts.their_first_in),
-        _percent("2nd serve return points won", counts.their_second_won, counts.their_second),
-    ]
     returns = _returns_by_serve(db, player_id, scope)
     breakdown = []
     if counts.return_points:
@@ -1045,8 +943,6 @@ def _returning_stats(
             BreakdownRow(label=label, value=value, max=ceiling) for label, value in values.items()
         ]
     return ServeSideStats(
-        hero=_percent("Return games won %", counts.return_won, counts.return_games),
-        metrics=[metric for metric in metrics if metric is not None],
         breakdown=breakdown,
         outcome=outcome,
         # Empty rather than zeroed: the opponent's serve is captured as in or
@@ -1243,34 +1139,6 @@ def _point_ender_styles(db: Session, player_id: uuid.UUID, scope: PointScope) ->
     )
 
 
-def _outcome_mix(counts: Row[Any]) -> list[OutcomeMixRow]:
-    """Each side's own last actions, split between forcing shots and errors.
-
-    A row groups the points that side decided, so the player's row is the hero
-    ratio's two counts as percentages and the opponents' row is its mirror.
-    """
-    rows = []
-    yours = counts.forced_won + counts.mistake_lost
-    if yours:
-        rows.append(
-            OutcomeMixRow(
-                label="You",
-                forced=round(100 * counts.forced_won / yours),
-                unforced=round(100 * counts.mistake_lost / yours),
-            )
-        )
-    theirs = counts.forced_lost + counts.mistake_won
-    if theirs:
-        rows.append(
-            OutcomeMixRow(
-                label="Opponents",
-                forced=round(100 * counts.forced_lost / theirs),
-                unforced=round(100 * counts.mistake_won / theirs),
-            )
-        )
-    return rows
-
-
 def _rally_length(counts: Row[Any]) -> list[RallyLengthBucket]:
     """The four buckets whole, or nothing while no point carries one.
 
@@ -1407,22 +1275,11 @@ def _rally_tab(db: Session, player_id: uuid.UUID, scope: PointScope) -> RallySta
     counts = _point_counts(db, player_id, scope)
     won_by_shot, lost_by_shot, shot_frequency = _shot_breakdowns(db, player_id, scope)
     return RallyStats(
-        hero=_forced_unforced(counts.forced_won, counts.mistake_lost),
         won=counts.won,
         lost=counts.total - counts.won,
         won_by_shot=won_by_shot,
         lost_by_shot=lost_by_shot,
-        outcome_mix=_outcome_mix(counts),
         styles=_point_ender_styles(db, player_id, scope),
-        errors_under_pressure=_percent(
-            "Errors under pressure (BP)",
-            counts.bp_mistakes,
-            counts.bp_endings_seen,
-            higher_is_better=False,
-        ),
-        errors_overall=_percent(
-            "Errors overall", counts.mistake_lost, counts.endings_seen, higher_is_better=False
-        ),
         shot_frequency=shot_frequency,
         rally_length=_rally_length(counts),
         average_rally_length=_rally_length_averages(counts),
@@ -1617,9 +1474,8 @@ def _tracked_counts_by_match(
             func.count()
             .filter(and_(~Point.won, Point.end_reason == EndReason.FORCED))
             .label("forced_lost"),
-            # Watched serves only, named as `_point_counts` names the same figure: this is
-            # the first-serve stat's denominator, and an unwatched serve is in neither its
-            # numerator nor its sample.
+            # Watched serves only: this is the first-serve stat's denominator, and an
+            # unwatched serve is in neither its numerator nor its sample.
             func.count()
             .filter(and_(tracked, Point.serve1_outcome.is_not(None)))
             .label("serves_seen"),

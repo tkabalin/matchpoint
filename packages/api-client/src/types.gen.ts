@@ -596,7 +596,7 @@ export type Metric = {
  *
  * How a metric's value is scaled, so the client can label and cap it.
  */
-export type MetricUnit = 'percent' | 'ratio' | 'per_set' | 'per_match';
+export type MetricUnit = 'percent' | 'ratio';
 
 /**
  * NoteFocus
@@ -633,29 +633,6 @@ export type OtpRequest = {
      * Email
      */
     email: string;
-};
-
-/**
- * OutcomeMixRow
- *
- * How the points one side decided split between their forcing shots and errors.
- *
- * Percentages of the rally-ended points that side's own last shot settled. A clean
- * winner counts as forced: capture records no distinction between the two (#175).
- */
-export type OutcomeMixRow = {
-    /**
-     * Forced
-     */
-    forced: number;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Unforced
-     */
-    unforced: number;
 };
 
 /**
@@ -1340,9 +1317,6 @@ export type RallyLengthBucket = {
  */
 export type RallyStats = {
     average_rally_length: RallyLengthAverages;
-    errors_overall: Metric | null;
-    errors_under_pressure: Metric | null;
-    hero: Metric | null;
     /**
      * Lost
      */
@@ -1351,10 +1325,6 @@ export type RallyStats = {
      * Lost By Shot
      */
     lost_by_shot: Array<BreakdownRow>;
-    /**
-     * Outcome Mix
-     */
-    outcome_mix: Array<OutcomeMixRow>;
     /**
      * Rally Length
      */
@@ -1647,11 +1617,6 @@ export type ServeSideStats = {
      */
     breakdown: Array<BreakdownRow>;
     fault_mode: FaultModeSplit;
-    hero: Metric | null;
-    /**
-     * Metrics
-     */
-    metrics: Array<Metric>;
     outcome: ServeOutcomeSplit;
     return_outcome: ReturnOutcomeSplit;
     /**

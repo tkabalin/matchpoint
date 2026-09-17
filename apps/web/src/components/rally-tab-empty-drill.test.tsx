@@ -19,23 +19,10 @@ const EMPTY_DETAIL = {
 };
 
 const RALLY_STATS: RallyStats = {
-  errors_overall: null,
-  errors_under_pressure: null,
-  hero: {
-    label: "Forced : Unforced ratio",
-    value: 1.0,
-    unit: "ratio",
-    sample_size: "n=1",
-    baseline: null,
-    delta: null,
-    max: 3,
-    higher_is_better: true,
-  },
   won: 3,
   lost: 4,
   lost_by_shot: [],
   won_by_shot: [],
-  outcome_mix: [],
   shot_frequency: { you: [], opponents: [] },
   rally_length: [{ label: "1-2 shots", count: 7 }],
   average_rally_length: { won: 2, lost: 2 },

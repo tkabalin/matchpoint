@@ -7,25 +7,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { RallyTab } from "./rally-tab";
 
 const RALLY_STATS: RallyStats = {
-  errors_overall: null,
-  errors_under_pressure: null,
-  hero: {
-    label: "Forced : Unforced ratio",
-    value: 1.8,
-    unit: "ratio",
-    sample_size: "n=9",
-    baseline: null,
-    delta: null,
-    max: 3,
-    higher_is_better: true,
-  },
   won: 5,
   lost: 4,
   // Wing × shot type, one row per combination — the radar's own axes are
   // keyed by shot type alone, so a coach reading "Drive 3" here is forehand
   // and backhand drives summed together.
   lost_by_shot: [{ label: "Forehand drive", value: 2, secondary_value: 1, max: 3 }],
-  outcome_mix: [],
   rally_length: [
     { label: "1-2 shots", count: 4 },
     { label: "3-5 shots", count: 3 },

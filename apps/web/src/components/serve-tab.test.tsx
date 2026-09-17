@@ -11,8 +11,6 @@ import { ServeTab } from "./serve-tab";
 const SERVE_STATS: ServeStats = {
   serving: {
     breakdown: [],
-    hero: null,
-    metrics: [],
     outcome: {
       first_serve: { landed: 68, fault: 24, ace: 8 },
       second_serve: { landed: 85, fault: 12, ace: 3 },
@@ -29,8 +27,6 @@ const SERVE_STATS: ServeStats = {
   },
   returning: {
     breakdown: [],
-    hero: null,
-    metrics: [],
     outcome: {
       first_serve: { landed: 61, fault: 31, ace: 8 },
       second_serve: { landed: 80, fault: 15, ace: 5 },

@@ -47,8 +47,6 @@ const DEFAULT_OVERVIEW: PlayerOverview = {
 
 const EMPTY_SERVE_SIDE: ServeSideStats = {
   breakdown: [],
-  hero: null,
-  metrics: [],
   outcome: { first_serve: null, second_serve: null },
   fault_mode: { first_serve: null, second_serve: null },
   return_outcome: { first_serve: [], second_serve: [] },
@@ -63,14 +61,10 @@ const EMPTY_STYLE_DETAIL = {
   unusual_reasons: null,
 };
 const DEFAULT_RALLY_STATS: RallyStats = {
-  errors_overall: null,
-  errors_under_pressure: null,
-  hero: null,
   won: 0,
   lost: 0,
   lost_by_shot: [],
   won_by_shot: [],
-  outcome_mix: [],
   rally_length: [],
   average_rally_length: { won: null, lost: null },
   trend: [],

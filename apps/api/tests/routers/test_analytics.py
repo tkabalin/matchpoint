@@ -238,8 +238,6 @@ def test_serve_is_empty_before_any_points(
     body = _get(client, player.id, "serve")
 
     empty_side = {
-        "hero": None,
-        "metrics": [],
         "breakdown": [],
         "outcome": {"first_serve": None, "second_serve": None},
         "fault_mode": {"first_serve": None, "second_serve": None},
@@ -249,12 +247,8 @@ def test_serve_is_empty_before_any_points(
     assert body == {"serving": empty_side, "returning": empty_side}
 
 
-def test_serving_metrics_and_breakdown(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Seven service points: 5 first serves in (3 won), an ace, a double fault,
-    two break points (one saved), and one held game.
-    """
+def test_serving_breakdown(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Seven service points: three won on the forehand, an ace, and a double fault."""
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     make_point(db_session, match_id=match.id, sequence=0)
@@ -311,26 +305,6 @@ def test_serving_metrics_and_breakdown(
     body = _get(client, player.id, "serve")
     serving = body["serving"]
 
-    assert serving["hero"]["label"] == "Hold % (service games won)"
-    assert serving["hero"]["value"] == 100
-    assert serving["hero"]["sample_size"] == "n=1"
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in serving["metrics"]
-    ] == [
-        ("Break points saved", 50, "n=2"),
-        ("1st serve in %", 71, "n=7"),
-        ("1st serve points won", 60, "n=5"),
-        ("2nd serve points won", 50, "n=2"),
-        ("Double faults / set", 1.0, "n=1 sets"),
-        ("Aces / match", 1.0, "n=1"),
-    ]
-    double_faults = serving["metrics"][4]
-    assert double_faults["unit"] == "per_set"
-    assert double_faults["max"] == 5
-    assert double_faults["higher_is_better"] is False
-    aces = serving["metrics"][5]
-    assert aces["unit"] == "per_match"
-    assert aces["higher_is_better"] is True
     assert serving["breakdown"] == [
         {"label": "Aces", "value": 1, "secondary_value": None, "max": 3},
         {"label": "Won on forehand", "value": 3, "secondary_value": None, "max": 3},
@@ -339,12 +313,8 @@ def test_serving_metrics_and_breakdown(
     ]
 
 
-def test_returning_metrics_and_breakdown(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Five return points: a converted break point, a missed return, an opponent
-    ace, a second-serve point won, and a return game closed out.
-    """
+def test_returning_breakdown(client: TestClient, db_session: Session, coach: Coach) -> None:
+    """Five return points: three returned in, one netted, and one opponent ace."""
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     opponent_serve = {
@@ -404,15 +374,6 @@ def test_returning_metrics_and_breakdown(
     body = _get(client, player.id, "serve")
     returning = body["returning"]
 
-    assert returning["hero"]["label"] == "Return games won %"
-    assert returning["hero"]["value"] == 100
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in returning["metrics"]
-    ] == [
-        ("Break points converted", 100, "n=1"),
-        ("1st serve return points won", 50, "n=4"),
-        ("2nd serve return points won", 100, "n=1"),
-    ]
     assert returning["breakdown"] == [
         {"label": "Returned in", "value": 3, "secondary_value": None, "max": 3},
         {"label": "Return error (net)", "value": 1, "secondary_value": None, "max": 3},
@@ -677,8 +638,6 @@ def test_an_unwatched_serve_stays_out_of_every_serve_rate(
 
     serving = _get(client, player.id, "serve")["serving"]
 
-    first_in = next(metric for metric in serving["metrics"] if metric["label"] == "1st serve in %")
-    assert (first_in["value"], first_in["sample_size"]) == (100, "n=1")
     assert serving["outcome"]["first_serve"] == {"landed": 100, "fault": 0, "ace": 0}
     # The match with nothing watched has no rate to plot, so the series skips it.
     assert serving["trend"] == [{"match": "M1", "first_serve_in": 100, "second_serve_in": None}]
@@ -715,9 +674,7 @@ def test_a_player_whose_serves_all_went_unwatched_keeps_the_breakdown_and_no_rat
 
     serving = _get(client, player.id, "serve")["serving"]
 
-    # Absent from the metrics list, not present at zero or null: a rate with no sample
-    # is not a figure the card can show.
-    assert "1st serve in %" not in [metric["label"] for metric in serving["metrics"]]
+    # Absent rather than zeroed: a rate with no sample is not a figure the card can show.
     assert serving["outcome"]["first_serve"] is None
     assert serving["trend"] == []
     assert serving["breakdown"][1] == {
@@ -920,12 +877,10 @@ def test_rally_is_empty_before_any_points(
     body = _get(client, player.id, "rally")
 
     assert body == {
-        "hero": None,
         "won": 0,
         "lost": 0,
         "won_by_shot": [],
         "lost_by_shot": [],
-        "outcome_mix": [],
         "styles": {
             "you": _styles_at_zero(
                 "Forced (your pressure)",
@@ -938,8 +893,6 @@ def test_rally_is_empty_before_any_points(
                 "Unusual (against you)",
             ),
         },
-        "errors_under_pressure": None,
-        "errors_overall": None,
         "shot_frequency": {"you": [], "opponents": []},
         "rally_length": [],
         "average_rally_length": {"won": None, "lost": None},
@@ -950,9 +903,6 @@ def test_rally_is_empty_before_any_points(
 def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> None:
     """Nine points: 3 forced wins, 2 gifted wins, 1 forced loss, 2 unforced losses
     (one on a break point), and an ace that joins no rally tally but the total.
-
-    Each outcome-mix row groups the points one side's own last shot settled, so the
-    two rows are deliberately different splits, not the same one twice.
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
@@ -998,8 +948,6 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
 
     body = _get(client, player.id, "rally")
 
-    assert body["hero"]["value"] == 1.5
-    assert body["hero"]["sample_size"] == "n=5"
     # Every point, the ace included, where the styles below count rally endings alone.
     assert (body["won"], body["lost"]) == (6, 3)
     # Nine points and not one of them bucketed, so the histogram stays empty rather
@@ -1013,17 +961,6 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
         {"label": "Forehand drive", "value": 1, "secondary_value": 1, "max": 2},
         {"label": "Backhand lob", "value": 1, "secondary_value": 0, "max": 2},
     ]
-    # You: 3 forced wins against 2 unforced losses. Opponents: 1 winner of their own
-    # against the 2 unforced errors that handed points over.
-    assert body["outcome_mix"] == [
-        {"label": "You", "forced": 60, "unforced": 40},
-        {"label": "Opponents", "forced": 33, "unforced": 67},
-    ]
-    assert body["errors_under_pressure"]["value"] == 100
-    assert body["errors_under_pressure"]["sample_size"] == "n=1"
-    assert body["errors_under_pressure"]["higher_is_better"] is False
-    assert body["errors_overall"]["value"] == 22
-    assert body["errors_overall"]["sample_size"] == "n=9"
     # Five wins carried a shot (4 drives and a volley) against three losses (2 drives
     # and a lob), each side's shares taken over its own total.
     assert body["shot_frequency"] == {
@@ -1042,42 +979,32 @@ def test_rally_stats(client: TestClient, db_session: Session, coach: Coach) -> N
     }
 
 
-def test_an_unwatched_ending_stays_out_of_every_error_rate(
+def test_an_unwatched_ending_is_a_point_without_a_style(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
     """Eight points, four ended in front of the coach and four not (#280).
 
     An unwatched ending is a real point with a real winner, so it still counts in the
-    win/loss tally, but it is in no error rate's sample: leaving it in the denominator
-    would read "didn't see it" as a point the player did not spoil, and drag both
-    rates down by however much of the match the coach skipped.
+    win/loss tally, but nothing was seen of how it ended, so it reaches no point-ender
+    style rather than padding one.
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     watched = [
-        (True, EndReason.FORCED, False),
-        (True, EndReason.FORCED, False),
-        (False, EndReason.MISTAKE, True),
-        (False, EndReason.MISTAKE, False),
+        (True, EndReason.FORCED),
+        (True, EndReason.FORCED),
+        (False, EndReason.MISTAKE),
+        (False, EndReason.MISTAKE),
     ]
-    for sequence, (won, end_reason, is_break_point) in enumerate(watched):
-        make_point(
-            db_session,
-            match_id=match.id,
-            sequence=sequence,
-            won=won,
-            end_reason=end_reason,
-            is_break_point=is_break_point,
-        )
+    for sequence, (won, end_reason) in enumerate(watched):
+        make_point(db_session, match_id=match.id, sequence=sequence, won=won, end_reason=end_reason)
     # The ending is what went unseen, so the shot that made it is null along with it.
-    unwatched = [(True, False), (False, False), (False, True), (True, True)]
-    for sequence, (won, is_break_point) in enumerate(unwatched, start=len(watched)):
+    for sequence, won in enumerate([True, False, False, True], start=len(watched)):
         make_point(
             db_session,
             match_id=match.id,
             sequence=sequence,
             won=won,
-            is_break_point=is_break_point,
             end_reason=None,
             wing=None,
             shot_type=None,
@@ -1085,46 +1012,11 @@ def test_an_unwatched_ending_stays_out_of_every_error_rate(
 
     body = _get(client, player.id, "rally")
 
-    # Two unforced errors over the four endings anyone saw. Over all eight points it
-    # would have read 25%.
-    assert (body["errors_overall"]["value"], body["errors_overall"]["sample_size"]) == (50, "n=4")
-    # One of the three break points ended where the coach was watching, and the player
-    # spoiled it. The other two would have diluted this to 33%.
-    assert (
-        body["errors_under_pressure"]["value"],
-        body["errors_under_pressure"]["sample_size"],
-    ) == (100, "n=1")
-    # The unwatched points are still points, so they keep their place in the win/loss
-    # tally, and the hero ratio goes on normalising over its own two counts.
+    # The unwatched points keep their place in the tally, where the styles count the
+    # four endings anyone saw: two forced wins against two errors given away.
     assert (body["won"], body["lost"]) == (4, 4)
-    assert (body["hero"]["value"], body["hero"]["sample_size"]) == (1.0, "n=4")
-
-
-def test_a_match_whose_endings_all_went_unwatched_has_no_error_rates(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """The boundary between the two counts: the points happened and are tallied, but
-    no ending was watched, so each error rate is absent rather than zero.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(db_session, player_id=player.id)
-    for sequence, won in enumerate([True, False]):
-        make_point(
-            db_session,
-            match_id=match.id,
-            sequence=sequence,
-            won=won,
-            is_break_point=True,
-            end_reason=None,
-            wing=None,
-            shot_type=None,
-        )
-
-    body = _get(client, player.id, "rally")
-
-    assert body["errors_overall"] is None
-    assert body["errors_under_pressure"] is None
-    assert (body["won"], body["lost"]) == (1, 1)
+    assert [style["count"] for style in body["styles"]["you"]] == [2, 0, 0]
+    assert [style["count"] for style in body["styles"]["opponents"]] == [0, 2, 0]
 
 
 def test_rally_length_buckets_are_reported_whole(
@@ -1614,15 +1506,15 @@ PHASE_STAMPS = [
 
 
 def test_serve_narrows_to_one_set(client: TestClient, db_session: Session, coach: Coach) -> None:
-    """Four service points over two sets: set 1 holds a game, set 2 double-faults once.
+    """Four service points over two sets, only set 2 holding the double fault.
 
-    The per-set denominator is counted off the same narrowed rows, so a one-set query
-    divides by one set and not by the two the match holds.
+    The tallies and the serve outcomes are separate queries over the same rows, so a
+    one-set answer has to move both.
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
     make_point(db_session, match_id=match.id, sequence=0)
-    make_point(db_session, match_id=match.id, sequence=1, is_game_end=True)
+    make_point(db_session, match_id=match.id, sequence=1)
     make_point(
         db_session,
         match_id=match.id,
@@ -1642,26 +1534,26 @@ def test_serve_narrows_to_one_set(client: TestClient, db_session: Session, coach
     first = _get(client, player.id, "serve?set_number=1")["serving"]
     second = _get(client, player.id, "serve?set_number=2")["serving"]
 
-    assert first["hero"]["value"] == 100
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in first["metrics"]
-    ] == [
-        ("1st serve in %", 100, "n=2"),
-        ("1st serve points won", 100, "n=2"),
-        ("Double faults / set", 0.0, "n=1 sets"),
-        ("Aces / match", 0.0, "n=1"),
-    ]
-    # No game ended inside set 2, so its hold percentage has nothing to count.
-    assert second["hero"] is None
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in second["metrics"]
-    ] == [
-        ("1st serve in %", 50, "n=2"),
-        ("1st serve points won", 100, "n=1"),
-        ("2nd serve points won", 0, "n=1"),
-        ("Double faults / set", 1.0, "n=1 sets"),
-        ("Aces / match", 0.0, "n=1"),
-    ]
+    assert first["outcome"] == {
+        "first_serve": {"landed": 100, "fault": 0, "ace": 0},
+        "second_serve": None,
+    }
+    assert first["breakdown"][3] == {
+        "label": "Double faults",
+        "value": 0,
+        "secondary_value": None,
+        "max": 2,
+    }
+    assert second["outcome"] == {
+        "first_serve": {"landed": 50, "fault": 50, "ace": 0},
+        "second_serve": {"landed": 0, "fault": 100, "ace": 0},
+    }
+    assert second["breakdown"][3] == {
+        "label": "Double faults",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
 
 
 def test_rally_narrows_to_one_set(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -1680,7 +1572,7 @@ def test_rally_narrows_to_one_set(client: TestClient, db_session: Session, coach
 
     body = _get(client, player.id, "rally?set_number=2")
 
-    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert (body["won"], body["lost"]) == (1, 0)
     assert body["won_by_shot"] == [
         {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
     ]
@@ -1710,7 +1602,7 @@ def test_phase_counts_only_the_points_carrying_its_stamp(
 
     body = _get(client, player.id, f"rally?phase={phase}")
 
-    assert body["errors_overall"]["sample_size"] == f"n={counted}"
+    assert body["won"] == counted
 
 
 def test_serve_narrows_to_a_phase(client: TestClient, db_session: Session, coach: Coach) -> None:
@@ -1723,51 +1615,11 @@ def test_serve_narrows_to_a_phase(client: TestClient, db_session: Session, coach
 
     serving = _get(client, player.id, "serve?phase=break_points")["serving"]
 
-    assert serving["metrics"][0] == {
-        "label": "Break points saved",
-        "value": 100,
-        "unit": "percent",
-        "sample_size": "n=2",
-        "baseline": None,
-        "delta": None,
-        "max": 100,
-        "higher_is_better": True,
-        "display": None,
-    }
-
-
-def test_tiebreak_phase_leaves_hold_percentage_null_rather_than_zero(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """Nobody holds serve in a tiebreak, the players alternating inside one.
-
-    So the hold percentage has no games to count and stays null, which the schema
-    reserves for "the data to compute it does not exist". A zero would instead read
-    as every service game lost.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
-    make_point(
-        db_session,
-        match_id=match.id,
-        sequence=1,
-        game_number=13,
-        in_tiebreak=True,
-        is_game_end=True,
-        is_set_end=True,
-    )
-
-    serving = _get(client, player.id, "serve?phase=tiebreaks")["serving"]
-
-    assert serving["hero"] is None
-    # The tiebreak point was counted, so the null above is the missing game and not
-    # an empty scope.
-    assert [(metric["label"], metric["value"]) for metric in serving["metrics"]] == [
-        ("1st serve in %", 100),
-        ("1st serve points won", 100),
-        ("Double faults / set", 0.0),
-        ("Aces / match", 0.0),
+    assert serving["breakdown"] == [
+        {"label": "Aces", "value": 0, "secondary_value": None, "max": 2},
+        {"label": "Won on forehand", "value": 2, "secondary_value": None, "max": 2},
+        {"label": "Won on backhand", "value": 0, "secondary_value": None, "max": 2},
+        {"label": "Double faults", "value": 0, "secondary_value": None, "max": 2},
     ]
 
 
@@ -1777,8 +1629,8 @@ def test_returning_breakdown_narrows_with_the_rest_of_the_payload(
     """A return in play in set 1, a return netted in set 2.
 
     The breakdown is its own query over the points rather than a slice of the tallies
-    above it, so an unscoped one would sit a filtered hero beside every return the
-    player has ever hit.
+    above it, so an unscoped one would sit every return the player has ever hit beside
+    a payload that had narrowed.
     """
     player = make_player(db_session, coach_id=coach.id)
     match = make_match(db_session, player_id=player.id)
@@ -1825,10 +1677,12 @@ def test_set_and_phase_narrow_together(
 
     serving = _get(client, player.id, "serve?set_number=2&phase=break_points")["serving"]
 
-    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
-        "Break points saved",
-        "n=1",
-    )
+    assert serving["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
 
 
 def test_overview_ignores_a_scope_it_does_not_offer(
@@ -1929,7 +1783,7 @@ def test_the_opponent_axis_counts_a_match_without_a_result(
 
     body = _get(client, player.id, "rally?opponent_key=torres")
 
-    assert body["errors_overall"]["sample_size"] == "n=2"
+    assert (body["won"], body["lost"]) == (2, 0)
     assert _get(client, player.id, "opponents") == [
         {"key": "torres", "name": "Torres", "matches": 2}
     ]
@@ -1943,7 +1797,7 @@ def test_serve_narrows_to_one_opponent(
     torres = _make_meeting(db_session, player.id, "Torres", 1)
     naidoo = _make_meeting(db_session, player.id, "Naidoo", 2)
     make_point(db_session, match_id=torres.id, sequence=0)
-    make_point(db_session, match_id=torres.id, sequence=1, is_game_end=True)
+    make_point(db_session, match_id=torres.id, sequence=1)
     make_point(
         db_session,
         match_id=naidoo.id,
@@ -1960,15 +1814,16 @@ def test_serve_narrows_to_one_opponent(
 
     serving = _get(client, player.id, "serve?opponent_key=torres")["serving"]
 
-    assert serving["hero"]["value"] == 100
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in serving["metrics"]
-    ] == [
-        ("1st serve in %", 100, "n=2"),
-        ("1st serve points won", 100, "n=2"),
-        ("Double faults / set", 0.0, "n=1 sets"),
-        ("Aces / match", 0.0, "n=1"),
-    ]
+    assert serving["outcome"] == {
+        "first_serve": {"landed": 100, "fault": 0, "ace": 0},
+        "second_serve": None,
+    }
+    assert serving["breakdown"][3] == {
+        "label": "Double faults",
+        "value": 0,
+        "secondary_value": None,
+        "max": 2,
+    }
 
 
 def test_rally_narrows_to_one_opponent(
@@ -1989,7 +1844,7 @@ def test_rally_narrows_to_one_opponent(
 
     body = _get(client, player.id, "rally?opponent_key=naidoo")
 
-    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert (body["won"], body["lost"]) == (1, 0)
     assert body["won_by_shot"] == [
         {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
     ]
@@ -2054,10 +1909,12 @@ def test_opponent_set_and_phase_narrow_together(
         "serving"
     ]
 
-    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
-        "Break points saved",
-        "n=1",
-    )
+    assert serving["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
 
 
 def test_an_opponent_key_reaches_any_spelling_of_the_name(
@@ -2081,7 +1938,7 @@ def test_an_opponent_key_reaches_any_spelling_of_the_name(
     )
 
     assert response.status_code == 200
-    assert response.json()["errors_overall"]["sample_size"] == "n=1"
+    assert response.json()["won"] == 1
 
 
 @pytest.mark.parametrize("suffix", ["overview", "serve", "rally"])
@@ -2130,7 +1987,7 @@ def test_serve_narrows_to_one_surface(
         db_session, player_id=player.id, surface=Surface.CLAY, played_on=date(2026, 8, 2)
     )
     make_point(db_session, match_id=hard.id, sequence=0)
-    make_point(db_session, match_id=hard.id, sequence=1, is_game_end=True)
+    make_point(db_session, match_id=hard.id, sequence=1)
     make_point(
         db_session,
         match_id=clay.id,
@@ -2147,15 +2004,16 @@ def test_serve_narrows_to_one_surface(
 
     serving = _get(client, player.id, "serve?surface=hard")["serving"]
 
-    assert serving["hero"]["value"] == 100
-    assert [
-        (metric["label"], metric["value"], metric["sample_size"]) for metric in serving["metrics"]
-    ] == [
-        ("1st serve in %", 100, "n=2"),
-        ("1st serve points won", 100, "n=2"),
-        ("Double faults / set", 0.0, "n=1 sets"),
-        ("Aces / match", 0.0, "n=1"),
-    ]
+    assert serving["outcome"] == {
+        "first_serve": {"landed": 100, "fault": 0, "ace": 0},
+        "second_serve": None,
+    }
+    assert serving["breakdown"][3] == {
+        "label": "Double faults",
+        "value": 0,
+        "secondary_value": None,
+        "max": 2,
+    }
 
 
 def test_rally_narrows_to_one_surface(
@@ -2176,7 +2034,7 @@ def test_rally_narrows_to_one_surface(
 
     body = _get(client, player.id, "rally?surface=clay")
 
-    assert body["errors_overall"]["sample_size"] == "n=1"
+    assert (body["won"], body["lost"]) == (1, 0)
     assert body["won_by_shot"] == [
         {"label": "Backhand volley", "value": 1, "secondary_value": None, "max": 1}
     ]
@@ -2237,7 +2095,7 @@ def test_surface_counts_a_match_with_no_opponent_name(
     match = make_match(db_session, player_id=player.id, surface=Surface.GRASS, opponent_name=None)
     make_point(db_session, match_id=match.id, sequence=0)
 
-    assert _get(client, player.id, "rally?surface=grass")["errors_overall"]["sample_size"] == "n=1"
+    assert _get(client, player.id, "rally?surface=grass")["won"] == 1
 
 
 def test_surface_excludes_a_match_with_no_surface_recorded(
@@ -2248,8 +2106,8 @@ def test_surface_excludes_a_match_with_no_surface_recorded(
     match = make_match(db_session, player_id=player.id, surface=None)
     make_point(db_session, match_id=match.id, sequence=0)
 
-    assert _get(client, player.id, "rally")["errors_overall"]["sample_size"] == "n=1"
-    assert _get(client, player.id, "rally?surface=hard")["errors_overall"] is None
+    assert _get(client, player.id, "rally")["won"] == 1
+    assert _get(client, player.id, "rally?surface=hard")["won"] == 0
 
 
 def test_surface_composes_with_opponent_set_and_phase(
@@ -2281,10 +2139,12 @@ def test_surface_composes_with_opponent_set_and_phase(
         "serve?opponent_key=torres&surface=hard&set_number=2&phase=break_points",
     )["serving"]
 
-    assert (serving["metrics"][0]["label"], serving["metrics"][0]["sample_size"]) == (
-        "Break points saved",
-        "n=1",
-    )
+    assert serving["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
 
 
 def test_opponents_narrows_by_surface(
@@ -2361,7 +2221,7 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
     """Two matches, one point of each kind in each: the scoped answer sees one match.
 
     Both sides are arranged, since the returning breakdown runs a query of its own
-    and would otherwise stay player-wide while the metrics narrowed.
+    and would otherwise stay player-wide while the tallies narrowed.
     """
     player = make_player(db_session, coach_id=coach.id)
     scoped = make_match(db_session, player_id=player.id)
@@ -2397,10 +2257,12 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
 
     body = _get_match(client, scoped.id, "serve")
 
-    first_in = next(
-        metric for metric in body["serving"]["metrics"] if metric["label"] == "1st serve in %"
-    )
-    assert (first_in["value"], first_in["sample_size"]) == (100, "n=1")
+    assert body["serving"]["breakdown"][1] == {
+        "label": "Won on forehand",
+        "value": 1,
+        "secondary_value": None,
+        "max": 1,
+    }
     assert body["returning"]["breakdown"] == [
         {"label": "Returned in", "value": 1, "secondary_value": None, "max": 1},
         {"label": "Return error (net)", "value": 0, "secondary_value": None, "max": 1},
@@ -2410,12 +2272,7 @@ def test_match_serve_stats_leave_the_players_other_matches_out(
     # The same two figures over both matches, so the scoping is what the assertions
     # above are reading and not an arrangement that would answer the same either way.
     player_wide = _get(client, player.id, "serve")
-    player_first_in = next(
-        metric
-        for metric in player_wide["serving"]["metrics"]
-        if metric["label"] == "1st serve in %"
-    )
-    assert (player_first_in["value"], player_first_in["sample_size"]) == (50, "n=2")
+    assert player_wide["serving"]["breakdown"][1]["value"] == 2
     assert player_wide["returning"]["breakdown"][1]["value"] == 1
     # The fault mode and the trend run queries of their own, so each is asserted
     # scoped and player-wide too.
@@ -2484,8 +2341,6 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     ]
     assert body["lost_by_shot"] == []
     assert (body["won"], body["lost"]) == (1, 0)
-    assert body["outcome_mix"] == [{"label": "You", "forced": 100, "unforced": 0}]
-    assert body["errors_overall"]["sample_size"] == "n=1"
     assert [style["count"] for style in body["styles"]["you"]] == [1, 0, 0]
     assert [style["count"] for style in body["styles"]["opponents"]] == [0, 0, 0]
     assert body["trend"] == [_bar(0)]
@@ -2493,7 +2348,6 @@ def test_match_rally_stats_leave_the_players_other_matches_out(
     assert player_wide["trend"] == [_bar(0), _bar(100, match="M2")]
     assert len(player_wide["lost_by_shot"]) == 1
     assert (player_wide["won"], player_wide["lost"]) == (1, 1)
-    assert player_wide["errors_overall"]["sample_size"] == "n=2"
     assert [style["count"] for style in player_wide["styles"]["opponents"]] == [0, 1, 0]
 
 

@@ -287,12 +287,7 @@ export const zMatchSetRead = z.object({
  *
  * How a metric's value is scaled, so the client can label and cap it.
  */
-export const zMetricUnit = z.enum([
-    'percent',
-    'ratio',
-    'per_set',
-    'per_match'
-]);
+export const zMetricUnit = z.enum(['percent', 'ratio']);
 
 /**
  * Metric
@@ -339,20 +334,6 @@ export const zOpponentSummary = z.object({
  */
 export const zOtpRequest = z.object({
     email: z.email().max(254)
-});
-
-/**
- * OutcomeMixRow
- *
- * How the points one side decided split between their forcing shots and errors.
- *
- * Percentages of the rally-ended points that side's own last shot settled. A clean
- * winner counts as forced: capture records no distinction between the two (#175).
- */
-export const zOutcomeMixRow = z.object({
-    forced: z.number(),
-    label: z.string(),
-    unforced: z.number()
 });
 
 /**
@@ -793,8 +774,6 @@ export const zServeTrendPoint = z.object({
 export const zServeSideStats = z.object({
     breakdown: z.array(zBreakdownRow),
     fault_mode: zFaultModeSplit,
-    hero: zMetric.nullable(),
-    metrics: z.array(zMetric),
     outcome: zServeOutcomeSplit,
     return_outcome: zReturnOutcomeSplit,
     trend: z.array(zServeTrendPoint)
@@ -1241,12 +1220,8 @@ export const zPointEnderStyles = z.object({
  */
 export const zRallyStats = z.object({
     average_rally_length: zRallyLengthAverages,
-    errors_overall: zMetric.nullable(),
-    errors_under_pressure: zMetric.nullable(),
-    hero: zMetric.nullable(),
     lost: z.int(),
     lost_by_shot: z.array(zBreakdownRow),
-    outcome_mix: z.array(zOutcomeMixRow),
     rally_length: z.array(zRallyLengthBucket),
     shot_frequency: zShotFrequencySides,
     styles: zPointEnderStyles,

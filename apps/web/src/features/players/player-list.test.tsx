@@ -37,8 +37,6 @@ const player: PlayerRead = {
 const EMPTY_SERVE_SIDE = {
   breakdown: [],
   fault_mode: { first_serve: null, second_serve: null },
-  hero: null,
-  metrics: [],
   outcome: { first_serve: null, second_serve: null },
   return_outcome: { first_serve: [], second_serve: [] },
   trend: [],
@@ -49,12 +47,8 @@ const emptyServeStats: ServeStats = { serving: EMPTY_SERVE_SIDE, returning: EMPT
 const emptyRallyStats: RallyStats = {
   average_rally_length: { won: null, lost: null },
   trend: [],
-  errors_overall: null,
-  errors_under_pressure: null,
-  hero: null,
   lost: 0,
   lost_by_shot: [],
-  outcome_mix: [],
   rally_length: [],
   shot_frequency: { you: [], opponents: [] },
   styles: { you: [], opponents: [] },

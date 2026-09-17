@@ -38,12 +38,8 @@ function rallyStats(overrides: Partial<RallyStats> = {}): RallyStats {
   return {
     average_rally_length: { won: null, lost: null },
     trend: [],
-    errors_overall: null,
-    errors_under_pressure: null,
-    hero: null,
     lost: 0,
     lost_by_shot: [],
-    outcome_mix: [],
     rally_length: [],
     shot_frequency: { you: [], opponents: [] },
     styles: { you: [], opponents: [] },

@@ -1,11 +1,11 @@
 """Response shapes for the player analytics endpoints (#172).
 
-Nearly every number a dashboard tab renders is one `Metric`, matching the bullet-bar
-component the web app draws them with, so the endpoints repeat one object rather than
-inventing bespoke fields per statistic. Everything here is computed by the router from
-stored rows, so no schema sets from_attributes and none has a request-body twin. A
-field is null exactly when the data to compute it does not exist yet; zero would read
-as a terrible score rather than an absent one.
+A number reported with its own scale, sample and baseline is one `Metric`, so the
+endpoints repeat one object rather than inventing bespoke fields per statistic.
+Everything here is computed by the router from stored rows, so no schema sets
+from_attributes and none has a request-body twin. A field is null exactly when the data
+to compute it does not exist yet; zero would read as a terrible score rather than an
+absent one.
 """
 
 import enum
@@ -21,8 +21,6 @@ class MetricUnit(enum.StrEnum):
 
     PERCENT = "percent"
     RATIO = "ratio"
-    PER_SET = "per_set"
-    PER_MATCH = "per_match"
 
 
 # Each member below TIEBREAKS names a boolean the capture client already stamps on
@@ -60,7 +58,7 @@ class Metric(BaseModel):
     label: str
     value: float
     unit: MetricUnit
-    # Rendered verbatim next to the label ("n=14", "n=20 sets").
+    # Rendered verbatim next to the label ("n=14").
     sample_size: str
     # The comparison the value is judged against, in the same units.
     baseline: float | None
@@ -68,7 +66,7 @@ class Metric(BaseModel):
     delta: float | None
     # Ceiling for the bar the value is drawn against.
     max: float
-    # False for metrics like double faults, where down is the good direction.
+    # Which direction reads as good, for a value where down can be the better one.
     higher_is_better: bool
     # Set only where the value is not a plain number, e.g. a "3:0" ratio.
     display: str | None = None
@@ -211,10 +209,6 @@ class ServeTrendPoint(BaseModel):
 class ServeSideStats(BaseModel):
     """One side of the serve tab, serving or returning."""
 
-    # Null until a game-end point exists for this side's hero percentage.
-    hero: Metric | None
-    # Whichever of the side's metrics the stored points can answer.
-    metrics: list[Metric]
     # How this side's points ended; empty until point data exists.
     breakdown: list[BreakdownRow]
     # How this side's serves landed, and how the faulted ones missed.
@@ -233,18 +227,6 @@ class ServeStats(BaseModel):
 
     serving: ServeSideStats
     returning: ServeSideStats
-
-
-class OutcomeMixRow(BaseModel):
-    """How the points one side decided split between their forcing shots and errors.
-
-    Percentages of the rally-ended points that side's own last shot settled. A clean
-    winner counts as forced: capture records no distinction between the two (#175).
-    """
-
-    label: str
-    forced: float
-    unforced: float
 
 
 class PointEnderKind(enum.StrEnum):
@@ -374,17 +356,13 @@ class RallyStats(BaseModel):
     player lost points on, never the player's own misses (#175).
     """
 
-    hero: Metric | None
     # Every point the player won and lost, aces and double faults included, so the
     # two deliberately outrun the styles below, which count rally endings alone.
     won: int
     lost: int
     won_by_shot: list[BreakdownRow]
     lost_by_shot: list[BreakdownRow]
-    outcome_mix: list[OutcomeMixRow]
     styles: PointEnderStyles
-    errors_under_pressure: Metric | None
-    errors_overall: Metric | None
     shot_frequency: ShotFrequencySides
     # The four buckets whole, or empty while no point carries one.
     rally_length: list[RallyLengthBucket]

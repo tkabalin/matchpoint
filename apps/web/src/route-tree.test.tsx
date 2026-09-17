@@ -260,8 +260,6 @@ test("/me renders the player's own view", async () => {
       Response.json({
         serving: {
           breakdown: [],
-          hero: null,
-          metrics: [],
           outcome: { first_serve: null, second_serve: null },
           fault_mode: { first_serve: null, second_serve: null },
           return_outcome: { first_serve: [], second_serve: [] },
@@ -269,8 +267,6 @@ test("/me renders the player's own view", async () => {
         },
         returning: {
           breakdown: [],
-          hero: null,
-          metrics: [],
           outcome: { first_serve: null, second_serve: null },
           fault_mode: { first_serve: null, second_serve: null },
           return_outcome: { first_serve: [], second_serve: [] },
@@ -366,8 +362,6 @@ test("/ redirects straight to /me with a live player session, rather than showin
       Response.json({
         serving: {
           breakdown: [],
-          hero: null,
-          metrics: [],
           outcome: { first_serve: null, second_serve: null },
           fault_mode: { first_serve: null, second_serve: null },
           return_outcome: { first_serve: [], second_serve: [] },
@@ -375,8 +369,6 @@ test("/ redirects straight to /me with a live player session, rather than showin
         },
         returning: {
           breakdown: [],
-          hero: null,
-          metrics: [],
           outcome: { first_serve: null, second_serve: null },
           fault_mode: { first_serve: null, second_serve: null },
           return_outcome: { first_serve: [], second_serve: [] },
