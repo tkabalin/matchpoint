@@ -7,9 +7,9 @@ import { StatCard } from "@/components/stat-card";
 import { squadHeadline } from "@/lib/analytics/squad-stats";
 import type { SquadStatsEntry } from "@/lib/analytics/types.provisional";
 
-/** Icon + big number + small label, three across — `StatHero`'s own DNA at a
- *  size that actually fits three in a row at `max-w-md`. Not promoted to
- *  `components/`, since it only has this one call site. */
+/** Icon + big number + small label, three across, at a size that fits three in
+ *  a row at `max-w-md`. Not promoted to `components/`, since it only has this
+ *  one call site. */
 function HeadlineStat({
   icon: Icon,
   value,
