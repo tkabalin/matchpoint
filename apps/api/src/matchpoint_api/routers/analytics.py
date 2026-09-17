@@ -340,7 +340,6 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
             _count(tracked, Point.won, Point.wing == Wing.FOREHAND).label("forehand_wins"),
             _count(tracked, Point.won, Point.wing == Wing.BACKHAND).label("backhand_wins"),
             _count(opponent).label("return_points"),
-            _count(opponent, Point.end_reason == EndReason.ACE).label("their_aces"),
             _count(Point.won, forced).label("forced_won"),
             _count(~Point.won, mistake).label("mistake_lost"),
             *(
