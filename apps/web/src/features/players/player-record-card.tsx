@@ -14,10 +14,9 @@ import { getErrorStatus } from "@/lib/error-status";
  *  Overview tab that read as a single "how are they doing" question, so they
  *  share a card rather than sitting in two separate ones side by side.
  *
- *  All-time only, not season: the API does carry a calendar-year
- *  `season_record` now, but nothing on this card claims otherwise reading it
- *  — showing a second record here is a product decision for someone to make,
- *  not a side effect of wiring this card to real data. */
+ *  All-time only, and the endpoint now carries no other record (#298): the
+ *  season-scoped one was dropped rather than left unread, so adding it here
+ *  means deciding to show it and putting it back. */
 export function PlayerRecordCard({
   playerId,
   opponentKey,

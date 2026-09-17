@@ -254,7 +254,7 @@ test("/me renders the player's own view", async () => {
     "/api/auth/player/me": () => Response.json(playerSelf),
     [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
     [`/api/players/${player.id}/analytics/overview`]: () =>
-      Response.json({ record: { wins: 0, losses: 0 }, form: null, days_since_last_match: null }),
+      Response.json({ all_time_record: { wins: 0, losses: 0 }, recent_results: [] }),
     "/api/matches": () => Response.json([]),
     [`/api/players/${player.id}/analytics/serve`]: () =>
       Response.json({
@@ -356,7 +356,7 @@ test("/ redirects straight to /me with a live player session, rather than showin
     "/api/auth/player/me": () => Response.json(playerSelf),
     [`/api/players/${player.id}/analytics/opponents`]: () => Response.json([]),
     [`/api/players/${player.id}/analytics/overview`]: () =>
-      Response.json({ record: { wins: 0, losses: 0 }, form: null, days_since_last_match: null }),
+      Response.json({ all_time_record: { wins: 0, losses: 0 }, recent_results: [] }),
     "/api/matches": () => Response.json([]),
     [`/api/players/${player.id}/analytics/serve`]: () =>
       Response.json({

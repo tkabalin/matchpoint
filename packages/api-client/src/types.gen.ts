@@ -551,47 +551,6 @@ export type MatchUpdate = {
 };
 
 /**
- * Metric
- *
- * One number a coach is shown, with everything needed to judge it.
- */
-export type Metric = {
-    /**
-     * Baseline
-     */
-    baseline: number | null;
-    /**
-     * Delta
-     */
-    delta: number | null;
-    /**
-     * Display
-     */
-    display?: string | null;
-    /**
-     * Higher Is Better
-     */
-    higher_is_better: boolean;
-    /**
-     * Label
-     */
-    label: string;
-    /**
-     * Max
-     */
-    max: number;
-    /**
-     * Sample Size
-     */
-    sample_size: string;
-    unit: MetricUnit;
-    /**
-     * Value
-     */
-    value: number;
-};
-
-/**
  * MetricUnit
  *
  * How a metric's value is scaled, so the client can label and cap it.
@@ -824,19 +783,17 @@ export type PlayerNoteUpdate = {
 /**
  * PlayerOverview
  *
- * The overview tab: headline metrics and the win/loss record.
+ * The win/loss record and the recent results beside it (#298).
+ *
+ * Counted over matches alone, so the opponent and surface axes narrow it and the
+ * point-scoped ones have nothing here to reach.
  */
 export type PlayerOverview = {
     all_time_record: WinLossRecord;
-    forced_to_unforced: Metric | null;
-    form: Metric | null;
-    hold_percentage: Metric | null;
     /**
      * Recent Results
      */
     recent_results: Array<MatchResult>;
-    return_games_won: Metric | null;
-    season_record: WinLossRecord;
 };
 
 /**

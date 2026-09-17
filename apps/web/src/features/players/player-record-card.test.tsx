@@ -7,20 +7,6 @@ import { PlayerRecordCard } from "./player-record-card";
 
 const OVERVIEW: PlayerOverview = {
   all_time_record: { wins: 52, losses: 28 },
-  season_record: { wins: 14, losses: 6 },
-  form: {
-    label: "Form",
-    value: 80,
-    unit: "percent",
-    sample_size: "n=5",
-    baseline: 62,
-    delta: 12,
-    max: 100,
-    higher_is_better: true,
-  },
-  hold_percentage: null,
-  return_games_won: null,
-  forced_to_unforced: null,
   recent_results: ["win", "win", "loss", "win", "win"],
 };
 

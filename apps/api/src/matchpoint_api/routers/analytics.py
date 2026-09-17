@@ -40,7 +40,6 @@ from matchpoint_api.schemas.analytics import (
     FaultModeShares,
     FaultModeSplit,
     LastFiveStats,
-    Metric,
     MetricUnit,
     OpponentSummary,
     PlayerOverview,
@@ -163,8 +162,8 @@ OPPONENT_NOT_FOUND: dict[int | str, dict[str, Any]] = {
     404: {"model": ErrorDetail, "description": "No matches against this opponent"}
 }
 
-# A bar needs a ceiling even where a rate has no natural one; this matches the scale
-# the dashboard was designed against, and a value past it becomes its own ceiling.
+# A ratio has no natural ceiling, so this is the scale the dashboard's own bars stop
+# at, and `_baseline_ratio` below holds a value past it there.
 RATIO_CAP = 3.0
 
 FORCED_UNFORCED_LABEL = "Forced : Unforced ratio"
@@ -259,61 +258,18 @@ _RALLY_LENGTH_MIDPOINT = {
 _LONG_RALLY_BUCKETS = (RallyBucket.B3, RallyBucket.B4)
 
 
-def _percent(label: str, part: int, whole: int, *, baseline: float | None = None) -> Metric | None:
-    """A percentage metric, or None while nothing has been counted to take one of."""
-    if whole == 0:
-        return None
-    return Metric(
-        label=label,
-        value=round(100 * part / whole),
-        unit=MetricUnit.PERCENT,
-        sample_size=f"n={whole}",
-        baseline=baseline,
-        delta=None,
-        max=100,
-        higher_is_better=True,
-    )
-
-
 def _ratio_value(forced: int, unforced: int) -> float | None:
     """The forced : unforced ratio as a bare number, or None with neither counted.
 
     With no unforced errors at all the true ratio has no value, so the forced count
-    stands in for it, which is what the "4:0" display below says out loud.
+    stands in for it. Every endpoint shipping this ships both counts beside it, which
+    is what lets a client tell that case from a measured ratio of the same size.
     """
     if forced + unforced == 0:
         return None
     if unforced == 0:
         return float(forced)
     return round(forced / unforced, 2)
-
-
-def _forced_unforced(forced: int, unforced: int) -> Metric | None:
-    """The forced : unforced ratio as a metric, or None while no rally has ended.
-
-    With no unforced errors the count itself is shown ("4:0") while the bar fills to
-    its ceiling.
-    """
-    value = _ratio_value(forced, unforced)
-    if value is None:
-        return None
-    if unforced == 0:
-        display = f"{forced}:0"
-        ceiling = value
-    else:
-        display = None
-        ceiling = max(RATIO_CAP, value)
-    return Metric(
-        label=FORCED_UNFORCED_LABEL,
-        value=value,
-        unit=MetricUnit.RATIO,
-        sample_size=f"n={forced + unforced}",
-        baseline=None,
-        delta=None,
-        max=ceiling,
-        higher_is_better=True,
-        display=display,
-    )
 
 
 # Every phase a caller can ask for is a boolean the capture client already stamped on
@@ -371,9 +327,6 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
 
     tracked = Point.server == MatchSide.TRACKED
     opponent = Point.server == MatchSide.OPPONENT
-    # Tiebreak points are excluded from game tallies: the players alternate serve
-    # inside one, so its final point says nothing about anyone holding.
-    game = and_(Point.is_game_end, ~Point.in_tiebreak)
     forced = Point.end_reason == EndReason.FORCED
     mistake = Point.end_reason == EndReason.MISTAKE
 
@@ -381,10 +334,6 @@ def _point_counts(db: Session, player_id: uuid.UUID, scope: PointScope) -> Row[A
         select(
             func.count().label("total"),
             _count(Point.won).label("won"),
-            _count(game, tracked).label("hold_games"),
-            _count(game, tracked, Point.won).label("hold_won"),
-            _count(game, opponent).label("return_games"),
-            _count(game, opponent, Point.won).label("return_won"),
             _count(tracked).label("serve_points"),
             _count(tracked, Point.end_reason == EndReason.DOUBLE_FAULT).label("double_faults"),
             _count(tracked, Point.end_reason == EndReason.ACE).label("aces"),
@@ -508,25 +457,6 @@ def _results_newest_first(db: Session, player_id: uuid.UUID) -> list[Row[Any]]:
 
 def _wins(results: Sequence[Row[Any]]) -> int:
     return sum(row.result == MatchResult.WIN for row in results)
-
-
-def _form_metric(results: Sequence[Row[Any]]) -> Metric | None:
-    """Win percentage over the last five results, judged against all time.
-
-    The delta compares the five before those, and stays null until they exist whole:
-    a partial previous window would make early swings look like trends.
-    """
-    window, previous = results[:5], results[5:10]
-    baseline = _percent("", _wins(results), len(results))
-    current = _percent(
-        "Form (win % last 5)",
-        _wins(window),
-        len(window),
-        baseline=baseline.value if baseline else None,
-    )
-    if current is not None and len(previous) == 5:
-        current.delta = current.value - round(100 * _wins(previous) / len(previous))
-    return current
 
 
 def _normalised(opponent_name: str) -> str:
@@ -661,33 +591,21 @@ def get_player_overview(
     opponent_key: OpponentFilter = None,
     surface: SurfaceFilter = None,
 ) -> PlayerOverview:
-    """The overview tab: form, the headline rates, and the win/loss record.
+    """The win/loss record and the results behind it.
 
     Takes the opponent and surface axes and not the set or phase one (#227, #244,
-    #225): both narrow matches, which all seven fields are counted over one way or
-    the other, where a set or a phase could reach only the three counted over points.
+    #225): both narrow matches, which is what these two fields are counted over,
+    where a set or a phase narrows points and so has nothing here to reach.
     """
     readable_player(db, player_id, principal)
     matches = _scoped_matches(db, player_id, opponent_key, surface)
     if matches is None:
         results = _results_newest_first(db, player_id)
-        scope = PointScope()
     else:
         results = [row for row in matches if row.result is not None]
-        scope = PointScope(match_ids=[row.id for row in matches])
-    counts = _point_counts(db, player_id, scope)
 
-    this_year = [row for row in results if row.played_on.year == date.today().year]
-    recent = results[:5]
     return PlayerOverview(
-        form=_form_metric(results),
-        recent_results=[row.result for row in reversed(recent)],
-        hold_percentage=_percent("Hold %", counts.hold_won, counts.hold_games),
-        return_games_won=_percent("Return games won %", counts.return_won, counts.return_games),
-        forced_to_unforced=_forced_unforced(counts.forced_won, counts.mistake_lost),
-        season_record=WinLossRecord(
-            wins=_wins(this_year), losses=len(this_year) - _wins(this_year)
-        ),
+        recent_results=[row.result for row in reversed(results[:5])],
         all_time_record=WinLossRecord(wins=_wins(results), losses=len(results) - _wins(results)),
     )
 
@@ -1333,9 +1251,9 @@ def _percent_value_or_none(part: int, whole: int) -> float | None:
 def _series_ratio(forced: int, unforced: int) -> float | None:
     """The forced : unforced ratio only where the denominator is real.
 
-    Not `_ratio_value`: the forced count it stands in with is a display convention
-    ("4:0"), and as a series member it would set the spread for the whole baseline
-    off one clean match, which is a z-score the client cannot read.
+    Not `_ratio_value`: the forced count it stands in with is not a measured ratio,
+    and as a series member it would set the spread for the whole baseline off one
+    clean match, which is a z-score the client cannot read.
     """
     if unforced == 0:
         return None
@@ -1700,8 +1618,8 @@ class _WeekTally:
 
 # Each metric off one week's pooled counts. `_series_ratio` rather than
 # `_ratio_value` for the reason a tracked stat's series uses it: the forced count
-# standing in for a missing denominator is a display convention, and as a point on a
-# line it would read as a real value.
+# standing in for a missing denominator is not a measured ratio, and as a point on a
+# line it would read as one.
 _SQUAD_METRIC_VALUE: dict[SquadMetric, Callable[[_WeekTally], float | None]] = {
     SquadMetric.RECORD: lambda week: _percent_value_or_none(week.wins, week.wins + week.losses),
     SquadMetric.FORCED_TO_UNFORCED: lambda week: _series_ratio(week.forced, week.unforced),

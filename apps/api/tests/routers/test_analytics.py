@@ -52,9 +52,9 @@ def coach(client: TestClient, db_session: Session) -> Coach:
     return coach
 
 
-# The season record and the squad snapshot's period are the calendar year the server
-# is in, so the tests that assert over them derive their dates instead of pinning a
-# year that would start failing every January.
+# The squad snapshot's period is the calendar year the server is in, so the tests that
+# assert over it derive their dates instead of pinning a year that would start failing
+# every January.
 THIS_YEAR = date.today().year
 LAST_YEAR = THIS_YEAR - 1
 
@@ -103,22 +103,18 @@ def test_overview_is_empty_before_any_data(
     body = _get(client, player.id, "overview")
 
     assert body == {
-        "form": None,
         "recent_results": [],
-        "hold_percentage": None,
-        "return_games_won": None,
-        "forced_to_unforced": None,
-        "season_record": {"wins": 0, "losses": 0},
         "all_time_record": {"wins": 0, "losses": 0},
     }
 
 
-def test_overview_records_and_form(client: TestClient, db_session: Session, coach: Coach) -> None:
-    """Twelve results: last year's go to all-time only, and form is the last five.
+def test_overview_records_every_year_and_lists_the_last_five(
+    client: TestClient, db_session: Session, coach: Coach
+) -> None:
+    """Twelve results: the record counts every year, the dots are the newest five.
 
-    This year's results by day, 1st to 10th: L L W W L W W L W W. Newest-first the
-    last five are W W L W W (80%), the five before them W W L L L (40%), so the delta
-    is +40. All time is 7 of 12 (58); the season is this year's 6 and 4.
+    This year's results by day, 1st to 10th: L L W W L W W L W W, and two more last
+    year. All time is 7 of 12, where the five most recent, oldest first, are W W L W W.
     """
     player = make_player(db_session, coach_id=coach.id)
     results = ["loss", "loss", "win", "win", "loss", "win", "win", "loss", "win", "win"]
@@ -138,93 +134,8 @@ def test_overview_records_and_form(client: TestClient, db_session: Session, coac
 
     body = _get(client, player.id, "overview")
 
-    assert body["form"] == {
-        "label": "Form (win % last 5)",
-        "value": 80,
-        "unit": "percent",
-        "sample_size": "n=5",
-        "baseline": 58,
-        "delta": 40,
-        "max": 100,
-        "higher_is_better": True,
-        "display": None,
-    }
     assert body["recent_results"] == ["win", "win", "loss", "win", "win"]
-    assert body["season_record"] == {"wins": 6, "losses": 4}
     assert body["all_time_record"] == {"wins": 7, "losses": 5}
-
-
-def test_overview_point_metrics(client: TestClient, db_session: Session, coach: Coach) -> None:
-    """Hold and return rates come off game-end stamps, tiebreaks excluded.
-
-    Two tracked-serve games (one held), one return game won, and a tiebreak-ending
-    point that must move nothing. Forced wins 2, unforced losses 1: ratio 2.0.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
-    make_point(
-        db_session,
-        match_id=match.id,
-        sequence=1,
-        is_game_end=True,
-        won=False,
-        end_reason=EndReason.MISTAKE,
-        wing=Wing.BACKHAND,
-    )
-    make_point(
-        db_session,
-        match_id=match.id,
-        sequence=2,
-        is_game_end=True,
-        server=MatchSide.OPPONENT,
-        return_outcome=ReturnOutcome.IN,
-    )
-    make_point(
-        db_session,
-        match_id=match.id,
-        sequence=3,
-        is_game_end=True,
-        in_tiebreak=True,
-        serve1_outcome=ServeOutcome.ACE,
-        end_reason=EndReason.ACE,
-        wing=None,
-        shot_type=None,
-    )
-
-    body = _get(client, player.id, "overview")
-
-    assert body["hold_percentage"]["value"] == 50
-    assert body["hold_percentage"]["sample_size"] == "n=2"
-    assert body["return_games_won"]["value"] == 100
-    assert body["return_games_won"]["sample_size"] == "n=1"
-    assert body["forced_to_unforced"] == {
-        "label": "Forced : Unforced ratio",
-        "value": 2.0,
-        "unit": "ratio",
-        "sample_size": "n=3",
-        "baseline": None,
-        "delta": None,
-        "max": 3,
-        "higher_is_better": True,
-        "display": None,
-    }
-
-
-def test_overview_ratio_without_unforced_errors_shows_the_count(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=match.id, sequence=0)
-
-    body = _get(client, player.id, "overview")
-
-    assert body["forced_to_unforced"]["value"] == 1.0
-    assert body["forced_to_unforced"]["display"] == "1:0"
-    # No unforced errors means no finite ratio, so the bar fills rather than sitting a
-    # third along the 0-3 scale the defined case is drawn on.
-    assert body["forced_to_unforced"]["max"] == 1.0
 
 
 # --- serve ---
@@ -1685,24 +1596,6 @@ def test_set_and_phase_narrow_together(
     }
 
 
-def test_overview_ignores_a_scope_it_does_not_offer(
-    client: TestClient, db_session: Session, coach: Coach
-) -> None:
-    """The overview declares no filter, so a scope sent to it changes nothing (#227).
-
-    Four of its fields are counted over matches rather than points and could not
-    honour one; answering the whole payload unscoped is the deliberate choice.
-    """
-    player = make_player(db_session, coach_id=coach.id)
-    match = make_match(db_session, player_id=player.id)
-    make_point(db_session, match_id=match.id, sequence=0, is_game_end=True)
-    make_point(db_session, match_id=match.id, sequence=1, set_number=2, is_game_end=True, won=False)
-
-    assert _get(client, player.id, "overview?set_number=1&phase=tiebreaks") == _get(
-        client, player.id, "overview"
-    )
-
-
 @pytest.mark.parametrize("suffix", ["serve", "rally"])
 @pytest.mark.parametrize(
     "query",
@@ -1855,12 +1748,11 @@ def test_overview_narrows_to_one_opponent(
 ) -> None:
     """Three results against Torres and one against Naidoo, all this year.
 
-    Every field narrows together: the record and the form are counted over the three
-    meetings, and the hold percentage over the one service game held inside them,
-    where all matches together hold half of two.
+    Both fields narrow together: the record and the results behind it are counted
+    over the three meetings, where every opponent together makes it four.
     """
     player = make_player(db_session, coach_id=coach.id)
-    meetings = [
+    for day, result in enumerate(["win", "loss", "win"], start=1):
         make_match(
             db_session,
             player_id=player.id,
@@ -1868,29 +1760,19 @@ def test_overview_narrows_to_one_opponent(
             played_on=date(THIS_YEAR, 7, day),
             result=MatchResult(result),
         )
-        for day, result in enumerate(["win", "loss", "win"], start=1)
-    ]
-    make_point(db_session, match_id=meetings[0].id, sequence=0, is_game_end=True)
-    naidoo = make_match(
+    make_match(
         db_session,
         player_id=player.id,
         opponent_name="Naidoo",
         played_on=date(THIS_YEAR, 7, 4),
         result=MatchResult.WIN,
     )
-    make_point(db_session, match_id=naidoo.id, sequence=0, is_game_end=True, won=False)
 
     body = _get(client, player.id, "overview?opponent_key=torres")
 
     assert body["recent_results"] == ["win", "loss", "win"]
     assert body["all_time_record"] == {"wins": 2, "losses": 1}
-    assert body["season_record"] == {"wins": 2, "losses": 1}
-    assert (body["form"]["value"], body["form"]["sample_size"]) == (67, "n=3")
-    assert (body["hold_percentage"]["value"], body["hold_percentage"]["sample_size"]) == (
-        100,
-        "n=1",
-    )
-    assert _get(client, player.id, "overview")["hold_percentage"]["value"] == 50
+    assert _get(client, player.id, "overview")["all_time_record"] == {"wins": 3, "losses": 1}
 
 
 def test_opponent_set_and_phase_narrow_together(
@@ -2045,13 +1927,12 @@ def test_overview_narrows_to_one_surface_including_the_record(
 ) -> None:
     """Two wins on hard and a loss on clay, all this year.
 
-    Every field narrows together, the same guarantee the opponent axis makes: the
-    record and the form come off the same surface-scoped matches as the hold
-    percentage, not off the unfiltered career the way an earlier version of this
-    endpoint would have left them.
+    Both fields narrow together, the same guarantee the opponent axis makes: the
+    record comes off the surface-scoped matches, not off the unfiltered career the
+    way an earlier version of this endpoint would have left it.
     """
     player = make_player(db_session, coach_id=coach.id)
-    hard_matches = [
+    for day in (1, 2):
         make_match(
             db_session,
             player_id=player.id,
@@ -2059,27 +1940,18 @@ def test_overview_narrows_to_one_surface_including_the_record(
             played_on=date(THIS_YEAR, 7, day),
             result=MatchResult.WIN,
         )
-        for day in (1, 2)
-    ]
-    make_point(db_session, match_id=hard_matches[0].id, sequence=0, is_game_end=True)
-    clay_match = make_match(
+    make_match(
         db_session,
         player_id=player.id,
         surface=Surface.CLAY,
         played_on=date(THIS_YEAR, 7, 3),
         result=MatchResult.LOSS,
     )
-    make_point(db_session, match_id=clay_match.id, sequence=0, is_game_end=True, won=False)
 
     body = _get(client, player.id, "overview?surface=hard")
 
     assert body["all_time_record"] == {"wins": 2, "losses": 0}
-    assert body["season_record"] == {"wins": 2, "losses": 0}
     assert body["recent_results"] == ["win", "win"]
-    assert (body["hold_percentage"]["value"], body["hold_percentage"]["sample_size"]) == (
-        100,
-        "n=1",
-    )
     assert _get(client, player.id, "overview")["all_time_record"] == {"wins": 2, "losses": 1}
 
 

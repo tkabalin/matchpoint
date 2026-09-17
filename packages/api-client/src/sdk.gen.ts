@@ -517,11 +517,11 @@ export const listOpponents = <ThrowOnError extends boolean = false>(options: Opt
 /**
  * Get Player Overview
  *
- * The overview tab: form, the headline rates, and the win/loss record.
+ * The win/loss record and the results behind it.
  *
  * Takes the opponent and surface axes and not the set or phase one (#227, #244,
- * #225): both narrow matches, which all seven fields are counted over one way or
- * the other, where a set or a phase could reach only the three counted over points.
+ * #225): both narrow matches, which is what these two fields are counted over,
+ * where a set or a phase narrows points and so has nothing here to reach.
  */
 export const getPlayerOverview = <ThrowOnError extends boolean = false>(options: Options<GetPlayerOverviewData, ThrowOnError>): RequestResult<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError> => (options.client ?? client).get<GetPlayerOverviewResponses, GetPlayerOverviewErrors, ThrowOnError>({ url: '/players/{player_id}/analytics/overview', ...options });
 

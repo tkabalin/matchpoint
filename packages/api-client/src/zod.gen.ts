@@ -290,23 +290,6 @@ export const zMatchSetRead = z.object({
 export const zMetricUnit = z.enum(['percent', 'ratio']);
 
 /**
- * Metric
- *
- * One number a coach is shown, with everything needed to judge it.
- */
-export const zMetric = z.object({
-    baseline: z.number().nullable(),
-    delta: z.number().nullable(),
-    display: z.string().nullish(),
-    higher_is_better: z.boolean(),
-    label: z.string(),
-    max: z.number(),
-    sample_size: z.string(),
-    unit: zMetricUnit,
-    value: z.number()
-});
-
-/**
  * NoteFocus
  *
  * A training focus area a note is filed under.
@@ -1008,16 +991,14 @@ export const zWinLossRecord = z.object({
 /**
  * PlayerOverview
  *
- * The overview tab: headline metrics and the win/loss record.
+ * The win/loss record and the recent results beside it (#298).
+ *
+ * Counted over matches alone, so the opponent and surface axes narrow it and the
+ * point-scoped ones have nothing here to reach.
  */
 export const zPlayerOverview = z.object({
     all_time_record: zWinLossRecord,
-    forced_to_unforced: zMetric.nullable(),
-    form: zMetric.nullable(),
-    hold_percentage: zMetric.nullable(),
-    recent_results: z.array(zMatchResult),
-    return_games_won: zMetric.nullable(),
-    season_record: zWinLossRecord
+    recent_results: z.array(zMatchResult)
 });
 
 /**

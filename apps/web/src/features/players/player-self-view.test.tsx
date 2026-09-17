@@ -37,11 +37,6 @@ const player: PlayerSelfRead = {
 
 const DEFAULT_OVERVIEW: PlayerOverview = {
   all_time_record: { wins: 0, losses: 0 },
-  season_record: { wins: 0, losses: 0 },
-  form: null,
-  hold_percentage: null,
-  return_games_won: null,
-  forced_to_unforced: null,
   recent_results: ["win", "win", "loss", "win", "win"],
 };
 

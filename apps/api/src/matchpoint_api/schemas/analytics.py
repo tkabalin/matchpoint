@@ -1,7 +1,5 @@
 """Response shapes for the player analytics endpoints (#172).
 
-A number reported with its own scale, sample and baseline is one `Metric`, so the
-endpoints repeat one object rather than inventing bespoke fields per statistic.
 Everything here is computed by the router from stored rows, so no schema sets
 from_attributes and none has a request-body twin. A field is null exactly when the data
 to compute it does not exist yet; zero would read as a terrible score rather than an
@@ -52,26 +50,6 @@ class OpponentSummary(BaseModel):
     matches: int
 
 
-class Metric(BaseModel):
-    """One number a coach is shown, with everything needed to judge it."""
-
-    label: str
-    value: float
-    unit: MetricUnit
-    # Rendered verbatim next to the label ("n=14").
-    sample_size: str
-    # The comparison the value is judged against, in the same units.
-    baseline: float | None
-    # Change over the window, in the same units. Sign carries the direction.
-    delta: float | None
-    # Ceiling for the bar the value is drawn against.
-    max: float
-    # Which direction reads as good, for a value where down can be the better one.
-    higher_is_better: bool
-    # Set only where the value is not a plain number, e.g. a "3:0" ratio.
-    display: str | None = None
-
-
 class WinLossRecord(BaseModel):
     """Wins and losses, counted over matches with a recorded result."""
 
@@ -98,17 +76,14 @@ class ShotShare(BaseModel):
 
 
 class PlayerOverview(BaseModel):
-    """The overview tab: headline metrics and the win/loss record."""
+    """The win/loss record and the recent results beside it (#298).
 
-    # Null until the player has a match with a recorded result.
-    form: Metric | None
+    Counted over matches alone, so the opponent and surface axes narrow it and the
+    point-scoped ones have nothing here to reach.
+    """
+
     # Most recent matches with a result, oldest first, at most five.
     recent_results: list[MatchResult]
-    # These three are null until captured point data exists to compute them from.
-    hold_percentage: Metric | None
-    return_games_won: Metric | None
-    forced_to_unforced: Metric | None
-    season_record: WinLossRecord
     all_time_record: WinLossRecord
 
 

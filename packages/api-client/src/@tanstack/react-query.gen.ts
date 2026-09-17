@@ -926,11 +926,11 @@ export const getPlayerOverviewQueryKey = (options: Options<GetPlayerOverviewData
 /**
  * Get Player Overview
  *
- * The overview tab: form, the headline rates, and the win/loss record.
+ * The win/loss record and the results behind it.
  *
  * Takes the opponent and surface axes and not the set or phase one (#227, #244,
- * #225): both narrow matches, which all seven fields are counted over one way or
- * the other, where a set or a phase could reach only the three counted over points.
+ * #225): both narrow matches, which is what these two fields are counted over,
+ * where a set or a phase narrows points and so has nothing here to reach.
  */
 export const getPlayerOverviewOptions = (options: Options<GetPlayerOverviewData>) => queryOptions<GetPlayerOverviewResponse, GetPlayerOverviewError, GetPlayerOverviewResponse, ReturnType<typeof getPlayerOverviewQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

@@ -1008,79 +1008,6 @@
         "title": "MatchUpdate",
         "type": "object"
       },
-      "Metric": {
-        "description": "One number a coach is shown, with everything needed to judge it.",
-        "properties": {
-          "baseline": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Baseline"
-          },
-          "delta": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Delta"
-          },
-          "display": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Display"
-          },
-          "higher_is_better": {
-            "title": "Higher Is Better",
-            "type": "boolean"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          },
-          "max": {
-            "title": "Max",
-            "type": "number"
-          },
-          "sample_size": {
-            "title": "Sample Size",
-            "type": "string"
-          },
-          "unit": {
-            "$ref": "#/components/schemas/MetricUnit"
-          },
-          "value": {
-            "title": "Value",
-            "type": "number"
-          }
-        },
-        "required": [
-          "label",
-          "value",
-          "unit",
-          "sample_size",
-          "baseline",
-          "delta",
-          "max",
-          "higher_is_better"
-        ],
-        "title": "Metric",
-        "type": "object"
-      },
       "MetricUnit": {
         "description": "How a metric's value is scaled, so the client can label and cap it.",
         "enum": [
@@ -1484,40 +1411,10 @@
         "type": "object"
       },
       "PlayerOverview": {
-        "description": "The overview tab: headline metrics and the win/loss record.",
+        "description": "The win/loss record and the recent results beside it (#298).\n\nCounted over matches alone, so the opponent and surface axes narrow it and the\npoint-scoped ones have nothing here to reach.",
         "properties": {
           "all_time_record": {
             "$ref": "#/components/schemas/WinLossRecord"
-          },
-          "forced_to_unforced": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "form": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "hold_percentage": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
           },
           "recent_results": {
             "items": {
@@ -1525,28 +1422,10 @@
             },
             "title": "Recent Results",
             "type": "array"
-          },
-          "return_games_won": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Metric"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "season_record": {
-            "$ref": "#/components/schemas/WinLossRecord"
           }
         },
         "required": [
-          "form",
           "recent_results",
-          "hold_percentage",
-          "return_games_won",
-          "forced_to_unforced",
-          "season_record",
           "all_time_record"
         ],
         "title": "PlayerOverview",
@@ -6421,7 +6300,7 @@
     },
     "/players/{player_id}/analytics/overview": {
       "get": {
-        "description": "The overview tab: form, the headline rates, and the win/loss record.\n\nTakes the opponent and surface axes and not the set or phase one (#227, #244,\n#225): both narrow matches, which all seven fields are counted over one way or\nthe other, where a set or a phase could reach only the three counted over points.",
+        "description": "The win/loss record and the results behind it.\n\nTakes the opponent and surface axes and not the set or phase one (#227, #244,\n#225): both narrow matches, which is what these two fields are counted over,\nwhere a set or a phase narrows points and so has nothing here to reach.",
         "operationId": "get_player_overview",
         "parameters": [
           {
