@@ -493,8 +493,9 @@ deploy:
     - chmod 600 "$SSH_PRIVATE_KEY"
     # The key is bound to a forced command on the VPS (infra/prod/deploy.sh),
     # so the "command" sent here is just the image tag to deploy. SSH goes to
-    # the IP because the domain resolves to Cloudflare, not the origin.
-    - ssh -i "$SSH_PRIVATE_KEY" -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" deploy@REDACTED
+    # the origin's IP (a CI variable, kept out of the public repo) because the
+    # domain resolves to Cloudflare, not the origin.
+    - ssh -i "$SSH_PRIVATE_KEY" -o UserKnownHostsFile="$SSH_KNOWN_HOSTS" deploy@"$DEPLOY_HOST"
       "$CI_COMMIT_SHORT_SHA"
 
 # What "deployed" is allowed to mean. deploy.sh returns once compose has started
