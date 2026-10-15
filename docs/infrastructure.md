@@ -1,7 +1,7 @@
 # MatchPoint Infrastructure
 
 This document records the infrastructure decisions for the MatchPoint capstone project and the
-rationale behind each choice.
+rationale behind each choice. The deployment it describes ran for the duration of the course.
 
 ## Server
 

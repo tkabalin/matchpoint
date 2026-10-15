@@ -8,7 +8,8 @@ decisions rest on evidence rather than recollection.
 
 ## Try it
 
-The prototype runs at <https://matchpoint.thomaskabalin.com>. It is a progressive web app, so it
+For the duration of the course the prototype was hosted at <https://matchpoint.thomaskabalin.com>;
+to run it yourself, see [Getting started](#getting-started). It is a progressive web app, so it
 installs from the browser rather than an app store:
 
 - iOS (Safari): Share → Add to Home Screen.
