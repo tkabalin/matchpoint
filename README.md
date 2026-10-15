@@ -117,7 +117,8 @@ Either way, `docker compose version` should report Compose v2 once done.
 ### Install
 
 ```sh
-git clone git@gitlab.cs.uct.ac.za:tldr/matchpoint.git
+git clone https://github.com/tkabalin/matchpoint.git   # public mirror
+# or, with UCT GitLab access: git clone git@gitlab.cs.uct.ac.za:tldr/matchpoint.git
 cd matchpoint
 
 pnpm install                          # web app + root tooling, from the repo root
