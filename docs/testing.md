@@ -1,7 +1,8 @@
 # Testing
 
 How MatchPoint is tested: what each level of test is for, where tests live, and the conventions each
-app follows. Commands for running the suites are in the README under "Check your work".
+app follows. Commands for running the suites are in the README under "Test" and in `CONTRIBUTING.md`
+under "Checks".
 
 ## Test levels
 

@@ -1,28 +1,44 @@
 # MatchPoint
 
-MatchPoint is a tennis statistics app for coaches. During a match, a coach records each point on
-their phone as it happens: serve, rally outcome, rally length. Capture works with no signal and
-syncs when a connection returns. Between matches, the same data becomes an analytics dashboard of
-serve percentages, rally-length win rates and trends across matches and opponents, so training
-decisions rest on evidence rather than recollection.
+Pro-level match stats for amateur tennis coaches, logged courtside on a phone.
 
-## Try it
+![Offline-first PWA](https://img.shields.io/badge/PWA-offline--first-5A0FC8?logo=pwa&logoColor=white)
+![Tests: 3,296 passing](https://img.shields.io/badge/tests-3%2C296%20passing-brightgreen)
+![API coverage: 100%](https://img.shields.io/badge/API%20coverage-100%25-brightgreen)
+![Web coverage: 93.8%](https://img.shields.io/badge/web%20coverage-93.8%25-green)
+[![License: All rights reserved](https://img.shields.io/badge/license-All%20rights%20reserved-lightgrey)](LICENSE)
 
-For the duration of the course the prototype was hosted at <https://matchpoint.thomaskabalin.com>;
-to run it yourself, see [Getting started](#getting-started). It is a progressive web app, so it
-installs from the browser rather than an app store:
+Professional players get detailed match statistics from specialist tracking systems and post-match
+video analysis. Amateur coaches and players have neither, so spotting patterns and planning training
+from evidence is hard. MatchPoint is a progressive web app that lets a coach record every point
+courtside on a phone and turns those records into match, player, and squad analytics. Capture is
+built around a tap-on-the-court interface: a single tap where the ball landed records whether it was
+in, where it fell or how it missed, and who won the point. A scoring engine keeps the score across
+seven match formats.
 
-- iOS (Safari): Share → Add to Home Screen.
-- Android (Chrome): accept the install prompt, or menu → Install app.
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/images/capture-serve.png" alt="Live capture: tapping where the serve landed" width="200"><br><sub>Tap where the serve landed</sub></td>
+    <td align="center" width="25%"><img src="docs/images/match-stats.png" alt="A match's momentum and serve statistics" width="200"><br><sub>Review a match</sub></td>
+    <td align="center" width="25%"><img src="docs/images/player-stats.png" alt="A player's recent form, serve and return percentages, rally length, and winning shots" width="200"><br><sub>Track a player</sub></td>
+    <td align="center" width="25%"><img src="docs/images/squad-stats.png" alt="Squad statistics and player insights" width="200"><br><sub>Compare the squad</sub></td>
+  </tr>
+</table>
 
-Installed, it opens full-screen and keeps working without a connection.
+Because courts may have poor signal, the app is offline-first. Points are saved to an on-device
+outbox and synced later. The outbox is kept apart from the read cache, so clearing cached data can
+never lose an unsynced point. Uploads are idempotent, and the server rebuilds each score from the
+stored events, so retries and out-of-order delivery always reach the same result.
 
-## Team
+The analytics dashboard follows Shneiderman's mantra of "overview first, zoom and filter, then
+details on demand". Its palette is adapted from Okabe–Ito to be safe for colour-blind readers, and
+every colour also carries a pattern, so no chart depends on colour alone. Players can sign in to
+view their own statistics, and a one-time transfer code moves a player, with their full match
+history, to a new coach.
 
-- **Thomas Kabalin**: API, data model, offline sync, security, infrastructure, and CI/CD.
-- **Danny Gebhard**: frontend — accounts, player roster, match management, statistics dashboard, and
-  styling.
-- **Luke Bryant**: frontend — match setup, live capture, and scoring engine.
+The design and engineering decisions are written up in [`docs/`](docs/): the tech stack, data model,
+offline sync, scoring systems, colour palette, security, infrastructure, CI/CD, testing, and
+AI-assisted development.
 
 ## Architecture
 
@@ -70,16 +86,11 @@ receives and answers the analytics queries; the scoring itself runs on the devic
 See [docs/tech-stack.md](docs/tech-stack.md) for the full breakdown with versions, tooling, and test
 frameworks.
 
-UI components are generated with the shadcn CLI rather than hand-built — see
-[`.claude/rules/web-components.md`](.claude/rules/web-components.md) for the instructions.
+## Development
 
-## Getting started
-
-These instructions target Ubuntu/Debian Linux, including WSL2, and nothing else. macOS is not
-supported: the scripts under `scripts/` use bash associative arrays and GNU `date`, neither of which
-a BSD userland provides. On Windows, work inside your WSL2 distro and run every command below from
-its bash shell — not from PowerShell or cmd, which cannot run the scripts at all and whose Node and
-pnpm binaries do not understand WSL paths.
+These instructions target Ubuntu/Debian Linux, including WSL2. macOS is not supported, because the
+scripts under `scripts/` rely on bash associative arrays and GNU `date`. On Windows, run every
+command from your WSL2 distro's bash shell, not PowerShell or cmd.
 
 ### Prerequisites
 
@@ -95,7 +106,7 @@ pnpm binaries do not understand WSL paths.
 # nvm — see https://github.com/nvm-sh/nvm for the latest install script
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.6/install.sh | bash
 
-# nvm only wires itself into your shell profile — load it into this shell too, or open a new terminal
+# nvm only wires itself into your shell profile, so load it into this shell too, or open a new terminal
 \. "$HOME/.nvm/nvm.sh"
 
 # Node + pnpm — `nvm use` reads .nvmrc
@@ -121,28 +132,14 @@ git clone https://github.com/tkabalin/matchpoint.git   # public mirror
 # or, with UCT GitLab access: git clone git@gitlab.cs.uct.ac.za:tldr/matchpoint.git
 cd matchpoint
 
-pnpm install                          # web app + root tooling, from the repo root
-cd apps/api && uv sync --group dev    # API, from apps/api
+pnpm install                                        # web app + root tooling
+(cd apps/api && uv sync --group dev)                # API
+docker compose up -d --wait                         # Postgres
+(cd apps/api && uv run alembic upgrade head)        # migrations
 ```
 
-PostgreSQL runs via Docker Compose rather than a native install. The previous step leaves you in
-`apps/api`, so `cd` back to the repo root first — `docker compose` reads `docker-compose.yml` from
-there:
-
-```sh
-docker compose up -d --wait                       # starts Postgres, from the repo root
-cd apps/api && uv run alembic upgrade head        # applies migrations
-```
-
-The default `MATCHPOINT_DATABASE_URL` already matches the Compose credentials, so no `.env` file is
-required for local dev — copy `apps/api/.env.example` to `apps/api/.env` only to override it.
-
-`apps/api` is a uv project, deliberately **not** a pnpm workspace member — never run `pnpm install`
-inside it.
-
-pnpm 11 enforces a `minimumReleaseAge` supply-chain policy: packages published within the last day
-are rejected. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` after you add a
-dependency, the fix is normally to wait rather than to relax the policy.
+The default `MATCHPOINT_DATABASE_URL` already matches the Compose credentials, so local development
+needs no `.env` file. Copy `apps/api/.env.example` to `apps/api/.env` only to override it.
 
 ### Run
 
@@ -153,72 +150,20 @@ cd apps/api && uv run fastapi dev src/matchpoint_api/main.py   # API → http://
 ```
 
 Check the API is up with `curl http://localhost:8000/health`; interactive docs are at
-`http://localhost:8000/docs`.
+`http://localhost:8000/docs`. Alternatively, `scripts/dev.sh` validates prerequisite versions and
+runs all three steps above in one go.
 
-Alternatively, `scripts/dev.sh` validates prerequisite versions and runs all three steps above in
-one go.
-
-### The typed API client
-
-The web app calls the API through `packages/api-client`, generated from the API's own OpenAPI spec —
-so a route's request and response types are the ones the frontend compiles against, and a mismatch
-is a type error rather than a runtime surprise.
-
-Both the spec (`apps/api/openapi.json`) and the generated client are committed. After changing
-anything a route exposes, regenerate them and commit the result alongside the change:
+### Test
 
 ```sh
-scripts/gen-api-client.sh
+scripts/check.sh                                # format check, lint, typecheck, and tests, web and API
+pnpm --filter @matchpoint/web exec playwright install chromium webkit --with-deps   # first e2e run only
+pnpm --filter @matchpoint/web run test:e2e      # Playwright end-to-end suite
 ```
 
-A stale spec fails `uv run pytest` in `apps/api`, and a stale generated client fails CI's
-`web-api-client` job, which regenerates the client and diffs it against what was committed. Neither
-is covered by `scripts/check.sh`, so run the script whenever a route changes.
-
-### Check your work
-
-Two scripts, run from anywhere in the repo:
-
-- `scripts/format.sh` — formats web + API code in place. **Required before every commit.**
-- `scripts/check.sh` — runs the full suite (web: format check, lint, typecheck, test; API: ruff
-  format check, ruff check, pyright, pytest). **Optional but recommended before pushing** — not
-  required, since CI runs the identical checks on every push/MR anyway, but running it locally first
-  catches failures earlier. Like CI, it only ever reports — it never rewrites your files, so run
-  `format.sh` to fix what it flags. The checks run concurrently, and every one runs to completion,
-  so a single run reports all the failures rather than stopping at the first.
-
-Underneath, both scripts run plain package-manager commands, so you can run a single step yourself
-(e.g. just `pnpm run lint`) instead of the whole suite:
-
-```sh
-# From the repo root
-pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test
-
-# From apps/api
-uv run ruff format . && uv run ruff check . && uv run pyright && uv run pytest
-```
-
-CI runs the same checks in verify mode rather than write mode — `pnpm run format:check` and
-`uv run ruff format --check .` — so it fails the pipeline instead of reformatting. Formatting
-locally first is what keeps it green.
-
-Coverage is opt-in on both sides, so it is not part of `scripts/check.sh` or the plain test
-commands. For a report, run `uv run pytest --cov` from `apps/api`, or
-`pnpm --filter @matchpoint/web run test --coverage` from the repo root; CI collects both.
-
-#### End-to-end tests
-
-The Playwright suite in `apps/web/e2e/` drives the real app in a browser. `scripts/check.sh` leaves
-it out because it is the slow tier; CI runs it on every push.
-
-```sh
-pnpm --filter @matchpoint/web exec playwright install chromium webkit --with-deps   # first run only
-pnpm --filter @matchpoint/web run test:e2e
-```
-
-Playwright starts the Vite dev server and the API itself, the latter through `scripts/e2e-api.sh` on
-a database of its own, so the Compose Postgres must be up and a dev API from the Run step must be
-stopped first. What each tier covers, and why, is in [docs/testing.md](docs/testing.md).
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the rest of the workflow: formatting, regenerating the API
+client, coverage, and running a single check. What each test tier covers, and why, is in
+[docs/testing.md](docs/testing.md).
 
 ## Repository structure
 
@@ -267,7 +212,7 @@ scripts/                    # dev setup/check/format helpers
   rules/                    # path-scoped conventions for Claude Code
   skills/                   # task procedures for Claude Code
 docs/                       # finished, production-ready documentation only
-  scratch/                  # gitignored — in-progress/planning notes, not tracked
+  scratch/                  # gitignored: in-progress/planning notes, not tracked
 deliverables/               # graded course submissions (e.g. assignment write-ups), not docs/ or app code
 CODEOWNERS                  # who reviews what
 skills-lock.json            # pins the vendored skills under .claude/skills/
@@ -279,3 +224,9 @@ directory.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, commit and code-style conventions.
+
+## Team
+
+- **Thomas Kabalin**: API, data model, offline sync, security, infrastructure, and CI/CD.
+- **Danny Gebhard**: accounts, player roster, match management, statistics dashboard, and styling.
+- **Luke Bryant**: match setup, live capture, and scoring engine.

@@ -48,3 +48,58 @@ On an in-progress branch, prefer fixing a bug by amending the commit that introd
 (`git commit --amend` / interactive rebase), then force-pushing if it's already on remote — this
 keeps the branch's history easy to review. This is a loose preference, not a rule: only do it when
 straightforward, and don't reach for complex git surgery to satisfy it.
+
+## Development workflow
+
+The README's Development section gets the app running. This section is the rest of the day-to-day
+workflow.
+
+### Checks
+
+`scripts/check.sh` runs its checks concurrently and lets every one finish, so a single run reports
+all the failures rather than stopping at the first. Like CI, it only reports and never rewrites
+files, so run `scripts/format.sh` to fix what it flags. Each step is a plain package-manager command
+you can also run on its own:
+
+```sh
+# From the repo root
+pnpm run format && pnpm run lint && pnpm run typecheck && pnpm run test
+
+# From apps/api
+uv run ruff format . && uv run ruff check . && uv run pyright && uv run pytest
+```
+
+Coverage is opt-in on both sides, so it is not part of `scripts/check.sh` or the plain test
+commands. For a report, run `uv run pytest --cov` from `apps/api`, or
+`pnpm --filter @matchpoint/web run test --coverage` from the repo root; CI collects both.
+
+The Playwright suite in `apps/web/e2e/` is left out of `scripts/check.sh` because it is the slow
+tier; CI runs it on every push. Playwright starts the Vite dev server and the API itself, the latter
+through `scripts/e2e-api.sh` on a database of its own, so the Compose Postgres must be up and any
+dev API must be stopped first.
+
+### Regenerating the API client
+
+The web app calls the API through `packages/api-client`, generated from the API's own OpenAPI spec.
+A route's request and response types are therefore the ones the frontend compiles against, and a
+mismatch is a type error rather than a runtime surprise.
+
+Both the spec (`apps/api/openapi.json`) and the generated client are committed. After changing
+anything a route exposes, regenerate them and commit the result alongside the change:
+
+```sh
+scripts/gen-api-client.sh
+```
+
+A stale spec fails `uv run pytest` in `apps/api`, and a stale generated client fails CI's
+`web-api-client` job, which regenerates the client and diffs it against what was committed. Neither
+is covered by `scripts/check.sh`, so run the script whenever a route changes.
+
+### Dependencies
+
+`apps/api` is a uv project, deliberately **not** a pnpm workspace member, so never run
+`pnpm install` inside it.
+
+pnpm 11 enforces a `minimumReleaseAge` supply-chain policy: packages published within the last day
+are rejected. If `pnpm install` fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` after you add a
+dependency, the fix is normally to wait rather than to relax the policy.
