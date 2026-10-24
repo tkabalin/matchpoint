@@ -160,7 +160,7 @@ export function MatchSetupScreen({
                   setOpponentListOpen(false);
                 }
               }}
-              className="h-11 rounded-lg pr-9 text-sm"
+              className="h-11 rounded-lg pr-9"
             />
             <ChevronDown
               aria-hidden="true"
@@ -211,7 +211,7 @@ export function MatchSetupScreen({
             onChange={(e) => {
               setEvent(e.target.value);
             }}
-            className="h-11 rounded-lg text-sm"
+            className="h-11 rounded-lg"
           />
         </Field>
 
