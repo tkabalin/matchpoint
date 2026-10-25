@@ -3,14 +3,7 @@ import { listPointsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import {
-  CircleCheck,
-  CircleX,
-  Crown,
-  EllipsisVertical,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { CircleCheck, CircleX, Crown, EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 
 import { PhotoAvatar } from "@/components/photo-avatar";
 import { PlayerAvatar } from "@/components/player-avatar";
