@@ -38,12 +38,19 @@ async function renderSettings() {
     path: "/",
     component: () => <h1>Sign In</h1>,
   });
-  const installRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/me/install",
-    component: () => <h1>Install MatchPoint</h1>,
-  });
-  const routeTree = rootRoute.addChildren([settingsRoute, signInRoute, installRoute]);
+  const stub = (path: string, heading: string) =>
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path,
+      component: () => <h1>{heading}</h1>,
+    });
+  const routeTree = rootRoute.addChildren([
+    settingsRoute,
+    signInRoute,
+    stub("/me/settings/account", "Account & Security"),
+    stub("/me/settings/app", "App"),
+    stub("/me/settings/support", "Support"),
+  ]);
   const router = createRouter({
     routeTree,
     history: createMemoryHistory({ initialEntries: ["/me/settings"] }),
@@ -56,111 +63,40 @@ async function renderSettings() {
   await screen.findByRole("heading", { name: "Settings" });
 }
 
-async function fillPasswordFields(
-  user: ReturnType<typeof userEvent.setup>,
-  current = "onetimepass",
-  next = "correct-horse-battery-staple",
-) {
-  await user.type(screen.getByLabelText("Current password"), current);
-  await user.type(screen.getByLabelText("New password"), next);
-  await user.type(screen.getByLabelText("Confirm new password"), next);
-}
-
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("renders the change-password fields and the sign-out action", async () => {
+// The point of the redesign: a player's Settings is the coach's drill-down menu,
+// so the root holds categories rather than the password form it used to inline.
+test("renders a category row per section and no password form", async () => {
   await renderSettings();
 
-  expect(screen.getByLabelText("Current password")).toBeInTheDocument();
-  expect(screen.getByLabelText("New password")).toBeInTheDocument();
-  expect(screen.getByLabelText("Confirm new password")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Sign Out" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Account & Security" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "App" })).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Support" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Current password")).not.toBeInTheDocument();
 });
 
-// #275: a player had no reachable path to the install guide before this row existed.
-test("links to the player's own install guide route", async () => {
+// Match Defaults configures how a coach starts a match, so a player has nothing
+// to set there — the one category deliberately left off this menu.
+test("offers no Match Defaults category", async () => {
+  await renderSettings();
+
+  expect(screen.queryByRole("link", { name: "Match Defaults" })).not.toBeInTheDocument();
+});
+
+test.each([
+  ["Account & Security", "Account & Security"],
+  ["App", "App"],
+  ["Support", "Support"],
+])("the %s row opens its own page", async (rowName, heading) => {
   const user = userEvent.setup({ delay: null });
   await renderSettings();
 
-  await user.click(screen.getByRole("link", { name: "Install MatchPoint" }));
+  await user.click(screen.getByRole("link", { name: rowName }));
 
-  expect(await screen.findByRole("heading", { name: "Install MatchPoint" })).toBeInTheDocument();
-});
-
-test("blocks submit until the new password and its confirmation match", async () => {
-  const user = userEvent.setup({ delay: null });
-  await renderSettings();
-
-  const submit = screen.getByRole("button", { name: "Change password" });
-  expect(submit).toBeDisabled();
-
-  await fillPasswordFields(user);
-  expect(submit).toBeEnabled();
-});
-
-test("shows a mismatch error and blocks submit when the confirmation differs", async () => {
-  const user = userEvent.setup({ delay: null });
-  await renderSettings();
-
-  await user.type(screen.getByLabelText("Current password"), "onetimepass");
-  await user.type(screen.getByLabelText("New password"), "correct-horse-battery-staple");
-  await user.type(screen.getByLabelText("Confirm new password"), "something-else");
-
-  expect(screen.getByText("Passwords don't match.")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Change password" })).toBeDisabled();
-});
-
-test("changes the password and shows a success message", async () => {
-  const posted: unknown[] = [];
-  stubFetch({
-    "POST /api/auth/player/change-password": async (input) => {
-      posted.push(JSON.parse(await input.text()));
-      return new Response(null, { status: 204 });
-    },
-  });
-  const user = userEvent.setup({ delay: null });
-  await renderSettings();
-
-  await fillPasswordFields(user);
-  await user.click(screen.getByRole("button", { name: "Change password" }));
-
-  expect(await screen.findByText("Your password has been changed.")).toBeInTheDocument();
-  expect(posted).toEqual([
-    { password: "onetimepass", new_password: "correct-horse-battery-staple" },
-  ]);
-  // Cleared after success, so the coach-issued password can't be resubmitted by
-  // accident and the fields don't sit filled on screen.
-  expect(screen.getByLabelText("Current password")).toHaveValue("");
-});
-
-test("shows the server's message when the current password is wrong", async () => {
-  stubFetch({
-    "POST /api/auth/player/change-password": () =>
-      new Response(JSON.stringify({ detail: "Incorrect password" }), { status: 403 }),
-  });
-  const user = userEvent.setup({ delay: null });
-  await renderSettings();
-
-  await fillPasswordFields(user);
-  await user.click(screen.getByRole("button", { name: "Change password" }));
-
-  expect(await screen.findByText("Incorrect password")).toBeInTheDocument();
-});
-
-test("shows the server's message when the new password fails its policy", async () => {
-  stubFetch({
-    "POST /api/auth/player/change-password": () =>
-      new Response(JSON.stringify({ detail: "Password rejected by policy" }), { status: 400 }),
-  });
-  const user = userEvent.setup({ delay: null });
-  await renderSettings();
-
-  await fillPasswordFields(user);
-  await user.click(screen.getByRole("button", { name: "Change password" }));
-
-  expect(await screen.findByText("Password rejected by policy")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
 });
 
 test("signs out through playerLogout, then lands on sign-in", async () => {

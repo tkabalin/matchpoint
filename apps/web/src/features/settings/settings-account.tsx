@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
 
 import { AppPage, PageHeader } from "@/components/page-shell";
+import { SectionLabel } from "@/components/section-label";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,17 +22,6 @@ import { DeleteAccountSheet } from "./delete-account-sheet";
 import { SignOutAction } from "./sign-out-action";
 
 type RevokeStep = "closed" | "confirm" | "success";
-
-/** Names a group of rows, reusing the small-caps list label `player-list.tsx` and
- * `start-match.tsx` already use. `aria-labelledby` carries the name onto the
- * `ItemGroup`'s own `role="list"`, so the grouping is announced, not just drawn. */
-function SectionLabel({ id, children }: { id: string; children: string }) {
-  return (
-    <h2 id={id} className="mt-2 text-[0.625rem] tracking-wide text-muted-foreground uppercase">
-      {children}
-    </h2>
-  );
-}
 
 /**
  * Account & Security (#178, wireframe 1c). Change password now leaves Settings
