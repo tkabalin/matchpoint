@@ -3,7 +3,7 @@ import { getRallyStatsOptions } from "@matchpoint/api-client/react-query";
 import { useQueries } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { Anchor, Crosshair, Feather, Flame, TriangleAlert, ZoomIn, ZoomOut } from "lucide-react";
-import type { PointerEvent } from "react";
+import type { MouseEvent, PointerEvent } from "react";
 import { useRef, useState } from "react";
 
 import { PlayerAvatar } from "@/components/player-avatar";
@@ -22,6 +22,21 @@ import { useInView } from "@/lib/use-in-view";
 const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const ZOOM_STEP = 0.5;
+
+// How long after a real pinch or pan ends to still swallow a click (#300): a
+// browser synthesizes a click for whichever finger lifts off last, targeting
+// whatever sits underneath it — ordinarily harmless, but a pinch-to-zoom
+// gesture routinely ends with a finger resting on the very avatar the coach
+// just zoomed in on, firing it straight to that player's profile. Long
+// enough to cover two fingers lifting a beat apart (near-simultaneous in
+// practice, never instant), short enough that a deliberate tap right after
+// still lands.
+const GESTURE_CLICK_SUPPRESS_MS = 350;
+// How far a single pointer has to move before it counts as a pan rather than
+// a tap that happens to wobble a pixel or two — a plain tap must never trip
+// this, since that is the only way a coach reaches a profile from here at
+// all once zoomed back out to scale 1.
+const PAN_MOVE_THRESHOLD_PX = 10;
 
 /** How far the zoomed content may pan before its own edge would enter the
  *  box: at scale `s`, a box of size `size` overflows by `(s-1)/2 * size` on
@@ -122,6 +137,19 @@ export function PlayerInsightsCard({
     anchor: { x: number; y: number };
   } | null>(null);
   const dragStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  // Whether this gesture (from the first finger down to the last finger up)
+  // ever became a real pinch, and whether a single remaining pointer actually
+  // panned rather than just sitting still — either one means the click a
+  // lifting finger is about to trigger belongs to the gesture, not a tap.
+  // Both reset the moment a brand new gesture starts (the first finger of a
+  // fresh touch, with nothing else already down).
+  const wasPinch = useRef(false);
+  const didPan = useRef(false);
+  // A timestamp rather than a plain boolean so two fingers lifting a few
+  // milliseconds apart (the normal way a pinch ends) both fall inside one
+  // cooldown window instead of the first finger's own cleanup clearing a
+  // flag the second finger's click still needed.
+  const suppressClickUntil = useRef(0);
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   // The box's own pixel size, captured alongside `pan` whenever a gesture
@@ -148,6 +176,7 @@ export function PlayerInsightsCard({
     const box = boxRef.current?.getBoundingClientRect();
     if (pointers.current.size === 2 && box) {
       dragStart.current = null;
+      wasPinch.current = true;
       const mid = pointerMidpoint();
       // Solving screenPos = boxCentre + pan + scale * contentPos for
       // contentPos, at the pan/scale this gesture is starting from.
@@ -161,6 +190,10 @@ export function PlayerInsightsCard({
       };
     } else if (pointers.current.size === 1) {
       dragStart.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+      // A fresh gesture starting — nothing else is down yet, so there is
+      // nothing to carry over from whatever the previous one ended as.
+      wasPinch.current = false;
+      didPan.current = false;
     }
   }
 
@@ -197,9 +230,12 @@ export function PlayerInsightsCard({
       });
     } else if (pointers.current.size === 1 && dragStart.current && scale > MIN_SCALE) {
       const start = dragStart.current;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.hypot(dx, dy) > PAN_MOVE_THRESHOLD_PX) didPan.current = true;
       setPan({
-        x: clampPan(start.panX + (e.clientX - start.x), scale, box.width),
-        y: clampPan(start.panY + (e.clientY - start.y), scale, box.height),
+        x: clampPan(start.panX + dx, scale, box.width),
+        y: clampPan(start.panY + dy, scale, box.height),
       });
     }
   }
@@ -216,6 +252,24 @@ export function PlayerInsightsCard({
             panY: pan.y,
           }
         : null;
+    // Armed once, on the last finger up, not on every finger of a multi-
+    // finger release — the first finger lifting from a pinch still has one
+    // more finger down, so there is no click to worry about from it yet.
+    if (pointers.current.size === 0 && (wasPinch.current || didPan.current)) {
+      suppressClickUntil.current = Date.now() + GESTURE_CLICK_SUPPRESS_MS;
+    }
+  }
+
+  // Capturing on the plotted layer, above every avatar's own `Link`, so one
+  // check here covers all of them rather than each `Link` needing its own
+  // handler. Scoped to just this layer (not the whole box) so the zoom
+  // buttons, a sibling rather than a descendant of it, are never touched by
+  // a suppression that exists for the avatars specifically.
+  function suppressGestureClick(e: MouseEvent<HTMLDivElement>) {
+    if (Date.now() < suppressClickUntil.current) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   }
 
   function zoomIn() {
@@ -334,7 +388,7 @@ export function PlayerInsightsCard({
                     its distance from its neighbours. A position past 0-100%
                     is simply clipped by the frame's own `overflow-hidden`,
                     the same way panning past the edge of a photo would be. */}
-                <div className="absolute inset-0">
+                <div className="absolute inset-0" onClickCapture={suppressGestureClick}>
                   <div
                     className="absolute inset-x-0 h-0.5 bg-muted-foreground/40"
                     style={{ top: `${zoomedPercent(50, panPercentY)}%` }}

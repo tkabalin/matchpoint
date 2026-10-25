@@ -394,6 +394,77 @@ test("pinching off-centre zooms into that spot, not the box's own centre", async
   expect(link).toHaveStyle({ left: "105%", top: "150%" });
 });
 
+// #300: a pinch ending with a finger resting on an avatar sent a coach
+// straight to that player's profile — the browser's own synthesized click
+// for the lifting finger, targeting whatever sat underneath it. jsdom
+// doesn't synthesize that click itself the way a real touchscreen does, so
+// this fires it by hand after the same raw pinch sequence the off-centre
+// test above drives, to prove the handler swallows it.
+test("a click right after a pinch doesn't navigate, but one well after the gesture does", async () => {
+  stubFetch({
+    [shortRally.id]: shortRallyStats,
+    [noRallyData.id]: noRallyDataStats,
+    [midRally.id]: midRallyStats,
+    [longRally.id]: longRallyStats,
+  });
+  await renderLoadedCard();
+
+  const link = screen.getByRole("link", { name: "Alex Chen's player insights" });
+  const box = link.parentElement!.parentElement!;
+  vi.spyOn(box, "getBoundingClientRect").mockReturnValue({
+    left: 0,
+    top: 0,
+    width: 200,
+    height: 200,
+    right: 200,
+    bottom: 200,
+    x: 0,
+    y: 0,
+    toJSON: () => "",
+  });
+
+  fireEvent.pointerDown(box, { pointerId: 1, clientX: 130, clientY: 60 });
+  fireEvent.pointerDown(box, { pointerId: 2, clientX: 170, clientY: 60 });
+  fireEvent.pointerMove(box, { pointerId: 1, clientX: 110, clientY: 60 });
+  fireEvent.pointerMove(box, { pointerId: 2, clientX: 190, clientY: 60 });
+  fireEvent.pointerUp(box, { pointerId: 1, clientX: 110, clientY: 60 });
+  fireEvent.pointerUp(box, { pointerId: 2, clientX: 190, clientY: 60 });
+
+  fireEvent.click(link);
+  expect(screen.queryByRole("heading", { name: "Player Profile" })).not.toBeInTheDocument();
+
+  // Restored before the assertion fires, not after: a real `Date.now` left
+  // mocked past this test's own end would corrupt every other test's own
+  // timing in this file, not just the gesture cooldown this one is checking.
+  const dateSpy = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 1_000);
+  fireEvent.click(link);
+  dateSpy.mockRestore();
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+});
+
+// A tap with no pinch or pan beforehand — the ordinary way a coach reaches a
+// profile from here, including right after zooming back out to scale 1 — is
+// a single pointer down-and-up with no real movement between them, and must
+// never be swallowed by the same guard.
+test("an ordinary tap with no preceding gesture still navigates", async () => {
+  stubFetch({
+    [shortRally.id]: shortRallyStats,
+    [noRallyData.id]: noRallyDataStats,
+    [midRally.id]: midRallyStats,
+    [longRally.id]: longRallyStats,
+  });
+  await renderLoadedCard();
+
+  const link = screen.getByRole("link", { name: "Alex Chen's player insights" });
+  const box = link.parentElement!.parentElement!;
+
+  fireEvent.pointerDown(box, { pointerId: 1, clientX: 20, clientY: 20 });
+  fireEvent.pointerUp(box, { pointerId: 1, clientX: 20, clientY: 20 });
+  fireEvent.click(link);
+
+  expect(await screen.findByRole("heading", { name: "Player Profile" })).toBeInTheDocument();
+});
+
 test("zooming all the way in disables further zoom-in", async () => {
   stubFetch({
     [shortRally.id]: shortRallyStats,
