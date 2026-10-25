@@ -371,9 +371,10 @@ export const releaseCapture = <ThrowOnError extends boolean = false>(options: Op
  *
  * A match's points, in the order the capture client assigned them.
  *
- * Feeds two readers: the analytics dashboard aggregating over rally outcomes and
- * serve placement, and the capture client reconciling its local outbox against what
- * the server holds after a sync. A pure read, so match_for_coach takes no lock.
+ * Feeds three readers: the analytics dashboard aggregating over rally outcomes and
+ * serve placement (a coach's own dashboard or a player's self-view of their own
+ * matches alike), and the capture client reconciling its local outbox against what
+ * the server holds after a sync. A pure read, so readable_match takes no lock.
  */
 export const listPoints = <ThrowOnError extends boolean = false>(options: Options<ListPointsData, ThrowOnError>): RequestResult<ListPointsResponses, ListPointsErrors, ThrowOnError> => (options.client ?? client).get<ListPointsResponses, ListPointsErrors, ThrowOnError>({ url: '/matches/{match_id}/points', ...options });
 

@@ -41,7 +41,7 @@ from matchpoint_api.schemas.score_checkpoint import ScoreCheckpointBatch, ScoreC
 # is the per-principal budget that dependency charges, so it rides along for the same
 # reason.
 #
-# The two read routes below take either principal: a coach reads their roster's
+# The three read routes below take either principal: a coach reads their roster's
 # matches, a player their own. Everything else here is a write or is roster-wide, and
 # stays coach-only.
 #
@@ -486,14 +486,15 @@ def ingest_points(
 
 
 @router.get("/{match_id}/points", response_model=list[PointRead])
-def list_points(match_id: uuid.UUID, db: DbSession, coach: CurrentCoach) -> list[Point]:
+def list_points(match_id: uuid.UUID, db: DbSession, principal: CurrentPrincipal) -> list[Point]:
     """A match's points, in the order the capture client assigned them.
 
-    Feeds two readers: the analytics dashboard aggregating over rally outcomes and
-    serve placement, and the capture client reconciling its local outbox against what
-    the server holds after a sync. A pure read, so match_for_coach takes no lock.
+    Feeds three readers: the analytics dashboard aggregating over rally outcomes and
+    serve placement (a coach's own dashboard or a player's self-view of their own
+    matches alike), and the capture client reconciling its local outbox against what
+    the server holds after a sync. A pure read, so readable_match takes no lock.
     """
-    match = match_for_coach(db, match_id, coach.id)
+    match = readable_match(db, match_id, principal)
     return list(
         db.scalars(select(Point).where(Point.match_id == match.id).order_by(Point.sequence))
     )

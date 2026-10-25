@@ -654,9 +654,10 @@ export const listPointsQueryKey = (options: Options<ListPointsData>) => createQu
  *
  * A match's points, in the order the capture client assigned them.
  *
- * Feeds two readers: the analytics dashboard aggregating over rally outcomes and
- * serve placement, and the capture client reconciling its local outbox against what
- * the server holds after a sync. A pure read, so match_for_coach takes no lock.
+ * Feeds three readers: the analytics dashboard aggregating over rally outcomes and
+ * serve placement (a coach's own dashboard or a player's self-view of their own
+ * matches alike), and the capture client reconciling its local outbox against what
+ * the server holds after a sync. A pure read, so readable_match takes no lock.
  */
 export const listPointsOptions = (options: Options<ListPointsData>) => queryOptions<ListPointsResponse, ListPointsError, ListPointsResponse, ReturnType<typeof listPointsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {

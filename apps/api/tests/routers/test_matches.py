@@ -2390,6 +2390,37 @@ def test_list_points_of_an_unknown_match_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_list_points_answers_a_player_about_their_own(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    """The momentum chart on a player's own self-view reads this route too (#300), and
+    it was coach-only until this test: a player's session got a 401 reading their own
+    match's points, same as the other either-principal routes already cover."""
+    match = make_match(db_session, player_id=signed_in_player.id)
+    make_point(db_session, match_id=match.id, sequence=0)
+    db_session.commit()
+
+    response = client.get(f"/matches/{match.id}/points")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_list_points_hides_a_stablemates_match_from_a_player(
+    client: TestClient, db_session: Session, signed_in_player: Player
+) -> None:
+    """Same coach owns both, which is exactly the refusal a coach-scoped check would
+    have let through: the answer is the 404 another coach's match gets."""
+    stablemate = make_player(db_session, coach_id=signed_in_player.coach_id)
+    theirs = make_match(db_session, player_id=stablemate.id)
+    make_point(db_session, match_id=theirs.id)
+    db_session.commit()
+
+    response = client.get(f"/matches/{theirs.id}/points")
+
+    assert response.status_code == 404
+
+
 def test_list_points_round_trips_every_field_the_ingest_route_stored(
     client: TestClient, db_session: Session, coach: Coach
 ) -> None:
@@ -3169,7 +3200,6 @@ def test_get_match_hides_a_stablemates_match_from_a_player(
         ("post", f"/matches/{uuid.UUID(int=0)}/capture"),
         ("post", f"/matches/{uuid.UUID(int=0)}/capture/release"),
         ("post", f"/matches/{uuid.UUID(int=0)}/points"),
-        ("get", f"/matches/{uuid.UUID(int=0)}/points"),
         ("post", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
         ("get", f"/matches/{uuid.UUID(int=0)}/score-checkpoints"),
         ("delete", f"/matches/{uuid.UUID(int=0)}/points/{uuid.UUID(int=0)}"),
@@ -3178,8 +3208,10 @@ def test_get_match_hides_a_stablemates_match_from_a_player(
 )
 @pytest.mark.usefixtures("signed_in_player")
 def test_match_routes_a_player_cannot_reach(client: TestClient, method: str, path: str) -> None:
-    """Every write, and the two roster-wide reads: a player captures nothing and sees
-    no one else's matches, so these keep asking for the coach cookie they always did."""
+    """Every write, and the roster-wide reads: a player captures nothing and sees no
+    one else's matches, so these keep asking for the coach cookie they always did.
+    Listing a match's own points moved off this list (#300) — it's an either-principal
+    read now, covered by its own tests instead."""
     response = client.request(method, path, json={} if method in {"post", "patch"} else None)
 
     assert response.status_code == 401

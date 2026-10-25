@@ -5327,7 +5327,7 @@
     },
     "/matches/{match_id}/points": {
       "get": {
-        "description": "A match's points, in the order the capture client assigned them.\n\nFeeds two readers: the analytics dashboard aggregating over rally outcomes and\nserve placement, and the capture client reconciling its local outbox against what\nthe server holds after a sync. A pure read, so match_for_coach takes no lock.",
+        "description": "A match's points, in the order the capture client assigned them.\n\nFeeds three readers: the analytics dashboard aggregating over rally outcomes and\nserve placement (a coach's own dashboard or a player's self-view of their own\nmatches alike), and the capture client reconciling its local outbox against what\nthe server holds after a sync. A pure read, so readable_match takes no lock.",
         "operationId": "list_points",
         "parameters": [
           {
