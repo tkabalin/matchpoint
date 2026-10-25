@@ -2,8 +2,8 @@ import type { MatchRead, PlayerRead } from "@matchpoint/api-client";
 import { listPointsOptions } from "@matchpoint/api-client/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import type { ReactNode } from "react";
 import {
-  ChevronRight,
   CircleCheck,
   CircleX,
   Crown,
@@ -49,19 +49,41 @@ function NameAvatar({ name, className }: { name: string; className?: string }) {
   );
 }
 
-/** The match-winner crown, reserving its slot either way so a name's row
- * doesn't shift height depending on which side won. Sits inline beside the
- * name now (#292) rather than stacked in a row above it — stacking pushed
- * the whole name+crown block out of vertical alignment with the avatar
- * beside it, which this removes by not needing a second row at all. Uses
- * the same win-outcome green a set's own tick already carries, rather than
- * inventing a "trophy gold" the color palette has no role for. */
+/** The match-winner crown. Uses the same win-outcome green a set's own tick
+ * already carries, rather than inventing a "trophy gold" the color palette
+ * has no role for. Unlike the stacked-above-the-name shape this replaced
+ * (#292), an inline icon this much smaller than the name's own line height
+ * never shifted row height whether shown or not, so there's nothing to
+ * reserve a slot for — rendering `null` when nobody's won yet gives the
+ * name back the width a permanent opacity-0 placeholder spent either way. */
 function WinnerCrown({ won }: { won: boolean }) {
-  if (!won) {
-    return <Crown className="size-4 shrink-0 text-outcome-win opacity-0" aria-hidden="true" />;
-  }
+  if (!won) return null;
   return (
     <Crown className="size-4 shrink-0 text-outcome-win" role="img" aria-label="Match winner" />
+  );
+}
+
+/** Our own tracked player's crown badges the avatar's corner instead of
+ * sitting inline before their name (#300) — the opponent's own crown below
+ * has no avatar to badge onto, so it stays inline, but freeing this one
+ * inline slot on our side costs the row nothing (an absolutely-positioned
+ * badge doesn't compete with the name for width) and the avatar is the one
+ * thing on this card that's never free-text, so it's the one place a badge
+ * can't misrepresent whose win it's marking. Same corner-overlay mechanics
+ * `PhotoAvatar`'s own `editable` camera badge already uses. */
+function AvatarWithCrown({ won, children }: { won: boolean; children: ReactNode }) {
+  if (!won) return children;
+  return (
+    <div className="relative inline-block shrink-0">
+      {children}
+      <span
+        role="img"
+        aria-label="Match winner"
+        className="swatch-halo absolute -top-1 -left-1 flex size-5 items-center justify-center rounded-full bg-outcome-win"
+      >
+        <Crown className="size-3 text-background" aria-hidden="true" />
+      </span>
+    </div>
   );
 }
 
@@ -103,18 +125,36 @@ export function MatchCard({
   const sets = points ? deriveSets(points, match.result !== null) : [];
 
   return (
-    // The kebab and the row are siblings, not nested — a button inside an
-    // anchor is invalid HTML, and an earlier overlay-link version of this
-    // turned out unreliable for real clicks despite passing in tests. Stacked
-    // above the row now rather than trailing beside it (#300): trailing beside
-    // it took its width from the row's right side only, which pushed "vs" off
-    // the card's true centre and left both names less room to truncate into.
-    // Stacking the menu in its own strip, left-aligned over where the avatar
-    // sits below, keeps it in the same top-left corner of the card without
-    // the row ever sharing its width with anything else.
-    <div ref={ref} className="flex flex-col gap-1">
-      {(onEdit ?? onDelete) && (
-        <div className="flex items-center">
+    // A bordered shell wraps a header strip and the clickable row as one
+    // visual card (#300): the kebab used to float above the row in its own
+    // unbordered strip, which read as belonging to whichever neighbouring
+    // card happened to be closer rather than to this one specifically. The
+    // header strip is real structure now — date/status on an outer edge,
+    // the kebab pinned to the other — so the menu reads as "this card's
+    // menu" the way a title bar reads as its own window's, not as loose
+    // whitespace between two cards. Kebab and row stay siblings, not nested
+    // one inside the other: a button inside an anchor is invalid HTML, and
+    // an earlier overlay-link version of this card was already found
+    // unreliable for real clicks.
+    <div ref={ref} className="overflow-hidden rounded-sm border border-border">
+      <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-1.5 text-sm font-semibold text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span>{formatPlayedOn(match.played_on)}</span>
+          {match.surface && SurfaceIcon && (
+            <span className="flex items-center gap-1">
+              <span aria-hidden="true">·</span>
+              <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
+              {SURFACE_LABEL[match.surface]}
+            </span>
+          )}
+          {match.result === null && (
+            <span className="flex items-center gap-1">
+              <span aria-hidden="true">·</span>
+              Not finished yet, no winner
+            </span>
+          )}
+        </span>
+        {(onEdit ?? onDelete) && (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={
@@ -122,14 +162,14 @@ export function MatchCard({
                   type="button"
                   variant="ghost"
                   size="icon-sm"
-                  className="text-muted-foreground"
+                  className="-my-1 text-muted-foreground"
                   aria-label={`Actions for the match vs ${opponentName}`}
                 />
               }
             >
               <EllipsisVertical />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
+            <DropdownMenuContent align="end">
               {onEdit && (
                 <DropdownMenuItem onClick={() => onEdit(match)}>
                   <Pencil className="text-primary" />
@@ -144,10 +184,10 @@ export function MatchCard({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
-      )}
+        )}
+      </div>
       <Item
-        variant="outline"
+        variant="default"
         render={<Link to={matchHref} params={{ matchId: match.id }} />}
         // `Item`'s own base class is a flex row (`item.tsx`), and this is the
         // one shape that trips a real mobile WebKit bug: a single full-width
@@ -162,17 +202,25 @@ export function MatchCard({
         // belongs here only, not on the padding-free wrapper div below: that
         // one clipped the avatar's own halo ring at the card's edge, since it
         // has no clearance of its own to lose — Item's real padding is what
-        // was actually doing the containing, and still does.
-        className="w-full min-w-0 overflow-hidden text-left"
+        // was actually doing the containing, and still does. `variant="default"`
+        // (a transparent border) rather than `outline`: the shell above already
+        // draws this card's one visible border, so Item's own would double it
+        // up along the three edges they share.
+        className="w-full min-w-0 overflow-hidden rounded-none text-left"
       >
         <div className="flex w-full min-w-0 flex-col gap-2.5">
           <div className="flex items-center gap-2">
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
-              {player ? <PlayerAvatar player={player} size="md" /> : <NameAvatar name={ourName} />}
-              <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
-                <WinnerCrown won={match.result === "win"} />
-                <p className="truncate text-sm font-bold text-foreground">{ourName}</p>
-              </div>
+              <AvatarWithCrown won={match.result === "win"}>
+                {player ? (
+                  <PlayerAvatar player={player} size="md" />
+                ) : (
+                  <NameAvatar name={ourName} />
+                )}
+              </AvatarWithCrown>
+              <p className="min-w-0 flex-1 truncate text-center text-sm font-bold text-foreground">
+                {ourName}
+              </p>
             </div>
             <span className="shrink-0 text-xs font-bold text-muted-foreground">vs</span>
             <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -180,43 +228,22 @@ export function MatchCard({
                   name] order around "vs" rather than repeating it — our
                   avatar sits on the row's *outer* edge, far from "vs", so the
                   opponent's decoration (real or not) has to sit on their own
-                  outer edge too. Putting the spacer first, like the first cut
-                  of this fix did, put it right next to "vs" instead — vs then
-                  read as centred between the two *decorations*, not the two
-                  names, which is exactly the asymmetry this is meant to fix.
-                  No real avatar here, deliberately: `opponent_name` is free
-                  text with no linked player row, so there's never a real
-                  photo behind it — an avatar box the same as our own
-                  player's would imply a capability that doesn't exist. */}
+                  outer edge too. The spacer matches the avatar's own
+                  footprint exactly (not the avatar-plus-crown-badge one,
+                  since the badge is an overlay that costs the row no width
+                  of its own), which is what keeps "vs" centred. No real
+                  avatar here, deliberately: `opponent_name` is free text
+                  with no linked player row, so there's never a real photo
+                  behind it — an avatar box the same as our own player's
+                  would imply a capability that doesn't exist. Their own
+                  crown stays inline rather than badging anything, for the
+                  same reason: there's no avatar on this side to badge. */}
               <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
                 <WinnerCrown won={match.result === "loss"} />
                 <p className="truncate text-sm font-bold text-foreground">{opponentName}</p>
               </div>
               <div className="size-9 shrink-0" aria-hidden="true" />
             </div>
-          </div>
-
-          {match.result === null && (
-            <p className="text-center text-xs font-semibold text-muted-foreground">
-              Not finished yet, no winner
-            </p>
-          )}
-
-          {/* Date/surface own row (#292): previously shared the momentum
-              strip's row in a trailing column, crowding the strip's own
-              width whenever a match had several sets. Full-width now, with
-              the chevron trailing it — the strip below gets the whole card
-              to itself instead. */}
-          <div className="flex items-center justify-end gap-1 text-sm font-semibold text-muted-foreground">
-            <span>{formatPlayedOn(match.played_on)}</span>
-            {match.surface && SurfaceIcon && (
-              <span className="flex items-center gap-1">
-                <span aria-hidden="true">·</span>
-                <SurfaceIcon className="size-4 shrink-0" aria-hidden="true" />
-                {SURFACE_LABEL[match.surface]}
-              </span>
-            )}
-            <ChevronRight className="size-4 shrink-0" aria-hidden="true" />
           </div>
 
           {sets.length > 0 && (
@@ -253,8 +280,11 @@ export function MatchCard({
                           progress (no winner yet) must reserve the exact same
                           height this icon takes up in a finished one, or its
                           shorter score block floats its momentum bars higher
-                          than its neighbours' — the same "reserve the slot"
-                          pattern `WinnerCrown` already uses above. */}
+                          than its neighbours'. Each set sits in its own
+                          column with nothing beside it competing for width,
+                          unlike the match-level `WinnerCrown` above — there's
+                          no truncation budget here for a reserved icon to
+                          cost. */}
                     {set.winner === "tracked" ? (
                       <CircleCheck
                         className="size-4 text-outcome-win"
