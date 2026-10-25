@@ -109,9 +109,24 @@ export function SquadTrendCard({
         </p>
       ) : trend ? (
         <ChartContainer config={config} className="aspect-[5/2] w-full">
-          <LineChart data={filledTrend}>
+          {/* A margin prop replaces Recharts' whole default, not one side of it, so
+              all four are spelled out. Right: the last week's label is centred
+              under the plot's right edge, and without room there its second half
+              falls outside the SVG ("Wk 6" read as "Wk"). Top: a point at 100
+              sits on the plot's top edge and needs a dot's radius above it. */}
+          <LineChart data={filledTrend} margin={{ top: 8, right: 16, bottom: 5, left: 5 }}>
             <CartesianGrid vertical={false} />
-            <XAxis dataKey="week" tickLine={false} axisLine={false} tick={<LegibleXTick />} />
+            {/* interval 0: Recharts otherwise drops any tick it judges to overlap its
+                neighbour, and at a phone's width it dropped "Wk 5" while the
+                point above it was still drawn. There are always exactly six
+                weeks (`SQUAD_TREND_WEEKS`), so showing every label costs nothing. */}
+            <XAxis
+              dataKey="week"
+              interval={0}
+              tickLine={false}
+              axisLine={false}
+              tick={<LegibleXTick />}
+            />
             <YAxis width={28} tick={<LegibleYTick />} domain={METRIC_Y_DOMAIN[metric]} />
             <ChartTooltip content={<ChartTooltipContent />} />
             {/* A hatch fill would be invisible on a 2px stroke, so the line's
@@ -138,7 +153,16 @@ export function SquadTrendCard({
               // A carried-forward point (no match logged that week) draws
               // hollow — background fill, colored ring — instead of the
               // normal solid dot, so it never looks like a real result.
-              dot={(dotProps: { cx?: number; cy?: number; index?: number }) => {
+              // A week with nothing to plot still reaches this renderer, with
+              // `cy` null. SVG reads a null `cy` as 0, so each such week drew a
+              // circle on the plot's top edge, half clipped into a dash: a
+              // quiet squad's chart came out as a row of dashes along the top
+              // with one real point somewhere below, which read as a broken
+              // chart rather than as empty weeks.
+              dot={(dotProps: { cx?: number; cy?: number | null; index?: number }) => {
+                if (dotProps.cy == null || dotProps.cx == null) {
+                  return <g key={dotProps.index} />;
+                }
                 const isCarried = carriedIndices.has(dotProps.index ?? -1);
                 return (
                   <circle
