@@ -124,3 +124,36 @@ test("reports a failed load instead of rendering an empty list", async () => {
 
   expect(await screen.findByText("Could not load matches.")).toBeInTheDocument();
 });
+
+// #300: a player's own matches list had no filter panel at all - dropped
+// entirely rather than just the one row (Player) that genuinely doesn't
+// apply when the list is already scoped server-side to just them.
+test("offers the same filter panel as the coach's list, minus the Player select", async () => {
+  stubFetch({ matches: () => Response.json([match]) });
+  const user = userEvent.setup({ delay: null });
+  renderPlayerMatchList();
+  await screen.findByText("T. Naidoo");
+
+  await user.click(screen.getByRole("button", { name: /all matches/i }));
+
+  expect(screen.getByLabelText("From")).toBeInTheDocument();
+  expect(screen.getByLabelText("To")).toBeInTheDocument();
+  expect(screen.getByPlaceholderText("Search opponent")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Surface" })).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Result" })).toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Player" })).not.toBeInTheDocument();
+});
+
+test("the filter panel actually narrows a player's own matches", async () => {
+  const other: MatchRead = { ...match, id: "match-2", opponent_name: "Priya M" };
+  stubFetch({ matches: () => Response.json([match, other]) });
+  const user = userEvent.setup({ delay: null });
+  renderPlayerMatchList();
+  await screen.findByText("T. Naidoo");
+
+  await user.click(screen.getByRole("button", { name: /all matches/i }));
+  await user.type(screen.getByPlaceholderText("Search opponent"), "Priya");
+
+  expect(screen.getByText("Priya M")).toBeInTheDocument();
+  expect(screen.queryByText("T. Naidoo")).not.toBeInTheDocument();
+});

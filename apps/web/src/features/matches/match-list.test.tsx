@@ -452,12 +452,53 @@ test("filters to matches that were never finished", async () => {
   expect(screen.queryByText("Priya M")).not.toBeInTheDocument();
 });
 
+// The DateField trigger opens a Calendar in a Popover rather than accepting
+// typed text (#300 — a native `<input type="date">` rendered inconsistently
+// between desktop and mobile, with no placeholder or icon on the latter), so
+// picking a date here means opening that popover, navigating to the target
+// month (it opens on today's by default, with no filter value yet to anchor
+// it elsewhere), and clicking the day cell — found by the same full-sentence
+// aria-label react-day-picker gives every one ("Monday, August 10th, 2026")
+// rather than a bare day number, which would collide across months. The
+// month count is computed against the real current date rather than
+// hardcoded, so this doesn't quietly start failing once real time carries
+// "today" far enough from the fixtures' own fixed 2026 dates.
+async function pickDate(user: ReturnType<typeof userEvent.setup>, field: string, target: Date) {
+  await user.click(screen.getByRole("button", { name: field }));
+  const today = new Date();
+  const monthsAway =
+    (target.getFullYear() - today.getFullYear()) * 12 + (target.getMonth() - today.getMonth());
+  const navLabel = monthsAway < 0 ? "Go to the Previous Month" : "Go to the Next Month";
+  for (let step = 0; step < Math.abs(monthsAway); step++) {
+    await user.click(await screen.findByRole("button", { name: navLabel }));
+  }
+  await user.click(await screen.findByRole("button", { name: dayAriaLabel(target) }));
+}
+
+// react-day-picker's own day-button aria-label, e.g. "Monday, August 10th,
+// 2026" - `toLocaleDateString` has no ordinal-suffix option, so the day
+// number is built by hand to match it exactly.
+function dayAriaLabel(date: Date): string {
+  const day = date.getDate();
+  const suffix =
+    day % 10 === 1 && day !== 11
+      ? "st"
+      : day % 10 === 2 && day !== 12
+        ? "nd"
+        : day % 10 === 3 && day !== 13
+          ? "rd"
+          : "th";
+  const weekday = date.toLocaleDateString("en-US", { weekday: "long" });
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  return `${weekday}, ${month} ${day}${suffix}, ${date.getFullYear()}`;
+}
+
 test("filters by a date range, inclusive at both ends", async () => {
   const user = userEvent.setup({ delay: null });
   await openFilters(user);
 
-  await user.type(screen.getByLabelText("From"), "2026-08-10");
-  await user.type(screen.getByLabelText("To"), "2026-08-20");
+  await pickDate(user, "From", new Date(2026, 7, 10));
+  await pickDate(user, "To", new Date(2026, 7, 20));
 
   // 2026-07-01 falls outside; both boundary dates are kept.
   expect(screen.getByText("T. Naidoo")).toBeInTheDocument();

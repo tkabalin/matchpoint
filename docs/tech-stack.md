@@ -18,25 +18,26 @@ latest, since community support and documentation coverage peak there.
 
 ## Frontend
 
-| Category          | Choice                                     |
-| ----------------- | ------------------------------------------ |
-| Language          | TypeScript 5.9                             |
-| UI framework      | React 19                                   |
-| Bundler           | Vite 8 (PWA via vite-plugin-pwa)           |
-| CSS framework     | Tailwind CSS 4                             |
-| Component library | shadcn/ui (Base UI)                        |
-| Routing           | TanStack Router                            |
-| API codegen       | @hey-api/openapi-ts                        |
-| Schema validation | Zod 4 (generated from the spec)            |
-| Server state      | TanStack Query                             |
-| Read-cache store  | persistQueryClient + idb-keyval            |
-| Charts            | Recharts 3 (via shadcn/ui `chart`)         |
-| Toasts            | Sonner 2 (via shadcn/ui)                   |
-| Offline outbox    | Dexie 4 (IndexedDB)                        |
-| Package manager   | pnpm 11.18 workspace                       |
-| Lint / format     | ESLint 10 + Prettier 3                     |
-| Type checking     | tsc                                        |
-| Tests             | Vitest 4 + Testing Library 16 + Playwright |
+| Category          | Choice                                         |
+| ----------------- | ---------------------------------------------- |
+| Language          | TypeScript 5.9                                 |
+| UI framework      | React 19                                       |
+| Bundler           | Vite 8 (PWA via vite-plugin-pwa)               |
+| CSS framework     | Tailwind CSS 4                                 |
+| Component library | shadcn/ui (Base UI)                            |
+| Date picker       | react-day-picker 10 (via shadcn/ui `calendar`) |
+| Routing           | TanStack Router                                |
+| API codegen       | @hey-api/openapi-ts                            |
+| Schema validation | Zod 4 (generated from the spec)                |
+| Server state      | TanStack Query                                 |
+| Read-cache store  | persistQueryClient + idb-keyval                |
+| Charts            | Recharts 3 (via shadcn/ui `chart`)             |
+| Toasts            | Sonner 2 (via shadcn/ui)                       |
+| Offline outbox    | Dexie 4 (IndexedDB)                            |
+| Package manager   | pnpm 11.18 workspace                           |
+| Lint / format     | ESLint 10 + Prettier 3                         |
+| Type checking     | tsc                                            |
+| Tests             | Vitest 4 + Testing Library 16 + Playwright     |
 
 ### Rationale
 
@@ -66,6 +67,17 @@ dialogs) for free. Base UI is now shadcn's default primitives layer, backed by t
 creators. Agents handle shadcn well. Alternatives considered: shadcn on Radix (no longer the default
 for new projects); hand-rolled Tailwind only (would mean rebuilding dialogs/menus/accessibility by
 hand).
+
+**react-day-picker, via shadcn/ui's `calendar`.** The matches filter's From/To range was a native
+`<input type="date">`, whose placeholder, calendar icon and intrinsic width are browser chrome the
+app does not control: desktop Chromium drew a format hint and an icon, while mobile Safari drew
+neither and sized the two inputs wide enough to overlap in a two-column grid. A button that opens a
+`Calendar` in a `Popover` is custom-rendered DOM, so it looks and sizes the same everywhere.
+`react-day-picker` is the library shadcn's `calendar` is built on, so it installs through the same
+CLI as every other component and carries `date-fns` in with it. Alternatives considered: keeping the
+native input and patching the mobile layout with CSS (cannot reach what WebKit draws inside the
+control); a hand-rolled calendar grid (month maths, keyboard navigation and accessibility labels
+rebuilt by hand).
 
 **TanStack Router.** The strongest type safety of the options we looked at including typed search
 params (useful for dashboard filter state in shareable URLs), natural pairing with TanStack Query.
