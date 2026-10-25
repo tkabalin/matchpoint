@@ -16,6 +16,7 @@ import {
   METRIC_ICON,
   METRIC_LABEL,
   METRIC_PATTERN,
+  METRIC_Y_DOMAIN,
   fillSquadTrendGaps,
 } from "@/lib/analytics/squad-stats";
 import type { SquadMetricKey } from "@/lib/analytics/types.provisional";
@@ -111,7 +112,7 @@ export function SquadTrendCard({
           <LineChart data={filledTrend}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="week" tickLine={false} axisLine={false} tick={<LegibleXTick />} />
-            <YAxis width={28} tick={<LegibleYTick />} />
+            <YAxis width={28} tick={<LegibleYTick />} domain={METRIC_Y_DOMAIN[metric]} />
             <ChartTooltip content={<ChartTooltipContent />} />
             {/* A hatch fill would be invisible on a 2px stroke, so the line's
                 own non-color channel is its dash style — solid/dashed/dotted

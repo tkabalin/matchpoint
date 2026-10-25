@@ -55,6 +55,28 @@ export const METRIC_ICON: Record<SquadMetricKey, LucideIcon> = {
   firstServe: CircleCheck,
 };
 
+/** The trend chart's own Y-axis domain per metric, since the two percentage
+ *  metrics and the ratio one need genuinely different treatment, not a
+ *  shared `auto`. A week nobody's roster played in carries `null` rather
+ *  than a 0 (`get_squad_trend`'s own doc comment), which a squad that's
+ *  gone quiet for most of a six-week window turns into a trend of mostly
+ *  nulls and one real value near the bottom — left on `auto`, Recharts
+ *  computes a Y-axis domain from that lone value with no sense that it's a
+ *  percentage, landing on some small arbitrary ceiling (4, in the case this
+ *  was found from) instead of the 0-100 the metric actually spans. Record
+ *  and first-serve are both `_percent_value`-scaled in `analytics.py`,
+ *  always 0-100 by construction, so they get that domain fixed outright.
+ *  Forced:unforced is a genuine ratio (`_series_ratio`), unbounded above
+ *  with no natural ceiling to fix it to — `[0, "auto"]` still floors it at
+ *  zero rather than a negative number autoscale could otherwise pick, which
+ *  is the one part of this same failure mode a ratio can be protected
+ *  against without inventing a ceiling it doesn't have. */
+export const METRIC_Y_DOMAIN: Record<SquadMetricKey, [number, number | "auto"]> = {
+  record: [0, 100],
+  forcedToUnforced: [0, "auto"],
+  firstServe: [0, 100],
+};
+
 type NamedEntry = SquadStatsEntry & { name: string };
 
 export function winPercent(entry: Pick<SquadStatsEntry, "wins" | "losses">): number {
