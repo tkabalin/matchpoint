@@ -103,10 +103,49 @@ export function MatchCard({
   const sets = points ? deriveSets(points, match.result !== null) : [];
 
   return (
-    // The row and the edit/delete buttons are siblings, not nested — a button
-    // inside an anchor is invalid HTML, and an earlier overlay-link version of
-    // this turned out unreliable for real clicks despite passing in tests.
-    <div ref={ref} className="flex items-stretch gap-1">
+    // The kebab and the row are siblings, not nested — a button inside an
+    // anchor is invalid HTML, and an earlier overlay-link version of this
+    // turned out unreliable for real clicks despite passing in tests. Stacked
+    // above the row now rather than trailing beside it (#300): trailing beside
+    // it took its width from the row's right side only, which pushed "vs" off
+    // the card's true centre and left both names less room to truncate into.
+    // Stacking the menu in its own strip, left-aligned over where the avatar
+    // sits below, keeps it in the same top-left corner of the card without
+    // the row ever sharing its width with anything else.
+    <div ref={ref} className="flex flex-col gap-1">
+      {(onEdit ?? onDelete) && (
+        <div className="flex items-center">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-muted-foreground"
+                  aria-label={`Actions for the match vs ${opponentName}`}
+                />
+              }
+            >
+              <EllipsisVertical />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {onEdit && (
+                <DropdownMenuItem onClick={() => onEdit(match)}>
+                  <Pencil className="text-primary" />
+                  Edit
+                </DropdownMenuItem>
+              )}
+              {onDelete && (
+                <DropdownMenuItem variant="destructive" onClick={() => onDelete(match)}>
+                  <Trash2 />
+                  Delete
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      )}
       <Item
         variant="outline"
         render={<Link to={matchHref} params={{ matchId: match.id }} />}
@@ -124,7 +163,7 @@ export function MatchCard({
         // one clipped the avatar's own halo ring at the card's edge, since it
         // has no clearance of its own to lose — Item's real padding is what
         // was actually doing the containing, and still does.
-        className="w-full min-w-0 flex-1 overflow-hidden text-left"
+        className="w-full min-w-0 overflow-hidden text-left"
       >
         <div className="flex w-full min-w-0 flex-col gap-2.5">
           <div className="flex items-center gap-2">
@@ -259,46 +298,6 @@ export function MatchCard({
           )}
         </div>
       </Item>
-      {/* One kebab menu instead of two stacked icon buttons (#292) — the
-          card's own height used to be set by two full-height buttons next to
-          it, taller than the content needed. Edit/delete still call the same
-          `onEdit`/`onDelete` callbacks; offered on a completed match too:
-          finishing one freezes only its result and scoring system (#228),
-          and the sheet locks that one field itself rather than the row
-          hiding the whole control. */}
-      {(onEdit ?? onDelete) && (
-        <div className="flex items-center pr-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground"
-                  aria-label={`Actions for the match vs ${opponentName}`}
-                />
-              }
-            >
-              <EllipsisVertical />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {onEdit && (
-                <DropdownMenuItem onClick={() => onEdit(match)}>
-                  <Pencil className="text-primary" />
-                  Edit
-                </DropdownMenuItem>
-              )}
-              {onDelete && (
-                <DropdownMenuItem variant="destructive" onClick={() => onDelete(match)}>
-                  <Trash2 />
-                  Delete
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      )}
     </div>
   );
 }
